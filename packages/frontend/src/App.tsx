@@ -1,0 +1,34 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { AppShell } from '@/components/app-shell';
+import { StandingsPage } from '@/pages/standings';
+
+function Placeholder({ title }: { title: string }) {
+  return (
+    <div className="flex items-center justify-center h-64 text-text-muted">
+      <span className="text-lg">{title} — coming soon</span>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <TooltipProvider>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route index element={<StandingsPage />} />
+            <Route path="draft" element={<Placeholder title="Draft Board" />} />
+            <Route path="schedule" element={<Placeholder title="Schedule" />} />
+            <Route path="stats" element={<Placeholder title="Pokemon Stats" />} />
+            <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
+            <Route path="teams" element={<Placeholder title="Teams" />} />
+            <Route path="teams/:id" element={<Placeholder title="Team Profile" />} />
+            <Route path="trades" element={<Placeholder title="Trade Block" />} />
+            <Route path="admin" element={<Placeholder title="Admin Panel" />} />
+          </Route>
+        </Routes>
+      </TooltipProvider>
+    </BrowserRouter>
+  );
+}
