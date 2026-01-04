@@ -109,22 +109,19 @@ export function TeamPopover({ player, children }: TeamPopoverProps) {
               </div>
 
               {/* Roster list */}
-              <div className="px-2 pb-2 space-y-px">
+              <div className="px-2 pb-2 space-y-px font-mono">
                 {player.roster.map(mon => (
-                  <div key={mon.name} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-surface-overlay/60 transition-colors">
-                    <TierBadge points={mon.tier} className="w-7 text-center shrink-0" />
+                  <div key={mon.name} className="flex items-center gap-1.5 py-1.5 px-2 rounded hover:bg-surface-overlay/60 transition-colors">
+                    <TierBadge points={mon.tier} className="shrink-0" />
                     <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-medium text-text-primary truncate block">
+                    <div className="flex-1 min-w-0 flex items-center gap-1">
+                      <span className={`text-[11px] font-semibold truncate ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'}`}>
                         {mon.name}
-                        {mon.isTeraCaptain && <span className="text-pink ml-1 font-bold">(T)</span>}
                       </span>
-                      {mon.isTeraCaptain && mon.teraTypes && (
-                        <div className="flex gap-1 mt-0.5">
-                          {mon.teraTypes.map(t => (
-                            <TypeChip key={t} types={[t]} size="xs" />
-                          ))}
-                        </div>
+                      {mon.isTeraCaptain && (
+                        <span className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black leading-none border border-pink/40">
+                          T
+                        </span>
                       )}
                     </div>
                     <TypeChip types={mon.types} size="xs" className="shrink-0" />

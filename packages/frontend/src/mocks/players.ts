@@ -6,7 +6,7 @@ export const players: Player[] = [
     teamColor: '#ee8130', record: { wins: 9, losses: 2, differential: 27 },
     roster: [
       { name: 'Mega Blastoise', types: ['water'], tier: 20, isTeraCaptain: false, stats: { hp: 79, atk: 103, def: 120, spa: 135, spd: 115, spe: 78 }, abilities: ['Mega Launcher'], seasonStats: { kills: 20, deaths: 6, gp: 11 } },
-      { name: 'Mandiuzz', types: ['dark', 'flying'], tier: 15, isTeraCaptain: false, stats: { hp: 110, atk: 115, def: 60, spa: 55, spd: 95, spe: 80 }, abilities: ['Intimidate', 'Overcoat'], seasonStats: { kills: 8, deaths: 5, gp: 11 } },
+      { name: 'Mandibuzz', types: ['dark', 'flying'], tier: 15, isTeraCaptain: false, stats: { hp: 110, atk: 115, def: 60, spa: 55, spd: 95, spe: 80 }, abilities: ['Intimidate', 'Overcoat'], seasonStats: { kills: 8, deaths: 5, gp: 11 } },
       { name: 'Delphox', types: ['fire', 'psychic'], tier: 11, isTeraCaptain: false, stats: { hp: 75, atk: 69, def: 72, spa: 114, spd: 100, spe: 104 }, abilities: ['Blaze', 'Magician'], seasonStats: { kills: 7, deaths: 4, gp: 11 } },
       { name: 'Crabominable', types: ['fighting', 'ice'], tier: 4, isTeraCaptain: true, teraTypes: ['ice', 'fighting', 'ground'], stats: { hp: 97, atk: 132, def: 77, spa: 62, spd: 67, spe: 43 }, abilities: ['Hyper Cutter', 'Iron Fist'], seasonStats: { kills: 5, deaths: 3, gp: 9 } },
       { name: 'Mudsdale', types: ['ground'], tier: 11, isTeraCaptain: false, stats: { hp: 100, atk: 125, def: 100, spa: 55, spd: 85, spe: 35 }, abilities: ['Own Tempo', 'Stamina'], seasonStats: { kills: 4, deaths: 4, gp: 11 } },
@@ -28,7 +28,7 @@ export const players: Player[] = [
       { name: 'Ceruledge', types: ['fire', 'ghost'], tier: 14, isTeraCaptain: false, stats: { hp: 75, atk: 125, def: 80, spa: 60, spd: 100, spe: 85 }, abilities: ['Flash Fire', 'Weak Armor'], seasonStats: { kills: 8, deaths: 6, gp: 11 } },
       { name: 'Gliscor', types: ['ground', 'flying'], tier: 17, isTeraCaptain: false, stats: { hp: 75, atk: 95, def: 125, spa: 45, spd: 75, spe: 95 }, abilities: ['Hyper Cutter', 'Sand Veil', 'Poison Heal'], seasonStats: { kills: 4, deaths: 3, gp: 11 } },
       { name: 'Cofagrigus', types: ['ghost'], tier: 8, isTeraCaptain: true, teraTypes: ['ghost', 'dark', 'normal'], stats: { hp: 58, atk: 50, def: 145, spa: 95, spd: 105, spe: 30 }, abilities: ['Mummy'], seasonStats: { kills: 3, deaths: 4, gp: 9 } },
-      { name: 'Coolishit', types: ['ice', 'water'], tier: 6, isTeraCaptain: true, teraTypes: ['water', 'ice', 'steel'], stats: { hp: 75, atk: 80, def: 110, spa: 65, spd: 80, spe: 30 }, abilities: ['Own Tempo', 'Ice Body'], seasonStats: { kills: 2, deaths: 4, gp: 8 } },
+      { name: 'Avalugg', types: ['ice', 'water'], tier: 6, isTeraCaptain: true, teraTypes: ['water', 'ice', 'steel'], stats: { hp: 75, atk: 80, def: 110, spa: 65, spd: 80, spe: 30 }, abilities: ['Own Tempo', 'Ice Body'], seasonStats: { kills: 2, deaths: 4, gp: 8 } },
       { name: 'Zoroark', types: ['dark'], tier: 10, isTeraCaptain: false, stats: { hp: 60, atk: 105, def: 60, spa: 120, spd: 60, spe: 105 }, abilities: ['Illusion'], seasonStats: { kills: 6, deaths: 5, gp: 10 } },
       { name: 'Ferroseed', types: ['grass', 'steel'], tier: 1, isTeraCaptain: false, stats: { hp: 44, atk: 50, def: 91, spa: 24, spd: 86, spe: 10 }, abilities: ['Iron Barbs'], seasonStats: { kills: 1, deaths: 3, gp: 5 } },
     ],
