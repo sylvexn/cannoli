@@ -1,0 +1,30 @@
+# Project docs (local only)
+*.md
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+.output/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Bun
+bun.lockb
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
