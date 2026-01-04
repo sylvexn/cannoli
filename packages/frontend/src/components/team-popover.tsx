@@ -5,6 +5,7 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import type { Player } from '@/lib/types';
+import { rosterPointsUsed } from '@/lib/roster';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -19,7 +20,7 @@ export function TeamPopover({ player, children }: TeamPopoverProps) {
   const triggerRef = useRef<HTMLSpanElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const pointsUsed = player.roster.reduce((sum, p) => sum + p.tier, 0);
+  const pointsUsed = rosterPointsUsed(player.roster);
   const hasRoster = player.roster.length > 0;
 
   const show = useCallback(() => {

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/app-shell';
 import { StandingsPage } from '@/pages/standings';
+import { TeamProfilePage } from '@/pages/team-profile';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -23,7 +24,7 @@ export default function App() {
             <Route path="stats" element={<Placeholder title="Pokemon Stats" />} />
             <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
             <Route path="teams" element={<Placeholder title="Teams" />} />
-            <Route path="teams/:id" element={<Placeholder title="Team Profile" />} />
+            <Route path="teams/:id" element={<TeamProfilePage />} />
             <Route path="trades" element={<Placeholder title="Trade Block" />} />
             <Route path="admin" element={<Placeholder title="Admin Panel" />} />
           </Route>

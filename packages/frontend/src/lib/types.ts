@@ -1,5 +1,18 @@
 import type { PokemonType } from './pokemon';
 
+/** League-level configuration (admin-managed) */
+export interface LeagueConfig {
+  /** Maximum total effective points allowed on a roster */
+  pointCap: number;
+  /** Number of tera captains allowed per team */
+  teraCaptainSlots: number;
+}
+
+export const DEFAULT_LEAGUE_CONFIG: LeagueConfig = {
+  pointCap: 110,
+  teraCaptainSlots: 2,
+};
+
 export interface Player {
   id: string;
   name: string;
@@ -13,6 +26,7 @@ export interface Player {
 export interface RosterPokemon {
   name: string;
   types: PokemonType[];
+  /** Base tier cost (before tera captain markup) */
   tier: number;
   isTeraCaptain: boolean;
   teraTypes?: PokemonType[];
