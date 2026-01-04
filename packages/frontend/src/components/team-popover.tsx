@@ -94,18 +94,26 @@ export function TeamPopover({ player, children }: TeamPopoverProps) {
 
           {hasRoster ? (
             <>
-              {/* Pokemon sprite row */}
-              <div className="px-3 pt-3 pb-2">
-                <div className="flex flex-wrap gap-1">
-                  {player.roster.map(mon => (
-                    <div key={mon.name} className="relative group">
-                      <PokemonSprite name={mon.name} size="sm" className="transition-transform duration-150 group-hover:scale-125" />
-                      {mon.isTeraCaptain && (
-                        <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-pink shadow-glow-pink-sm" />
-                      )}
+              {/* Pokemon sprite grid — 6 per row in tubes */}
+              <div className="px-3 pt-3 pb-2 space-y-1.5">
+                {Array.from({ length: Math.ceil(player.roster.length / 6) }, (_, row) => {
+                  const rowMons = player.roster.slice(row * 6, (row + 1) * 6);
+                  return (
+                    <div
+                      key={row}
+                      className="flex items-center justify-center gap-1 px-2 py-1 rounded-full bg-surface-overlay/60 border border-border-subtle"
+                    >
+                      {rowMons.map(mon => (
+                        <div key={mon.name} className="relative group">
+                          <PokemonSprite name={mon.name} size="sm" className="transition-transform duration-150 group-hover:scale-125" />
+                          {mon.isTeraCaptain && (
+                            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-pink shadow-glow-pink-sm" />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
               {/* Roster list */}

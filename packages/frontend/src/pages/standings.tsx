@@ -6,6 +6,7 @@ import { TeamPopover } from '@/components/team-popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 function findPlayer(id: string) {
   return players.find(p => p.id === id);
@@ -57,14 +58,14 @@ export function StandingsPage() {
                           </div>
                           <div>
                             <TeamPopover player={player}>
-                              <button className="text-left">
+                              <Link to={`/teams/${player.id}`} className="text-left">
                                 <span className="text-sm font-medium text-text-primary transition-colors duration-150 group-hover:text-neon cursor-pointer hover:underline decoration-neon/40 underline-offset-2">
                                   {player.name}
                                 </span>
                                 <span className="text-text-muted ml-1.5 font-normal text-sm">
                                   {player.teamName}
                                 </span>
-                              </button>
+                              </Link>
                             </TeamPopover>
                             <span className="block text-[10px] text-text-muted uppercase tracking-wider">
                               {player.teamAbbrev}
