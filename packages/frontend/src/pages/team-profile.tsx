@@ -82,13 +82,21 @@ function getTeamDefensiveProfile(roster: RosterPokemon[]) {
 }
 
 // ─── Free agents (dynamic from tier list) ────────────────────────
-function computeFreeAgents(allPlayers: Player[]): { name: string; tier: number; teraCost: number }[] {
-  const drafted = new Set<string>();
+interface PoolEntry { name: string; tier: number; teraCost: number; drafted: boolean; draftedBy?: string }
+
+function computePool(allPlayers: Player[]): PoolEntry[] {
+  const draftedMap = new Map<string, string>();
   for (const p of allPlayers) {
-    for (const mon of p.roster) drafted.add(mon.name);
+    for (const mon of p.roster) draftedMap.set(mon.name, p.teamAbbrev);
   }
   return TIER_LIST
-    .filter(entry => !drafted.has(entry.name))
+    .map(entry => ({
+      name: entry.name,
+      tier: entry.tier,
+      teraCost: entry.teraCost,
+      drafted: draftedMap.has(entry.name),
+      draftedBy: draftedMap.get(entry.name),
+    }))
     .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
 }
 
@@ -159,7 +167,8 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
-  const freeAgents = useMemo(() => computeFreeAgents(players), []);
+  const pool = useMemo(() => computePool(players), []);
+  const [showTaken, setShowTaken] = useState(false);
 
   // Initialize roster order
   useEffect(() => {
@@ -402,10 +411,13 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   };
 
   const filteredAgents = useMemo(() => {
-    if (!searchQuery) return freeAgents;
-    const q = searchQuery.toLowerCase();
-    return freeAgents.filter(fa => fa.name.toLowerCase().includes(q));
-  }, [freeAgents, searchQuery]);
+    let list = showTaken ? pool : pool.filter(p => !p.drafted);
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q));
+    }
+    return list;
+  }, [pool, searchQuery, showTaken]);
 
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
@@ -417,47 +429,18 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
       </Link>
 
       {/* ═══ TEAM HEADER ═══ */}
-      <div className="relative rounded-lg border border-border-default overflow-hidden bg-surface-raised">
-        {/* Colored top accent line */}
-        <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${player.teamColor}, transparent 80%)` }} />
+      <div className="relative rounded-lg overflow-hidden" style={{ background: `linear-gradient(135deg, ${player.teamColor}08, ${player.teamColor}03 40%, transparent)` }}>
+        {/* Accent bar */}
+        <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${player.teamColor}cc, ${player.teamColor}30 60%, transparent)` }} />
 
-        <div className="px-5 py-4 flex items-center gap-4">
-          {/* Team identity */}
-          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-11 h-11 text-xs shrink-0" />
-          <div className="min-w-0 mr-2">
-            <h1 className="text-base font-semibold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
-            <p className="text-[11px] text-text-muted mt-1 font-medium">
+        <div className="px-5 pt-4 pb-3 flex items-center gap-4">
+          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-12 h-12 text-xs shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
+            <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide">
               {player.name} <span className="text-border-default mx-1">/</span> {player.teamAbbrev}
             </p>
           </div>
-
-          {/* Stats cluster — tight, centered */}
-          <div className="flex-1 flex items-center justify-center gap-5">
-            <RankBadge rank={rank} />
-
-            <div className="h-8 w-px bg-border-subtle/40" />
-
-            <StatBlock
-              value={<RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />}
-              label="Record"
-            />
-
-            <div className="h-8 w-px bg-border-subtle/40" />
-
-            <StatBlock
-              value={<><span className="text-win">{teamKills}</span><span className="text-text-muted/40">/</span><span className="text-loss">{teamDeaths}</span></>}
-              label="K/D"
-            />
-
-            <div className="h-8 w-px bg-border-subtle/40" />
-
-            <StatBlock
-              value={<>{((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-xs text-text-muted font-normal">%</span></>}
-              label="Win Rate"
-            />
-          </div>
-
-          {/* Theorycraft */}
           <button
             onClick={() => { setTheorycraftMode(!theorycraftMode); if (theorycraftMode) handleResetAll(); }}
             className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all ${
@@ -469,6 +452,42 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
             <FlaskConical size={11} />
             {theorycraftMode ? 'Exit' : 'Theorycraft'}
           </button>
+        </div>
+
+        {/* Stats strip */}
+        <div className="mx-5 mb-4 rounded-lg bg-surface-raised border border-border-default overflow-hidden">
+          <div className="flex items-stretch divide-x divide-border-subtle">
+            {/* Rank */}
+            <div className="flex items-center justify-center px-5 py-3">
+              <RankBadge rank={rank} />
+            </div>
+
+            {/* Record */}
+            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
+              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
+                <RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />
+              </div>
+              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Record</span>
+            </div>
+
+            {/* K/D */}
+            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
+              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
+                <span className="text-win">{teamKills}</span>
+                <span className="text-text-muted/30 mx-0.5">/</span>
+                <span className="text-loss">{teamDeaths}</span>
+              </div>
+              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">K / D</span>
+            </div>
+
+            {/* Win Rate */}
+            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
+              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none text-text-primary">
+                {((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-sm text-text-muted font-normal">%</span>
+              </div>
+              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Win Rate</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -616,136 +635,141 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           })}
         </div>
 
-        {/* Swap picker — flat grid with comparison sidebar */}
+        {/* Swap picker */}
         {swappingIndex !== null && theorycraftMode && (() => {
           const currentMon = activeRoster[swappingIndex];
           const currentCost = getEffectiveCost(currentMon.name, currentMon.isTeraCaptain);
-          // Limit rendered items for perf
-          const visibleAgents = filteredAgents.slice(0, 120);
+          const visibleAgents = filteredAgents.slice(0, 200);
           const hovered = hoveredAgent ? filteredAgents.find(a => a.name === hoveredAgent) : null;
           const hoveredDelta = hovered ? hovered.tier - currentCost : 0;
           const hoveredNewTotal = hovered ? pointsUsed + hoveredDelta : 0;
           const hoveredExceeds = hovered ? hoveredNewTotal > config.pointCap : false;
 
           return (
-            <div className="border-t border-border-subtle bg-surface-overlay/20">
-              {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-border-subtle/40">
-                <div className="flex items-center gap-2 text-[11px] text-text-muted">
-                  <ArrowRightLeft size={11} className="text-neon" />
-                  <span className="text-text-primary font-medium">{currentMon.name}</span>
-                  <span className="font-mono">({currentCost}pt)</span>
-                </div>
+            <div className="border-t border-border-subtle bg-surface-overlay/15">
+              {/* Toolbar */}
+              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle/30 text-[10px]">
+                <ArrowRightLeft size={10} className="text-neon shrink-0" />
+                <span className="text-text-muted">Replacing</span>
+                <span className="text-text-primary font-semibold">{currentMon.name}</span>
+                <span className="font-mono text-text-muted">({currentCost}pt)</span>
                 <div className="flex-1" />
-                <div className="flex items-center gap-1.5 bg-surface-overlay/60 rounded px-2 py-1">
-                  <Search size={11} className="text-text-muted" />
+                <label className="flex items-center gap-1 cursor-pointer select-none text-text-muted hover:text-text-secondary transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={showTaken}
+                    onChange={e => setShowTaken(e.target.checked)}
+                    className="w-3 h-3 rounded border-border-default accent-neon"
+                  />
+                  Show taken
+                </label>
+                <div className="flex items-center gap-1 bg-surface-overlay/50 rounded px-2 py-0.5 ml-1">
+                  <Search size={10} className="text-text-muted" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search..."
-                    className="w-32 bg-transparent text-[11px] text-text-primary placeholder:text-text-muted outline-none"
+                    placeholder="Filter..."
+                    className="w-28 bg-transparent text-[10px] text-text-primary placeholder:text-text-muted outline-none"
                     autoFocus
                   />
-                  {searchQuery && (
-                    <button onClick={() => setSearchQuery('')} className="text-text-muted hover:text-text-primary">
-                      <X size={10} />
-                    </button>
-                  )}
+                  {searchQuery && <button onClick={() => setSearchQuery('')} className="text-text-muted hover:text-text-primary"><X size={9} /></button>}
                 </div>
-                <span className="text-[10px] text-text-muted font-mono">{filteredAgents.length}</span>
-                <button onClick={() => { setSwappingIndex(null); setSearchQuery(''); setHoveredAgent(null); }} className="text-text-muted hover:text-text-primary p-0.5">
-                  <X size={13} />
-                </button>
+                <span className="font-mono text-text-muted">{filteredAgents.length}</span>
+                <button onClick={() => { setSwappingIndex(null); setSearchQuery(''); setHoveredAgent(null); }} className="text-text-muted hover:text-text-primary ml-1"><X size={12} /></button>
               </div>
 
-              <div className="flex" style={{ height: 240 }}>
-                {/* Grid — single scroll area */}
+              <div className="flex" style={{ height: 320 }}>
+                {/* Grid */}
                 <div className="flex-1 overflow-y-auto p-2">
-                  <div className="flex flex-wrap gap-[2px] content-start">
+                  <div className="flex flex-wrap gap-[3px] content-start">
                     {visibleAgents.map(fa => {
                       const wouldExceed = (pointsUsed + fa.tier - currentCost) > config.pointCap;
                       const isHov = hoveredAgent === fa.name;
                       return (
                         <button
                           key={fa.name}
-                          onClick={() => { if (!wouldExceed) { handleSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
+                          onClick={() => { if (!wouldExceed && !fa.drafted) { handleSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
                           onMouseEnter={() => setHoveredAgent(fa.name)}
                           onMouseLeave={() => { if (hoveredAgent === fa.name) setHoveredAgent(null); }}
-                          disabled={wouldExceed}
-                          className={`relative w-10 h-10 rounded flex items-center justify-center transition-colors ${
-                            wouldExceed ? 'opacity-15 cursor-not-allowed'
+                          disabled={wouldExceed || fa.drafted}
+                          className={`relative w-11 h-11 rounded flex items-center justify-center transition-colors ${
+                            fa.drafted ? 'opacity-25 cursor-not-allowed'
+                            : wouldExceed ? 'opacity-15 cursor-not-allowed'
                             : isHov ? 'bg-neon/15 ring-1 ring-neon/40'
                             : 'hover:bg-surface-overlay/60'
                           }`}
-                          title={`${fa.name} (${fa.tier}pt)`}
                         >
                           <PokemonSprite name={fa.name} size="sm" />
-                          {/* Tier pip */}
                           <span
                             className="absolute bottom-0 right-0 text-[7px] font-bold rounded-tl px-[3px] py-[1px] leading-none text-white/90"
                             style={{ backgroundColor: `hsl(${Math.round(270 - ((Math.max(1, Math.min(20, fa.tier)) - 1) / 19) * 270)}, 75%, 45%)` }}
                           >
                             {fa.tier}
                           </span>
+                          {fa.drafted && (
+                            <span className="absolute top-0 left-0 text-[6px] font-bold text-text-muted bg-surface/80 rounded-br px-[2px]">{fa.draftedBy}</span>
+                          )}
                         </button>
                       );
                     })}
                     {visibleAgents.length === 0 && (
-                      <p className="text-[11px] text-text-muted py-6 text-center w-full">No results</p>
+                      <p className="text-[11px] text-text-muted py-8 text-center w-full">No results</p>
                     )}
                   </div>
                 </div>
 
-                {/* Comparison sidebar — fixed right */}
-                <div className="w-48 shrink-0 border-l border-border-subtle/40 p-3 flex flex-col justify-center">
+                {/* Comparison panel */}
+                <div className="w-52 shrink-0 border-l border-border-subtle/30 p-3 flex flex-col">
                   {hovered ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <PokemonSprite name={hovered.name} size="lg" />
-                        <div>
-                          <div className="text-xs font-semibold text-text-primary">{hovered.name}</div>
-                          <div className="flex items-center gap-1 mt-0.5">
+                    <div className="space-y-2.5">
+                      {/* Large preview */}
+                      <div className="flex items-start gap-2.5">
+                        <PokemonSprite name={hovered.name} size="xl" />
+                        <div className="pt-1">
+                          <div className="text-sm font-semibold text-text-primary leading-tight">{hovered.name}</div>
+                          <div className="flex items-center gap-1.5 mt-1">
                             <TierBadge points={hovered.tier} />
                             <span className="text-[10px] font-mono text-text-muted">{hovered.tier}pt</span>
                           </div>
+                          {hovered.drafted && (
+                            <div className="text-[9px] text-draw font-medium mt-1">Drafted by {hovered.draftedBy}</div>
+                          )}
                         </div>
                       </div>
 
-                      <div className="space-y-1 text-[10px] font-mono">
+                      {/* Cost comparison */}
+                      <div className="rounded bg-surface-overlay/40 p-2 space-y-1 text-[10px] font-mono">
                         <div className="flex justify-between">
                           <span className="text-text-muted">Cost</span>
                           <span>
-                            <span className="text-text-secondary">{currentCost}</span>
-                            <span className="text-text-muted mx-1">&rarr;</span>
-                            <span className="text-text-primary">{hovered.tier}</span>
+                            {currentCost} <span className="text-text-muted">&rarr;</span> {hovered.tier}
                             <span className={`ml-1 font-semibold ${hoveredDelta > 0 ? 'text-loss' : hoveredDelta < 0 ? 'text-win' : 'text-text-muted'}`}>
-                              {hoveredDelta > 0 ? '+' : ''}{hoveredDelta}
+                              ({hoveredDelta > 0 ? '+' : ''}{hoveredDelta})
                             </span>
                           </span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-text-muted">Total</span>
+                          <span className="text-text-muted">Team</span>
                           <span className={hoveredExceeds ? 'text-loss font-semibold' : 'text-text-primary'}>
                             {hoveredNewTotal}/{config.pointCap}
                           </span>
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-border-subtle/40 flex items-center gap-1.5 text-[10px]">
+                      {/* Swap preview */}
+                      <div className="flex items-center gap-1.5 text-[10px]">
                         <PokemonSprite name={currentMon.name} size="xs" />
-                        <span className="text-loss line-through">{currentMon.name}</span>
-                        <span className="text-text-muted">&rarr;</span>
-                        <span className="text-neon font-medium">{hovered.name}</span>
+                        <span className="text-loss line-through truncate">{currentMon.name}</span>
+                        <span className="text-text-muted shrink-0">&rarr;</span>
+                        <span className="text-neon font-medium truncate">{hovered.name}</span>
                       </div>
 
-                      {hoveredExceeds && (
-                        <div className="text-[9px] text-loss font-medium">Exceeds point cap</div>
-                      )}
+                      {hoveredExceeds && <div className="text-[9px] text-loss font-semibold">Over point cap</div>}
                     </div>
                   ) : (
-                    <div className="text-[10px] text-text-muted text-center">
-                      Hover a Pokemon to compare
+                    <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted/50">
+                      Hover to preview
                     </div>
                   )}
                 </div>
