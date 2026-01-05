@@ -315,78 +315,71 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Back nav */}
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-text-muted hover:text-neon transition-colors">
-        <ArrowLeft size={14} /> Standings
+      <Link to="/" className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted hover:text-neon transition-colors uppercase tracking-widest">
+        <ArrowLeft size={11} /> Standings
       </Link>
 
       {/* ═══ TEAM HEADER ═══ */}
-      <div
-        className="relative rounded-xl border border-border-default overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${player.teamColor}12, transparent 60%)` }}
-      >
-        <div className="p-5 flex items-center gap-5">
-          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-14 h-14 text-base shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-text-primary leading-tight">{player.teamName}</h1>
-            <p className="text-sm text-text-secondary mt-0.5">
-              {player.name} <span className="text-text-muted">&middot; {player.teamAbbrev}</span>
+      <div className="relative rounded-lg border border-border-default overflow-hidden bg-surface-raised">
+        {/* Colored top accent line */}
+        <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${player.teamColor}, transparent 80%)` }} />
+
+        <div className="px-5 py-4 flex items-center gap-4">
+          {/* Team identity */}
+          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-11 h-11 text-xs shrink-0" />
+          <div className="min-w-0 mr-2">
+            <h1 className="text-base font-semibold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
+            <p className="text-[11px] text-text-muted mt-1 font-medium">
+              {player.name} <span className="text-border-default mx-1">/</span> {player.teamAbbrev}
             </p>
           </div>
 
-          {/* Centered prominent stats */}
-          <div className="flex-1 flex items-center justify-center gap-6">
-            <div className="text-center">
-              <div className={`text-2xl font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-primary'}`}>#{rank}</div>
-              <div className="text-[10px] text-text-muted uppercase tracking-wider">Place</div>
-            </div>
-            <div className="w-px h-8 bg-border-subtle" />
-            <div className="text-center">
-              <div className="text-2xl font-bold tabular-nums">
-                <RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />
-              </div>
-              <div className="text-[10px] text-text-muted uppercase tracking-wider">Record</div>
-            </div>
-            <div className="w-px h-8 bg-border-subtle" />
-            <div className="text-center">
-              <div className="text-2xl font-bold tabular-nums">
-                <span className="text-win">{teamKills}</span>
-                <span className="text-text-muted">/</span>
-                <span className="text-loss">{teamDeaths}</span>
-              </div>
-              <div className="text-[10px] text-text-muted uppercase tracking-wider">K / D</div>
-            </div>
-            <div className="w-px h-8 bg-border-subtle" />
-            <div className="text-center">
-              <div className="text-2xl font-bold tabular-nums text-text-primary">
-                {((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}%
-              </div>
-              <div className="text-[10px] text-text-muted uppercase tracking-wider">Win Rate</div>
-            </div>
+          {/* Stats cluster — tight, centered */}
+          <div className="flex-1 flex items-center justify-center gap-5">
+            <RankBadge rank={rank} />
+
+            <div className="h-8 w-px bg-border-subtle/40" />
+
+            <StatBlock
+              value={<RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />}
+              label="Record"
+            />
+
+            <div className="h-8 w-px bg-border-subtle/40" />
+
+            <StatBlock
+              value={<><span className="text-win">{teamKills}</span><span className="text-text-muted/40">/</span><span className="text-loss">{teamDeaths}</span></>}
+              label="K/D"
+            />
+
+            <div className="h-8 w-px bg-border-subtle/40" />
+
+            <StatBlock
+              value={<>{((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-xs text-text-muted font-normal">%</span></>}
+              label="Win Rate"
+            />
           </div>
 
-          {/* Theorycraft toggle */}
+          {/* Theorycraft */}
           <button
             onClick={() => { setTheorycraftMode(!theorycraftMode); if (theorycraftMode) handleResetAll(); }}
-            className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all ${
               theorycraftMode
-                ? 'bg-pink/15 text-pink border border-pink/30 shadow-glow-pink-sm'
-                : 'bg-surface-overlay text-text-secondary border border-border-default hover:text-neon hover:border-neon/30'
+                ? 'bg-pink/10 text-pink border border-pink/25'
+                : 'bg-surface-overlay/50 text-text-muted border border-border-subtle hover:text-neon hover:border-neon/30'
             }`}
           >
-            <FlaskConical size={14} />
-            {theorycraftMode ? 'Exit Theorycraft' : 'Theorycraft'}
+            <FlaskConical size={11} />
+            {theorycraftMode ? 'Exit' : 'Theorycraft'}
           </button>
         </div>
       </div>
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
       <Card className="bg-surface-raised border-border-default overflow-hidden">
-        <div
-          className="flex items-center justify-center gap-1.5 p-4 flex-wrap"
-          style={{ background: `linear-gradient(180deg, ${player.teamColor}08, transparent)` }}
-        >
+        <div className="flex items-center justify-center gap-1 px-4 py-3 flex-wrap">
           {activeRoster.map((mon, i) => {
             const isSwapped = swaps.some(s => s.index === i);
             const isSwapping = swappingIndex === i;
@@ -657,17 +650,17 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
         })()}
 
         {/* Point cap & tera captain info */}
-        <div className="px-4 py-3 border-t border-border-subtle flex items-center gap-6">
-          <div className="flex-1 max-w-sm">
+        <div className="px-4 py-2.5 border-t border-border-subtle flex items-center gap-6">
+          <div className="flex-1 max-w-xs">
             <PointCapBar used={pointsUsed} total={config.pointCap} />
-            {pointsDelta !== 0 && (
-              <span className={`text-[10px] mt-0.5 inline-block ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
-                {pointsDelta > 0 ? '+' : ''}{pointsDelta} from original
-              </span>
-            )}
           </div>
-          <div className="text-xs text-text-muted">
-            Tera Captains: <span className={`font-medium ${captainCount > config.teraCaptainSlots ? 'text-loss' : 'text-pink'}`}>{captainCount}/{config.teraCaptainSlots}</span>
+          {pointsDelta !== 0 && (
+            <span className={`text-[10px] font-mono font-medium ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
+              {pointsDelta > 0 ? '+' : ''}{pointsDelta}pt
+            </span>
+          )}
+          <div className="text-[11px] text-text-muted font-medium">
+            Tera <span className={captainCount > config.teraCaptainSlots ? 'text-loss' : 'text-pink'}>{captainCount}<span className="text-text-muted">/{config.teraCaptainSlots}</span></span>
           </div>
         </div>
       </Card>
@@ -679,7 +672,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
         <Card className="xl:col-span-2 bg-surface-raised border-border-default">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base text-text-primary">Roster</CardTitle>
+              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Roster</CardTitle>
               {theorycraftMode && swaps.length > 0 && (
                 <button onClick={handleResetAll} className="flex items-center gap-1 text-xs text-text-muted hover:text-loss transition-colors">
                   <RotateCcw size={12} /> Reset all
@@ -691,32 +684,32 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-border-subtle text-[11px] uppercase text-text-muted">
-                    <th className="px-3 py-2 text-left w-12">
+                  <tr className="border-b border-border-subtle text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    <th className="px-3 py-2.5 text-left w-12">
                       <button onClick={() => handleSort('tier')} className="flex items-center gap-0.5 hover:text-neon transition-colors">
                         Cost <SortIcon k="tier" />
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-left">Pokemon</th>
-                    <th className="px-3 py-2 text-left">Type</th>
-                    <th className="px-3 py-2 text-left hidden lg:table-cell">Abilities</th>
-                    <th className="px-3 py-2 text-right">
+                    <th className="px-3 py-2.5 text-left">Pokemon</th>
+                    <th className="px-3 py-2.5 text-left">Type</th>
+                    <th className="px-3 py-2.5 text-left hidden lg:table-cell">Abilities</th>
+                    <th className="px-3 py-2.5 text-right font-mono">
                       <button onClick={() => handleSort('kills')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
                         K <SortIcon k="kills" />
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-right">
+                    <th className="px-3 py-2.5 text-right font-mono">
                       <button onClick={() => handleSort('deaths')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
                         D <SortIcon k="deaths" />
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-right">GP</th>
-                    <th className="px-3 py-2 text-right">
+                    <th className="px-3 py-2.5 text-right font-mono">GP</th>
+                    <th className="px-3 py-2.5 text-right font-mono">
                       <button onClick={() => handleSort('kpg')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
                         KPG <SortIcon k="kpg" />
                       </button>
                     </th>
-                    <th className="px-3 py-2 text-right">
+                    <th className="px-3 py-2.5 text-right font-mono">
                       <button onClick={() => handleSort('spe')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
                         Spe <SortIcon k="spe" />
                       </button>
@@ -757,22 +750,20 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                             </div>
                           </td>
                           <td className="px-3 py-2.5">
-                            <div className="space-y-0.5">
+                            <div className="flex flex-col gap-1">
                               <TypeChip types={mon.types} size="xs" />
                               {mon.isTeraCaptain && mon.teraTypes && mon.teraTypes.length > 0 && (
-                                <div className="flex items-center gap-0.5">
-                                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-sm bg-pink/20 text-pink text-[6px] font-black border border-pink/30 shrink-0">t</span>
-                                  <div className="flex gap-0.5">
-                                    {mon.teraTypes.map(t => (
-                                      <span
-                                        key={t}
-                                        className="text-[7px] font-bold uppercase rounded px-1 py-px text-white"
-                                        style={{ backgroundColor: TYPE_COLORS[t] }}
-                                      >
-                                        {TYPE_ABBR[t]}
-                                      </span>
-                                    ))}
-                                  </div>
+                                <div className="flex items-center gap-px">
+                                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-[2px] bg-pink/15 text-pink text-[6px] font-black shrink-0 mr-0.5">t</span>
+                                  {mon.teraTypes.map(t => (
+                                    <span
+                                      key={t}
+                                      className="text-[6px] font-bold uppercase rounded-[2px] px-[3px] py-[1px] text-white/90 leading-none"
+                                      style={{ backgroundColor: TYPE_COLORS[t] }}
+                                    >
+                                      {TYPE_ABBR[t]}
+                                    </span>
+                                  ))}
                                 </div>
                               )}
                             </div>
@@ -780,11 +771,11 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                           <td className="px-3 py-2.5 hidden lg:table-cell">
                             <span className="text-[11px] text-text-muted">{mon.abilities.join(', ')}</span>
                           </td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-sm font-medium text-win">{mon.seasonStats.kills}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-sm font-medium text-loss">{mon.seasonStats.deaths}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-sm text-text-muted">{mon.seasonStats.gp}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-sm text-text-secondary font-medium">{kpg}</td>
-                          <td className="px-3 py-2.5 text-right tabular-nums text-sm text-text-secondary">{mon.stats.spe}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-win">{mon.seasonStats.kills}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-loss">{mon.seasonStats.deaths}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-muted">{mon.seasonStats.gp}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary font-semibold">{kpg}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary">{mon.stats.spe}</td>
                         </tr>
                         {isExpanded && (
                           <tr className="border-b border-border-subtle/50">
@@ -822,9 +813,9 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
             </div>
 
             {/* Totals */}
-            <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-xs text-text-muted">
-              <span>{activeRoster.length} Pokemon &middot; {pointsUsed}/{config.pointCap}pt</span>
-              <KDDisplay kills={teamKills} deaths={teamDeaths} />
+            <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted font-medium">
+              <span className="font-mono">{activeRoster.length} mon &middot; {pointsUsed}/{config.pointCap}pt</span>
+              <span className="font-mono"><KDDisplay kills={teamKills} deaths={teamDeaths} /></span>
             </div>
           </CardContent>
         </Card>
@@ -838,7 +829,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           {/* ─── SCHEDULE ─── */}
           <Card className="bg-surface-raised border-border-default">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base text-text-primary">Schedule</CardTitle>
+              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Schedule</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
               {matches.map(match => {
@@ -855,29 +846,26 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                 const isCurrent = match.week === currentSeason.currentWeek + 1;
 
                 return (
-                  <div key={match.id} className={`flex items-center gap-2 py-2 px-3 rounded-md transition-colors ${isCurrent ? 'bg-neon/5 border border-neon/20' : 'hover:bg-surface-overlay/40'}`}>
-                    <span className="w-10 text-xs tabular-nums text-text-muted shrink-0">Wk {match.week}</span>
+                  <div key={match.id} className={`flex items-center gap-2 py-1.5 px-2 rounded transition-colors ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
+                    <span className="w-8 text-[10px] font-mono tabular-nums text-text-muted shrink-0">{match.week}</span>
                     {hasResult ? (
-                      <span className={`w-5 text-center text-xs font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
+                      <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
                         {won ? 'W' : lost ? 'L' : 'D'}
                       </span>
                     ) : (
-                      <span className="w-5 text-center text-[10px] text-text-muted">—</span>
+                      <span className="w-4 text-center text-[10px] text-text-muted">—</span>
                     )}
-                    <span className="text-xs text-text-muted">{isHome ? 'vs' : '@'}</span>
                     <Link to={`/teams/${opponentId}`} className="flex items-center gap-1.5 flex-1 min-w-0">
                       <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
-                      <span className="text-sm text-text-primary hover:text-neon transition-colors truncate">{opponent.teamAbbrev}</span>
+                      <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
                     </Link>
                     {hasResult && (
-                      <span className="text-sm tabular-nums text-text-secondary">
-                        <span className={won ? 'text-win font-medium' : ''}>{myScore}</span>
-                        <span className="text-text-muted mx-0.5">-</span>
-                        <span className={lost ? 'text-loss font-medium' : ''}>{theirScore}</span>
+                      <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                        {myScore}<span className="mx-px">-</span>{theirScore}
                       </span>
                     )}
                     {match.replayUrl && (
-                      <a href={match.replayUrl} className="text-text-muted hover:text-neon transition-colors"><ExternalLink size={12} /></a>
+                      <a href={match.replayUrl} className="text-text-muted/40 hover:text-neon transition-colors"><ExternalLink size={10} /></a>
                     )}
                   </div>
                 );
@@ -888,7 +876,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           {/* ─── SPEED TIERS ─── */}
           <Card className="bg-surface-raised border-border-default">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base text-text-primary">Speed Tiers</CardTitle>
+              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Speed Tiers</CardTitle>
             </CardHeader>
             <CardContent className="space-y-px">
               {[...activeRoster]
@@ -934,6 +922,44 @@ const TYPE_ABBR: Record<PokemonType, string> = {
   dark: 'DRK', steel: 'STL', fairy: 'FAI',
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// RANK BADGE — gold/silver/bronze for top 3, muted for others
+// ═══════════════════════════════════════════════════════════════════
+
+function StatBlock({ value, label }: { value: React.ReactNode; label: string }) {
+  return (
+    <div className="flex flex-col items-center">
+      <div className="font-mono text-base font-bold tabular-nums tracking-tight leading-none">{value}</div>
+      <span className="text-[9px] font-medium text-text-muted uppercase tracking-widest mt-1.5">{label}</span>
+    </div>
+  );
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank <= 3) {
+    const cls = `rank-badge rank-badge-${rank}`;
+    return (
+      <div className={`${cls} w-10 h-10 rounded-lg text-lg`}>
+        #{rank}
+      </div>
+    );
+  }
+
+  if (rank <= 8) {
+    return (
+      <div className="w-10 h-10 rounded-lg bg-neon/10 border border-neon/20 flex items-center justify-center text-lg font-bold tabular-nums text-neon">
+        #{rank}
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-10 h-10 rounded-lg bg-surface-overlay border border-border-subtle flex items-center justify-center text-lg font-bold tabular-nums text-text-muted">
+      #{rank}
+    </div>
+  );
+}
+
 function cellColor(weak: number, resist: number, immune: number): string {
   if (immune > 0 && weak === 0) return 'rgba(34, 211, 238, 0.25)';
   const net = weak - resist - immune;
@@ -965,9 +991,9 @@ function TypeCoverageGrid({ profile }: {
   return (
     <Card className="bg-surface-raised border-border-default">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base text-text-primary">Defensive Profile</CardTitle>
-        <p className="text-[10px] text-text-muted mt-0.5">
-          Hover each pip to see which Pokemon
+        <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Defensive Profile</CardTitle>
+        <p className="text-[9px] text-text-muted mt-0.5 tracking-wide">
+          Hover pips for details
         </p>
       </CardHeader>
       <CardContent className="px-3 pb-3">

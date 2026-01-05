@@ -31,7 +31,7 @@ export function AppShell() {
       <aside className="w-56 flex-shrink-0 bg-surface-raised border-r border-border-default flex flex-col">
         {/* Logo / League Header */}
         <div className="p-4 border-b border-border-default">
-          <h1 className="text-lg font-bold text-neon tracking-tight">cannoli</h1>
+          <h1 className="text-lg font-bold text-neon tracking-tighter">cannoli</h1>
           <div className="mt-2 flex items-center gap-2">
             <span className={cn('text-[10px] font-bold uppercase px-1.5 py-0.5 rounded', phaseColors[currentSeason.phase])}>
               {currentSeason.phase}
