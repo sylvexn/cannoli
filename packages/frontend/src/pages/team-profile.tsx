@@ -10,6 +10,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { TeamLogo } from '@/components/team-logo';
+import { AbilityChip } from '@/components/ability-chip';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -903,7 +904,9 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                             <TypeChip types={mon.types} size="xs" />
                           </td>
                           <td className="px-3 py-2.5 hidden lg:table-cell">
-                            <span className="text-[11px] text-text-muted">{mon.abilities.join(', ')}</span>
+                            <div className="flex flex-wrap gap-0.5">
+                              {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
+                            </div>
                           </td>
                           <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-win">{mon.seasonStats.kills}</td>
                           <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-loss">{mon.seasonStats.deaths}</td>
@@ -931,8 +934,10 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                                 )}
                                 {mon.abilities.length > 0 && (
                                   <div className="mt-1.5 lg:hidden">
-                                    <span className="text-[10px] text-text-muted font-bold uppercase">Abilities: </span>
-                                    <span className="text-[11px] text-text-secondary">{mon.abilities.join(', ')}</span>
+                                    <span className="text-[10px] text-text-muted font-bold uppercase block mb-0.5">Abilities</span>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
+                                    </div>
                                   </div>
                                 )}
                               </div>
