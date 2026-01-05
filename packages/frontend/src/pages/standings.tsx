@@ -120,17 +120,17 @@ export function StandingsPage() {
                 return (
                   <div
                     key={match.id}
-                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 group cursor-default"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
-                    <div className="flex items-center gap-2">
+                    <Link to={`/teams/${home.id}`} className="flex items-center gap-2 group/home">
                       <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
-                      <span className="text-sm font-medium text-text-primary group-hover:text-neon transition-colors">{home.teamAbbrev}</span>
-                    </div>
+                      <span className="text-sm font-medium text-text-primary group-hover/home:text-neon transition-colors">{home.teamAbbrev}</span>
+                    </Link>
                     <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
-                    <div className="flex items-center gap-2 justify-end">
-                      <span className="text-sm font-medium text-text-primary group-hover:text-pink transition-colors">{away.teamAbbrev}</span>
+                    <Link to={`/teams/${away.id}`} className="flex items-center gap-2 justify-end group/away">
+                      <span className="text-sm font-medium text-text-primary group-hover/away:text-pink transition-colors">{away.teamAbbrev}</span>
                       <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
-                    </div>
+                    </Link>
                   </div>
                 );
               })}
@@ -158,14 +158,14 @@ export function StandingsPage() {
                 return (
                   <div
                     key={match.id}
-                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 group"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
-                    <div className="flex items-center gap-2">
+                    <Link to={`/teams/${home.id}`} className="flex items-center gap-2 group/home">
                       <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
-                      <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'}`}>
+                      <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2 px-3">
                       <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
                         {match.homeScore}
@@ -175,12 +175,12 @@ export function StandingsPage() {
                         {match.awayScore}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 justify-end">
-                      <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'}`}>
+                    <Link to={`/teams/${away.id}`} className="flex items-center gap-2 justify-end group/away">
+                      <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
                       <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
-                    </div>
+                    </Link>
                   </div>
                 );
               })}

@@ -1173,17 +1173,17 @@ function TypeCoverageGridInner({ profile }: {
         const net = wk - rs - im;
 
         return (
-          <div key={type} className="flex items-center gap-0 h-[26px] group/row">
+          <div key={type} className="flex items-center gap-0 h-[22px] group/row">
             {/* Type badge */}
             <span
-              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l py-[5px] text-white shrink-0 leading-none"
+              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l py-[4px] text-white shrink-0 leading-none"
               style={{ backgroundColor: TYPE_COLORS[type] }}
             >
               {TYPE_ABBR[type]}
             </span>
 
-            {/* Stacked bar — inline block segments with explicit sizing */}
-            <div className="flex-1 h-full rounded-r overflow-hidden bg-surface-overlay/20" style={{ display: 'flex' }}>
+            {/* Stacked bar */}
+            <div className="flex-1 h-[14px] rounded-r overflow-hidden bg-surface-overlay/20" style={{ display: 'flex' }}>
               {weak.map(name => (
                 <DefSegment key={`w-${name}`} name={name} label="weak" color="loss" pct={100 / maxCount} />
               ))}
