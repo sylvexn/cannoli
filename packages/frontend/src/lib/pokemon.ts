@@ -15,6 +15,66 @@ export function spriteUrl(name: string, type: 'gen5' | 'gen5-shiny' | 'ani' | 'a
 }
 
 /**
+ * Showdown sprite ID overrides for names our general rules can't handle.
+ * Maps display name (lowercase) → sprite filename (without extension).
+ */
+const SPRITE_OVERRIDES: Record<string, string> = {
+  // Hyphenated names that should be collapsed (no hyphen in sprite ID)
+  'kommo-o': 'kommoo',
+  'hakamo-o': 'hakamoo',
+  'jangmo-o': 'jangmoo',
+  'ho-oh': 'hooh',
+  'porygon-z': 'porygonz',
+
+  // Gender forms — male is default (no suffix)
+  'basculegion-m': 'basculegion',
+  'indeedee-m': 'indeedee',
+  'meowstic-m': 'meowstic',
+  'oinkologne-m': 'oinkologne',
+
+  // Basculin forms
+  'basculin-blue': 'basculin-bluestriped',
+  'basculin-red': 'basculin',
+  'basculin-white': 'basculin-whitestriped',
+
+  // Oricorio
+  'oricorio-pom-pom': 'oricorio-pompom',
+
+  // Lycanroc — midday is default
+  'lycanroc-midday': 'lycanroc',
+
+  // Nidoran gender symbols
+  'nidoran-f': 'nidoranf',
+  'nidoran-m': 'nidoranm',
+
+  // Squawkabilly — yellow isn't in gen5 sprites, use base
+  'squawkabilly-yellow': 'squawkabilly',
+
+  // Sirfetch'd apostrophe
+  "sirfetch'd": 'sirfetchd',
+
+  // Farfetch'd
+  "farfetch'd": 'farfetchd',
+  "farfetch'd-galar": 'farfetchd-galar',
+
+  // Flabébé accent
+  'flabébé': 'flabebe',
+
+  // Paldean Tauros — no gen5 sprites, fall back to base tauros
+  'tauros-paldea': 'tauros',
+  'tauros-paldea-aqua': 'tauros',
+  'tauros-paldea-blaze': 'tauros',
+  'tauros-paldea-combat': 'tauros',
+
+  // Urshifu
+  'urshifu-rapid-strike': 'urshifu-rapidstrike',
+  'urshifu-single-strike': 'urshifu',
+
+  // Ursaluna Bloodmoon
+  'ursaluna-bloodmoon': 'ursaluna-bloodmoon',
+};
+
+/**
  * Convert a display name to Showdown's sprite filename format.
  * Showdown sprites use lowercase with hyphens for forms:
  *   "Mega Blastoise" → "blastoise-mega"
@@ -23,11 +83,16 @@ export function spriteUrl(name: string, type: 'gen5' | 'gen5-shiny' | 'ani' | 'a
  *   "Rotom-Wash"     → "rotom-wash"
  *   "Mr. Mime"       → "mrmime"
  *   "Mega Charizard X" → "charizard-megax"
+ *   "Kommo-o"        → "kommoo"
  */
 export function toSpriteId(name: string): string {
   let n = name.trim();
 
-  // Handle "Mega X" / "Mega Y" variants: "Mega Charizard X" → "Charizard-MegaX"
+  // Check overrides first (case-insensitive)
+  const lower = n.toLowerCase();
+  if (SPRITE_OVERRIDES[lower]) return SPRITE_OVERRIDES[lower];
+
+  // Handle "Mega X" / "Mega Y" variants: "Mega Charizard X" → "charizard-megax"
   const megaXY = n.match(/^Mega\s+(.+)\s+([XY])$/i);
   if (megaXY) {
     return `${cleanBase(megaXY[1])}-mega${megaXY[2].toLowerCase()}`;
@@ -46,7 +111,6 @@ export function toSpriteId(name: string): string {
   }
 
   // Handle hyphenated forms: "Slowking-Galar", "Rotom-Wash", "Basculegion-F"
-  // Keep hyphens, just lowercase and strip special chars from each part
   if (n.includes('-')) {
     return n
       .split('-')
