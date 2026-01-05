@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { players, standings } from '@/mocks/players';
 import { getTeamMatches, currentSeason } from '@/mocks/season';
 import { TIER_LIST, TERA_BANNED, getEffectiveCost, canBeTeraCaptain, getTermCost } from '@/mocks/tier-list';
@@ -20,9 +21,11 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
   ChevronDown, ChevronUp, X, Search, ArrowRightLeft,
+  Shield, Calendar, Zap,
 } from 'lucide-react';
 
 // ─── Type effectiveness ──────────────────────────────────────────
@@ -146,7 +149,11 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const [swappingIndex, setSwappingIndex] = useState<number | null>(null);
   const [teraEditingIndex, setTeraEditingIndex] = useState<number | null>(null);
   const [draggingTeraFrom, setDraggingTeraFrom] = useState<number | null>(null);
+  const [draggingPosFrom, setDraggingPosFrom] = useState<number | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const spriteRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [rosterOrder, setRosterOrder] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedMon, setExpandedMon] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
@@ -154,15 +161,22 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
   const freeAgents = useMemo(() => computeFreeAgents(players), []);
 
-  // Apply swaps + tera edits
+  // Initialize roster order
+  useEffect(() => {
+    setRosterOrder(player.roster.map((_, i) => i));
+  }, [player.roster]);
+
+  // Apply swaps + tera edits + reorder
   const activeRoster = useMemo(() => {
-    const roster = [...player.roster.map(mon => ({ ...mon }))];
-    for (const swap of swaps) roster[swap.index] = { ...swap.replacement };
+    const base = [...player.roster.map(mon => ({ ...mon }))];
+    for (const swap of swaps) base[swap.index] = { ...swap.replacement };
     for (const edit of teraEdits) {
-      roster[edit.index] = { ...roster[edit.index], isTeraCaptain: edit.isTeraCaptain, teraTypes: edit.teraTypes.length > 0 ? edit.teraTypes : undefined };
+      base[edit.index] = { ...base[edit.index], isTeraCaptain: edit.isTeraCaptain, teraTypes: edit.teraTypes.length > 0 ? edit.teraTypes : undefined };
     }
-    return roster;
-  }, [player.roster, swaps, teraEdits]);
+    // Apply position reorder
+    const order = rosterOrder.length === base.length ? rosterOrder : base.map((_, i) => i);
+    return order.map(idx => base[idx]);
+  }, [player.roster, swaps, teraEdits, rosterOrder]);
 
   const sortedRoster = useMemo(() => {
     const indexed = activeRoster.map((mon, i) => ({ mon, originalIndex: i }));
@@ -221,10 +235,22 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   function handleResetAll() {
     setSwaps([]);
     setTeraEdits([]);
+    setRosterOrder(player.roster.map((_, i) => i));
     setSwappingIndex(null);
     setTeraEditingIndex(null);
     setDraggingTeraFrom(null);
+    setDraggingPosFrom(null);
     setSearchQuery('');
+  }
+
+  function handlePositionSwap(fromDisplayIdx: number, toDisplayIdx: number) {
+    setRosterOrder(prev => {
+      const order = prev.length === player.roster.length ? [...prev] : player.roster.map((_, i) => i);
+      const temp = order[fromDisplayIdx];
+      order[fromDisplayIdx] = order[toDisplayIdx];
+      order[toDisplayIdx] = temp;
+      return order;
+    });
   }
 
   function handleTeraDrop(targetIndex: number) {
@@ -289,6 +315,69 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
       });
     }
   }
+
+  // Pointer-based drag system (tera badge + position reorder)
+  const isDragging = draggingTeraFrom !== null || draggingPosFrom !== null;
+  const dragSource = draggingTeraFrom ?? draggingPosFrom;
+  const dragType = draggingTeraFrom !== null ? 'tera' : draggingPosFrom !== null ? 'position' : null;
+
+  const handleTeraPointerDown = useCallback((index: number, e: React.PointerEvent) => {
+    if (!theorycraftMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingTeraFrom(index);
+    setDragPos({ x: e.clientX, y: e.clientY });
+  }, [theorycraftMode]);
+
+  const handlePositionPointerDown = useCallback((index: number, e: React.PointerEvent) => {
+    if (!theorycraftMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggingPosFrom(index);
+    setDragPos({ x: e.clientX, y: e.clientY });
+  }, [theorycraftMode]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    function onMove(e: PointerEvent) {
+      setDragPos({ x: e.clientX, y: e.clientY });
+      let found: number | null = null;
+      spriteRefs.current.forEach((el, idx) => {
+        const rect = el.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          found = idx;
+        }
+      });
+      setDragOverIndex(found !== dragSource ? found : null);
+    }
+
+    function onUp() {
+      if (dragOverIndex !== null && dragOverIndex !== dragSource) {
+        if (dragType === 'tera') {
+          // Only drop if target can be tera captain
+          const targetMon = activeRoster[dragOverIndex];
+          if (canBeTeraCaptain(targetMon.name)) {
+            handleTeraDrop(dragOverIndex);
+          }
+          // Otherwise: invalid drop — badge returns to owner (just reset state)
+        } else if (dragType === 'position') {
+          handlePositionSwap(draggingPosFrom!, dragOverIndex);
+        }
+      }
+      setDraggingTeraFrom(null);
+      setDraggingPosFrom(null);
+      setDragPos(null);
+      setDragOverIndex(null);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+  }, [isDragging, dragSource, dragType, dragOverIndex, activeRoster]);
 
   const SortIcon = ({ k }: { k: typeof sortKey }) => {
     if (sortKey !== k) return null;
@@ -381,63 +470,79 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
       <Card className="bg-surface-raised border-border-default overflow-hidden">
         <div className="flex items-center justify-center gap-1 px-4 py-3 flex-wrap">
           {activeRoster.map((mon, i) => {
-            const isSwapped = swaps.some(s => s.index === i);
+            const isSwapped = swaps.some(s => s.index === (rosterOrder[i] ?? i));
             const isSwapping = swappingIndex === i;
             const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
-            const isDragOver = dragOverIndex === i && draggingTeraFrom !== null && draggingTeraFrom !== i;
-            const canDrop = isDragOver && canBeTeraCaptain(mon.name);
+            const isTeraOver = dragOverIndex === i && draggingTeraFrom !== null && draggingTeraFrom !== i;
+            const isPosOver = dragOverIndex === i && draggingPosFrom !== null && draggingPosFrom !== i;
+            const teraCanDrop = isTeraOver && canBeTeraCaptain(mon.name);
+            const teraBlocked = isTeraOver && !canBeTeraCaptain(mon.name);
+            const beingDragged = draggingPosFrom === i;
             return (
               <div
                 key={`${mon.name}-${i}`}
                 className="relative group"
-                onDragOver={(e) => {
-                  if (draggingTeraFrom !== null && draggingTeraFrom !== i) {
-                    e.preventDefault();
-                    setDragOverIndex(i);
-                  }
-                }}
-                onDragLeave={() => { if (dragOverIndex === i) setDragOverIndex(null); }}
-                onDrop={(e) => { e.preventDefault(); handleTeraDrop(i); setDragOverIndex(null); }}
+                ref={(el) => { if (el) spriteRefs.current.set(i, el); else spriteRefs.current.delete(i); }}
               >
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className={`relative cursor-default p-1.5 rounded-lg transition-all duration-200 hover:bg-surface-overlay/60 ${isSwapped ? 'ring-1 ring-pink/40' : ''} ${isSwapping ? 'ring-2 ring-neon/60 bg-neon/5' : ''} ${canDrop ? 'ring-2 ring-pink/60 bg-pink/5' : ''} ${isDragOver && !canDrop ? 'ring-2 ring-loss/40 bg-loss/5' : ''}`}>
-                      <PokemonSprite name={mon.name} size="xl" className="transition-transform duration-200 group-hover:scale-110" />
+                    <div
+                      onPointerDown={(e) => {
+                        // Only start position drag from the sprite body (not tera badge)
+                        if ((e.target as HTMLElement).closest('svg')) return;
+                        handlePositionPointerDown(i, e);
+                      }}
+                      className={`relative p-1.5 rounded-lg transition-all duration-200 ${
+                        theorycraftMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+                      } ${isSwapped ? 'ring-1 ring-pink/40' : ''
+                      } ${isSwapping ? 'ring-2 ring-neon/60 bg-neon/5' : ''
+                      } ${teraCanDrop ? 'ring-2 ring-pink/60 bg-pink/8 scale-105' : ''
+                      } ${teraBlocked ? 'ring-2 ring-loss/60 bg-loss/10' : ''
+                      } ${isPosOver ? 'ring-2 ring-neon/50 bg-neon/8 scale-105' : ''
+                      } ${beingDragged ? 'opacity-30 scale-95' : 'hover:bg-surface-overlay/60'
+                      }`}
+                    >
+                      <PokemonSprite name={mon.name} size="xl" className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
+                      {/* Tera blocked overlay */}
+                      {teraBlocked && (
+                        <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-loss/10">
+                          <X size={28} className="text-loss/60" />
+                        </div>
+                      )}
                       {mon.isTeraCaptain && (
-                        <div
-                          draggable={theorycraftMode}
-                          onDragStart={(e) => {
-                            if (!theorycraftMode) return;
-                            setDraggingTeraFrom(i);
-                            e.dataTransfer.effectAllowed = 'move';
-                            // Tiny drag image
-                            const el = document.createElement('div');
-                            el.textContent = 'T';
-                            el.style.cssText = 'width:20px;height:20px;border-radius:50%;background:#e879f9;color:white;font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;position:absolute;top:-100px;left:-100px;';
-                            document.body.appendChild(el);
-                            e.dataTransfer.setDragImage(el, 10, 10);
-                            setTimeout(() => document.body.removeChild(el), 0);
-                          }}
-                          onDragEnd={() => { setDraggingTeraFrom(null); setDragOverIndex(null); }}
+                        <svg
+                          width="27"
+                          height="27"
+                          viewBox="0 0 18 18"
+                          onPointerDown={(e) => handleTeraPointerDown(i, e)}
                           onClick={(e) => {
                             if (!theorycraftMode) return;
                             e.stopPropagation();
                             setTeraEditingIndex(teraEditingIndex === i ? null : i);
                           }}
-                          className={`absolute top-1 right-1 w-4 h-4 rounded-full bg-pink shadow-glow-pink-sm flex items-center justify-center ${theorycraftMode ? 'cursor-grab active:cursor-grabbing hover:scale-125 transition-transform' : ''}`}
+                          className={`absolute top-0.5 right-0.5 select-none touch-none ${theorycraftMode ? 'cursor-grab active:cursor-grabbing hover:scale-110 transition-transform' : ''} ${draggingTeraFrom === i ? 'opacity-40' : ''}`}
+                          style={{ filter: 'drop-shadow(0 0 5px rgba(232, 121, 249, 0.5))' }}
                         >
-                          <span className="text-[7px] font-black text-white">T</span>
-                        </div>
+                          <circle cx="9" cy="9" r="8.5" fill="#e879f9" />
+                          <circle cx="9" cy="9" r="7.5" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
+                          <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" opacity="0.9" />
+                          <path d="M4.5 7.5 L13.5 7.5" stroke="white" strokeWidth="0.8" opacity="0.5" />
+                          <path d="M9 3 L9 7.5" stroke="white" strokeWidth="0.6" opacity="0.35" />
+                        </svg>
                       )}
                       {/* Empty captain slot indicator in theorycraft mode */}
                       {theorycraftMode && !mon.isTeraCaptain && canBeTeraCaptain(mon.name) && captainCount < config.teraCaptainSlots && (
-                        <button
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 18 18"
                           onClick={(e) => { e.stopPropagation(); handleToggleCaptain(i); }}
-                          className="absolute top-1 right-1 w-4 h-4 rounded-full border border-dashed border-pink/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-pink/10 hover:border-pink/60"
-                          title="Make tera captain"
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-all cursor-pointer select-none"
+                          style={{ filter: 'drop-shadow(0 0 2px rgba(232, 121, 249, 0.2))' }}
                         >
-                          <span className="text-[7px] font-black text-pink/40">T</span>
-                        </button>
+                          <circle cx="9" cy="9" r="8" fill="none" stroke="#e879f9" strokeWidth="1" strokeDasharray="3 2" opacity="0.5" />
+                          <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="#e879f9" strokeWidth="0.8" strokeLinejoin="round" opacity="0.4" />
+                        </svg>
                       )}
                       <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
                         <TierBadge points={effectiveCost} />
@@ -649,18 +754,17 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           );
         })()}
 
-        {/* Point cap & tera captain info */}
-        <div className="px-4 py-2.5 border-t border-border-subtle flex items-center gap-6">
-          <div className="flex-1 max-w-xs">
-            <PointCapBar used={pointsUsed} total={config.pointCap} />
-          </div>
-          {pointsDelta !== 0 && (
-            <span className={`text-[10px] font-mono font-medium ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
-              {pointsDelta > 0 ? '+' : ''}{pointsDelta}pt
-            </span>
-          )}
-          <div className="text-[11px] text-text-muted font-medium">
-            Tera <span className={captainCount > config.teraCaptainSlots ? 'text-loss' : 'text-pink'}>{captainCount}<span className="text-text-muted">/{config.teraCaptainSlots}</span></span>
+        {/* Point cap bar — centered, wide */}
+        <div className="px-6 py-2.5 border-t border-border-subtle">
+          <div className="max-w-lg mx-auto flex items-center gap-3">
+            <div className="flex-1">
+              <PointCapBar used={pointsUsed} total={config.pointCap} />
+            </div>
+            {pointsDelta !== 0 && (
+              <span className={`text-[10px] font-mono font-semibold shrink-0 ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
+                {pointsDelta > 0 ? '+' : ''}{pointsDelta}
+              </span>
+            )}
           </div>
         </div>
       </Card>
@@ -744,29 +848,35 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                                 {mon.name}
                               </span>
                               {mon.isTeraCaptain && (
-                                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
+                                <Tooltip delayDuration={0}>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40 cursor-default">T</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="bg-surface-overlay border-border-default p-2">
+                                    <div className="text-[9px] font-semibold text-pink uppercase tracking-wider mb-1.5">Tera Types</div>
+                                    {mon.teraTypes && mon.teraTypes.length > 0 ? (
+                                      <div className="flex gap-1">
+                                        {mon.teraTypes.map(t => (
+                                          <span
+                                            key={t}
+                                            className="text-[9px] font-bold uppercase rounded px-1.5 py-0.5 text-white"
+                                            style={{ backgroundColor: TYPE_COLORS[t] }}
+                                          >
+                                            {TYPE_ABBR[t]}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-[10px] text-text-muted">No tera types set</span>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
                               {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
                             </div>
                           </td>
                           <td className="px-3 py-2.5">
-                            <div className="flex flex-col gap-1">
-                              <TypeChip types={mon.types} size="xs" />
-                              {mon.isTeraCaptain && mon.teraTypes && mon.teraTypes.length > 0 && (
-                                <div className="flex items-center gap-px">
-                                  <span className="inline-flex items-center justify-center w-3 h-3 rounded-[2px] bg-pink/15 text-pink text-[6px] font-black shrink-0 mr-0.5">t</span>
-                                  {mon.teraTypes.map(t => (
-                                    <span
-                                      key={t}
-                                      className="text-[6px] font-bold uppercase rounded-[2px] px-[3px] py-[1px] text-white/90 leading-none"
-                                      style={{ backgroundColor: TYPE_COLORS[t] }}
-                                    >
-                                      {TYPE_ABBR[t]}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <TypeChip types={mon.types} size="xs" />
                           </td>
                           <td className="px-3 py-2.5 hidden lg:table-cell">
                             <span className="text-[11px] text-text-muted">{mon.abilities.join(', ')}</span>
@@ -815,90 +925,123 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
             {/* Totals */}
             <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted font-medium">
               <span className="font-mono">{activeRoster.length} mon &middot; {pointsUsed}/{config.pointCap}pt</span>
-              <span className="font-mono"><KDDisplay kills={teamKills} deaths={teamDeaths} /></span>
+              <div className="flex items-center gap-3 font-mono">
+                <span>Tera <span className={captainCount > config.teraCaptainSlots ? 'text-loss' : 'text-pink'}>{captainCount}</span>/{config.teraCaptainSlots}</span>
+                <KDDisplay kills={teamKills} deaths={teamDeaths} />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* ─── RIGHT COLUMN ─── */}
-        <div className="space-y-6">
+        {/* ─── RIGHT COLUMN — Tabbed ─── */}
+        <Card className="bg-surface-raised border-border-default self-start">
+          <Tabs defaultValue="defense">
+            <div className="border-b border-border-subtle">
+              <TabsList variant="line" className="w-full justify-start px-2 h-9">
+                <TabsTrigger value="defense" className="text-[11px] gap-1 px-2">
+                  <Shield size={12} /> Defense
+                </TabsTrigger>
+                <TabsTrigger value="schedule" className="text-[11px] gap-1 px-2">
+                  <Calendar size={12} /> Schedule
+                </TabsTrigger>
+                <TabsTrigger value="speed" className="text-[11px] gap-1 px-2">
+                  <Zap size={12} /> Speed
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          {/* ─── TYPE COVERAGE GRID ─── */}
-          <TypeCoverageGrid profile={typeProfile} />
+            <TabsContent value="defense" className="p-0">
+              <TypeCoverageGridInner profile={typeProfile} />
+            </TabsContent>
 
-          {/* ─── SCHEDULE ─── */}
-          <Card className="bg-surface-raised border-border-default">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Schedule</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              {matches.map(match => {
-                const isHome = match.homePlayer === player.id;
-                const opponentId = isHome ? match.awayPlayer : match.homePlayer;
-                const opponent = players.find(p => p.id === opponentId);
-                if (!opponent) return null;
+            <TabsContent value="schedule" className="p-0">
+              <div className="p-3 space-y-0.5 max-h-[520px] overflow-y-auto">
+                {matches.map(match => {
+                  const isHome = match.homePlayer === player.id;
+                  const opponentId = isHome ? match.awayPlayer : match.homePlayer;
+                  const opponent = players.find(p => p.id === opponentId);
+                  if (!opponent) return null;
 
-                const hasResult = match.homeScore != null && match.awayScore != null;
-                const myScore = isHome ? match.homeScore : match.awayScore;
-                const theirScore = isHome ? match.awayScore : match.homeScore;
-                const won = hasResult && (myScore ?? 0) > (theirScore ?? 0);
-                const lost = hasResult && (myScore ?? 0) < (theirScore ?? 0);
-                const isCurrent = match.week === currentSeason.currentWeek + 1;
+                  const hasResult = match.homeScore != null && match.awayScore != null;
+                  const myScore = isHome ? match.homeScore : match.awayScore;
+                  const theirScore = isHome ? match.awayScore : match.homeScore;
+                  const won = hasResult && (myScore ?? 0) > (theirScore ?? 0);
+                  const lost = hasResult && (myScore ?? 0) < (theirScore ?? 0);
+                  const isCurrent = match.week === currentSeason.currentWeek + 1;
 
-                return (
-                  <div key={match.id} className={`flex items-center gap-2 py-1.5 px-2 rounded transition-colors ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
-                    <span className="w-8 text-[10px] font-mono tabular-nums text-text-muted shrink-0">{match.week}</span>
-                    {hasResult ? (
-                      <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
-                        {won ? 'W' : lost ? 'L' : 'D'}
-                      </span>
-                    ) : (
-                      <span className="w-4 text-center text-[10px] text-text-muted">—</span>
-                    )}
-                    <Link to={`/teams/${opponentId}`} className="flex items-center gap-1.5 flex-1 min-w-0">
-                      <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
-                      <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
-                    </Link>
-                    {hasResult && (
-                      <span className="font-mono text-[11px] tabular-nums text-text-muted">
-                        {myScore}<span className="mx-px">-</span>{theirScore}
-                      </span>
-                    )}
-                    {match.replayUrl && (
-                      <a href={match.replayUrl} className="text-text-muted/40 hover:text-neon transition-colors"><ExternalLink size={10} /></a>
-                    )}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          {/* ─── SPEED TIERS ─── */}
-          <Card className="bg-surface-raised border-border-default">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Speed Tiers</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-px">
-              {[...activeRoster]
-                .sort((a, b) => b.stats.spe - a.stats.spe)
-                .map((mon, i) => {
-                  const maxSpe = Math.max(...activeRoster.map(m => m.stats.spe));
-                  const pct = maxSpe > 0 ? (mon.stats.spe / maxSpe) * 100 : 0;
                   return (
-                    <div key={`${mon.name}-${i}`} className="flex items-center gap-2 py-1">
-                      <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
-                      <div className="flex-1 h-1.5 rounded-full bg-surface-overlay overflow-hidden">
-                        <div className="h-full rounded-full bg-neon/60" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs tabular-nums text-text-secondary w-8 text-right">{mon.stats.spe}</span>
+                    <div key={match.id} className={`flex items-center gap-2 py-1.5 px-2 rounded transition-colors ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
+                      <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{match.week}</span>
+                      {hasResult ? (
+                        <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
+                          {won ? 'W' : lost ? 'L' : 'D'}
+                        </span>
+                      ) : (
+                        <span className="w-4 text-center text-[10px] text-text-muted">—</span>
+                      )}
+                      <Link to={`/teams/${opponentId}`} className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
+                        <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
+                      </Link>
+                      {hasResult && (
+                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+                          {myScore}<span className="mx-px">-</span>{theirScore}
+                        </span>
+                      )}
+                      {match.replayUrl && (
+                        <a href={match.replayUrl} className="text-text-muted/40 hover:text-neon transition-colors"><ExternalLink size={10} /></a>
+                      )}
                     </div>
                   );
-                })
-              }
-            </CardContent>
-          </Card>
-        </div>
+                })}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="speed" className="p-0">
+              <div className="p-3 space-y-0.5">
+                {[...activeRoster]
+                  .sort((a, b) => b.stats.spe - a.stats.spe)
+                  .map((mon, i) => {
+                    const maxSpe = Math.max(...activeRoster.map(m => m.stats.spe));
+                    const pct = maxSpe > 0 ? (mon.stats.spe / maxSpe) * 100 : 0;
+                    return (
+                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 py-1">
+                        <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
+                        <span className="text-[10px] text-text-muted font-medium w-16 truncate">{mon.name}</span>
+                        <div className="flex-1 h-1.5 rounded-full bg-surface-overlay overflow-hidden">
+                          <div className="h-full rounded-full bg-neon/60 transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[11px] font-mono tabular-nums text-text-secondary w-7 text-right">{mon.stats.spe}</span>
+                      </div>
+                    );
+                  })
+                }
+              </div>
+            </TabsContent>
+          </Tabs>
+        </Card>
       </div>
+
+      {/* Floating drag cursor */}
+      {isDragging && dragPos && createPortal(
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ left: dragPos.x - 16, top: dragPos.y - 16 }}
+        >
+          {dragType === 'tera' ? (
+            <svg width="32" height="32" viewBox="0 0 18 18" style={{ filter: 'drop-shadow(0 0 8px rgba(232, 121, 249, 0.6))' }}>
+              <circle cx="9" cy="9" r="8.5" fill="#e879f9" />
+              <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" opacity="0.9" />
+              <path d="M4.5 7.5 L13.5 7.5" stroke="white" strokeWidth="0.8" opacity="0.5" />
+            </svg>
+          ) : dragType === 'position' && draggingPosFrom !== null ? (
+            <div className="w-10 h-10 rounded-lg bg-surface-overlay/90 border border-neon/30 flex items-center justify-center shadow-glow-sm">
+              <PokemonSprite name={activeRoster[draggingPosFrom].name} size="sm" />
+            </div>
+          ) : null}
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
@@ -985,24 +1128,17 @@ function PipTooltip({ name, category }: { name: string; category: 'weak' | 'resi
   );
 }
 
-function TypeCoverageGrid({ profile }: {
+function TypeCoverageGridInner({ profile }: {
   profile: Record<PokemonType, TypeProfileEntry>;
 }) {
   return (
-    <Card className="bg-surface-raised border-border-default">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Defensive Profile</CardTitle>
-        <p className="text-[9px] text-text-muted mt-0.5 tracking-wide">
-          Hover pips for details
-        </p>
-      </CardHeader>
-      <CardContent className="px-3 pb-3">
-        <div className="grid grid-cols-2 gap-[2px]">
-          {POKEMON_TYPES.map(type => {
-            const { weak, resist, immune } = profile[type];
-            const wk = weak.length, rs = resist.length, im = immune.length;
-            const bg = cellColor(wk, rs, im);
-            const hasAny = wk > 0 || rs > 0 || im > 0;
+    <div className="p-3">
+      <div className="grid grid-cols-2 gap-[2px]">
+        {POKEMON_TYPES.map(type => {
+          const { weak, resist, immune } = profile[type];
+          const wk = weak.length, rs = resist.length, im = immune.length;
+          const bg = cellColor(wk, rs, im);
+          const hasAny = wk > 0 || rs > 0 || im > 0;
 
             return (
               <div
@@ -1046,13 +1182,12 @@ function TypeCoverageGrid({ profile }: {
           })}
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-4 mt-2 text-[9px] text-text-muted">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-loss/70" /> Weak</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-win/50" /> Resist</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neon/60" /> Immune</span>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2 text-[9px] text-text-muted">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-loss/70" /> Weak</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-win/50" /> Resist</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neon/60" /> Immune</span>
+      </div>
+    </div>
   );
 }
