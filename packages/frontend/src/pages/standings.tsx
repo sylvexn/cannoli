@@ -48,8 +48,8 @@ export function StandingsPage() {
                     >
                       <td className="px-4 py-2.5">
                         {i < 3 ? (
-                          <span className={`rank-badge rank-badge-${i + 1} w-7 h-7 rounded text-xs`}>
-                            #{i + 1}
+                          <span className={`rank-badge rank-badge-${i + 1} w-6 h-6 text-[10px]`}>
+                            {i + 1}
                           </span>
                         ) : (
                           <span className={`text-sm font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-muted'}`}>
@@ -120,20 +120,16 @@ export function StandingsPage() {
                 return (
                   <div
                     key={match.id}
-                    className="flex items-center justify-between py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 hover:shadow-glow-sm group cursor-default"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 group cursor-default"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="transition-transform duration-200 group-hover:scale-110">
-                        <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
-                      </div>
-                      <span className="text-sm font-medium text-text-primary transition-colors group-hover:text-neon">{home.teamAbbrev}</span>
+                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
+                      <span className="text-sm font-medium text-text-primary group-hover:text-neon transition-colors">{home.teamAbbrev}</span>
                     </div>
-                    <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider">vs</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-text-primary transition-colors group-hover:text-pink">{away.teamAbbrev}</span>
-                      <div className="transition-transform duration-200 group-hover:scale-110">
-                        <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
-                      </div>
+                    <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
+                    <div className="flex items-center gap-2 justify-end">
+                      <span className="text-sm font-medium text-text-primary group-hover:text-pink transition-colors">{away.teamAbbrev}</span>
+                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
                     </div>
                   </div>
                 );
@@ -162,17 +158,15 @@ export function StandingsPage() {
                 return (
                   <div
                     key={match.id}
-                    className="flex items-center justify-between py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 group"
+                    className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60 group"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="transition-transform duration-200 group-hover:scale-110">
-                        <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
                       <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'}`}>
                         {home.teamAbbrev}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3">
                       <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
                         {match.homeScore}
                       </span>
@@ -181,22 +175,12 @@ export function StandingsPage() {
                         {match.awayScore}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2 justify-end">
                       <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'}`}>
                         {away.teamAbbrev}
                       </span>
-                      <div className="transition-transform duration-200 group-hover:scale-110">
-                        <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
-                      </div>
+                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
                     </div>
-                    {match.replayUrl && (
-                      <a
-                        href={match.replayUrl}
-                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 text-text-muted hover:text-neon ml-1 hover:scale-110"
-                      >
-                        <ExternalLink size={12} />
-                      </a>
-                    )}
                   </div>
                 );
               })}

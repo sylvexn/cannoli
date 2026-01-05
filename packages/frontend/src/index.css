@@ -179,10 +179,10 @@
   }
 }
 
-/* ─── Rank badges (gold/silver/bronze) ─── */
-@keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+/* ─── Rank medals (gold/silver/bronze) ─── */
+@keyframes medal-shine {
+  0% { background-position: -150% 150%; }
+  100% { background-position: 150% -150%; }
 }
 
 .rank-badge {
@@ -191,29 +191,54 @@
   justify-content: center;
   font-weight: 800;
   letter-spacing: -0.03em;
+  border-radius: 9999px;
   position: relative;
 }
 
 .rank-badge-1 {
-  background: linear-gradient(135deg, #ffd700, #ffec80, #ffd700, #b8860b);
-  background-size: 200% 100%;
-  animation: shimmer 3s ease-in-out infinite;
-  color: #1a1400;
-  box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), 0 0 24px rgba(255, 215, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  background: linear-gradient(
+    -45deg,
+    #b8860b 0%, #ffd700 25%, #fff5b0 45%, #ffd700 55%, #b8860b 75%, #ffd700 100%
+  );
+  background-size: 300% 300%;
+  animation: medal-shine 8s ease-in-out infinite;
+  color: #3d2e00;
+  box-shadow:
+    0 0 10px rgba(255, 215, 0, 0.3),
+    0 0 20px rgba(255, 215, 0, 0.1),
+    inset 0 1px 2px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.15);
+  border: 1.5px solid rgba(255, 215, 0, 0.5);
 }
 
 .rank-badge-2 {
-  background: linear-gradient(135deg, #c0c0c0, #e8e8e8, #c0c0c0, #8a8a8a);
-  background-size: 200% 100%;
-  animation: shimmer 4s ease-in-out infinite;
-  color: #1a1a1a;
-  box-shadow: 0 0 10px rgba(192, 192, 192, 0.35), 0 0 20px rgba(192, 192, 192, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  background: linear-gradient(
+    -45deg,
+    #8a8a8a 0%, #c0c0c0 25%, #f0f0f0 45%, #c0c0c0 55%, #8a8a8a 75%, #c0c0c0 100%
+  );
+  background-size: 300% 300%;
+  animation: medal-shine 10s ease-in-out infinite;
+  color: #2a2a2a;
+  box-shadow:
+    0 0 8px rgba(192, 192, 192, 0.25),
+    0 0 16px rgba(192, 192, 192, 0.08),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.12);
+  border: 1.5px solid rgba(192, 192, 192, 0.4);
 }
 
 .rank-badge-3 {
-  background: linear-gradient(135deg, #cd7f32, #e8a862, #cd7f32, #8b5a2b);
-  background-size: 200% 100%;
-  animation: shimmer 5s ease-in-out infinite;
-  color: #1a1000;
-  box-shadow: 0 0 10px rgba(205, 127, 50, 0.35), 0 0 20px rgba(205, 127, 50, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  background: linear-gradient(
+    -45deg,
+    #8b5a2b 0%, #cd7f32 25%, #e8b87a 45%, #cd7f32 55%, #8b5a2b 75%, #cd7f32 100%
+  );
+  background-size: 300% 300%;
+  animation: medal-shine 12s ease-in-out infinite;
+  color: #2d1a00;
+  box-shadow:
+    0 0 8px rgba(205, 127, 50, 0.25),
+    0 0 16px rgba(205, 127, 50, 0.08),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.15);
+  border: 1.5px solid rgba(205, 127, 50, 0.4);
 }
