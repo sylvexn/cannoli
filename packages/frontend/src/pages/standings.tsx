@@ -47,9 +47,15 @@ export function StandingsPage() {
                       className="group border-b border-border-subtle/50 transition-all duration-200 hover:bg-surface-overlay/60 hover:shadow-[inset_2px_0_0_var(--color-neon)]"
                     >
                       <td className="px-4 py-2.5">
-                        <span className={`text-sm font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-muted'}`}>
-                          {i + 1}
-                        </span>
+                        {i < 3 ? (
+                          <span className={`rank-badge rank-badge-${i + 1} w-7 h-7 rounded text-xs`}>
+                            #{i + 1}
+                          </span>
+                        ) : (
+                          <span className={`text-sm font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-muted'}`}>
+                            {i + 1}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">

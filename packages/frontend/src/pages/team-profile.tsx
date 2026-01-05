@@ -164,7 +164,6 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [rosterOrder, setRosterOrder] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedMon, setExpandedMon] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
@@ -847,104 +846,93 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                 </thead>
                 <tbody>
                   {sortedRoster.map(({ mon, originalIndex }) => {
-                    const isExpanded = expandedMon === originalIndex;
                     const isSwapped = swaps.some(s => s.index === originalIndex);
                     const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
                     const kpg = mon.seasonStats.gp ? (mon.seasonStats.kills / mon.seasonStats.gp).toFixed(1) : '—';
+                    const bst = mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe;
 
                     return (
-                      <React.Fragment key={`${originalIndex}-${mon.name}`}>
-                        <tr
-                          className={`group border-b border-border-subtle/50 cursor-pointer transition-colors ${isSwapped ? 'bg-pink/5' : 'hover:bg-surface-overlay/40'}`}
-                          onClick={() => setExpandedMon(isExpanded ? null : originalIndex)}
-                        >
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-1">
-                              <TierBadge points={effectiveCost} />
-                              {mon.isTeraCaptain && effectiveCost !== mon.tier && (
-                                <span className="text-[9px] text-text-muted tabular-nums">({mon.tier})</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
-                              <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
-                                {mon.name}
-                              </span>
-                              {mon.isTeraCaptain && (
-                                <Tooltip delayDuration={0}>
-                                  <TooltipTrigger asChild>
-                                    <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40 cursor-default">T</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right" className="bg-surface-overlay border-border-default p-2">
-                                    <div className="text-[9px] font-semibold text-pink uppercase tracking-wider mb-1.5">Tera Types</div>
-                                    {mon.teraTypes && mon.teraTypes.length > 0 ? (
-                                      <div className="flex gap-1">
+                      <tr
+                        key={`${originalIndex}-${mon.name}`}
+                        className={`group border-b border-border-subtle/50 transition-colors ${isSwapped ? 'bg-pink/5' : 'hover:bg-surface-overlay/40'}`}
+                      >
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1">
+                            <TierBadge points={effectiveCost} />
+                            {mon.isTeraCaptain && effectiveCost !== mon.tier && (
+                              <span className="text-[9px] text-text-muted tabular-nums">({mon.tier})</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Tooltip delayDuration={200}>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center gap-2 cursor-default">
+                                <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
+                                <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
+                                  {mon.name}
+                                </span>
+                                {mon.isTeraCaptain && (
+                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
+                                )}
+                                {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" align="start" className="bg-surface-raised border-border-default p-0 w-64">
+                              <div className="p-2.5">
+                                {/* Header */}
+                                <div className="flex items-start gap-2.5 mb-2">
+                                  <PokemonSprite name={mon.name} size="lg" />
+                                  <div className="flex-1 min-w-0 pt-0.5">
+                                    <div className="text-xs font-semibold text-text-primary">{mon.name}</div>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <TypeChip types={mon.types} size="xs" />
+                                      <TierBadge points={effectiveCost} />
+                                    </div>
+                                    {mon.isTeraCaptain && mon.teraTypes && mon.teraTypes.length > 0 && (
+                                      <div className="flex items-center gap-1 mt-1">
+                                        <span className="text-[7px] font-black text-pink">TERA</span>
                                         {mon.teraTypes.map(t => (
-                                          <span
-                                            key={t}
-                                            className="text-[9px] font-bold uppercase rounded px-1.5 py-0.5 text-white"
-                                            style={{ backgroundColor: TYPE_COLORS[t] }}
-                                          >
-                                            {TYPE_ABBR[t]}
-                                          </span>
+                                          <span key={t} className="text-[7px] font-bold uppercase rounded px-1 py-px text-white" style={{ backgroundColor: TYPE_COLORS[t] }}>{TYPE_ABBR[t]}</span>
                                         ))}
                                       </div>
-                                    ) : (
-                                      <span className="text-[10px] text-text-muted">No tera types set</span>
                                     )}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <TypeChip types={mon.types} size="xs" />
-                          </td>
-                          <td className="px-3 py-2.5 hidden lg:table-cell">
-                            <div className="flex flex-wrap gap-0.5">
-                              {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-win">{mon.seasonStats.kills}</td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-loss">{mon.seasonStats.deaths}</td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-muted">{mon.seasonStats.gp}</td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary font-semibold">{kpg}</td>
-                          <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary">{mon.stats.spe}</td>
-                        </tr>
-                        {isExpanded && (
-                          <tr className="border-b border-border-subtle/50">
-                            <td colSpan={9} className="px-3 py-2 bg-surface-overlay/20">
-                              <div className="ml-10 mr-4">
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                                  </div>
+                                </div>
+                                {/* Stats */}
+                                <div className="space-y-0.5 mb-2">
                                   <StatBar label="HP" value={mon.stats.hp} />
-                                  <StatBar label="SpA" value={mon.stats.spa} />
                                   <StatBar label="Atk" value={mon.stats.atk} />
-                                  <StatBar label="SpD" value={mon.stats.spd} />
                                   <StatBar label="Def" value={mon.stats.def} />
+                                  <StatBar label="SpA" value={mon.stats.spa} />
+                                  <StatBar label="SpD" value={mon.stats.spd} />
                                   <StatBar label="Spe" value={mon.stats.spe} />
                                 </div>
-                                {mon.isTeraCaptain && mon.teraTypes && (
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <span className="text-[10px] text-pink font-bold uppercase">Tera Types:</span>
-                                    <div className="flex gap-1">{mon.teraTypes.map(t => <TypeBadge key={t} type={t} size="sm" />)}</div>
-                                  </div>
-                                )}
+                                <div className="text-[9px] font-mono text-text-muted text-right">BST {bst}</div>
+                                {/* Abilities */}
                                 {mon.abilities.length > 0 && (
-                                  <div className="mt-1.5 lg:hidden">
-                                    <span className="text-[10px] text-text-muted font-bold uppercase block mb-0.5">Abilities</span>
-                                    <div className="flex flex-wrap gap-0.5">
-                                      {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
-                                    </div>
+                                  <div className="flex flex-wrap gap-0.5 mt-1.5 pt-1.5 border-t border-border-subtle/50">
+                                    {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
                                   </div>
                                 )}
                               </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                            </TooltipContent>
+                          </Tooltip>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <TypeChip types={mon.types} size="xs" />
+                        </td>
+                        <td className="px-3 py-2.5 hidden lg:table-cell">
+                          <div className="flex flex-wrap gap-0.5">
+                            {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-win">{mon.seasonStats.kills}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-loss">{mon.seasonStats.deaths}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-muted">{mon.seasonStats.gp}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary font-semibold">{kpg}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary">{mon.stats.spe}</td>
+                      </tr>
                     );
                   })}
                 </tbody>
