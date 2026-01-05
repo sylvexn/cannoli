@@ -321,6 +321,18 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const dragSource = draggingTeraFrom ?? draggingPosFrom;
   const dragType = draggingTeraFrom !== null ? 'tera' : draggingPosFrom !== null ? 'position' : null;
 
+  // Use refs for values needed in event handlers to avoid stale closures
+  const dragOverRef = useRef<number | null>(null);
+  const dragTypeRef = useRef<typeof dragType>(null);
+  const dragSourceRef = useRef<typeof dragSource>(null);
+  const activeRosterRef = useRef(activeRoster);
+  const draggingPosFromRef = useRef(draggingPosFrom);
+  dragOverRef.current = dragOverIndex;
+  dragTypeRef.current = dragType;
+  dragSourceRef.current = dragSource;
+  activeRosterRef.current = activeRoster;
+  draggingPosFromRef.current = draggingPosFrom;
+
   const handleTeraPointerDown = useCallback((index: number, e: React.PointerEvent) => {
     if (!theorycraftMode) return;
     e.preventDefault();
@@ -349,20 +361,25 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           found = idx;
         }
       });
-      setDragOverIndex(found !== dragSource ? found : null);
+      const src = dragSourceRef.current;
+      setDragOverIndex(found !== src ? found : null);
     }
 
     function onUp() {
-      if (dragOverIndex !== null && dragOverIndex !== dragSource) {
-        if (dragType === 'tera') {
-          // Only drop if target can be tera captain
-          const targetMon = activeRoster[dragOverIndex];
-          if (canBeTeraCaptain(targetMon.name)) {
-            handleTeraDrop(dragOverIndex);
+      const overIdx = dragOverRef.current;
+      const src = dragSourceRef.current;
+      const type = dragTypeRef.current;
+      const roster = activeRosterRef.current;
+
+      if (overIdx !== null && overIdx !== src) {
+        if (type === 'tera') {
+          const targetMon = roster[overIdx];
+          if (targetMon && canBeTeraCaptain(targetMon.name)) {
+            handleTeraDrop(overIdx);
           }
-          // Otherwise: invalid drop — badge returns to owner (just reset state)
-        } else if (dragType === 'position') {
-          handlePositionSwap(draggingPosFrom!, dragOverIndex);
+          // Invalid target: do nothing, badge snaps back
+        } else if (type === 'position' && draggingPosFromRef.current !== null) {
+          handlePositionSwap(draggingPosFromRef.current, overIdx);
         }
       }
       setDraggingTeraFrom(null);
@@ -377,7 +394,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [isDragging, dragSource, dragType, dragOverIndex, activeRoster]);
+  }, [isDragging]);
 
   const SortIcon = ({ k }: { k: typeof sortKey }) => {
     if (sortKey !== k) return null;
@@ -389,17 +406,6 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
     const q = searchQuery.toLowerCase();
     return freeAgents.filter(fa => fa.name.toLowerCase().includes(q));
   }, [freeAgents, searchQuery]);
-
-  // Group free agents by tier for the horizontal scroller
-  const agentsByTier = useMemo(() => {
-    const groups: Map<number, typeof filteredAgents> = new Map();
-    for (const fa of filteredAgents) {
-      const existing = groups.get(fa.tier) ?? [];
-      existing.push(fa);
-      groups.set(fa.tier, existing);
-    }
-    return Array.from(groups.entries()).sort((a, b) => b[0] - a[0]);
-  }, [filteredAgents]);
 
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
@@ -610,145 +616,139 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           })}
         </div>
 
-        {/* Swap picker — horizontal tier-grouped scroller */}
+        {/* Swap picker — flat grid with comparison sidebar */}
         {swappingIndex !== null && theorycraftMode && (() => {
           const currentMon = activeRoster[swappingIndex];
           const currentCost = getEffectiveCost(currentMon.name, currentMon.isTeraCaptain);
+          // Limit rendered items for perf
+          const visibleAgents = filteredAgents.slice(0, 120);
+          const hovered = hoveredAgent ? filteredAgents.find(a => a.name === hoveredAgent) : null;
+          const hoveredDelta = hovered ? hovered.tier - currentCost : 0;
+          const hoveredNewTotal = hovered ? pointsUsed + hoveredDelta : 0;
+          const hoveredExceeds = hovered ? hoveredNewTotal > config.pointCap : false;
+
           return (
-            <div className="border-t border-border-subtle bg-surface-overlay/30">
-              {/* Header bar */}
-              <div className="flex items-center gap-3 px-4 py-2 border-b border-border-subtle/50">
-                <div className="flex items-center gap-2 text-xs text-text-muted">
-                  <ArrowRightLeft size={12} className="text-neon" />
-                  Replacing <span className="text-text-primary font-medium">{currentMon.name}</span>
-                  <span className="text-text-muted">({currentCost}pt)</span>
+            <div className="border-t border-border-subtle bg-surface-overlay/20">
+              {/* Header */}
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-border-subtle/40">
+                <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                  <ArrowRightLeft size={11} className="text-neon" />
+                  <span className="text-text-primary font-medium">{currentMon.name}</span>
+                  <span className="font-mono">({currentCost}pt)</span>
                 </div>
                 <div className="flex-1" />
-                <div className="flex items-center gap-2">
-                  <Search size={13} className="text-text-muted" />
+                <div className="flex items-center gap-1.5 bg-surface-overlay/60 rounded px-2 py-1">
+                  <Search size={11} className="text-text-muted" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Filter..."
-                    className="w-40 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
+                    placeholder="Search..."
+                    className="w-32 bg-transparent text-[11px] text-text-primary placeholder:text-text-muted outline-none"
                     autoFocus
                   />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="text-text-muted hover:text-text-primary">
+                      <X size={10} />
+                    </button>
+                  )}
                 </div>
-                <button onClick={() => { setSwappingIndex(null); setSearchQuery(''); setHoveredAgent(null); }} className="text-text-muted hover:text-text-primary p-1">
-                  <X size={14} />
+                <span className="text-[10px] text-text-muted font-mono">{filteredAgents.length}</span>
+                <button onClick={() => { setSwappingIndex(null); setSearchQuery(''); setHoveredAgent(null); }} className="text-text-muted hover:text-text-primary p-0.5">
+                  <X size={13} />
                 </button>
               </div>
 
-              {/* Tier rows */}
-              <div className="max-h-[320px] overflow-y-auto">
-                {agentsByTier.map(([tier, agents]) => {
-                  const pointDelta = tier - currentCost;
-                  const tierExceeds = (pointsUsed + pointDelta) > config.pointCap;
-                  return (
-                    <div key={tier} className="flex items-start border-b border-border-subtle/30 last:border-0">
-                      {/* Tier label (sticky left) */}
-                      <div className="w-12 shrink-0 flex flex-col items-center justify-center py-2 sticky left-0 bg-surface-raised/80 z-10">
-                        <TierBadge points={tier} />
-                        <span className={`text-[9px] tabular-nums mt-0.5 ${pointDelta > 0 ? 'text-loss' : pointDelta < 0 ? 'text-win' : 'text-text-muted'}`}>
-                          {pointDelta > 0 ? '+' : ''}{pointDelta}
-                        </span>
-                      </div>
+              <div className="flex" style={{ height: 240 }}>
+                {/* Grid — single scroll area */}
+                <div className="flex-1 overflow-y-auto p-2">
+                  <div className="flex flex-wrap gap-[2px] content-start">
+                    {visibleAgents.map(fa => {
+                      const wouldExceed = (pointsUsed + fa.tier - currentCost) > config.pointCap;
+                      const isHov = hoveredAgent === fa.name;
+                      return (
+                        <button
+                          key={fa.name}
+                          onClick={() => { if (!wouldExceed) { handleSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
+                          onMouseEnter={() => setHoveredAgent(fa.name)}
+                          onMouseLeave={() => { if (hoveredAgent === fa.name) setHoveredAgent(null); }}
+                          disabled={wouldExceed}
+                          className={`relative w-10 h-10 rounded flex items-center justify-center transition-colors ${
+                            wouldExceed ? 'opacity-15 cursor-not-allowed'
+                            : isHov ? 'bg-neon/15 ring-1 ring-neon/40'
+                            : 'hover:bg-surface-overlay/60'
+                          }`}
+                          title={`${fa.name} (${fa.tier}pt)`}
+                        >
+                          <PokemonSprite name={fa.name} size="sm" />
+                          {/* Tier pip */}
+                          <span
+                            className="absolute bottom-0 right-0 text-[7px] font-bold rounded-tl px-[3px] py-[1px] leading-none text-white/90"
+                            style={{ backgroundColor: `hsl(${Math.round(270 - ((Math.max(1, Math.min(20, fa.tier)) - 1) / 19) * 270)}, 75%, 45%)` }}
+                          >
+                            {fa.tier}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {visibleAgents.length === 0 && (
+                      <p className="text-[11px] text-text-muted py-6 text-center w-full">No results</p>
+                    )}
+                  </div>
+                </div>
 
-                      {/* Horizontal scroll of sprites */}
-                      <div className="flex-1 overflow-x-auto">
-                        <div className="flex items-start gap-0.5 py-1.5 px-1">
-                          {agents.map(fa => {
-                            const wouldExceed = (pointsUsed + fa.tier - currentCost) > config.pointCap;
-                            const isHovered = hoveredAgent === fa.name;
-                            return (
-                              <div
-                                key={fa.name}
-                                className="relative shrink-0"
-                                onMouseEnter={() => setHoveredAgent(fa.name)}
-                                onMouseLeave={() => setHoveredAgent(null)}
-                              >
-                                <button
-                                  onClick={() => { handleSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); }}
-                                  disabled={wouldExceed}
-                                  className={`relative flex flex-col items-center rounded-lg transition-all duration-200 ease-out ${
-                                    wouldExceed
-                                      ? 'opacity-20 cursor-not-allowed'
-                                      : isHovered
-                                        ? 'bg-neon/10 ring-1 ring-neon/40 shadow-glow-sm scale-110 z-20 -mx-1 px-2 py-1'
-                                        : 'hover:bg-surface-overlay/60 px-1 py-1'
-                                  }`}
-                                >
-                                  <PokemonSprite
-                                    name={fa.name}
-                                    size={isHovered ? 'lg' : 'sm'}
-                                    className="transition-all duration-200"
-                                  />
-                                  <span className={`text-center leading-tight transition-all duration-200 ${
-                                    isHovered ? 'text-[10px] text-neon font-medium mt-0.5 max-w-[80px]' : 'text-[8px] text-text-muted mt-0.5 max-w-[40px]'
-                                  } truncate block`}>
-                                    {fa.name}
-                                  </span>
-                                </button>
-
-                                {/* Expanded comparison card on hover */}
-                                {isHovered && !wouldExceed && (
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-30 w-56 rounded-lg bg-surface-raised border border-neon/20 shadow-glow-sm p-2.5 pointer-events-none">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className="text-xs font-semibold text-text-primary">{fa.name}</span>
-                                      <TierBadge points={fa.tier} />
-                                    </div>
-
-                                    {/* Comparison */}
-                                    <div className="space-y-1.5 text-[10px]">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-text-muted">Point cost</span>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="text-text-secondary">{currentCost}</span>
-                                          <span className="text-text-muted">&rarr;</span>
-                                          <span className="text-text-primary font-medium">{fa.tier}</span>
-                                          <span className={`font-bold ${pointDelta > 0 ? 'text-loss' : pointDelta < 0 ? 'text-win' : 'text-text-muted'}`}>
-                                            ({pointDelta > 0 ? '+' : ''}{pointDelta})
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-text-muted">Team total</span>
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-text-secondary">{pointsUsed}</span>
-                                          <span className="text-text-muted">&rarr;</span>
-                                          <span className={`font-medium ${(pointsUsed + fa.tier - currentCost) > config.pointCap ? 'text-loss' : 'text-text-primary'}`}>
-                                            {pointsUsed + fa.tier - currentCost}/{config.pointCap}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Outgoing mon comparison */}
-                                    <div className="mt-2 pt-2 border-t border-border-subtle flex items-center gap-2">
-                                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                                        <PokemonSprite name={currentMon.name} size="xs" />
-                                        <span className="text-[10px] text-loss line-through truncate">{currentMon.name}</span>
-                                      </div>
-                                      <span className="text-text-muted text-[10px]">&rarr;</span>
-                                      <div className="flex items-center gap-1 flex-1 min-w-0">
-                                        <PokemonSprite name={fa.name} size="xs" />
-                                        <span className="text-[10px] text-neon font-medium truncate">{fa.name}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                {/* Comparison sidebar — fixed right */}
+                <div className="w-48 shrink-0 border-l border-border-subtle/40 p-3 flex flex-col justify-center">
+                  {hovered ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <PokemonSprite name={hovered.name} size="lg" />
+                        <div>
+                          <div className="text-xs font-semibold text-text-primary">{hovered.name}</div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <TierBadge points={hovered.tier} />
+                            <span className="text-[10px] font-mono text-text-muted">{hovered.tier}pt</span>
+                          </div>
                         </div>
                       </div>
+
+                      <div className="space-y-1 text-[10px] font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-text-muted">Cost</span>
+                          <span>
+                            <span className="text-text-secondary">{currentCost}</span>
+                            <span className="text-text-muted mx-1">&rarr;</span>
+                            <span className="text-text-primary">{hovered.tier}</span>
+                            <span className={`ml-1 font-semibold ${hoveredDelta > 0 ? 'text-loss' : hoveredDelta < 0 ? 'text-win' : 'text-text-muted'}`}>
+                              {hoveredDelta > 0 ? '+' : ''}{hoveredDelta}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-text-muted">Total</span>
+                          <span className={hoveredExceeds ? 'text-loss font-semibold' : 'text-text-primary'}>
+                            {hoveredNewTotal}/{config.pointCap}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border-subtle/40 flex items-center gap-1.5 text-[10px]">
+                        <PokemonSprite name={currentMon.name} size="xs" />
+                        <span className="text-loss line-through">{currentMon.name}</span>
+                        <span className="text-text-muted">&rarr;</span>
+                        <span className="text-neon font-medium">{hovered.name}</span>
+                      </div>
+
+                      {hoveredExceeds && (
+                        <div className="text-[9px] text-loss font-medium">Exceeds point cap</div>
+                      )}
                     </div>
-                  );
-                })}
-                {agentsByTier.length === 0 && (
-                  <p className="text-xs text-text-muted py-4 text-center">No Pokemon match your search</p>
-                )}
+                  ) : (
+                    <div className="text-[10px] text-text-muted text-center">
+                      Hover a Pokemon to compare
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -770,10 +770,10 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
       </Card>
 
       {/* ═══ MAIN CONTENT GRID ═══ */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
 
         {/* ─── ROSTER TABLE (2 cols) ─── */}
-        <Card className="xl:col-span-2 bg-surface-raised border-border-default">
+        <Card className="xl:col-span-2 bg-surface-raised border-border-default flex flex-col">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Roster</CardTitle>
@@ -933,9 +933,9 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
           </CardContent>
         </Card>
 
-        {/* ─── RIGHT COLUMN — Tabbed ─── */}
-        <Card className="bg-surface-raised border-border-default self-start">
-          <Tabs defaultValue="defense">
+        {/* ─── RIGHT COLUMN — Tabbed, stretches to match roster ─── */}
+        <Card className="bg-surface-raised border-border-default flex flex-col min-h-0">
+          <Tabs defaultValue="defense" className="flex flex-col flex-1 min-h-0">
             <div className="border-b border-border-subtle">
               <TabsList variant="line" className="w-full justify-start px-2 h-9">
                 <TabsTrigger value="defense" className="text-[11px] gap-1 px-2">
@@ -950,12 +950,12 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
               </TabsList>
             </div>
 
-            <TabsContent value="defense" className="p-0">
+            <TabsContent value="defense" className="p-0 flex-1 overflow-y-auto">
               <TypeCoverageGridInner profile={typeProfile} />
             </TabsContent>
 
-            <TabsContent value="schedule" className="p-0">
-              <div className="p-3 space-y-0.5 max-h-[520px] overflow-y-auto">
+            <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto">
+              <div className="p-3 space-y-0.5">
                 {matches.map(match => {
                   const isHome = match.homePlayer === player.id;
                   const opponentId = isHome ? match.awayPlayer : match.homePlayer;
@@ -997,21 +997,21 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
               </div>
             </TabsContent>
 
-            <TabsContent value="speed" className="p-0">
-              <div className="p-3 space-y-0.5">
+            <TabsContent value="speed" className="p-0 flex-1 overflow-y-auto">
+              <div className="p-3 space-y-1">
                 {[...activeRoster]
                   .sort((a, b) => b.stats.spe - a.stats.spe)
                   .map((mon, i) => {
                     const maxSpe = Math.max(...activeRoster.map(m => m.stats.spe));
                     const pct = maxSpe > 0 ? (mon.stats.spe / maxSpe) * 100 : 0;
                     return (
-                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 py-1">
-                        <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
-                        <span className="text-[10px] text-text-muted font-medium w-16 truncate">{mon.name}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-surface-overlay overflow-hidden">
-                          <div className="h-full rounded-full bg-neon/60 transition-all" style={{ width: `${pct}%` }} />
+                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-surface-overlay/30 transition-colors">
+                        <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
+                        <span className="text-[11px] text-text-secondary font-medium w-20 truncate">{mon.name}</span>
+                        <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
+                          <div className="h-full rounded-full bg-neon/50 transition-all" style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="text-[11px] font-mono tabular-nums text-text-secondary w-7 text-right">{mon.stats.spe}</span>
+                        <span className="text-[11px] font-mono tabular-nums text-text-primary font-semibold w-8 text-right">{mon.stats.spe}</span>
                       </div>
                     );
                   })
@@ -1103,26 +1103,37 @@ function RankBadge({ rank }: { rank: number }) {
   );
 }
 
-function cellColor(weak: number, resist: number, immune: number): string {
-  if (immune > 0 && weak === 0) return 'rgba(34, 211, 238, 0.25)';
-  const net = weak - resist - immune;
-  if (net >= 3) return 'rgba(248, 113, 113, 0.5)';
-  if (net >= 1) return 'rgba(248, 113, 113, 0.25)';
-  if (net <= -3) return 'rgba(74, 222, 128, 0.35)';
-  if (net <= -1) return 'rgba(74, 222, 128, 0.18)';
-  return 'transparent';
-}
+const DEF_COLORS = {
+  loss: { bg: 'rgba(248,113,113,0.45)', hover: 'rgba(248,113,113,0.75)' },
+  win:  { bg: 'rgba(74,222,128,0.3)',   hover: 'rgba(74,222,128,0.55)' },
+  neon: { bg: 'rgba(34,211,238,0.35)',   hover: 'rgba(34,211,238,0.6)' },
+} as const;
 
-function PipTooltip({ name, category }: { name: string; category: 'weak' | 'resist' | 'immune' }) {
-  const colorClass = category === 'weak' ? 'bg-loss/70 hover:bg-loss' : category === 'resist' ? 'bg-win/50 hover:bg-win/70' : 'bg-neon/60 hover:bg-neon/80';
+const DEF_LABEL_COLORS = { loss: 'text-loss', win: 'text-win', neon: 'text-neon' } as const;
+
+function DefSegment({ name, label, color, pct }: { name: string; label: string; color: 'loss' | 'win' | 'neon'; pct: number }) {
+  const [hovered, setHovered] = useState(false);
+  const palette = DEF_COLORS[color];
   return (
     <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <button className={`w-[10px] h-3 rounded-sm cursor-default transition-colors shrink-0 ${colorClass}`} />
-      </TooltipTrigger>
+      <TooltipTrigger
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          width: `${pct}%`,
+          minWidth: 6,
+          height: '100%',
+          backgroundColor: hovered ? palette.hover : palette.bg,
+          transition: 'background-color 0.15s',
+          display: 'block',
+          cursor: 'default',
+          borderRight: '1px solid rgba(10,10,15,0.3)',
+        }}
+      />
       <TooltipContent side="top" className="bg-surface-overlay border-border-default p-1.5 flex items-center gap-1.5">
         <PokemonSprite name={name} size="xs" />
         <span className="text-[10px] text-text-primary font-medium">{name}</span>
+        <span className={`text-[9px] ${DEF_LABEL_COLORS[color]}`}>{label}</span>
       </TooltipContent>
     </Tooltip>
   );
@@ -1131,62 +1142,57 @@ function PipTooltip({ name, category }: { name: string; category: 'weak' | 'resi
 function TypeCoverageGridInner({ profile }: {
   profile: Record<PokemonType, TypeProfileEntry>;
 }) {
+  const maxCount = Math.max(
+    ...POKEMON_TYPES.map(t => Math.max(profile[t].weak.length, profile[t].resist.length + profile[t].immune.length)),
+    1
+  );
+
   return (
-    <div className="p-3">
-      <div className="grid grid-cols-2 gap-[2px]">
-        {POKEMON_TYPES.map(type => {
-          const { weak, resist, immune } = profile[type];
-          const wk = weak.length, rs = resist.length, im = immune.length;
-          const bg = cellColor(wk, rs, im);
-          const hasAny = wk > 0 || rs > 0 || im > 0;
+    <div className="px-2 py-2 space-y-[3px]">
+      {POKEMON_TYPES.map(type => {
+        const { weak, resist, immune } = profile[type];
+        const wk = weak.length, rs = resist.length, im = immune.length;
+        const net = wk - rs - im;
 
-            return (
-              <div
-                key={type}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded transition-colors"
-                style={{ backgroundColor: bg }}
-              >
-                {/* Type label */}
-                <span
-                  className="text-[9px] font-bold uppercase w-7 text-center rounded py-0.5 text-white shrink-0"
-                  style={{ backgroundColor: TYPE_COLORS[type] }}
-                >
-                  {TYPE_ABBR[type]}
-                </span>
+        return (
+          <div key={type} className="flex items-center gap-0 h-[26px] group/row">
+            {/* Type badge */}
+            <span
+              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l py-[5px] text-white shrink-0 leading-none"
+              style={{ backgroundColor: TYPE_COLORS[type] }}
+            >
+              {TYPE_ABBR[type]}
+            </span>
 
-                {/* Pip bar — each pip is an individual Pokemon */}
-                <div className="flex-1 flex items-center gap-[2px] h-3">
-                  {weak.map(name => (
-                    <PipTooltip key={`w-${name}`} name={name} category="weak" />
-                  ))}
-                  {!hasAny && (
-                    <div className="h-full flex-1 rounded-sm bg-surface-overlay/50 max-w-[10px]" />
-                  )}
-                  {resist.map(name => (
-                    <PipTooltip key={`r-${name}`} name={name} category="resist" />
-                  ))}
-                  {immune.map(name => (
-                    <PipTooltip key={`i-${name}`} name={name} category="immune" />
-                  ))}
-                </div>
+            {/* Stacked bar — inline block segments with explicit sizing */}
+            <div className="flex-1 h-full rounded-r overflow-hidden bg-surface-overlay/20" style={{ display: 'flex' }}>
+              {weak.map(name => (
+                <DefSegment key={`w-${name}`} name={name} label="weak" color="loss" pct={100 / maxCount} />
+              ))}
+              {resist.map(name => (
+                <DefSegment key={`r-${name}`} name={name} label="resist" color="win" pct={100 / maxCount} />
+              ))}
+              {immune.map(name => (
+                <DefSegment key={`i-${name}`} name={name} label="immune" color="neon" pct={100 / maxCount} />
+              ))}
+            </div>
 
-                {/* Count labels */}
-                <div className="flex items-center gap-1 shrink-0 tabular-nums text-[10px]">
-                  {wk > 0 && <span className="text-loss font-bold">{wk}</span>}
-                  {rs > 0 && <span className="text-win">{rs}</span>}
-                  {im > 0 && <span className="text-neon font-bold">{im}</span>}
-                  {!hasAny && <span className="text-text-muted">—</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+            {/* Net score */}
+            <div className="w-[38px] shrink-0 flex items-center justify-end gap-[3px] pr-1.5 font-mono text-[10px] tabular-nums">
+              {wk > 0 && <span className="text-loss font-semibold">{wk}</span>}
+              {rs > 0 && <span className="text-win">{rs}</span>}
+              {im > 0 && <span className="text-neon font-semibold">{im}</span>}
+              {wk === 0 && rs === 0 && im === 0 && <span className="text-text-muted/40">—</span>}
+            </div>
+          </div>
+        );
+      })}
 
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-2 text-[9px] text-text-muted">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-loss/70" /> Weak</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-win/50" /> Resist</span>
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-neon/60" /> Immune</span>
+      <div className="flex items-center justify-center gap-4 pt-2 text-[9px] text-text-muted">
+        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-loss/50" /> Weak</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-win/35" /> Resist</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-neon/40" /> Immune</span>
       </div>
     </div>
   );
