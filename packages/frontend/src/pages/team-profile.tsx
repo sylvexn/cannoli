@@ -51,16 +51,18 @@ const TYPE_CHART: Record<PokemonType, { weak: PokemonType[]; resist: PokemonType
   fairy: { weak: ['poison', 'steel'], resist: ['fighting', 'bug', 'dark'], immune: ['dragon'] },
 };
 
+interface TypeHit { name: string; mult: number }
 interface TypeProfileEntry {
-  weak: string[];
-  resist: string[];
-  immune: string[];
+  x4: TypeHit[];   // 4x super effective
+  x2: TypeHit[];   // 2x super effective
+  x05: TypeHit[];  // 0.5x resist
+  x025: TypeHit[]; // 0.25x resist
+  x0: TypeHit[];   // 0x immune
 }
 
 function getTeamDefensiveProfile(roster: RosterPokemon[]) {
-  // For each attacking type, track which Pokemon are weak/resist/immune
   const profile: Record<PokemonType, TypeProfileEntry> = {} as any;
-  for (const t of POKEMON_TYPES) profile[t] = { weak: [], resist: [], immune: [] };
+  for (const t of POKEMON_TYPES) profile[t] = { x4: [], x2: [], x05: [], x025: [], x0: [] };
 
   for (const mon of roster) {
     const effective: Record<PokemonType, number> = {} as any;
@@ -74,9 +76,13 @@ function getTeamDefensiveProfile(roster: RosterPokemon[]) {
     }
 
     for (const t of POKEMON_TYPES) {
-      if (effective[t] === 0) profile[t].immune.push(mon.name);
-      else if (effective[t] >= 2) profile[t].weak.push(mon.name);
-      else if (effective[t] <= 0.5) profile[t].resist.push(mon.name);
+      const m = effective[t];
+      const hit = { name: mon.name, mult: m };
+      if (m === 0) profile[t].x0.push(hit);
+      else if (m >= 4) profile[t].x4.push(hit);
+      else if (m >= 2) profile[t].x2.push(hit);
+      else if (m <= 0.25) profile[t].x025.push(hit);
+      else if (m <= 0.5) profile[t].x05.push(hit);
     }
   }
   return profile;
@@ -1121,17 +1127,18 @@ function RankBadge({ rank, size = 'md' }: { rank: number; size?: 'sm' | 'md' }) 
   );
 }
 
-const DEF_COLORS = {
-  loss: { bg: 'rgba(248,113,113,0.45)', hover: 'rgba(248,113,113,0.75)' },
-  win:  { bg: 'rgba(74,222,128,0.3)',   hover: 'rgba(74,222,128,0.55)' },
-  neon: { bg: 'rgba(34,211,238,0.35)',   hover: 'rgba(34,211,238,0.6)' },
-} as const;
+const MULT_STYLES: Record<string, { bg: string; hover: string; label: string; textCls: string }> = {
+  '4':    { bg: 'rgba(248,80,80,0.6)',    hover: 'rgba(248,80,80,0.85)',   label: '4x',    textCls: 'text-loss font-bold' },
+  '2':    { bg: 'rgba(248,113,113,0.4)',   hover: 'rgba(248,113,113,0.7)',  label: '2x',    textCls: 'text-loss' },
+  '0.5':  { bg: 'rgba(74,222,128,0.3)',    hover: 'rgba(74,222,128,0.55)',  label: '½x',   textCls: 'text-win' },
+  '0.25': { bg: 'rgba(74,222,128,0.5)',    hover: 'rgba(74,222,128,0.75)',  label: '¼x',   textCls: 'text-win font-bold' },
+  '0':    { bg: 'rgba(34,211,238,0.35)',   hover: 'rgba(34,211,238,0.6)',   label: '0x',    textCls: 'text-neon font-bold' },
+};
 
-const DEF_LABEL_COLORS = { loss: 'text-loss', win: 'text-win', neon: 'text-neon' } as const;
-
-function DefSegment({ name, label, color, pct }: { name: string; label: string; color: 'loss' | 'win' | 'neon'; pct: number }) {
+function DefSegment({ name, mult, pct }: { name: string; mult: number; pct: number }) {
   const [hovered, setHovered] = useState(false);
-  const palette = DEF_COLORS[color];
+  const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
+  const style = MULT_STYLES[key];
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger
@@ -1141,7 +1148,7 @@ function DefSegment({ name, label, color, pct }: { name: string; label: string; 
           width: `${pct}%`,
           minWidth: 6,
           height: '100%',
-          backgroundColor: hovered ? palette.hover : palette.bg,
+          backgroundColor: hovered ? style.hover : style.bg,
           transition: 'background-color 0.15s',
           display: 'block',
           cursor: 'default',
@@ -1151,7 +1158,7 @@ function DefSegment({ name, label, color, pct }: { name: string; label: string; 
       <TooltipContent side="top" className="bg-surface-overlay border-border-default p-1.5 flex items-center gap-1.5">
         <PokemonSprite name={name} size="xs" />
         <span className="text-[10px] text-text-primary font-medium">{name}</span>
-        <span className={`text-[9px] ${DEF_LABEL_COLORS[color]}`}>{label}</span>
+        <span className={`text-[9px] ${style.textCls}`}>{style.label}</span>
       </TooltipContent>
     </Tooltip>
   );
@@ -1161,20 +1168,24 @@ function TypeCoverageGridInner({ profile }: {
   profile: Record<PokemonType, TypeProfileEntry>;
 }) {
   const maxCount = Math.max(
-    ...POKEMON_TYPES.map(t => Math.max(profile[t].weak.length, profile[t].resist.length + profile[t].immune.length)),
+    ...POKEMON_TYPES.map(t => {
+      const p = profile[t];
+      return p.x4.length + p.x2.length + p.x05.length + p.x025.length + p.x0.length;
+    }),
     1
   );
 
   return (
     <div className="px-2 py-2 space-y-[3px]">
       {POKEMON_TYPES.map(type => {
-        const { weak, resist, immune } = profile[type];
-        const wk = weak.length, rs = resist.length, im = immune.length;
-        const net = wk - rs - im;
+        const p = profile[type];
+        const totalWeak = p.x4.length + p.x2.length;
+        const totalResist = p.x05.length + p.x025.length;
+        const totalImmune = p.x0.length;
+        const hasAny = totalWeak + totalResist + totalImmune > 0;
 
         return (
           <div key={type} className="flex items-center gap-0 h-[22px] group/row">
-            {/* Type badge */}
             <span
               className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l py-[4px] text-white shrink-0 leading-none"
               style={{ backgroundColor: TYPE_COLORS[type] }}
@@ -1182,35 +1193,34 @@ function TypeCoverageGridInner({ profile }: {
               {TYPE_ABBR[type]}
             </span>
 
-            {/* Stacked bar */}
             <div className="flex-1 h-[14px] rounded-r overflow-hidden bg-surface-overlay/20" style={{ display: 'flex' }}>
-              {weak.map(name => (
-                <DefSegment key={`w-${name}`} name={name} label="weak" color="loss" pct={100 / maxCount} />
-              ))}
-              {resist.map(name => (
-                <DefSegment key={`r-${name}`} name={name} label="resist" color="win" pct={100 / maxCount} />
-              ))}
-              {immune.map(name => (
-                <DefSegment key={`i-${name}`} name={name} label="immune" color="neon" pct={100 / maxCount} />
-              ))}
+              {p.x4.map(h => <DefSegment key={`4x-${h.name}`} name={h.name} mult={4} pct={100 / maxCount} />)}
+              {p.x2.map(h => <DefSegment key={`2x-${h.name}`} name={h.name} mult={2} pct={100 / maxCount} />)}
+              {p.x05.map(h => <DefSegment key={`.5x-${h.name}`} name={h.name} mult={0.5} pct={100 / maxCount} />)}
+              {p.x025.map(h => <DefSegment key={`.25x-${h.name}`} name={h.name} mult={0.25} pct={100 / maxCount} />)}
+              {p.x0.map(h => <DefSegment key={`0x-${h.name}`} name={h.name} mult={0} pct={100 / maxCount} />)}
             </div>
 
-            {/* Net score */}
-            <div className="w-[38px] shrink-0 flex items-center justify-end gap-[3px] pr-1.5 font-mono text-[10px] tabular-nums">
-              {wk > 0 && <span className="text-loss font-semibold">{wk}</span>}
-              {rs > 0 && <span className="text-win">{rs}</span>}
-              {im > 0 && <span className="text-neon font-semibold">{im}</span>}
-              {wk === 0 && rs === 0 && im === 0 && <span className="text-text-muted/40">—</span>}
+            {/* Counts by multiplier */}
+            <div className="w-[52px] shrink-0 flex items-center justify-end gap-[3px] pr-1.5 font-mono text-[9px] tabular-nums">
+              {p.x4.length > 0 && <span className="text-loss font-bold">{p.x4.length}</span>}
+              {p.x2.length > 0 && <span className="text-loss">{p.x2.length}</span>}
+              {p.x05.length > 0 && <span className="text-win">{p.x05.length}</span>}
+              {p.x025.length > 0 && <span className="text-win font-bold">{p.x025.length}</span>}
+              {p.x0.length > 0 && <span className="text-neon font-bold">{p.x0.length}</span>}
+              {!hasAny && <span className="text-text-muted/40">—</span>}
             </div>
           </div>
         );
       })}
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-4 pt-2 text-[9px] text-text-muted">
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-loss/50" /> Weak</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-win/35" /> Resist</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-neon/40" /> Immune</span>
+      <div className="flex items-center justify-center gap-3 pt-2 text-[8px] font-mono text-text-muted">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['4'].bg }} /> 4x</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['2'].bg }} /> 2x</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0.5'].bg }} /> ½x</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0.25'].bg }} /> ¼x</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0'].bg }} /> 0x</span>
       </div>
     </div>
   );
