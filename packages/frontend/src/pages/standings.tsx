@@ -17,7 +17,7 @@ export function StandingsPage() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-text-primary">League Hub</h1>
+        <h1 className="text-2xl font-heading font-bold text-text-primary">League Hub</h1>
         <p className="text-sm text-text-muted">
           Season {currentSeason.seasonNumber} &middot; Week {currentSeason.currentWeek} of {currentSeason.totalWeeks}
         </p>

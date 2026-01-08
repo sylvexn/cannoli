@@ -442,7 +442,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
         <div className="px-5 pt-4 pb-3 flex items-center gap-4">
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-12 h-12 text-xs shrink-0" />
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
+            <h1 className="text-lg font-heading font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
             <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide">
               {player.name} <span className="text-border-default mx-1">/</span> {player.teamAbbrev}
             </p>
@@ -973,12 +973,12 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
               </TabsList>
             </div>
 
-            <TabsContent value="defense" className="p-0 flex-1 overflow-y-auto">
+            <TabsContent value="defense" className="p-0 flex-1 overflow-y-auto flex flex-col">
               <TypeCoverageGridInner profile={typeProfile} />
             </TabsContent>
 
-            <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto">
-              <div className="p-3 space-y-0.5">
+            <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
+              <div className="p-3 flex-1 flex flex-col gap-0.5">
                 {matches.map(match => {
                   const isHome = match.homePlayer === player.id;
                   const opponentId = isHome ? match.awayPlayer : match.homePlayer;
@@ -993,7 +993,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                   const isCurrent = match.week === currentSeason.currentWeek + 1;
 
                   return (
-                    <div key={match.id} className={`flex items-center gap-2 py-1.5 px-2 rounded transition-colors ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
+                    <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
                       <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{match.week}</span>
                       {hasResult ? (
                         <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
@@ -1020,15 +1020,15 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
               </div>
             </TabsContent>
 
-            <TabsContent value="speed" className="p-0 flex-1 overflow-y-auto">
-              <div className="p-3 space-y-1">
+            <TabsContent value="speed" className="p-0 flex-1 overflow-y-auto flex flex-col">
+              <div className="p-3 flex-1 flex flex-col gap-0.5">
                 {[...activeRoster]
                   .sort((a, b) => b.stats.spe - a.stats.spe)
                   .map((mon, i) => {
                     const maxSpe = Math.max(...activeRoster.map(m => m.stats.spe));
                     const pct = maxSpe > 0 ? (mon.stats.spe / maxSpe) * 100 : 0;
                     return (
-                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 py-1.5 px-1 rounded hover:bg-surface-overlay/30 transition-colors">
+                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 px-1 rounded hover:bg-surface-overlay/30 transition-colors flex-1 min-h-[28px]">
                         <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
                         <span className="text-[11px] text-text-secondary font-medium w-20 truncate">{mon.name}</span>
                         <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
@@ -1127,38 +1127,67 @@ function RankBadge({ rank, size = 'md' }: { rank: number; size?: 'sm' | 'md' }) 
   );
 }
 
-const MULT_STYLES: Record<string, { bg: string; hover: string; label: string; textCls: string }> = {
-  '4':    { bg: 'rgba(248,80,80,0.6)',    hover: 'rgba(248,80,80,0.85)',   label: '4x',    textCls: 'text-loss font-bold' },
-  '2':    { bg: 'rgba(248,113,113,0.4)',   hover: 'rgba(248,113,113,0.7)',  label: '2x',    textCls: 'text-loss' },
-  '0.5':  { bg: 'rgba(74,222,128,0.3)',    hover: 'rgba(74,222,128,0.55)',  label: '½x',   textCls: 'text-win' },
-  '0.25': { bg: 'rgba(74,222,128,0.5)',    hover: 'rgba(74,222,128,0.75)',  label: '¼x',   textCls: 'text-win font-bold' },
-  '0':    { bg: 'rgba(34,211,238,0.35)',   hover: 'rgba(34,211,238,0.6)',   label: '0x',    textCls: 'text-neon font-bold' },
+const MULT_STYLES: Record<string, { bg: string; hover: string; border: string; text: string; label: string; textCls: string }> = {
+  '4':    { bg: 'rgba(220,38,38,0.7)',  hover: 'rgba(220,38,38,0.9)',  border: '#fca5a5', text: '#fff', label: '4x',  textCls: 'text-loss font-bold' },
+  '2':    { bg: 'rgba(239,68,68,0.5)',  hover: 'rgba(239,68,68,0.75)', border: '#f87171', text: '#fff', label: '2x',  textCls: 'text-loss' },
+  '0.5':  { bg: 'rgba(22,163,74,0.45)', hover: 'rgba(22,163,74,0.7)',  border: '#4ade80', text: '#fff', label: '½x', textCls: 'text-win' },
+  '0.25': { bg: 'rgba(21,128,61,0.6)',  hover: 'rgba(21,128,61,0.85)', border: '#22c55e', text: '#fff', label: '¼x', textCls: 'text-win font-bold' },
+  '0':    { bg: 'rgba(8,145,178,0.5)',  hover: 'rgba(8,145,178,0.75)', border: '#22d3ee', text: '#fff', label: '0x',  textCls: 'text-neon font-bold' },
 };
 
-function DefSegment({ name, mult, pct }: { name: string; mult: number; pct: number }) {
-  const [hovered, setHovered] = useState(false);
+function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'md' }) {
   const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
-  const style = MULT_STYLES[key];
+  const s = MULT_STYLES[key];
+  const px = size === 'sm' ? 18 : 22;
+  const fs = size === 'sm' ? 8 : 10;
+  return (
+    <span
+      style={{
+        minWidth: px,
+        height: px,
+        borderRadius: 9999,
+        backgroundColor: s.bg,
+        border: `1.5px solid ${s.border}`,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: fs,
+        fontWeight: 800,
+        color: s.text,
+        lineHeight: 1,
+        flexShrink: 0,
+        padding: '0 3px',
+      }}
+    >
+      {s.label}
+    </span>
+  );
+}
+
+function DefSegment({ name, mult, pct }: { name: string; mult: number; pct: number }) {
+  const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
+  const s = MULT_STYLES[key];
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
         style={{
           width: `${pct}%`,
           minWidth: 6,
           height: '100%',
-          backgroundColor: hovered ? style.hover : style.bg,
-          transition: 'background-color 0.15s',
+          backgroundColor: s.bg,
           display: 'block',
           cursor: 'default',
           borderRight: '1px solid rgba(10,10,15,0.3)',
+          transition: 'transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background-color 0.15s',
         }}
+        className="hover:!scale-y-[1.3] hover:rounded-sm hover:z-10"
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.hover; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.bg; }}
       />
       <TooltipContent side="top" className="bg-surface-overlay border-border-default p-1.5 flex items-center gap-1.5">
         <PokemonSprite name={name} size="xs" />
         <span className="text-[10px] text-text-primary font-medium">{name}</span>
-        <span className={`text-[9px] ${style.textCls}`}>{style.label}</span>
+        <MultChip mult={mult} />
       </TooltipContent>
     </Tooltip>
   );
@@ -1176,7 +1205,7 @@ function TypeCoverageGridInner({ profile }: {
   );
 
   return (
-    <div className="px-2 py-2 space-y-[3px]">
+    <div className="px-2 py-2 flex-1 flex flex-col gap-[2px]">
       {POKEMON_TYPES.map(type => {
         const p = profile[type];
         const totalWeak = p.x4.length + p.x2.length;
@@ -1185,15 +1214,15 @@ function TypeCoverageGridInner({ profile }: {
         const hasAny = totalWeak + totalResist + totalImmune > 0;
 
         return (
-          <div key={type} className="flex items-center gap-0 h-[22px] group/row">
+          <div key={type} className="flex items-center gap-0 flex-1 min-h-[18px] group/row">
             <span
-              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l py-[4px] text-white shrink-0 leading-none"
+              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l-full text-white shrink-0 leading-none flex items-center justify-center self-stretch"
               style={{ backgroundColor: TYPE_COLORS[type] }}
             >
               {TYPE_ABBR[type]}
             </span>
 
-            <div className="flex-1 h-[14px] rounded-r overflow-hidden bg-surface-overlay/20" style={{ display: 'flex' }}>
+            <div className="flex-1 self-stretch rounded-r-full overflow-hidden bg-surface-overlay/15" style={{ display: 'flex' }}>
               {p.x4.map(h => <DefSegment key={`4x-${h.name}`} name={h.name} mult={4} pct={100 / maxCount} />)}
               {p.x2.map(h => <DefSegment key={`2x-${h.name}`} name={h.name} mult={2} pct={100 / maxCount} />)}
               {p.x05.map(h => <DefSegment key={`.5x-${h.name}`} name={h.name} mult={0.5} pct={100 / maxCount} />)}
@@ -1215,12 +1244,10 @@ function TypeCoverageGridInner({ profile }: {
       })}
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-3 pt-2 text-[8px] font-mono text-text-muted">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['4'].bg }} /> 4x</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['2'].bg }} /> 2x</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0.5'].bg }} /> ½x</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0.25'].bg }} /> ¼x</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2 rounded-sm" style={{ backgroundColor: MULT_STYLES['0'].bg }} /> 0x</span>
+      <div className="flex items-center justify-center gap-1.5 pt-2 pb-1 shrink-0">
+        {[4, 2, 0.5, 0.25, 0].map(m => (
+          <MultChip key={m} mult={m} size="sm" />
+        ))}
       </div>
     </div>
   );
