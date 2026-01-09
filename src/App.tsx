@@ -3,6 +3,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/app-shell';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
+import { DraftBoardPage } from '@/pages/draft-board';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -19,7 +20,7 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<StandingsPage />} />
-            <Route path="draft" element={<Placeholder title="Draft Board" />} />
+            <Route path="draft" element={<DraftBoardPage />} />
             <Route path="schedule" element={<Placeholder title="Schedule" />} />
             <Route path="stats" element={<Placeholder title="Pokemon Stats" />} />
             <Route path="matchup" element={<Placeholder title="Matchup Center" />} />

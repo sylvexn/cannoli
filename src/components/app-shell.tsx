@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, Users, BarChart3, Calendar, ArrowLeftRight,
@@ -24,7 +24,13 @@ const phaseColors = {
   offseason: 'text-text-muted bg-surface-overlay',
 };
 
+// Routes that need full-width layout (no max-w constraint)
+const WIDE_ROUTES = ['/draft'];
+
 export function AppShell() {
+  const { pathname } = useLocation();
+  const isWide = WIDE_ROUTES.some(r => pathname.startsWith(r));
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -77,7 +83,7 @@ export function AppShell() {
 
       {/* Main content */}
       <main className="flex-1 overflow-y-auto bg-surface">
-        <div className="max-w-7xl mx-auto p-6">
+        <div className={isWide ? 'p-4 h-full' : 'max-w-7xl mx-auto p-6'}>
           <Outlet />
         </div>
       </main>
