@@ -180,6 +180,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  h1, h2, h3 {
+    font-family: var(--font-heading);
+  }
 }
 
 /* ─── Background texture ─── */
@@ -203,11 +206,6 @@ body::before {
 /* ─── Sidebar depth ─── */
 aside {
   box-shadow: 4px 0 16px rgba(0,0,0,0.3);
-}
-
-/* ─── Heading font ─── */
-h1, h2, h3 {
-  font-family: var(--font-heading);
 }
 
 /* ─── Rank medals ─── */
