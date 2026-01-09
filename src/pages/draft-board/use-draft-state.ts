@@ -1,5 +1,6 @@
 import { useReducer, useMemo, useEffect, useCallback } from 'react';
 import { TIER_LIST } from '@/mocks/tier-list';
+import { getPokemonData } from '@/mocks/pokemon-data';
 import { players } from '@/mocks/players';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, MOCK_TRADES } from './generate-draft-order';
@@ -189,14 +190,14 @@ export function useDraftState() {
       if (state.filters.ownership === 'owned' && !owned) return false;
       if (state.filters.ownership === 'free-agent' && owned) return false;
 
-      // Type filter — cross-reference roster data for type info
+      // Type filter — cross-reference roster data or pokedex
       if (state.filters.types.length > 0) {
         const rosterMon = rosterLookup.get(entry.name);
-        if (rosterMon) {
-          const hasType = state.filters.types.some(t => rosterMon.types.includes(t));
+        const pokeData = getPokemonData(entry.name);
+        const types = rosterMon?.types ?? pokeData?.types;
+        if (types) {
+          const hasType = state.filters.types.some(t => types.includes(t));
           if (!hasType) return false;
-        } else {
-          // No type data — include in results (don't filter out unknowns)
         }
       }
 

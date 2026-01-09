@@ -19,6 +19,7 @@ import { ArrowRightLeft, Swords, Sparkles } from 'lucide-react';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { getTierEntry } from '@/mocks/tier-list';
+import { getPokemonData } from '@/mocks/pokemon-data';
 
 interface PokemonDetailSheetProps {
   name: string | null;
@@ -42,10 +43,16 @@ export function PokemonDetailSheet({
   if (!name) return null;
 
   const mon = rosterLookup.get(name);
+  const pokeData = getPokemonData(name);
   const ownership = ownershipMap.get(name);
   const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
   const tierEntry = getTierEntry(name);
-  const bst = mon ? mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe : null;
+
+  // Unified data: prefer roster data (has season stats), fall back to pokedex
+  const types = mon?.types ?? pokeData?.types;
+  const stats = mon?.stats ?? pokeData?.stats;
+  const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
+  const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
   return (
     <Sheet open={!!name} onOpenChange={open => { if (!open) onClose(); }}>
@@ -73,7 +80,7 @@ export function PokemonDetailSheet({
 
               <div className="flex items-center gap-2 mt-1.5">
                 {tierEntry && <TierBadge points={tierEntry.tier} />}
-                {mon && <TypeChip types={mon.types} size="sm" />}
+                {types && <TypeChip types={types} size="sm" />}
               </div>
 
               {bst && (
@@ -106,30 +113,30 @@ export function PokemonDetailSheet({
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
           {/* Stats */}
-          {mon && (
+          {stats && (
             <div>
               <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider mb-2">
                 Base Stats
               </h3>
               <div className="space-y-1">
-                <StatBar label="HP" value={mon.stats.hp} />
-                <StatBar label="Atk" value={mon.stats.atk} />
-                <StatBar label="Def" value={mon.stats.def} />
-                <StatBar label="SpA" value={mon.stats.spa} />
-                <StatBar label="SpD" value={mon.stats.spd} />
-                <StatBar label="Spe" value={mon.stats.spe} />
+                <StatBar label="HP" value={stats.hp} />
+                <StatBar label="Atk" value={stats.atk} />
+                <StatBar label="Def" value={stats.def} />
+                <StatBar label="SpA" value={stats.spa} />
+                <StatBar label="SpD" value={stats.spd} />
+                <StatBar label="Spe" value={stats.spe} />
               </div>
             </div>
           )}
 
           {/* Abilities */}
-          {mon && mon.abilities.length > 0 && (
+          {abilities.length > 0 && (
             <div>
               <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider mb-2">
                 Abilities
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {mon.abilities.map(a => (
+                {abilities.map(a => (
                   <AbilityChip key={a} name={a} />
                 ))}
               </div>

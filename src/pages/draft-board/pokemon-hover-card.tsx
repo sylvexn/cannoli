@@ -12,6 +12,7 @@ import { ArrowRightLeft } from 'lucide-react';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { getTierEntry } from '@/mocks/tier-list';
+import { getPokemonData } from '@/mocks/pokemon-data';
 
 interface PokemonHoverCardProps {
   name: string;
@@ -33,9 +34,16 @@ export function PokemonHoverCard({
   onMouseLeave,
 }: PokemonHoverCardProps) {
   const mon = rosterLookup.get(name);
+  const pokeData = getPokemonData(name);
   const ownership = ownershipMap.get(name);
   const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
   const tierEntry = getTierEntry(name);
+
+  // Unified data: prefer roster data (has season stats etc), fall back to pokedex
+  const types = mon?.types ?? pokeData?.types;
+  const stats = mon?.stats ?? pokeData?.stats;
+  const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
+  const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
   // Position: right of the card, or left if near right edge
   const cardWidth = 240;
@@ -49,8 +57,7 @@ export function PokemonHoverCard({
   }
 
   let top = rect.top;
-  // Estimate card height ~280px, clamp to viewport
-  const estimatedHeight = mon ? 300 : 120;
+  const estimatedHeight = stats ? 300 : 120;
   if (top + estimatedHeight > viewportHeight - 16) {
     top = viewportHeight - estimatedHeight - 16;
   }
@@ -75,37 +82,37 @@ export function PokemonHoverCard({
           <div className="text-sm font-medium text-text-primary leading-tight">{name}</div>
           <div className="flex items-center gap-1.5 mt-1">
             {tierEntry && <TierBadge points={tierEntry.tier} />}
-            {mon && <TypeChip types={mon.types} size="xs" />}
+            {types && <TypeChip types={types} size="xs" />}
           </div>
-          {mon && (
+          {bst && (
             <div className="text-[10px] text-text-muted font-mono mt-0.5">
-              BST {mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe}
+              BST {bst}
             </div>
           )}
         </div>
       </div>
 
-      {/* Stats (only if we have roster data) */}
-      {mon && (
+      {/* Stats */}
+      {stats && (
         <>
           <Separator className="bg-border-subtle" />
           <div className="px-3 py-2 space-y-0.5">
-            <StatBar label="HP" value={mon.stats.hp} />
-            <StatBar label="Atk" value={mon.stats.atk} />
-            <StatBar label="Def" value={mon.stats.def} />
-            <StatBar label="SpA" value={mon.stats.spa} />
-            <StatBar label="SpD" value={mon.stats.spd} />
-            <StatBar label="Spe" value={mon.stats.spe} />
+            <StatBar label="HP" value={stats.hp} />
+            <StatBar label="Atk" value={stats.atk} />
+            <StatBar label="Def" value={stats.def} />
+            <StatBar label="SpA" value={stats.spa} />
+            <StatBar label="SpD" value={stats.spd} />
+            <StatBar label="Spe" value={stats.spe} />
           </div>
         </>
       )}
 
       {/* Abilities */}
-      {mon && mon.abilities.length > 0 && (
+      {abilities.length > 0 && (
         <>
           <Separator className="bg-border-subtle" />
           <div className="px-3 py-2 flex flex-wrap gap-1">
-            {mon.abilities.map(a => (
+            {abilities.map(a => (
               <AbilityChip key={a} name={a} />
             ))}
           </div>
@@ -136,14 +143,14 @@ export function PokemonHoverCard({
         </>
       )}
 
-      {/* No data hint */}
-      {!mon && !owner && tierEntry && (
+      {/* Free agent badge */}
+      {!owner && tierEntry && (
         <>
           <Separator className="bg-border-subtle" />
-          <div className="px-3 py-2 text-[10px] text-text-muted text-center">
-            Free agent · Tier {tierEntry.tier}
+          <div className="px-3 py-2 flex items-center justify-center gap-1.5">
+            <span className="text-[10px] text-text-muted">Free agent</span>
             {tierEntry.teraBanned && (
-              <Badge variant="outline" className="ml-1.5 text-[9px] h-3.5 px-1 border-loss/30 text-loss">
+              <Badge variant="outline" className="text-[9px] h-3.5 px-1 border-loss/30 text-loss">
                 Tera banned
               </Badge>
             )}

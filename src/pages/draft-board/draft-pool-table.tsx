@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { ArrowRightLeft } from 'lucide-react';
 import type { TierEntry } from '@/mocks/tier-list';
+import { getPokemonData } from '@/mocks/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 
@@ -52,9 +53,13 @@ export function DraftPoolTable({
           const ownership = ownershipMap.get(entry.name);
           const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
           const mon = rosterLookup.get(entry.name);
+          const pokeData = getPokemonData(entry.name);
+          const types = mon?.types ?? pokeData?.types;
+          const stats = mon?.stats ?? pokeData?.stats;
+          const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
           const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
           const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
-          const bst = mon ? mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe : null;
+          const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
           return (
             <TableRow
@@ -81,15 +86,15 @@ export function DraftPoolTable({
                 <TierBadge points={entry.tier} />
               </TableCell>
               <TableCell className="px-2 py-1">
-                {mon && <TypeChip types={mon.types} size="xs" />}
+                {types && <TypeChip types={types} size="xs" />}
               </TableCell>
               <TableCell className="px-2 py-1 text-right">
                 {bst && <span className="text-xs font-mono tabular-nums text-text-secondary">{bst}</span>}
               </TableCell>
               <TableCell className="px-2 py-1">
-                {mon && (
+                {abilities.length > 0 && (
                   <div className="flex flex-wrap gap-0.5">
-                    {mon.abilities.slice(0, 2).map(a => (
+                    {abilities.slice(0, 2).map(a => (
                       <Badge key={a} variant="outline" className="text-[9px] h-4 px-1 border-border-subtle text-text-muted">
                         {a}
                       </Badge>
