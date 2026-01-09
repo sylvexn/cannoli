@@ -1,11 +1,13 @@
 {
-  "name": "frontend",
+  "name": "cannoli",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "echo 'TODO: concurrently run frontend + backend when backend exists' && vite",
     "build": "tsc -b && vite build",
+    "check": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview"
   },
