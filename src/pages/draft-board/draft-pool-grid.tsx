@@ -3,16 +3,17 @@ import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { PokemonCompactCard } from './pokemon-compact-card';
 import type { TierEntry } from '@/mocks/tier-list';
-import type { Player } from '@/lib/types';
+import { getPokemonData } from '@/mocks/pokemon-data';
+import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 
 interface DraftPoolGridProps {
   poolByTier: [number, TierEntry[]][];
   ownershipMap: Map<string, PoolOwnership>;
   playerLookup: Map<string, Player>;
+  rosterLookup: Map<string, RosterPokemon>;
   selectedTeamId: string | null;
   isUserPickable?: boolean;
-  ownedByUser?: Set<string>;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -22,6 +23,7 @@ export function DraftPoolGrid({
   poolByTier,
   ownershipMap,
   playerLookup,
+  rosterLookup,
   selectedTeamId,
   isUserPickable,
   onCardClick,
@@ -75,6 +77,9 @@ export function DraftPoolGrid({
               {entries.map(entry => {
                 const ownership = ownershipMap.get(entry.name);
                 const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
+                const rosterMon = rosterLookup.get(entry.name);
+                const pokeData = getPokemonData(entry.name);
+                const types = rosterMon?.types ?? pokeData?.types;
                 const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
                 const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
 
@@ -83,6 +88,7 @@ export function DraftPoolGrid({
                     key={entry.name}
                     name={entry.name}
                     tier={entry.tier}
+                    types={types}
                     owner={owner}
                     isHighlighted={isHighlighted}
                     isUserPickable={isUserPickable && !ownership}

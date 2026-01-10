@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { preloadSprites } from '@/components/pokemon-sprite';
 import { LayoutGrid, Table, Zap, History } from 'lucide-react';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
@@ -53,6 +54,11 @@ export function DraftBoardPage() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ name: string; rect: DOMRect } | null>(null);
+
+  // Preload sprites for all visible Pokemon in the current filtered pool
+  useEffect(() => {
+    preloadSprites(filteredPool.map(e => e.name));
+  }, [filteredPool]);
 
   const handleCardClick = useCallback((name: string) => {
     dispatch({ type: 'SET_DETAIL', name });
@@ -120,6 +126,7 @@ export function DraftBoardPage() {
               poolByTier={poolByTier}
               ownershipMap={ownershipMap}
               playerLookup={playerLookup}
+              rosterLookup={rosterLookup}
               selectedTeamId={state.selectedTeamId}
               isUserPickable={isUserTurn}
               onCardClick={handleCardClick}

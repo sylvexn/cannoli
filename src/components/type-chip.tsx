@@ -14,7 +14,7 @@ const typeLabels: Record<PokemonType, string> = {
   dark: 'DRK', steel: 'STL', fairy: 'FAI',
 };
 
-const typeColors: Record<PokemonType, string> = {
+export const typeColors: Record<PokemonType, string> = {
   normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
   grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
   ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',

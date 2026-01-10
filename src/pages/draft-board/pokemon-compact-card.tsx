@@ -1,13 +1,16 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
 import { TierBadge } from '@/components/tier-badge';
+import { typeColors } from '@/components/type-chip';
+import type { PokemonType } from '@/lib/pokemon';
 import type { Player } from '@/lib/types';
 
 interface PokemonCompactCardProps {
   name: string;
   tier: number;
+  types?: PokemonType[];
   owner?: Player;
   isHighlighted?: boolean;
   isUserPickable?: boolean;
@@ -21,6 +24,7 @@ interface PokemonCompactCardProps {
 export function PokemonCompactCard({
   name,
   tier,
+  types,
   owner,
   isHighlighted,
   isUserPickable,
@@ -41,6 +45,19 @@ export function PokemonCompactCard({
   // Truncate display name for card
   const displayName = name.length > 12 ? name.replace('Mega ', 'M-').replace('-Alola', '-A').replace('-Galar', '-G').replace('-Hisui', '-H').replace('-Paldea', '-P') : name;
 
+  // Type gradient background
+  const typeGradient = useMemo(() => {
+    if (!types || types.length === 0) return undefined;
+    if (types.length === 1) {
+      const c = typeColors[types[0]];
+      return `radial-gradient(ellipse at 50% 30%, ${c}18 0%, ${c}08 60%, transparent 100%)`;
+    }
+    // Dual type: blend both colors
+    const c1 = typeColors[types[0]];
+    const c2 = typeColors[types[1]];
+    return `linear-gradient(135deg, ${c1}18 0%, ${c2}18 100%)`;
+  }, [types]);
+
   return (
     <button
       ref={ref}
@@ -49,25 +66,25 @@ export function PokemonCompactCard({
       onMouseLeave={onHoverEnd}
       className={cn(
         'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[68px] h-[78px]',
-        'border transition-all duration-200 cursor-pointer',
+        'border transition-all duration-200 cursor-pointer overflow-hidden',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',
         // Base state
-        !owner && !isUserPickable && 'bg-surface-overlay/30 border-border-subtle hover:bg-surface-overlay/60 hover:border-border-default',
+        !owner && !isUserPickable && 'border-border-subtle hover:border-border-default',
         // Owned state
-        owner && !isHighlighted && 'bg-surface-overlay/40 hover:bg-surface-overlay/70',
+        owner && !isHighlighted && 'hover:brightness-110',
         // Highlighted (team selected in sidebar)
-        isHighlighted && 'bg-surface-overlay/60 ring-1 shadow-glow-sm',
+        isHighlighted && 'ring-1 shadow-glow-sm',
         // User can pick this
-        isUserPickable && !owner && 'bg-neon/5 border-neon/30 hover:bg-neon/10 hover:border-neon/50 hover:shadow-glow-sm',
-        // Dimmed (filtered out but still visible, or owned by another team when filtering)
+        isUserPickable && !owner && 'border-neon/30 hover:border-neon/50 hover:shadow-glow-sm',
+        // Dimmed
         dimmed && 'opacity-30',
         // Recently picked animation
         recentlyPicked && 'animate-in zoom-in-95 duration-300',
       )}
       style={{
+        background: typeGradient,
         borderLeftColor: owner && !isHighlighted ? owner.teamColor : undefined,
         borderLeftWidth: owner ? '2px' : undefined,
-        ringColor: isHighlighted && owner ? owner.teamColor : undefined,
         // @ts-expect-error CSS custom property
         '--tw-ring-color': isHighlighted && owner ? owner.teamColor : undefined,
         '--tw-shadow-color': isHighlighted && owner ? `${owner.teamColor}40` : undefined,

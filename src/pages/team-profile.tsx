@@ -13,7 +13,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { AbilityChip } from '@/components/ability-chip';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
-import { PokemonSprite } from '@/components/pokemon-sprite';
+import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { TypeBadge } from '@/components/type-badge';
@@ -158,6 +158,12 @@ export function TeamProfilePage() {
 
 function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank: number; isPlayoff: boolean }) {
   const config = DEFAULT_LEAGUE_CONFIG;
+
+  // Preload sprites for entire roster + free agent pool (theorycraft swaps)
+  useEffect(() => {
+    preloadSprites(player.roster.map(m => m.name));
+  }, [player]);
+
   const [theorycraftMode, setTheorycraftMode] = useState(false);
   const [swaps, setSwaps] = useState<SwapEntry[]>([]);
   const [teraEdits, setTeraEdits] = useState<TeraEdit[]>([]);

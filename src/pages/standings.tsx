@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { standings, players } from '@/mocks/players';
 import { currentSeason, recentMatches, upcomingMatches } from '@/mocks/season';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { TeamPopover } from '@/components/team-popover';
+import { preloadSprites } from '@/components/pokemon-sprite';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink } from 'lucide-react';
@@ -13,6 +15,11 @@ function findPlayer(id: string) {
 }
 
 export function StandingsPage() {
+  // Preload all roster sprites for hover popovers
+  useEffect(() => {
+    preloadSprites(players.flatMap(p => p.roster.map(m => m.name)));
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Page header */}
