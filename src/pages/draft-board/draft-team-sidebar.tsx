@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { ChevronRight, ChevronLeft, ArrowRightLeft } from 'lucide-react';
-import { players } from '@/mocks/players';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 
 interface DraftTeamSidebarProps {
+  /** Players in display order (draft order during draft, standings after) */
+  teamOrder: Player[];
   teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
   teamPoints: Map<string, number>;
   selectedTeamId: string | null;
@@ -22,6 +23,7 @@ interface DraftTeamSidebarProps {
 }
 
 export function DraftTeamSidebar({
+  teamOrder,
   teamRosters,
   teamPoints,
   selectedTeamId,
@@ -40,7 +42,7 @@ export function DraftTeamSidebar({
         >
           <ChevronLeft size={14} />
         </Button>
-        {players.map(p => (
+        {teamOrder.map(p => (
           <button
             key={p.id}
             onClick={() => onSelectTeam(p.id)}

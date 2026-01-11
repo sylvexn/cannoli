@@ -2,14 +2,12 @@ import { useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
-import { TierBadge } from '@/components/tier-badge';
 import { typeColors } from '@/components/type-chip';
 import type { PokemonType } from '@/lib/pokemon';
 import type { Player } from '@/lib/types';
 
 interface PokemonCompactCardProps {
   name: string;
-  tier: number;
   types?: PokemonType[];
   owner?: Player;
   isHighlighted?: boolean;
@@ -23,7 +21,6 @@ interface PokemonCompactCardProps {
 
 export function PokemonCompactCard({
   name,
-  tier,
   types,
   owner,
   isHighlighted,
@@ -45,17 +42,17 @@ export function PokemonCompactCard({
   // Truncate display name for card
   const displayName = name.length > 12 ? name.replace('Mega ', 'M-').replace('-Alola', '-A').replace('-Galar', '-G').replace('-Hisui', '-H').replace('-Paldea', '-P') : name;
 
-  // Type gradient background
+  // Type color background
   const typeGradient = useMemo(() => {
     if (!types || types.length === 0) return undefined;
     if (types.length === 1) {
       const c = typeColors[types[0]];
-      return `radial-gradient(ellipse at 50% 30%, ${c}18 0%, ${c}08 60%, transparent 100%)`;
+      return `linear-gradient(180deg, ${c}30 0%, ${c}12 100%)`;
     }
-    // Dual type: blend both colors
+    // Dual type: hard diagonal split
     const c1 = typeColors[types[0]];
     const c2 = typeColors[types[1]];
-    return `linear-gradient(135deg, ${c1}18 0%, ${c2}18 100%)`;
+    return `linear-gradient(135deg, ${c1}30 0%, ${c1}30 50%, ${c2}30 50%, ${c2}30 100%)`;
   }, [types]);
 
   return (
@@ -65,7 +62,7 @@ export function PokemonCompactCard({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={onHoverEnd}
       className={cn(
-        'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[68px] h-[78px]',
+        'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[76px] h-[82px]',
         'border transition-all duration-200 cursor-pointer overflow-hidden',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',
         // Base state
@@ -98,7 +95,7 @@ export function PokemonCompactCard({
       )}
 
       {/* Sprite */}
-      <PokemonSprite name={name} size="sm" />
+      <PokemonSprite name={name} size="md" />
 
       {/* Name */}
       <span className={cn(
@@ -109,10 +106,6 @@ export function PokemonCompactCard({
         {displayName}
       </span>
 
-      {/* Tier badge (bottom-left) */}
-      <div className="absolute -bottom-1 -left-1">
-        <TierBadge points={tier} />
-      </div>
     </button>
   );
 }

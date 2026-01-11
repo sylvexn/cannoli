@@ -87,7 +87,6 @@ export function DraftPoolGrid({
                   <PokemonCompactCard
                     key={entry.name}
                     name={entry.name}
-                    tier={entry.tier}
                     types={types}
                     owner={owner}
                     isHighlighted={isHighlighted}

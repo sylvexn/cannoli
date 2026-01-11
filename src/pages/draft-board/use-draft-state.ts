@@ -1,7 +1,7 @@
 import { useReducer, useMemo, useEffect, useCallback } from 'react';
 import { TIER_LIST } from '@/mocks/tier-list';
 import { getPokemonData } from '@/mocks/pokemon-data';
-import { players } from '@/mocks/players';
+import { players, standings } from '@/mocks/players';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, MOCK_TRADES } from './generate-draft-order';
 import type {
@@ -277,6 +277,9 @@ export function useDraftState() {
 
   const isUserTurn = state.mode === 'live' && currentPick?.playerId === state.userTeamId;
 
+  // Draft order: worst record picks first (same as generate-draft-order.ts)
+  const draftOrder = useMemo(() => [...standings].reverse(), []);
+
   return {
     state,
     dispatch,
@@ -289,5 +292,6 @@ export function useDraftState() {
     rosterLookup,
     playerLookup,
     isUserTurn,
+    draftOrder,
   };
 }

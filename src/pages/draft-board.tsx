@@ -49,7 +49,7 @@ export function DraftBoardPage() {
     state, dispatch,
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
-    rosterLookup, playerLookup, isUserTurn,
+    rosterLookup, playerLookup, isUserTurn, draftOrder,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -147,6 +147,7 @@ export function DraftBoardPage() {
 
         {/* Team sidebar */}
         <DraftTeamSidebar
+          teamOrder={draftOrder}
           teamRosters={teamRosters}
           teamPoints={teamPoints}
           selectedTeamId={state.selectedTeamId}
