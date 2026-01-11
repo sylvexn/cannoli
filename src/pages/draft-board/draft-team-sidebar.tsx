@@ -74,7 +74,7 @@ export function DraftTeamSidebar({
       {/* Team list */}
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {players.map(p => {
+          {teamOrder.map(p => {
             const roster = teamRosters.get(p.id) ?? [];
             const points = teamPoints.get(p.id) ?? 0;
             const isSelected = selectedTeamId === p.id;
