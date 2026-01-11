@@ -83,13 +83,22 @@ export function PokemonCompactCard({
       )}
       style={{
         background: typeGradient,
-        borderLeftColor: owner && !isHighlighted ? owner.teamColor : undefined,
-        borderLeftWidth: owner ? '2px' : undefined,
         // @ts-expect-error CSS custom property
         '--tw-ring-color': isHighlighted && owner ? owner.teamColor : undefined,
         '--tw-shadow-color': isHighlighted && owner ? `${owner.teamColor}40` : undefined,
       }}
     >
+      {/* Owned team tab — left edge */}
+      {owner && (
+        <div
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full"
+          style={{
+            backgroundColor: owner.teamColor,
+            boxShadow: `0 0 6px ${owner.teamColor}80`,
+          }}
+        />
+      )}
+
       {/* Team badge (top-right corner) */}
       {owner && (
         <div className="absolute -top-1 -right-1 z-10">
