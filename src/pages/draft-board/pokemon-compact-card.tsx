@@ -63,16 +63,19 @@ export function PokemonCompactCard({
       onMouseLeave={onHoverEnd}
       className={cn(
         'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[76px] h-[82px]',
-        'border transition-all duration-200 cursor-pointer overflow-hidden',
+        'border cursor-pointer overflow-hidden',
+        'transition-[box-shadow,border-color,transform,opacity] duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',
+        // Hover ring + lift
+        'hover:ring-1 hover:ring-neon/40 hover:shadow-[0_0_12px_rgba(34,211,238,0.15)] hover:scale-[1.04]',
         // Base state
-        !owner && !isUserPickable && 'border-border-subtle hover:border-border-default',
+        !owner && !isUserPickable && 'border-border-subtle hover:border-neon/30',
         // Owned state
-        owner && !isHighlighted && 'hover:brightness-110',
+        owner && !isHighlighted && 'hover:border-neon/20',
         // Highlighted (team selected in sidebar)
         isHighlighted && 'ring-1 shadow-glow-sm',
         // User can pick this
-        isUserPickable && !owner && 'border-neon/30 hover:border-neon/50 hover:shadow-glow-sm',
+        isUserPickable && !owner && 'border-neon/30 hover:ring-neon/60 hover:shadow-[0_0_16px_rgba(34,211,238,0.25)]',
         // Dimmed
         dimmed && 'opacity-30',
         // Recently picked animation
