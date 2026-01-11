@@ -75,7 +75,7 @@ export function DraftBoardPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Live mode: on-the-clock banner */}
-      {state.mode === 'live' && currentPick && (
+      {state.mode === 'live' && currentPick && playerLookup.get(currentPick.playerId) && (
         <DraftOnTheClock
           pick={currentPick}
           player={playerLookup.get(currentPick.playerId)!}
