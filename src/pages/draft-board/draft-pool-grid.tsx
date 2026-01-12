@@ -73,7 +73,7 @@ export function DraftPoolGrid({
             </div>
 
             {/* Cards grid */}
-            <div className="flex flex-wrap gap-1 px-1 py-1.5">
+            <div className="flex flex-wrap gap-1 pl-5 pr-1 py-1.5">
               {entries.map(entry => {
                 const ownership = ownershipMap.get(entry.name);
                 const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
