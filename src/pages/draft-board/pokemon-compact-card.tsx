@@ -63,7 +63,7 @@ export function PokemonCompactCard({
       onMouseLeave={onHoverEnd}
       className={cn(
         'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[76px] h-[82px]',
-        'border cursor-pointer overflow-hidden',
+        'border cursor-pointer',
         'transition-[box-shadow,border-color,transform,opacity] duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',
         // Hover ring + lift
@@ -88,13 +88,14 @@ export function PokemonCompactCard({
         '--tw-shadow-color': isHighlighted && owner ? `${owner.teamColor}40` : undefined,
       }}
     >
-      {/* Owned team tab — left edge bar that expands to show team logo on hover */}
+      {/* Owned team tab — sits on left edge, expands outward on hover */}
       {owner && (
         <div
           className={cn(
-            'absolute left-0 top-0 bottom-0 z-10 flex items-center justify-end',
-            'rounded-r-md overflow-hidden',
-            'w-[3px] group-hover:w-[18px]',
+            'absolute top-1.5 bottom-1.5 z-20 flex items-center',
+            'rounded-l-md overflow-hidden',
+            'right-full mr-[-3px] w-[3px]',
+            'group-hover:w-[20px] group-hover:mr-[-3px]',
             'transition-[width] duration-300 ease-in-out',
           )}
           style={{
@@ -102,8 +103,7 @@ export function PokemonCompactCard({
             boxShadow: `0 0 8px ${owner.teamColor}60`,
           }}
         >
-          {/* Team logo — only visible when tab is expanded */}
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 pr-[2px]">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100 flex items-center justify-center w-full">
             <TeamLogo abbrev={owner.teamAbbrev} color="#ffffff" size="sm" />
           </div>
         </div>
