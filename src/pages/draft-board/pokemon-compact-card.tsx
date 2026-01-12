@@ -1,7 +1,6 @@
 import { useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { TeamLogo } from '@/components/team-logo';
 import { typeColors } from '@/components/type-chip';
 import type { PokemonType } from '@/lib/pokemon';
 import type { Player } from '@/lib/types';
@@ -92,10 +91,10 @@ export function PokemonCompactCard({
       {owner && (
         <div
           className={cn(
-            'absolute top-1.5 bottom-1.5 z-20 flex items-center',
+            'absolute top-1 bottom-1 z-20 flex items-center justify-center',
             'rounded-l-md overflow-hidden',
             'right-full mr-[-3px] w-[3px]',
-            'group-hover:w-[20px] group-hover:mr-[-3px]',
+            'group-hover:w-[26px] group-hover:mr-[-3px]',
             'transition-[width] duration-300 ease-in-out',
           )}
           style={{
@@ -103,9 +102,12 @@ export function PokemonCompactCard({
             boxShadow: `0 0 8px ${owner.teamColor}60`,
           }}
         >
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100 flex items-center justify-center w-full">
-            <TeamLogo abbrev={owner.teamAbbrev} color="#ffffff" size="sm" />
-          </div>
+          <span
+            className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-100 font-bold text-white whitespace-nowrap leading-none"
+            style={{ fontSize: `${Math.min(10, 26 / owner.teamAbbrev.length)}px` }}
+          >
+            {owner.teamAbbrev}
+          </span>
         </div>
       )}
 
