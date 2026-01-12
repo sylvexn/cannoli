@@ -88,21 +88,24 @@ export function PokemonCompactCard({
         '--tw-shadow-color': isHighlighted && owner ? `${owner.teamColor}40` : undefined,
       }}
     >
-      {/* Owned team tab — left edge */}
+      {/* Owned team tab — left edge bar that expands to show team logo on hover */}
       {owner && (
         <div
-          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full"
+          className={cn(
+            'absolute left-0 top-0 bottom-0 z-10 flex items-center justify-end',
+            'rounded-r-md overflow-hidden',
+            'w-[3px] group-hover:w-[18px]',
+            'transition-[width] duration-300 ease-in-out',
+          )}
           style={{
             backgroundColor: owner.teamColor,
-            boxShadow: `0 0 6px ${owner.teamColor}80`,
+            boxShadow: `0 0 8px ${owner.teamColor}60`,
           }}
-        />
-      )}
-
-      {/* Team badge (top-right corner) */}
-      {owner && (
-        <div className="absolute -top-1 -right-1 z-10">
-          <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="sm" />
+        >
+          {/* Team logo — only visible when tab is expanded */}
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 pr-[2px]">
+            <TeamLogo abbrev={owner.teamAbbrev} color="#ffffff" size="sm" />
+          </div>
         </div>
       )}
 
