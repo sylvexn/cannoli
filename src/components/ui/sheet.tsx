@@ -27,8 +27,6 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
       data-slot="sheet-overlay"
       className={cn(
         "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
-        "data-open:animate-[sheet-overlay-in_300ms_ease-out_forwards]",
-        "data-ending-style:animate-[sheet-overlay-out_250ms_ease-in_forwards]",
         className
       )}
       {...props}
@@ -46,9 +44,6 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
-  const slideIn = side === "left" ? "sheet-slide-in-left" : "sheet-slide-in-right"
-  const slideOut = side === "left" ? "sheet-slide-out-left" : "sheet-slide-out-right"
-
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -63,28 +58,6 @@ function SheetContent({
           "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t",
           className
         )}
-        style={{
-          animation: `var(--sheet-anim)`,
-        }}
-        // base-ui sets data-open when open, data-ending-style when closing
-        // We use CSS to pick the right animation via these attributes
-        ref={(el) => {
-          if (!el) return
-          const observer = new MutationObserver(() => {
-            const isClosing = el.hasAttribute('data-ending-style')
-            const isOpen = el.hasAttribute('data-open')
-            if (isClosing) {
-              el.style.animation = `${slideOut} 250ms ease-in forwards`
-            } else if (isOpen) {
-              el.style.animation = `${slideIn} 300ms ease-out forwards`
-            }
-          })
-          observer.observe(el, { attributes: true, attributeFilter: ['data-open', 'data-ending-style'] })
-          // Initial state
-          if (el.hasAttribute('data-open')) {
-            el.style.animation = `${slideIn} 300ms ease-out forwards`
-          }
-        }}
         {...props}
       >
         {children}
@@ -99,8 +72,7 @@ function SheetContent({
               />
             }
           >
-            <XIcon
-            />
+            <XIcon />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
         )}
