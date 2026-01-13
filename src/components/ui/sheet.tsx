@@ -26,7 +26,9 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
     <SheetPrimitive.Backdrop
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/10 transition-opacity duration-300 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+        "data-open:animate-[sheet-overlay-in_300ms_ease-out_forwards]",
+        "data-ending-style:animate-[sheet-overlay-out_250ms_ease-in_forwards]",
         className
       )}
       {...props}
@@ -44,6 +46,9 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const slideIn = side === "left" ? "sheet-slide-in-left" : "sheet-slide-in-right"
+  const slideOut = side === "left" ? "sheet-slide-out-left" : "sheet-slide-out-right"
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -51,9 +56,35 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg transition-[transform,opacity] duration-300 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0 data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=bottom]:data-ending-style:translate-y-full data-[side=bottom]:data-starting-style:translate-y-full data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:data-ending-style:translate-x-[-100%] data-[side=left]:data-starting-style:translate-x-[-100%] data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:data-ending-style:translate-x-full data-[side=right]:data-starting-style:translate-x-full data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=top]:data-ending-style:translate-y-[-100%] data-[side=top]:data-starting-style:translate-y-[-100%] data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-lg",
+          "data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=right]:sm:max-w-sm",
+          "data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=left]:sm:max-w-sm",
+          "data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b",
+          "data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t",
           className
         )}
+        style={{
+          animation: `var(--sheet-anim)`,
+        }}
+        // base-ui sets data-open when open, data-ending-style when closing
+        // We use CSS to pick the right animation via these attributes
+        ref={(el) => {
+          if (!el) return
+          const observer = new MutationObserver(() => {
+            const isClosing = el.hasAttribute('data-ending-style')
+            const isOpen = el.hasAttribute('data-open')
+            if (isClosing) {
+              el.style.animation = `${slideOut} 250ms ease-in forwards`
+            } else if (isOpen) {
+              el.style.animation = `${slideIn} 300ms ease-out forwards`
+            }
+          })
+          observer.observe(el, { attributes: true, attributeFilter: ['data-open', 'data-ending-style'] })
+          // Initial state
+          if (el.hasAttribute('data-open')) {
+            el.style.animation = `${slideIn} 300ms ease-out forwards`
+          }
+        }}
         {...props}
       >
         {children}

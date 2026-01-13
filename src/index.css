@@ -208,6 +208,33 @@ aside {
   box-shadow: 4px 0 16px rgba(0,0,0,0.3);
 }
 
+/* ─── Sheet slide animations ─── */
+
+@keyframes sheet-slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes sheet-slide-out-right {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+@keyframes sheet-slide-in-left {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes sheet-slide-out-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+@keyframes sheet-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sheet-overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 /* ─── Rank medals ─── */
 
 @keyframes glint {
