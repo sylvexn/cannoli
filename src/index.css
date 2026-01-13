@@ -208,56 +208,32 @@ aside {
   box-shadow: 4px 0 16px rgba(0,0,0,0.3);
 }
 
-/* ─── Sheet slide animations ─── */
-/* Pure CSS so base-ui detects animations and waits before unmounting */
+/* ─── Sheet slide transitions ─── */
+/* Uses CSS transitions so base-ui detects transitionend and waits before unmounting */
 
-@keyframes sheet-in-right {
-  from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
+[data-slot="sheet-overlay"] {
+  transition: opacity 300ms ease;
+  opacity: 1;
 }
-@keyframes sheet-out-right {
-  from { transform: translateX(0); opacity: 1; }
-  to   { transform: translateX(100%); opacity: 0; }
-}
-@keyframes sheet-in-left {
-  from { transform: translateX(-100%); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
-}
-@keyframes sheet-out-left {
-  from { transform: translateX(0); opacity: 1; }
-  to   { transform: translateX(-100%); opacity: 0; }
-}
-@keyframes sheet-overlay-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes sheet-overlay-out {
-  from { opacity: 1; }
-  to   { opacity: 0; }
-}
-
-/* Entry: data-open is set, data-ending-style is NOT set */
-[data-slot="sheet-content"][data-open]:not([data-ending-style])[data-side="right"] {
-  animation: sheet-in-right 300ms ease-out forwards;
-}
-[data-slot="sheet-content"][data-open]:not([data-ending-style])[data-side="left"] {
-  animation: sheet-in-left 300ms ease-out forwards;
-}
-
-/* Exit: data-ending-style IS set */
-[data-slot="sheet-content"][data-ending-style][data-side="right"] {
-  animation: sheet-out-right 250ms ease-in forwards;
-}
-[data-slot="sheet-content"][data-ending-style][data-side="left"] {
-  animation: sheet-out-left 250ms ease-in forwards;
-}
-
-/* Overlay */
-[data-slot="sheet-overlay"][data-open]:not([data-ending-style]) {
-  animation: sheet-overlay-in 300ms ease-out forwards;
-}
+[data-slot="sheet-overlay"][data-starting-style],
 [data-slot="sheet-overlay"][data-ending-style] {
-  animation: sheet-overlay-out 250ms ease-in forwards;
+  opacity: 0;
+}
+
+[data-slot="sheet-content"] {
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 300ms ease;
+  transform: translateX(0);
+  opacity: 1;
+}
+[data-slot="sheet-content"][data-side="right"][data-starting-style],
+[data-slot="sheet-content"][data-side="right"][data-ending-style] {
+  transform: translateX(100%);
+  opacity: 0;
+}
+[data-slot="sheet-content"][data-side="left"][data-starting-style],
+[data-slot="sheet-content"][data-side="left"][data-ending-style] {
+  transform: translateX(-100%);
+  opacity: 0;
 }
 
 /* ─── Rank medals ─── */
