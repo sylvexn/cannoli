@@ -208,48 +208,6 @@ aside {
   box-shadow: 4px 0 16px rgba(0,0,0,0.3);
 }
 
-/* ─── Sheet slide transitions ─── */
-
-[data-slot="sheet-overlay"] {
-  opacity: 1;
-  transition: opacity 300ms ease !important;
-  @starting-style {
-    opacity: 0;
-  }
-}
-[data-slot="sheet-overlay"][data-ending-style] {
-  opacity: 0;
-}
-
-[data-slot="sheet-content"] {
-  opacity: 1;
-  transform: translateX(0);
-  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1), opacity 300ms ease !important;
-  @starting-style {
-    opacity: 0;
-  }
-}
-[data-slot="sheet-content"][data-side="right"] {
-  @starting-style {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-}
-[data-slot="sheet-content"][data-side="right"][data-ending-style] {
-  transform: translateX(100%);
-  opacity: 0;
-}
-[data-slot="sheet-content"][data-side="left"] {
-  @starting-style {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-}
-[data-slot="sheet-content"][data-side="left"][data-ending-style] {
-  transform: translateX(-100%);
-  opacity: 0;
-}
-
 /* ─── Rank medals ─── */
 
 @keyframes glint {
