@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -37,7 +37,6 @@ export function PokemonDetailSheet({
   onDraft,
 }: PokemonDetailSheetProps) {
   const isOpen = !!name;
-  const panelRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
   useEffect(() => {
@@ -74,7 +73,6 @@ export function PokemonDetailSheet({
 
       {/* Panel — always mounted, slides via transform */}
       <div
-        ref={panelRef}
         className={cn(
           'fixed top-0 right-0 bottom-0 z-50 w-[400px]',
           'bg-surface-raised border-l border-border-default shadow-card-lg',
