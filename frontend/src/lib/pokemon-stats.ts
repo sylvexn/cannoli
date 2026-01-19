@@ -1,6 +1,6 @@
 import type { PokemonType } from './pokemon';
 import { players } from '@/mocks/players';
-import { allMatches } from '@/mocks/season';
+import { rawMatches } from '@/mocks/schedule-data';
 import { matchDetailMap } from '@/mocks/match-details';
 
 export interface PokemonLeagueStat {
@@ -18,7 +18,7 @@ export interface PokemonLeagueStat {
 }
 
 export function computeLeagueStats(): PokemonLeagueStat[] {
-  const completedMatches = allMatches.filter(m => m.homeScore !== undefined && m.week <= 9);
+  const completedMatches = rawMatches.filter(m => m.homeScore !== undefined && m.week <= 9);
 
   // Build appearance records: for each player's Pokemon, track which matches they appeared in
   // and whether the team won or lost
