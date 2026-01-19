@@ -11,7 +11,7 @@
 
 import type { MatchPokemonEntry } from '@/lib/types';
 import { players } from './players';
-import { allMatches } from './season';
+import { rawMatches } from './schedule-data';
 
 // Seeded RNG for deterministic generation
 function seededRng(seed: number) {
@@ -40,7 +40,7 @@ function generateAllMatchDetails(): MatchDetail[] {
     const pokemonWeeks = new Map<string, Set<number>>();
 
     // Get all weeks this team plays (completed only, weeks 1-9)
-    const teamMatches = allMatches
+    const teamMatches = rawMatches
       .filter(m => m.week <= 9 && (m.homePlayer === player.id || m.awayPlayer === player.id))
       .map(m => m.week);
 
@@ -131,7 +131,7 @@ function generateAllMatchDetails(): MatchDetail[] {
     remainingGames.set(player.id, remaining);
   }
 
-  const completedMatches = allMatches.filter(m => m.homeScore !== undefined && m.week <= 9);
+  const completedMatches = rawMatches.filter(m => m.homeScore !== undefined && m.week <= 9);
 
   for (const match of completedMatches) {
     const homePlayer = playerMap.get(match.homePlayer)!;
@@ -329,7 +329,7 @@ export function computeSeasonStats(teamId: string): Map<string, { kills: number;
   const stats = new Map<string, { kills: number; deaths: number; gp: number }>();
 
   for (const [matchId, detail] of matchDetailMap) {
-    const match = allMatches.find(m => m.id === matchId);
+    const match = rawMatches.find(m => m.id === matchId);
     if (!match) continue;
 
     const isHome = match.homePlayer === teamId;
