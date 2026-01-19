@@ -6,6 +6,7 @@ import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
+import { KDDisplay } from '@/components/kd-display';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -68,6 +69,12 @@ export function StatsPage() {
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
 
+  // Top 6 always by kills desc, unfiltered
+  const top6 = useMemo(() =>
+    [...allStats].sort((a, b) => b.kills - a.kills).slice(0, 6),
+    [allStats],
+  );
+
   useEffect(() => {
     preloadSprites(allStats.map(s => s.name));
   }, [allStats]);
@@ -91,6 +98,59 @@ export function StatsPage() {
         <p className="text-sm text-text-muted">
           League-wide performance &middot; Season 10
         </p>
+      </div>
+
+      {/* Top 6 MVPs */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {top6.map((stat, i) => {
+          const team = playerMap.get(stat.teamId);
+          return (
+            <Card
+              key={`${stat.teamId}-${stat.name}`}
+              className="bg-surface-raised border-border-default overflow-hidden group relative"
+            >
+              {/* Team color accent bar */}
+              <div
+                className="absolute inset-x-0 top-0 h-0.5"
+                style={{ backgroundColor: team?.teamColor }}
+              />
+              <CardContent className="p-3 pt-3.5 flex flex-col items-center text-center gap-1.5">
+                {/* Rank badge */}
+                {i < 3 ? (
+                  <span className={`rank-badge rank-badge-${i + 1} w-5 h-5 text-[9px]`}>
+                    {i + 1}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold tabular-nums text-text-muted">
+                    #{i + 1}
+                  </span>
+                )}
+                {/* Sprite */}
+                <div className="transition-transform duration-200 group-hover:scale-110">
+                  <PokemonSprite name={stat.name} size="md" />
+                </div>
+                {/* Name */}
+                <Link
+                  to={`/pokemon/${encodeURIComponent(stat.name)}`}
+                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full"
+                >
+                  {stat.name}
+                </Link>
+                {/* Team */}
+                {team && (
+                  <Link to={`/teams/${team.id}`} className="flex items-center gap-1 group/team">
+                    <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                    <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
+                      {team.teamAbbrev}
+                    </span>
+                  </Link>
+                )}
+                {/* KD */}
+                <KDDisplay kills={stat.kills} deaths={stat.deaths} className="text-xs" />
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <StatsFilterBar
@@ -138,7 +198,13 @@ export function StatsPage() {
                     >
                       {/* Rank */}
                       <td className="px-3 py-1.5 text-center">
-                        <span className="text-xs font-bold tabular-nums text-text-muted">{i + 1}</span>
+                        {i < 3 ? (
+                          <span className={`rank-badge rank-badge-${i + 1} w-5 h-5 text-[9px]`}>
+                            {i + 1}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-bold tabular-nums text-text-muted">{i + 1}</span>
+                        )}
                       </td>
                       {/* Sprite */}
                       <td className="py-1.5">
