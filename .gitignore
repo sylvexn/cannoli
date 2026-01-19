@@ -1,7 +1,7 @@
 # Project docs (local only)
 *.md
+!CLAUDE.md
 plan/
-scripts/
 
 # Dependencies
 node_modules/
