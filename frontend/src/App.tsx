@@ -5,6 +5,7 @@ import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { DraftBoardPage } from '@/pages/draft-board';
 import { SchedulePage } from '@/pages/schedule';
+import { StatsPage } from '@/pages/stats';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -23,7 +24,7 @@ export default function App() {
             <Route index element={<StandingsPage />} />
             <Route path="draft" element={<DraftBoardPage />} />
             <Route path="schedule" element={<SchedulePage />} />
-            <Route path="stats" element={<Placeholder title="Pokemon Stats" />} />
+            <Route path="stats" element={<StatsPage />} />
             <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
             <Route path="teams" element={<Placeholder title="Teams" />} />
             <Route path="teams/:id" element={<TeamProfilePage />} />
