@@ -1,4 +1,5 @@
 import type { LeagueSeason, Match } from '@/lib/types';
+import { matchDetailMap } from './match-details';
 
 export const currentSeason: LeagueSeason = {
   id: 's10',
@@ -102,16 +103,26 @@ export const allMatches: Match[] = [
   { id: 'w11m6', week: 11, homePlayer: 'ak', awayPlayer: 'pow' },
 ];
 
-/** Get matches for a specific team */
+/** Get matches for a specific team (with pokemonKD attached) */
 export function getTeamMatches(teamId: string): Match[] {
   return allMatches
     .filter(m => m.homePlayer === teamId || m.awayPlayer === teamId)
-    .sort((a, b) => a.week - b.week);
+    .sort((a, b) => a.week - b.week)
+    .map(enrichMatch);
 }
 
-/** Get matches for a specific week */
+/** Get matches for a specific week (with pokemonKD attached) */
 export function getWeekMatches(week: number): Match[] {
-  return allMatches.filter(m => m.week === week);
+  return allMatches
+    .filter(m => m.week === week)
+    .map(enrichMatch);
+}
+
+/** Attach pokemonKD to a match from generated detail data */
+function enrichMatch(match: Match): Match {
+  const detail = matchDetailMap.get(match.id);
+  if (!detail) return match;
+  return { ...match, pokemonKD: detail };
 }
 
 // Convenience re-exports for standings page

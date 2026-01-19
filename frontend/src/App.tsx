@@ -4,6 +4,7 @@ import { AppShell } from '@/components/app-shell';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { DraftBoardPage } from '@/pages/draft-board';
+import { SchedulePage } from '@/pages/schedule';
 
 function Placeholder({ title }: { title: string }) {
   return (
@@ -21,7 +22,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route index element={<StandingsPage />} />
             <Route path="draft" element={<DraftBoardPage />} />
-            <Route path="schedule" element={<Placeholder title="Schedule" />} />
+            <Route path="schedule" element={<SchedulePage />} />
             <Route path="stats" element={<Placeholder title="Pokemon Stats" />} />
             <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
             <Route path="teams" element={<Placeholder title="Teams" />} />
