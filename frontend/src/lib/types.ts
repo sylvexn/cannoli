@@ -39,6 +39,13 @@ export interface RosterPokemon {
   };
 }
 
+export interface MatchPokemonEntry {
+  name: string;
+  kills: number;
+  deaths: number;
+  teraUsed: boolean;
+}
+
 export interface Match {
   id: string;
   week: number;
@@ -48,8 +55,8 @@ export interface Match {
   awayScore?: number;
   replayUrl?: string;
   pokemonKD?: {
-    home: { name: string; kills: number; deaths: number }[];
-    away: { name: string; kills: number; deaths: number }[];
+    home: MatchPokemonEntry[];
+    away: MatchPokemonEntry[];
   };
 }
 
