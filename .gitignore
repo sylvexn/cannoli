@@ -1,7 +1,6 @@
 # Project docs (local only)
 *.md
 plan/
-scripts/
 
 # Dependencies
 node_modules/
