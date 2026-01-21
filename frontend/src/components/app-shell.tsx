@@ -101,7 +101,7 @@ export function AppShell() {
                     style={{ backgroundColor: league.color }}
                   />
                   <span className="flex-1 text-left truncate text-xs font-semibold uppercase tracking-wider">
-                    {league.name}
+                    {league.name.replace(' League', '')}
                   </span>
                   <span className={cn(
                     'text-[9px] px-1 py-0.5 rounded font-bold uppercase',
