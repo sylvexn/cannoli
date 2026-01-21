@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLeagueUrl } from '@/lib/use-league-url';
 import { StatsFilterBar, defaultFilters, type StatsFilters } from './stats-filter-bar';
 
 const playerMap = new Map(players.map(p => [p.id, p]));
@@ -68,6 +69,8 @@ export function StatsPage() {
 
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
+
+  const leagueUrl = useLeagueUrl();
 
   // Top 6 always by kills desc, unfiltered
   const top6 = useMemo(() =>
@@ -131,14 +134,14 @@ export function StatsPage() {
                 </div>
                 {/* Name */}
                 <Link
-                  to={`/pokemon/${encodeURIComponent(stat.name)}`}
+                  to={leagueUrl(`/pokemon/${encodeURIComponent(stat.name)}`)}
                   className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full"
                 >
                   {stat.name}
                 </Link>
                 {/* Team */}
                 {team && (
-                  <Link to={`/teams/${team.id}`} className="flex items-center gap-1 group/team">
+                  <Link to={leagueUrl(`/teams/${team.id}`)} className="flex items-center gap-1 group/team">
                     <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
                     <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
                       {team.teamAbbrev}
@@ -215,7 +218,7 @@ export function StatsPage() {
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
                             <Link
-                              to={`/pokemon/${encodeURIComponent(stat.name)}`}
+                              to={leagueUrl(`/pokemon/${encodeURIComponent(stat.name)}`)}
                               className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block"
                             >
                               {stat.name}
@@ -223,7 +226,7 @@ export function StatsPage() {
                             </Link>
                             {team && (
                               <Link
-                                to={`/teams/${team.id}`}
+                                to={leagueUrl(`/teams/${team.id}`)}
                                 className="flex items-center gap-1 group/team"
                               >
                                 <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />

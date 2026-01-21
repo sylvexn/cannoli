@@ -9,12 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLeagueUrl } from '@/lib/use-league-url';
 
 function findPlayer(id: string) {
   return players.find(p => p.id === id);
 }
 
 export function StandingsPage() {
+  const leagueUrl = useLeagueUrl();
+
   // Preload all roster sprites for hover popovers
   useEffect(() => {
     preloadSprites(players.flatMap(p => p.roster.map(m => m.name)));
@@ -71,7 +74,7 @@ export function StandingsPage() {
                           </div>
                           <div>
                             <TeamPopover player={player}>
-                              <Link to={`/teams/${player.id}`} className="text-left">
+                              <Link to={leagueUrl(`/teams/${player.id}`)} className="text-left">
                                 <span className="text-sm font-medium text-text-primary transition-colors duration-150 group-hover:text-neon cursor-pointer hover:underline decoration-neon/40 underline-offset-2">
                                   {player.name}
                                 </span>
@@ -129,12 +132,12 @@ export function StandingsPage() {
                     key={match.id}
                     className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
-                    <Link to={`/teams/${home.id}`} className="flex items-center gap-2 group/home">
+                    <Link to={leagueUrl(`/teams/${home.id}`)} className="flex items-center gap-2 group/home">
                       <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
                       <span className="text-sm font-medium text-text-primary group-hover/home:text-neon transition-colors">{home.teamAbbrev}</span>
                     </Link>
                     <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
-                    <Link to={`/teams/${away.id}`} className="flex items-center gap-2 justify-end group/away">
+                    <Link to={leagueUrl(`/teams/${away.id}`)} className="flex items-center gap-2 justify-end group/away">
                       <span className="text-sm font-medium text-text-primary group-hover/away:text-pink transition-colors">{away.teamAbbrev}</span>
                       <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
                     </Link>
@@ -167,7 +170,7 @@ export function StandingsPage() {
                     key={match.id}
                     className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
-                    <Link to={`/teams/${home.id}`} className="flex items-center gap-2 group/home">
+                    <Link to={leagueUrl(`/teams/${home.id}`)} className="flex items-center gap-2 group/home">
                       <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
                       <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
@@ -182,7 +185,7 @@ export function StandingsPage() {
                         {match.awayScore}
                       </span>
                     </div>
-                    <Link to={`/teams/${away.id}`} className="flex items-center gap-2 justify-end group/away">
+                    <Link to={leagueUrl(`/teams/${away.id}`)} className="flex items-center gap-2 justify-end group/away">
                       <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>

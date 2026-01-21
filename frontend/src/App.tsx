@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/app-shell';
+import { LeagueLayout } from '@/components/league-layout';
+import { LeagueOverviewPage } from '@/pages/league-overview';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { DraftBoardPage } from '@/pages/draft-board';
@@ -21,14 +23,22 @@ export default function App() {
       <TooltipProvider>
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<StandingsPage />} />
-            <Route path="draft" element={<DraftBoardPage />} />
-            <Route path="schedule" element={<SchedulePage />} />
-            <Route path="stats" element={<StatsPage />} />
+            {/* Cross-league overview */}
+            <Route index element={<LeagueOverviewPage />} />
+
+            {/* League-scoped pages */}
+            <Route path="league/:leagueId" element={<LeagueLayout />}>
+              <Route index element={<StandingsPage />} />
+              <Route path="draft" element={<DraftBoardPage />} />
+              <Route path="schedule" element={<SchedulePage />} />
+              <Route path="stats" element={<StatsPage />} />
+              <Route path="teams" element={<Placeholder title="Teams" />} />
+              <Route path="teams/:id" element={<TeamProfilePage />} />
+              <Route path="trades" element={<Placeholder title="Trade Block" />} />
+            </Route>
+
+            {/* League-independent pages */}
             <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
-            <Route path="teams" element={<Placeholder title="Teams" />} />
-            <Route path="teams/:id" element={<TeamProfilePage />} />
-            <Route path="trades" element={<Placeholder title="Trade Block" />} />
             <Route path="admin" element={<Placeholder title="Admin Panel" />} />
           </Route>
         </Routes>

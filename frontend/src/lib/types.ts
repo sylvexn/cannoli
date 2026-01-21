@@ -85,3 +85,12 @@ export interface TierPokemon {
   drafted: boolean;
   draftedBy?: string;
 }
+
+export interface League {
+  id: string;
+  name: string;
+  color: string;
+  season: LeagueSeason;
+  players: Player[];
+  hasData: boolean;
+}
