@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { ChevronDown, ExternalLink, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLeagueUrl } from '@/lib/use-league-url';
 
 const TYPE_COLORS: Record<PokemonType, string> = {
   normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
@@ -25,6 +26,7 @@ interface MatchCardProps {
 }
 
 export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
+  const leagueUrl = useLeagueUrl();
   const [expanded, setExpanded] = useState(false);
   const isCompleted = match.homeScore !== undefined;
   const homeWon = isCompleted && (match.homeScore ?? 0) > (match.awayScore ?? 0);
@@ -45,7 +47,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
       >
         {/* Home team */}
         <Link
-          to={`/teams/${homePlayer.id}`}
+          to={leagueUrl(`/teams/${homePlayer.id}`)}
           onClick={e => e.stopPropagation()}
           className="flex items-center gap-2.5 group/home min-w-0 flex-1"
         >
@@ -83,7 +85,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
 
         {/* Away team */}
         <Link
-          to={`/teams/${awayPlayer.id}`}
+          to={leagueUrl(`/teams/${awayPlayer.id}`)}
           onClick={e => e.stopPropagation()}
           className="flex items-center gap-2.5 justify-end group/away min-w-0 flex-1"
         >

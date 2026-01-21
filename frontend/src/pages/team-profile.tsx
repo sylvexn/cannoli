@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
+import { useLeagueUrl } from '@/lib/use-league-url';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { players, standings } from '@/mocks/players';
@@ -139,6 +140,7 @@ function freeAgentToRoster(fa: { name: string; tier: number }): RosterPokemon {
 // ─── Main Page ───────────────────────────────────────────────────
 export function TeamProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const leagueUrl = useLeagueUrl();
   const player = players.find(p => p.id === id);
 
   if (!player) {
@@ -1008,7 +1010,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                       ) : (
                         <span className="w-4 text-center text-[10px] text-text-muted">—</span>
                       )}
-                      <Link to={`/teams/${opponentId}`} className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Link to={leagueUrl(`/teams/${opponentId}`)} className="flex items-center gap-1.5 flex-1 min-w-0">
                         <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
                         <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
                       </Link>
