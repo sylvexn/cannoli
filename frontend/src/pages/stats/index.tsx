@@ -228,7 +228,7 @@ export function StatsPage() {
                               >
                                 <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
                                 <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
-                                  {team.teamAbbrev}
+                                  {team.teamName}
                                 </span>
                               </Link>
                             )}
