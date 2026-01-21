@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import type { Match, Player, MatchPokemonEntry } from '@/lib/types';
+import type { PokemonType } from '@/lib/pokemon';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ChevronDown, ExternalLink, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
+
+const TYPE_COLORS: Record<PokemonType, string> = {
+  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
+  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
+  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
+  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
+  steel: '#b7b7ce', fairy: '#d685ad',
+};
 
 interface MatchCardProps {
   match: Match;
@@ -46,10 +56,10 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               homeWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               'group-hover/home:text-neon',
             )}>
-              {homePlayer.name}
+              {homePlayer.teamName}
             </span>
-            <span className="text-[10px] text-text-muted uppercase tracking-wider block">
-              {homePlayer.teamAbbrev}
+            <span className="text-[10px] text-text-muted/60 block truncate">
+              {homePlayer.name}
             </span>
           </div>
         </Link>
@@ -83,10 +93,10 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               awayWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               'group-hover/away:text-pink',
             )}>
-              {awayPlayer.name}
+              {awayPlayer.teamName}
             </span>
-            <span className="text-[10px] text-text-muted uppercase tracking-wider block">
-              {awayPlayer.teamAbbrev}
+            <span className="text-[10px] text-text-muted/60 block truncate">
+              {awayPlayer.name}
             </span>
           </div>
           <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
@@ -180,6 +190,33 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   );
 }
 
+function TeraIndicator({ entry, teamColor }: { entry: MatchPokemonEntry; teamColor: string }) {
+  if (!entry.teraUsed) return null;
+
+  const teraType = entry.teraType;
+  const teraColor = teraType ? TYPE_COLORS[teraType] : teamColor;
+  const label = teraType ? teraType.charAt(0).toUpperCase() + teraType.slice(1) : 'Tera';
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-0.5 shrink-0 cursor-default">
+          <Zap className="w-3 h-3" style={{ color: teraColor }} fill={teraColor} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="px-2 py-1">
+        <span className="flex items-center gap-1.5 text-xs">
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: teraColor }}
+          />
+          Tera {label}
+        </span>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function PokemonKDColumn({
   entries,
   teamColor,
@@ -229,13 +266,7 @@ function PokemonKDColumn({
               {entry.name}
             </span>
 
-            {entry.teraUsed && (
-              <Zap
-                className="w-3 h-3 shrink-0 relative"
-                style={{ color: teamColor }}
-                fill={teamColor}
-              />
-            )}
+            <TeraIndicator entry={entry} teamColor={teamColor} />
 
             <span className={cn(
               'tabular-nums text-xs shrink-0 flex items-center gap-0.5 relative',
