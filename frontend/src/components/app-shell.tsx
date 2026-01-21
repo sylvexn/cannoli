@@ -90,17 +90,17 @@ export function AppShell() {
                 <button
                   onClick={() => toggleLeague(league.id)}
                   className={cn(
-                    'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150',
+                    'gem-wrapper w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150',
                     isActiveLeague
                       ? 'text-text-primary'
-                      : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+                      : 'text-text-secondary hover:bg-surface-overlay/50 hover:text-text-primary',
                   )}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: league.color }}
-                  />
-                  <span className="flex-1 text-left truncate text-xs font-semibold uppercase tracking-wider">
+                  <span className={`gem gem-${league.id}`} />
+                  <span className={cn(
+                    `gem-text gem-text-${league.id}`,
+                    'flex-1 text-left truncate text-xs font-bold uppercase tracking-wider',
+                  )}>
                     {league.name.replace(' League', '')}
                   </span>
                   <span className={cn(
