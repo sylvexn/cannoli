@@ -265,14 +265,17 @@ function generateAllMatchDetails(): MatchDetail[] {
     }
 
     // Tera usage: 0-1 per team, prefer tera captains
-    function pickTera(brought: typeof winnerBrought): boolean[] {
-      const result = new Array(brought.length).fill(false);
+    // Returns array of tera type used (or undefined) per slot
+    function pickTera(brought: typeof winnerBrought): (string | undefined)[] {
+      const result = new Array<string | undefined>(brought.length).fill(undefined);
       if (rng() < 0.7) { // 70% chance someone teras
         const captainIdx = brought.findIndex(m => m.isTeraCaptain);
         if (captainIdx >= 0) {
-          result[captainIdx] = true;
+          const types = brought[captainIdx].teraTypes;
+          result[captainIdx] = types?.[Math.floor(rng() * types.length)] ?? brought[captainIdx].types[0];
         } else {
-          result[Math.floor(rng() * brought.length)] = true;
+          const idx = Math.floor(rng() * brought.length);
+          result[idx] = brought[idx].types[0]; // non-captain teras into own type
         }
       }
       return result;
@@ -282,12 +285,13 @@ function generateAllMatchDetails(): MatchDetail[] {
     const loserTera = pickTera(loserBrought);
 
     // Build entries
-    function buildEntries(brought: typeof winnerBrought, kills: number[], deaths: number[], tera: boolean[]): MatchPokemonEntry[] {
+    function buildEntries(brought: typeof winnerBrought, kills: number[], deaths: number[], tera: (string | undefined)[]): MatchPokemonEntry[] {
       return brought.slice(0, 6).map((mon, i) => ({
         name: mon.name,
         kills: Math.max(0, kills[i]),
         deaths: Math.max(0, deaths[i]),
-        teraUsed: tera[i],
+        teraUsed: tera[i] !== undefined,
+        ...(tera[i] !== undefined ? { teraType: tera[i] as MatchPokemonEntry['teraType'] } : {}),
       }));
     }
 

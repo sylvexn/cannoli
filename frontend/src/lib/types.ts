@@ -44,6 +44,7 @@ export interface MatchPokemonEntry {
   kills: number;
   deaths: number;
   teraUsed: boolean;
+  teraType?: PokemonType;
 }
 
 export interface Match {
