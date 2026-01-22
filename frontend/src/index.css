@@ -280,58 +280,7 @@ aside {
   border: 1.5px solid rgba(205, 127, 50, 0.4);
 }
 
-/* ─── League gem icons ─── */
-
-.gem {
-  position: relative;
-  width: 14px;
-  height: 14px;
-  transform: rotate(45deg);
-  border-radius: 2px;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-/* Facet highlight — inset light streak */
-.gem::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(255,255,255,0) 0%,
-    rgba(255,255,255,0.35) 30%,
-    rgba(255,255,255,0.08) 50%,
-    rgba(255,255,255,0) 100%
-  );
-  pointer-events: none;
-}
-
-/* Glint sweep on hover */
-.gem::after {
-  content: '';
-  position: absolute;
-  inset: -50%;
-  background: linear-gradient(
-    -45deg,
-    transparent 0%,
-    transparent 40%,
-    rgba(255,255,255,0.5) 45%,
-    rgba(255,255,255,0.7) 50%,
-    rgba(255,255,255,0.5) 55%,
-    transparent 60%,
-    transparent 100%
-  );
-  transform: translateX(-200%) translateY(-200%);
-  pointer-events: none;
-  transition: none;
-}
-
-.gem-wrapper:hover .gem::after {
-  animation: glint 0.5s ease-out forwards;
-}
-
-/* ── League banner ── */
+/* ─── League banners ─── */
 
 .league-banner {
   position: relative;
@@ -344,22 +293,31 @@ aside {
 }
 
 .gem-wrapper:hover .league-banner {
-  filter: brightness(1.15);
+  filter: brightness(1.1);
 }
 
-/* Inner highlight streak across the banner */
+/* Glint sweep across the banner on hover */
 .league-banner::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -50%;
   background: linear-gradient(
-    100deg,
-    rgba(255,255,255,0.12) 0%,
-    rgba(255,255,255,0) 40%,
-    rgba(255,255,255,0.06) 60%,
-    rgba(255,255,255,0) 100%
+    -60deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(255,255,255,0.25) 45%,
+    rgba(255,255,255,0.4) 50%,
+    rgba(255,255,255,0.25) 55%,
+    transparent 60%,
+    transparent 100%
   );
+  transform: translateX(-200%);
   pointer-events: none;
+  transition: none;
+}
+
+.gem-wrapper:hover .league-banner::before {
+  animation: glint 0.6s ease-out forwards;
 }
 
 /* Top edge bevel highlight */
@@ -384,45 +342,18 @@ aside {
 }
 
 /* ── Sapphire ── */
-.gem-sapphire {
-  background: linear-gradient(145deg, #1e40af, #3b82f6, #1e3a8a);
-  box-shadow:
-    0 0 6px rgba(59, 130, 246, 0.35),
-    inset 0 1px 2px rgba(147, 197, 253, 0.4),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(59, 130, 246, 0.4);
-}
-
 .league-banner-sapphire {
   background: linear-gradient(135deg, #1e3a8a, #2563eb 40%, #1d4ed8 70%, #1e3a8a);
   box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3);
 }
 
 /* ── Ruby ── */
-.gem-ruby {
-  background: linear-gradient(145deg, #991b1b, #ef4444, #7f1d1d);
-  box-shadow:
-    0 0 6px rgba(239, 68, 68, 0.35),
-    inset 0 1px 2px rgba(252, 165, 165, 0.4),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-}
-
 .league-banner-ruby {
   background: linear-gradient(135deg, #7f1d1d, #dc2626 40%, #b91c1c 70%, #7f1d1d);
   box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3);
 }
 
 /* ── Emerald ── */
-.gem-emerald {
-  background: linear-gradient(145deg, #166534, #22c55e, #14532d);
-  box-shadow:
-    0 0 6px rgba(34, 197, 94, 0.35),
-    inset 0 1px 2px rgba(134, 239, 172, 0.4),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(34, 197, 94, 0.4);
-}
-
 .league-banner-emerald {
   background: linear-gradient(135deg, #14532d, #16a34a 40%, #15803d 70%, #14532d);
   box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);

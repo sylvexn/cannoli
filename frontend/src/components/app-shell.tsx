@@ -92,7 +92,6 @@ export function AppShell() {
                   className="gem-wrapper w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
                 >
                   <div className={`league-banner league-banner-${league.id} flex-1 min-w-0`}>
-                    <span className={`gem gem-${league.id}`} />
                     <span className="league-banner-text text-white truncate">
                       {league.name.replace(' League', '')}
                     </span>
