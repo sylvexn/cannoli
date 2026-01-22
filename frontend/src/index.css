@@ -287,8 +287,9 @@ aside {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px 5px 6px;
+  padding: 5px 14px 5px 16px;
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 6px 50%);
+  justify-content: center;
   transition: filter 0.15s ease;
 }
 
