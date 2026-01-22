@@ -89,22 +89,16 @@ export function AppShell() {
                 {/* League header — accordion toggle */}
                 <button
                   onClick={() => toggleLeague(league.id)}
-                  className={cn(
-                    'gem-wrapper w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150',
-                    isActiveLeague
-                      ? 'text-text-primary'
-                      : 'text-text-secondary hover:bg-surface-overlay/50 hover:text-text-primary',
-                  )}
+                  className="gem-wrapper w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
                 >
-                  <span className={`gem gem-${league.id}`} />
+                  <div className={`league-banner league-banner-${league.id} flex-1 min-w-0`}>
+                    <span className={`gem gem-${league.id}`} />
+                    <span className="league-banner-text text-white truncate">
+                      {league.name.replace(' League', '')}
+                    </span>
+                  </div>
                   <span className={cn(
-                    `gem-text gem-text-${league.id}`,
-                    'flex-1 text-left truncate text-xs font-bold uppercase tracking-wider',
-                  )}>
-                    {league.name.replace(' League', '')}
-                  </span>
-                  <span className={cn(
-                    'text-[9px] px-1 py-0.5 rounded font-bold uppercase',
+                    'text-[9px] px-1 py-0.5 rounded font-bold uppercase shrink-0',
                     phaseColors[league.season.phase],
                   )}>
                     {league.season.phase === 'regular'
@@ -114,7 +108,7 @@ export function AppShell() {
                   <ChevronDown
                     size={14}
                     className={cn(
-                      'text-text-muted transition-transform duration-200',
+                      'text-text-muted transition-transform duration-200 shrink-0',
                       isOpen && 'rotate-180',
                     )}
                   />
