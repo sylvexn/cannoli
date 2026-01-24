@@ -140,7 +140,6 @@ function freeAgentToRoster(fa: { name: string; tier: number }): RosterPokemon {
 // ─── Main Page ───────────────────────────────────────────────────
 export function TeamProfilePage() {
   const { id } = useParams<{ id: string }>();
-  const leagueUrl = useLeagueUrl();
   const player = players.find(p => p.id === id);
 
   if (!player) {
@@ -159,6 +158,7 @@ export function TeamProfilePage() {
 }
 
 function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank: number; isPlayoff: boolean }) {
+  const leagueUrl = useLeagueUrl();
   const config = DEFAULT_LEAGUE_CONFIG;
 
   // Preload sprites for entire roster + free agent pool (theorycraft swaps)
