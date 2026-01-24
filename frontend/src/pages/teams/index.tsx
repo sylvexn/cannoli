@@ -31,7 +31,7 @@ export function TeamsPage() {
         <p className="text-sm text-text-muted">{players.length} teams · Season 10</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="columns-1 md:columns-2 xl:columns-3 gap-4 [&>*]:mb-4">
         {standings.map((player, rank) => (
           <TeamCard key={player.id} player={player} rank={rank + 1} leagueUrl={leagueUrl} />
         ))}
@@ -59,7 +59,7 @@ function TeamCard({
   const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
 
   return (
-    <Card className="bg-surface-raised border-border-default overflow-hidden group">
+    <Card className="bg-surface-raised border-border-default overflow-hidden group break-inside-avoid">
       {/* Team color accent */}
       <div className="h-1" style={{ backgroundColor: player.teamColor }} />
 
