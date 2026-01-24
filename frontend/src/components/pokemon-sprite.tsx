@@ -27,16 +27,26 @@ function getCacheState(url: string): CacheState {
   return spriteCache.get(url) ?? 'loading';
 }
 
+// Pending promises for in-flight loads so multiple callers await the same fetch
+const pendingLoads = new Map<string, Promise<void>>();
+
 function loadSprite(url: string): Promise<void> {
-  if (spriteCache.has(url)) return Promise.resolve();
+  const cached = spriteCache.get(url);
+  if (cached === 'loaded' || cached === 'error') return Promise.resolve();
+
+  // If already loading, return the existing promise
+  const pending = pendingLoads.get(url);
+  if (pending) return pending;
 
   spriteCache.set(url, 'loading');
-  return new Promise(resolve => {
+  const promise = new Promise<void>(resolve => {
     const img = new Image();
-    img.onload = () => { spriteCache.set(url, 'loaded'); resolve(); };
-    img.onerror = () => { spriteCache.set(url, 'error'); resolve(); };
+    img.onload = () => { spriteCache.set(url, 'loaded'); pendingLoads.delete(url); resolve(); };
+    img.onerror = () => { spriteCache.set(url, 'error'); pendingLoads.delete(url); resolve(); };
     img.src = url;
   });
+  pendingLoads.set(url, promise);
+  return promise;
 }
 
 /**
