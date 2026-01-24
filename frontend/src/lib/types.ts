@@ -86,6 +86,24 @@ export interface TierPokemon {
   draftedBy?: string;
 }
 
+export interface Trade {
+  id: string;
+  week: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  proposer: string;
+  recipient: string;
+  offering: string[];
+  requesting: string[];
+  proposedAt: string;
+  resolvedAt?: string;
+}
+
+export interface TradeBlockListing {
+  teamId: string;
+  pokemonName: string;
+  note?: string;
+}
+
 export interface League {
   id: string;
   name: string;
