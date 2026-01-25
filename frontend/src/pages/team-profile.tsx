@@ -1215,7 +1215,7 @@ function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pc
                 </span>
                 <div className="flex flex-wrap gap-px">
                   {entries.map(({ type }) => (
-                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: typeColors[type] }}>
+                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[type] }}>
                       {type.slice(0, 3)}
                     </span>
                   ))}
