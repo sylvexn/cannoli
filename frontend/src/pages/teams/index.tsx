@@ -84,10 +84,10 @@ function TeamRow({
         >
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
           <div className="min-w-0">
-            <span className="text-sm font-medium text-text-primary group-hover/team:text-neon transition-colors truncate block">
+            <span className="text-sm font-medium text-text-primary group-hover/team:text-neon transition-colors truncate block leading-snug">
               {player.teamName}
             </span>
-            <span className="text-[10px] text-text-muted/60 block">{player.name}</span>
+            <span className="text-[10px] text-text-muted/60 block leading-snug">{player.name}</span>
           </div>
         </Link>
 
