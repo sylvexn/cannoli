@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 
 // ─── Type effectiveness (shared) ─────────────────────────────────
-import { TYPE_CHART } from '@/lib/type-effectiveness';
+import { TYPE_CHART, getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
 
 interface TypeHit { name: string; mult: number }
 interface TypeProfileEntry {
@@ -211,6 +211,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
   const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
   const teamDeaths = activeRoster.reduce((sum, p) => sum + p.seasonStats.deaths, 0);
   const typeProfile = useMemo(() => getTeamDefensiveProfile(activeRoster), [activeRoster]);
+  const pokemonTypesMap = useMemo(() => new Map(activeRoster.map(m => [m.name, m.types])), [activeRoster]);
 
   function handleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
@@ -963,7 +964,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
             </div>
 
             <TabsContent value="defense" className="p-0 flex-1 overflow-y-auto flex flex-col">
-              <TypeCoverageGridInner profile={typeProfile} />
+              <TypeCoverageGridInner profile={typeProfile} pokemonTypesMap={pokemonTypesMap} />
             </TabsContent>
 
             <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
@@ -1153,9 +1154,25 @@ function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'md' }) {
   );
 }
 
-function DefSegment({ name, mult, pct }: { name: string; mult: number; pct: number }) {
+function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pct: number; types: PokemonType[] }) {
   const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
   const s = MULT_STYLES[key];
+
+  const matchups = useMemo(() => {
+    const raw = getDefensiveMatchups(types);
+    return groupMatchups(raw);
+  }, [types.join(',')]);
+
+  const tiers: { key: string; label: string; color: string }[] = [
+    { key: 'x4', label: '4×', color: '#f87171' },
+    { key: 'x2', label: '2×', color: '#fb923c' },
+    { key: 'x05', label: '½×', color: '#4ade80' },
+    { key: 'x025', label: '¼×', color: '#22d3ee' },
+    { key: 'x0', label: '0×', color: '#a78bfa' },
+  ];
+
+  const visibleTiers = tiers.filter(t => (matchups as Record<string, { type: PokemonType }[]>)[t.key].length > 0);
+
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger
@@ -1173,17 +1190,48 @@ function DefSegment({ name, mult, pct }: { name: string; mult: number; pct: numb
         onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.hover; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.bg; }}
       />
-      <TooltipContent side="top" className="bg-surface-overlay border-border-default p-1.5 flex items-center gap-1.5">
-        <PokemonSprite name={name} size="xs" />
-        <span className="text-[10px] text-text-primary font-medium">{name}</span>
-        <MultChip mult={mult} />
+      <TooltipContent side="top" className="bg-surface-overlay border-border-default p-0 max-w-[260px]">
+        {/* Header: sprite + name + mult + types */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border-subtle/30">
+          <PokemonSprite name={name} size="xs" />
+          <span className="text-[11px] text-text-primary font-medium">{name}</span>
+          <MultChip mult={mult} />
+          <div className="ml-auto flex gap-0.5">
+            {types.map(t => (
+              <span key={t} className="text-[8px] font-bold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[t] }}>
+                {t.slice(0, 3)}
+              </span>
+            ))}
+          </div>
+        </div>
+        {/* Defensive matchup chart */}
+        <div className="px-2.5 py-1.5 space-y-1">
+          {visibleTiers.map(tier => {
+            const entries = (matchups as Record<string, { type: PokemonType }[]>)[tier.key];
+            return (
+              <div key={tier.key} className="flex items-start gap-1.5">
+                <span className="text-[9px] font-bold tabular-nums w-4 shrink-0 text-right" style={{ color: tier.color }}>
+                  {tier.label}
+                </span>
+                <div className="flex flex-wrap gap-px">
+                  {entries.map(({ type }) => (
+                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: typeColors[type] }}>
+                      {type.slice(0, 3)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </TooltipContent>
     </Tooltip>
   );
 }
 
-function TypeCoverageGridInner({ profile }: {
+function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
   profile: Record<PokemonType, TypeProfileEntry>;
+  pokemonTypesMap: Map<string, PokemonType[]>;
 }) {
   const maxCount = Math.max(
     ...POKEMON_TYPES.map(t => {
@@ -1212,11 +1260,11 @@ function TypeCoverageGridInner({ profile }: {
             </span>
 
             <div className="flex-1 self-stretch rounded-r-full overflow-hidden bg-surface-overlay/15" style={{ display: 'flex' }}>
-              {p.x4.map(h => <DefSegment key={`4x-${h.name}`} name={h.name} mult={4} pct={100 / maxCount} />)}
-              {p.x2.map(h => <DefSegment key={`2x-${h.name}`} name={h.name} mult={2} pct={100 / maxCount} />)}
-              {p.x05.map(h => <DefSegment key={`.5x-${h.name}`} name={h.name} mult={0.5} pct={100 / maxCount} />)}
-              {p.x025.map(h => <DefSegment key={`.25x-${h.name}`} name={h.name} mult={0.25} pct={100 / maxCount} />)}
-              {p.x0.map(h => <DefSegment key={`0x-${h.name}`} name={h.name} mult={0} pct={100 / maxCount} />)}
+              {p.x4.map(h => <DefSegment key={`4x-${h.name}`} name={h.name} mult={4} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
+              {p.x2.map(h => <DefSegment key={`2x-${h.name}`} name={h.name} mult={2} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
+              {p.x05.map(h => <DefSegment key={`.5x-${h.name}`} name={h.name} mult={0.5} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
+              {p.x025.map(h => <DefSegment key={`.25x-${h.name}`} name={h.name} mult={0.25} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
+              {p.x0.map(h => <DefSegment key={`0x-${h.name}`} name={h.name} mult={0} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
             </div>
 
             {/* Counts by multiplier */}
