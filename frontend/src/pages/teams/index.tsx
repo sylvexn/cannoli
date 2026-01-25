@@ -9,6 +9,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
+import { PointCapBar } from '@/components/point-cap-bar';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent } from '@/components/ui/card';
@@ -100,10 +101,11 @@ function TeamRow({
           />
           <span className="hidden md:inline text-border-subtle">·</span>
           <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-[11px] hidden md:inline-flex" />
-          <span className="hidden lg:inline text-border-subtle">·</span>
-          <span className="hidden lg:inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-text-secondary">
-            {points}<span className="text-text-muted">/110pt</span>
-          </span>
+        </div>
+
+        {/* Point cap bar */}
+        <div className="hidden lg:block w-32 shrink-0">
+          <PointCapBar used={points} />
         </div>
 
         {/* Chevron */}
