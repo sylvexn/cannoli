@@ -62,83 +62,89 @@ export function TradeBlockPage() {
         </div>
       )}
 
-      {/* On the Block — listings */}
-      <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base text-text-primary flex items-center gap-2">
-            On the Block
-            <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted">
-              {tradeBlockListings.length}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {tradeBlockListings.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {tradeBlockListings.map(listing => {
-                const team = playerMap.get(listing.teamId);
-                const mon = team?.roster.find(m => m.name === listing.pokemonName);
-                if (!team || !mon) return null;
+      {/* Side-by-side: On the Block + Proposals */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* On the Block — list view */}
+        <Card className="bg-surface-raised border-border-default flex flex-col">
+          <CardHeader className="pb-2 shrink-0">
+            <CardTitle className="text-base text-text-primary flex items-center gap-2">
+              On the Block
+              <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted">
+                {tradeBlockListings.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto max-h-[420px] p-0">
+            {tradeBlockListings.length > 0 ? (
+              <div className="divide-y divide-border-subtle/30">
+                {tradeBlockListings.map(listing => {
+                  const team = playerMap.get(listing.teamId);
+                  const mon = team?.roster.find(m => m.name === listing.pokemonName);
+                  if (!team || !mon) return null;
 
-                return (
-                  <div
-                    key={`${listing.teamId}-${listing.pokemonName}`}
-                    className={cn(
-                      'flex items-center gap-3 p-2.5 rounded-lg border transition-colors',
-                      deadlinePassed
-                        ? 'border-border-subtle/30 opacity-50'
-                        : 'border-border-subtle hover:border-border-default hover:bg-surface-overlay/30',
-                    )}
-                  >
-                    <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-text-primary truncate">{mon.name}</span>
-                        <TierBadge points={mon.tier} />
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <TypeChip types={mon.types} size="xs" />
-                      </div>
-                      {listing.note && (
-                        <p className="text-[10px] text-text-muted mt-1 italic truncate">"{listing.note}"</p>
+                  return (
+                    <div
+                      key={`${listing.teamId}-${listing.pokemonName}`}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-3 transition-colors',
+                        deadlinePassed
+                          ? 'opacity-50'
+                          : 'hover:bg-surface-overlay/30',
                       )}
-                    </div>
-                    <Link
-                      to={leagueUrl(`/teams/${team.id}`)}
-                      className="shrink-0 group/team flex items-center gap-1"
                     >
-                      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
-                      <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
-                        {team.teamAbbrev}
-                      </span>
-                    </Link>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-text-muted text-center py-4">No Pokemon currently on the block</p>
-          )}
-        </CardContent>
-      </Card>
+                      <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-text-primary truncate">{mon.name}</span>
+                          <TierBadge points={mon.tier} />
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <TypeChip types={mon.types} size="xs" />
+                        </div>
+                        {listing.note && (
+                          <p className="text-[10px] text-text-muted mt-1 italic">"{listing.note}"</p>
+                        )}
+                      </div>
+                      <Link
+                        to={leagueUrl(`/teams/${team.id}`)}
+                        className="shrink-0 group/team flex flex-col items-center gap-0.5"
+                      >
+                        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                        <span className="text-[9px] text-text-muted group-hover/team:text-neon transition-colors">
+                          {team.teamAbbrev}
+                        </span>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted text-center py-8">No Pokemon currently on the block</p>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Active / Pending proposals */}
-      {activeTrades.length > 0 && (
-        <div>
-          <h2 className="text-sm font-heading font-semibold text-text-primary mb-3 flex items-center gap-2">
-            <ArrowLeftRight size={14} />
-            Proposals
-            <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted">
-              {activeTrades.length}
-            </Badge>
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {activeTrades.map(trade => (
-              <TradeCard key={trade.id} trade={trade} playerMap={playerMap} />
-            ))}
-          </div>
-        </div>
-      )}
+        {/* Proposals */}
+        <Card className="bg-surface-raised border-border-default flex flex-col">
+          <CardHeader className="pb-2 shrink-0">
+            <CardTitle className="text-base text-text-primary flex items-center gap-2">
+              Proposals
+              <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted">
+                {activeTrades.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-y-auto max-h-[420px] p-0 px-3 pb-3 space-y-3">
+            {activeTrades.length > 0 ? (
+              activeTrades.map(trade => (
+                <TradeCard key={trade.id} trade={trade} playerMap={playerMap} />
+              ))
+            ) : (
+              <p className="text-sm text-text-muted text-center py-8">No active proposals</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Trade history */}
       <Card className="bg-surface-raised border-border-default">
@@ -173,7 +179,6 @@ export function TradeBlockPage() {
                     <ArrowLeftRight size={12} className="text-loss shrink-0" />
                   )}
 
-                  {/* Teams involved */}
                   <div className="flex items-center gap-1 shrink-0">
                     {proposer && <TeamLogo abbrev={proposer.teamAbbrev} color={proposer.teamColor} size="sm" />}
                     {!isFreeAgent && recipient && (
@@ -184,7 +189,6 @@ export function TradeBlockPage() {
                     )}
                   </div>
 
-                  {/* Pokemon exchanged */}
                   <div className="flex-1 min-w-0 text-xs text-text-secondary truncate">
                     {trade.offering.join(', ')}
                     <span className="text-text-muted mx-1">for</span>
