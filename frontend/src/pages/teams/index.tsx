@@ -76,11 +76,12 @@ function TeamRow({
           )}
         </div>
 
-        {/* Team identity — flexes to fill */}
+        {/* Team identity */}
         <Link
           to={leagueUrl(`/teams/${player.id}`)}
           onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2.5 min-w-0 flex-1 group/team"
+          className="flex items-center gap-2.5 min-w-0 group/team"
+          style={{ flex: '1 1 0', minWidth: 0 }}
         >
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
           <div className="min-w-0">
@@ -91,7 +92,7 @@ function TeamRow({
           </div>
         </Link>
 
-        {/* Centered stats cluster */}
+        {/* Stats — always visible */}
         <div className="shrink-0 flex items-center gap-3">
           <RecordDisplay
             wins={player.record.wins}
@@ -99,13 +100,10 @@ function TeamRow({
             differential={player.record.differential}
             className="text-xs"
           />
-          <span className="hidden md:inline text-border-subtle">·</span>
-          <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-[11px] hidden md:inline-flex" />
-        </div>
-
-        {/* Point cap bar */}
-        <div className="hidden lg:block w-32 shrink-0">
-          <PointCapBar used={points} />
+          <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-[11px] hidden sm:inline-flex" />
+          <div className="hidden lg:block w-28">
+            <PointCapBar used={points} />
+          </div>
         </div>
 
         {/* Chevron */}
