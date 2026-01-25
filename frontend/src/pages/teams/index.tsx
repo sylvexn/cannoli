@@ -9,7 +9,6 @@ import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
-import { PointCapBar } from '@/components/point-cap-bar';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent } from '@/components/ui/card';
@@ -76,11 +75,11 @@ function TeamRow({
           )}
         </div>
 
-        {/* Team identity */}
+        {/* Team identity — flexes to fill */}
         <Link
           to={leagueUrl(`/teams/${player.id}`)}
           onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2.5 min-w-0 w-56 shrink-0 group/team"
+          className="flex items-center gap-2.5 min-w-0 flex-1 group/team"
         >
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
           <div className="min-w-0">
@@ -91,36 +90,20 @@ function TeamRow({
           </div>
         </Link>
 
-        {/* Record */}
-        <div className="shrink-0">
+        {/* Centered stats cluster */}
+        <div className="shrink-0 flex items-center gap-3">
           <RecordDisplay
             wins={player.record.wins}
             losses={player.record.losses}
             differential={player.record.differential}
             className="text-xs"
           />
-        </div>
-
-        {/* K/D */}
-        <div className="shrink-0 hidden md:block">
-          <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-[11px]" />
-        </div>
-
-        {/* Point cap (compact) */}
-        <div className="hidden lg:block w-36 shrink-0">
-          <PointCapBar used={points} />
-        </div>
-
-        {/* Sprite strip */}
-        <div className="flex-1 min-w-0 hidden xl:flex items-center gap-0.5 justify-end">
-          {player.roster.map(mon => (
-            <div key={mon.name} className="relative">
-              <PokemonSprite name={mon.name} size="xs" />
-              {mon.isTeraCaptain && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-pink" />
-              )}
-            </div>
-          ))}
+          <span className="hidden md:inline text-border-subtle">·</span>
+          <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-[11px] hidden md:inline-flex" />
+          <span className="hidden lg:inline text-border-subtle">·</span>
+          <span className="hidden lg:inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-text-secondary">
+            {points}<span className="text-text-muted">/110pt</span>
+          </span>
         </div>
 
         {/* Chevron */}
@@ -140,21 +123,6 @@ function TeamRow({
       )}>
         <div className="overflow-hidden">
           <div className="px-4 pb-4 pt-1">
-            {/* Responsive: sprites on smaller screens + point cap */}
-            <div className="flex items-center gap-4 mb-3 lg:hidden">
-              <PointCapBar used={points} className="flex-1" />
-            </div>
-            <div className="flex items-center gap-0.5 mb-3 xl:hidden">
-              {player.roster.map(mon => (
-                <div key={mon.name} className="relative">
-                  <PokemonSprite name={mon.name} size="xs" />
-                  {mon.isTeraCaptain && (
-                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-pink" />
-                  )}
-                </div>
-              ))}
-            </div>
-
             {/* Roster table */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
               {player.roster.map(mon => (
