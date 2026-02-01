@@ -1,13 +1,21 @@
-import { useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { standings, players } from '@/mocks/players';
 import { currentSeason, recentMatches, upcomingMatches } from '@/mocks/season';
+import { getTeamTrades } from '@/mocks/trades';
+import { rosterPointsUsed } from '@/lib/roster';
+import type { Player, Trade } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
+import { KDDisplay } from '@/components/kd-display';
+import { PointCapBar } from '@/components/point-cap-bar';
+import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
+import { TierBadge } from '@/components/tier-badge';
+import { TypeChip } from '@/components/type-chip';
 import { TeamPopover } from '@/components/team-popover';
-import { preloadSprites } from '@/components/pokemon-sprite';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { ChevronDown, ExternalLink, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 
@@ -18,14 +26,12 @@ function findPlayer(id: string) {
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
 
-  // Preload all roster sprites for hover popovers
   useEffect(() => {
     preloadSprites(players.flatMap(p => p.roster.map(m => m.name)));
   }, []);
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
       <div>
         <h1 className="text-2xl font-heading font-bold text-text-primary">League Hub</h1>
         <p className="text-sm text-text-muted">
@@ -34,74 +40,15 @@ export function StandingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Standings table — takes 2 columns */}
+        {/* Standings — takes 2 columns */}
         <Card className="lg:col-span-2 bg-surface-raised border-border-default">
           <CardHeader className="pb-3">
             <CardTitle className="text-base text-text-primary">Standings</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle text-[11px] uppercase text-text-muted">
-                  <th className="px-4 py-2 text-left w-10">#</th>
-                  <th className="px-4 py-2 text-left">Team</th>
-                  <th className="px-4 py-2 text-right">Record</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.map((player, i) => {
-                  const isPlayoff = i < 8;
-                  return (
-                    <tr
-                      key={player.id}
-                      className="group border-b border-border-subtle/50 transition-all duration-200 hover:bg-surface-overlay/60 hover:shadow-[inset_2px_0_0_var(--color-neon)]"
-                    >
-                      <td className="px-4 py-2.5">
-                        {i < 3 ? (
-                          <span className={`rank-badge rank-badge-${i + 1} w-6 h-6 text-[10px]`}>
-                            {i + 1}
-                          </span>
-                        ) : (
-                          <span className={`text-sm font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-muted'}`}>
-                            {i + 1}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-3">
-                          <div className="transition-transform duration-200 group-hover:scale-110">
-                            <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-                          </div>
-                          <div>
-                            <TeamPopover player={player}>
-                              <Link to={leagueUrl(`/teams/${player.id}`)} className="text-left">
-                                <span className="text-sm font-medium text-text-primary transition-colors duration-150 group-hover:text-neon cursor-pointer hover:underline decoration-neon/40 underline-offset-2">
-                                  {player.name}
-                                </span>
-                                <span className="text-text-muted ml-1.5 font-normal text-sm">
-                                  {player.teamName}
-                                </span>
-                              </Link>
-                            </TeamPopover>
-                            <span className="block text-[10px] text-text-muted uppercase tracking-wider">
-                              {player.teamAbbrev}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <RecordDisplay
-                          wins={player.record.wins}
-                          losses={player.record.losses}
-                          differential={player.record.differential}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {/* Playoff line indicator */}
+            {standings.map((player, i) => (
+              <StandingsRow key={player.id} player={player} rank={i + 1} leagueUrl={leagueUrl} />
+            ))}
             <div className="px-4 py-1.5 text-[10px] text-text-muted uppercase tracking-wider border-t border-border-subtle">
               Top 8 qualify for playoffs
             </div>
@@ -110,7 +57,6 @@ export function StandingsPage() {
 
         {/* Right column — upcoming & recent */}
         <div className="space-y-6">
-          {/* Upcoming Matches */}
           <Card className="bg-surface-raised border-border-default">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -147,7 +93,6 @@ export function StandingsPage() {
             </CardContent>
           </Card>
 
-          {/* Recent Results */}
           <Card className="bg-surface-raised border-border-default">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -198,6 +143,153 @@ export function StandingsPage() {
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: number; leagueUrl: (p: string) => string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isPlayoff = rank <= 8;
+  const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
+  const teamTrades = useMemo(() => getTeamTrades(player.id), [player.id]);
+  const completedTrades = teamTrades.filter(t => t.status === 'accepted');
+  const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
+  const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
+
+  return (
+    <div className="border-b border-border-subtle/50 last:border-b-0">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/60 transition-all duration-200 cursor-pointer group"
+      >
+        {/* Rank */}
+        <div className="w-6 shrink-0 text-center">
+          {rank <= 3 ? (
+            <span className={`rank-badge rank-badge-${rank} w-6 h-6 text-[10px]`}>{rank}</span>
+          ) : (
+            <span className={`text-sm font-bold tabular-nums ${isPlayoff ? 'text-neon' : 'text-text-muted'}`}>{rank}</span>
+          )}
+        </div>
+
+        {/* Team */}
+        <Link
+          to={leagueUrl(`/teams/${player.id}`)}
+          onClick={e => e.stopPropagation()}
+          className="flex items-center gap-2.5 min-w-0 group/team"
+          style={{ flex: '1 1 0', minWidth: 0 }}
+        >
+          <div className="transition-transform duration-200 group-hover/team:scale-110">
+            <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+          </div>
+          <div className="min-w-0 text-left">
+            <span className="text-sm font-medium text-text-primary group-hover/team:text-neon transition-colors truncate block leading-snug">
+              {player.teamName}
+            </span>
+            <span className="text-[10px] text-text-muted/60 block leading-snug text-left">{player.name}</span>
+          </div>
+        </Link>
+
+        {/* Record */}
+        <div className="shrink-0">
+          <RecordDisplay
+            wins={player.record.wins}
+            losses={player.record.losses}
+            differential={player.record.differential}
+            className="text-xs"
+          />
+        </div>
+
+        {/* Chevron */}
+        <ChevronDown
+          size={14}
+          className={cn(
+            'text-text-muted transition-transform duration-200 shrink-0',
+            expanded && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {/* Expanded detail */}
+      <div className={cn(
+        'grid transition-all duration-200 ease-out',
+        expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+      )}>
+        <div className="overflow-hidden">
+          <div className="px-4 pb-4 pt-1 ml-9">
+            {/* Stats + Point cap bar */}
+            <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle/20">
+              <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
+              <PointCapBar used={points} className="flex-1 max-w-[200px]" />
+              {completedTrades.length > 0 && (
+                <span className="flex items-center gap-1 text-[10px] text-text-muted">
+                  <ArrowLeftRight size={10} />
+                  {completedTrades.length} trade{completedTrades.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+
+            {/* Roster table */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
+              {player.roster.map(mon => (
+                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0">
+                  <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
+                  <span className={cn(
+                    'text-xs font-medium truncate flex-1',
+                    mon.isTeraCaptain ? 'text-pink' : 'text-text-primary',
+                  )}>
+                    {mon.name}
+                    {mon.isTeraCaptain && <span className="text-[9px] text-text-muted ml-1">(T)</span>}
+                  </span>
+                  <TypeChip types={mon.types} size="xs" />
+                  <TierBadge points={mon.tier} />
+                  <span className="tabular-nums text-[10px] shrink-0 w-12 text-right">
+                    <span className="text-win">{mon.seasonStats.kills}</span>
+                    <span className="text-text-muted">/</span>
+                    <span className="text-loss">{mon.seasonStats.deaths}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Trade history */}
+            {completedTrades.length > 0 && (
+              <div className="mt-3 pt-2 border-t border-border-subtle/30">
+                <h4 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Transactions</h4>
+                <div className="space-y-1">
+                  {completedTrades.map(trade => (
+                    <TradeHistoryRow key={trade.id} trade={trade} teamId={player.id} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradeHistoryRow({ trade, teamId }: { trade: Trade; teamId: string }) {
+  const isFreeAgent = trade.recipient === 'pool';
+  const isProposer = trade.proposer === teamId;
+  const sent = isProposer ? trade.offering : trade.requesting;
+  const received = isProposer ? trade.requesting : trade.offering;
+
+  return (
+    <div className="flex items-center gap-2 text-[10px] text-text-secondary py-0.5">
+      <Badge variant="outline" className="text-[9px] px-1 py-0 border-border-subtle shrink-0">
+        W{trade.week}
+      </Badge>
+      {isFreeAgent ? (
+        <UserPlus size={10} className="text-neon shrink-0" />
+      ) : (
+        <ArrowLeftRight size={10} className="text-text-muted shrink-0" />
+      )}
+      <span className="truncate">
+        <span className="text-win">+{received.join(', ')}</span>
+        <span className="text-text-muted mx-1">/</span>
+        <span className="text-loss">-{sent.join(', ')}</span>
+      </span>
     </div>
   );
 }

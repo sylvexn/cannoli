@@ -8,7 +8,6 @@ import { TeamProfilePage } from '@/pages/team-profile';
 import { DraftBoardPage } from '@/pages/draft-board';
 import { SchedulePage } from '@/pages/schedule';
 import { StatsPage } from '@/pages/stats';
-import { TeamsPage } from '@/pages/teams';
 import { TradeBlockPage } from '@/pages/trade-block';
 
 function Placeholder({ title }: { title: string }) {
@@ -34,7 +33,6 @@ export default function App() {
               <Route path="draft" element={<DraftBoardPage />} />
               <Route path="schedule" element={<SchedulePage />} />
               <Route path="stats" element={<StatsPage />} />
-              <Route path="teams" element={<TeamsPage />} />
               <Route path="teams/:id" element={<TeamProfilePage />} />
               <Route path="trades" element={<TradeBlockPage />} />
             </Route>

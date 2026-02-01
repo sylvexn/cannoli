@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Trophy, Swords, Users, BarChart3, Calendar, ArrowLeftRight,
+  Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe,
 } from 'lucide-react';
 import { leagues } from '@/mocks/leagues';
@@ -19,7 +19,6 @@ const leaguePages = [
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
-  { path: '/teams', label: 'Teams', icon: Users },
   { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
 ];
 
