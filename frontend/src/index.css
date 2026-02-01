@@ -359,3 +359,127 @@ aside {
   background: linear-gradient(135deg, #14532d, #16a34a 40%, #15803d 70%, #14532d);
   box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);
 }
+
+/* ─── Neon Logo ─── */
+
+/* Initial stroke draw animation */
+@keyframes neon-trace {
+  0% {
+    stroke-dashoffset: 8000;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* Fill fade-in after stroke draws */
+@keyframes neon-fill-in {
+  0%, 60% {
+    fill-opacity: 0;
+  }
+  100% {
+    fill-opacity: 1;
+  }
+}
+
+/* Traveling spark along letter outlines */
+@keyframes neon-spark-travel {
+  0% {
+    stroke-dashoffset: 8000;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Subtle ambient pulse on the glow */
+@keyframes neon-pulse {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 0.85; }
+}
+
+/* Rainbow hue rotation for hover */
+@keyframes neon-rainbow {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+.neon-logo-wrapper {
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-origin: center center;
+  cursor: pointer;
+}
+
+.neon-logo-wrapper:hover {
+  transform: scale(1.12) rotate(-2deg);
+}
+
+/* On hover: rainbow hue cycle on the SVG */
+.neon-logo-wrapper .neon-logo-svg {
+  transition: filter 0.3s ease;
+}
+
+.neon-logo-wrapper:hover .neon-logo-svg {
+  animation: neon-rainbow 2s linear infinite;
+}
+
+/* Stroke draw animation */
+.neon-draw {
+  stroke-dasharray: 8000;
+  stroke-dashoffset: 8000;
+  animation: neon-trace 2s ease-out forwards;
+}
+
+/* Fill appears after draw */
+.neon-fill {
+  fill-opacity: 0;
+  animation:
+    neon-trace 2s ease-out forwards,
+    neon-fill-in 2.5s ease-out forwards;
+}
+
+/* Spark: small bright dash traveling the outline */
+.neon-spark {
+  stroke-dasharray: 200 7800;
+  animation: neon-spark-travel 6s linear infinite;
+}
+
+/* Speed up spark on hover */
+.neon-logo-wrapper:hover .neon-spark {
+  animation-duration: 1.5s;
+}
+
+/* Glow pulse layer */
+.neon-glow-layer {
+  animation: neon-pulse 4s ease-in-out infinite;
+}
+
+/* Speed up pulse on hover */
+.neon-logo-wrapper:hover .neon-glow-layer {
+  animation-duration: 1s;
+}
+
+@media (prefers-reduced-motion) {
+  .neon-draw,
+  .neon-fill,
+  .neon-spark,
+  .neon-glow-layer,
+  .neon-logo-wrapper:hover .neon-logo-svg {
+    animation: none;
+  }
+  .neon-draw {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  .neon-fill {
+    fill-opacity: 1;
+  }
+  .neon-logo-wrapper:hover {
+    transform: none;
+  }
+}
