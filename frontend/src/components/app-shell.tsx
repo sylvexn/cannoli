@@ -5,7 +5,8 @@ import {
   Shield, LayoutDashboard, ChevronDown, Globe,
 } from 'lucide-react';
 import { leagues } from '@/mocks/leagues';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { NeonLogo } from './neon-logo';
 
 const phaseColors: Record<string, string> = {
   draft: 'text-draw bg-draw/10',
@@ -29,8 +30,14 @@ export function AppShell() {
   const { pathname } = useLocation();
   const isWide = WIDE_ROUTES.some(r => pathname.includes(r));
 
-  // Track which league accordion is open — auto-open based on current route
+  // Track active league for color theming
   const activeLeagueId = pathname.match(/^\/league\/([^/]+)/)?.[1] ?? null;
+  const activeLeagueColor = useMemo(
+    () => leagues.find(l => l.id === activeLeagueId)?.color,
+    [activeLeagueId],
+  );
+
+  // Track which league accordion is open — auto-open based on current route
   const [openLeagues, setOpenLeagues] = useState<Set<string>>(
     activeLeagueId ? new Set([activeLeagueId]) : new Set(),
   );
@@ -56,9 +63,9 @@ export function AppShell() {
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-surface-raised border-r border-border-default flex flex-col">
         {/* Logo */}
-        <div className="p-4 border-b border-border-default">
-          <h1 className="text-lg font-heading font-bold text-neon tracking-tighter">cannoli</h1>
-          <p className="text-[10px] text-text-muted mt-0.5">Season 10</p>
+        <div className="px-3 pt-3 pb-2 border-b border-border-default">
+          <NeonLogo color={activeLeagueColor} className="w-full h-auto" />
+          <p className="text-[10px] text-text-muted text-center -mt-1">Season 10</p>
         </div>
 
         {/* Nav */}
