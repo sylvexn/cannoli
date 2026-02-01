@@ -84,11 +84,11 @@ function TeamRow({
           style={{ flex: '1 1 0', minWidth: 0 }}
         >
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-          <div className="min-w-0">
+          <div className="min-w-0 text-left">
             <span className="text-sm font-medium text-text-primary group-hover/team:text-neon transition-colors truncate block leading-snug">
               {player.teamName}
             </span>
-            <span className="text-[10px] text-text-muted/60 block leading-snug">{player.name}</span>
+            <span className="text-[10px] text-text-muted/60 block leading-snug text-left">{player.name}</span>
           </div>
         </Link>
 
