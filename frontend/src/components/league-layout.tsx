@@ -8,7 +8,7 @@ const routeLabels: Record<string, string> = {
   'draft': 'Draft Board',
   'schedule': 'Schedule',
   'stats': 'Pokemon Stats',
-  'teams': 'Teams',
+  'teams': 'Team Profile',
   'trades': 'Trade Block',
 };
 

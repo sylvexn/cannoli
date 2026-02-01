@@ -11,7 +11,9 @@ import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Link } from 'react-router-dom';
 import { ArrowRightLeft, Swords, Sparkles, X } from 'lucide-react';
+import { useLeagueUrl } from '@/lib/use-league-url';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { getTierEntry } from '@/mocks/tier-list';
@@ -36,6 +38,7 @@ export function PokemonDetailSheet({
   canDraft,
   onDraft,
 }: PokemonDetailSheetProps) {
+  const leagueUrl = useLeagueUrl();
   const isOpen = !!name;
 
   // Close on Escape
@@ -212,7 +215,13 @@ export function PokemonDetailSheet({
                   <div className="flex items-center gap-2.5 p-2.5 rounded-md bg-surface-overlay/30 border border-border-subtle">
                     <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
                     <div>
-                      <div className="text-sm font-medium text-text-primary">{owner.teamName}</div>
+                      <Link
+                        to={leagueUrl(`/teams/${owner.id}`)}
+                        className="text-sm font-medium text-text-primary hover:text-neon transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {owner.teamName}
+                      </Link>
                       <div className="text-[11px] text-text-muted">
                         {ownership.acquisition.method === 'traded' ? (
                           <span className="flex items-center gap-1">

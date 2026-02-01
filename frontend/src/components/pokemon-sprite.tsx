@@ -62,6 +62,26 @@ export function preloadSprites(names: string[], type: 'gen5' | 'ani' = 'gen5') {
   }
 }
 
+/** Check whether a sprite is still loading (useful for coordinating sibling UI). */
+export function useSpriteState(name: string, animated = false): CacheState {
+  const type = animated ? 'ani' : 'gen5';
+  const url = spriteUrl(name, type);
+  const cached = getCacheState(url);
+  const [state, setState] = useState<CacheState>(cached);
+
+  useEffect(() => {
+    const current = getCacheState(url);
+    if (current === 'loaded' || current === 'error') {
+      setState(current);
+      return;
+    }
+    setState('loading');
+    loadSprite(url).then(() => setState(getCacheState(url)));
+  }, [url]);
+
+  return state;
+}
+
 export function PokemonSprite({ name, size = 'md', className, animated = false }: PokemonSpriteProps) {
   const type = animated ? 'ani' : 'gen5';
   const url = spriteUrl(name, type);

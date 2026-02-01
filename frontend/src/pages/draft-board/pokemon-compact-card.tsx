@@ -1,6 +1,6 @@
 import { useRef, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { PokemonSprite } from '@/components/pokemon-sprite';
+import { PokemonSprite, useSpriteState } from '@/components/pokemon-sprite';
 import { typeColors } from '@/components/type-chip';
 import type { PokemonType } from '@/lib/pokemon';
 import type { Player } from '@/lib/types';
@@ -31,6 +31,7 @@ export function PokemonCompactCard({
   onHoverEnd,
 }: PokemonCompactCardProps) {
   const ref = useRef<HTMLButtonElement>(null);
+  const spriteState = useSpriteState(name);
 
   const handleMouseEnter = useCallback(() => {
     if (ref.current) {
@@ -114,14 +115,18 @@ export function PokemonCompactCard({
       {/* Sprite */}
       <PokemonSprite name={name} size="md" />
 
-      {/* Name */}
-      <span className={cn(
-        'text-[9px] leading-tight text-center w-full truncate',
-        owner ? 'text-text-primary' : 'text-text-secondary',
-        isHighlighted && 'text-text-primary font-medium',
-      )}>
-        {displayName}
-      </span>
+      {/* Name — skeleton while sprite loads */}
+      {spriteState === 'loading' ? (
+        <div className="h-[13px] w-[50px] rounded bg-surface-overlay/30 animate-pulse" />
+      ) : (
+        <span className={cn(
+          'text-[9px] leading-tight text-center w-full truncate',
+          owner ? 'text-text-primary' : 'text-text-secondary',
+          isHighlighted && 'text-text-primary font-medium',
+        )}>
+          {displayName}
+        </span>
+      )}
 
     </button>
   );
