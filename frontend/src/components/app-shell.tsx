@@ -33,7 +33,7 @@ const leaguePages = [
 ];
 
 // Routes that need full-width layout (no max-w constraint)
-const WIDE_ROUTES = ['/draft'];
+const WIDE_ROUTES = ['/draft', '/matchup'];
 
 export function AppShell() {
   const { pathname } = useLocation();
