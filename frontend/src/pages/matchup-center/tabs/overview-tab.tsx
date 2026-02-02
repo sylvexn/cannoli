@@ -5,6 +5,7 @@ import { TypeBadge } from '@/components/type-badge';
 import { TierBadge } from '@/components/tier-badge';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
+import { AbilityChip } from '@/components/ability-chip';
 import { Star } from 'lucide-react';
 
 interface OverviewTabProps {
@@ -110,8 +111,10 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                 </div>
               </div>
               <TierBadge points={pokemon.tier} />
-              <div className="text-[10px] text-text-muted text-right shrink-0 max-w-[100px]">
-                {pokemon.abilities.slice(0, 2).join(', ')}
+              <div className="flex flex-wrap gap-0.5 justify-end shrink-0 max-w-[140px]">
+                {pokemon.abilities.slice(0, 2).map(a => (
+                  <AbilityChip key={a} name={a} />
+                ))}
               </div>
             </div>
           ))

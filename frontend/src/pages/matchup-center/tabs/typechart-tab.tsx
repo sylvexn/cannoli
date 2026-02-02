@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { TypeBadge } from '@/components/type-badge';
 import type { RosterPokemon } from '@/lib/types';
 import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon';
 import { getDefensiveMatchups } from '@/lib/type-effectiveness';
@@ -9,21 +10,6 @@ interface TypeChartTabProps {
   teamA: RosterPokemon[];
   teamB: RosterPokemon[];
 }
-
-const TYPE_ABBR: Record<PokemonType, string> = {
-  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRS',
-  ice: 'ICE', fighting: 'FGT', poison: 'PSN', ground: 'GND', flying: 'FLY',
-  psychic: 'PSY', bug: 'BUG', rock: 'RCK', ghost: 'GHO', dragon: 'DRG',
-  dark: 'DRK', steel: 'STL', fairy: 'FAI',
-};
-
-const TYPE_COLORS: Record<PokemonType, string> = {
-  normal: '#a8a878', fire: '#f08030', water: '#6890f0', electric: '#f8d030',
-  grass: '#78c850', ice: '#98d8d8', fighting: '#c03028', poison: '#a040a0',
-  ground: '#e0c068', flying: '#a890f0', psychic: '#f85888', bug: '#a8b820',
-  rock: '#b8a038', ghost: '#705898', dragon: '#7038f8', dark: '#705848',
-  steel: '#b8b8d0', fairy: '#ee99ac',
-};
 
 function multLabel(m: number): string {
   if (m === 0) return '0';
@@ -106,12 +92,7 @@ function TypeGrid({
           {POKEMON_TYPES.map(type => (
             <tr key={type} className="border-b border-border-subtle/30">
               <td className="px-1 py-[3px]">
-                <span
-                  className="inline-block px-1 py-0.5 rounded text-[9px] font-bold text-white leading-none"
-                  style={{ backgroundColor: TYPE_COLORS[type] }}
-                >
-                  {TYPE_ABBR[type]}
-                </span>
+                <TypeBadge type={type} size="sm" />
               </td>
               {chart.map(p => {
                 const matchup = p.matchups.find(m => m.type === type);

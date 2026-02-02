@@ -4,6 +4,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import type { RosterPokemon } from '@/lib/types';
 import { DEFAULT_MOVE_CATEGORIES } from '@/data/move-categories';
 import { getTeamMoveCoverage } from '@/lib/move-coverage';
+import { AbilityChip } from '@/components/ability-chip';
 import { ChevronDown } from 'lucide-react';
 
 interface MovesTabProps {
@@ -91,12 +92,11 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                 className="flex items-center border-b border-border-subtle/20 hover:bg-surface-overlay/10"
               >
                 <div className="w-32 shrink-0 px-3 py-[3px]">
-                  <span className={cn(
-                    'text-[11px]',
-                    entry.isAbility ? 'text-draw italic' : 'text-text-secondary',
-                  )}>
-                    {entry.name}
-                  </span>
+                  {entry.isAbility ? (
+                    <AbilityChip name={entry.name} />
+                  ) : (
+                    <span className="text-[11px] text-text-secondary">{entry.name}</span>
+                  )}
                 </div>
                 {/* Team A indicators */}
                 <div className="flex border-r border-border-default/30">
