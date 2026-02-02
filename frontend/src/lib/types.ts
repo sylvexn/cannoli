@@ -1,5 +1,15 @@
 import type { PokemonType } from './pokemon';
 
+/** Authenticated user */
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  mustChangePassword: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
 /** League-level configuration (admin-managed) */
 export interface LeagueConfig {
   /** Maximum total effective points allowed on a roster */

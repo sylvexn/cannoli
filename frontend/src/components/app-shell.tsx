@@ -1,9 +1,18 @@
-import { NavLink, Outlet, useLocation, useParams } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe,
+  Settings, LogOut,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/lib/auth-context';
 import { leagues } from '@/mocks/leagues';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
@@ -28,6 +37,8 @@ const WIDE_ROUTES = ['/draft'];
 
 export function AppShell() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { user, isAdmin, logout } = useAuth();
   const isWide = WIDE_ROUTES.some(r => pathname.includes(r));
 
   // Track active league for color theming
@@ -173,31 +184,49 @@ export function AppShell() {
             Matchup Center
           </NavLink>
 
-          <NavLink
-            to="/admin"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Shield size={16} />
-            Admin
-          </NavLink>
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) => cn(
+                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-neon/10 text-neon'
+                  : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+              )}
+            >
+              <Shield size={16} />
+              Admin
+            </NavLink>
+          )}
         </nav>
 
-        {/* Footer */}
+        {/* Footer — user dropdown */}
         <div className="p-3 border-t border-border-default">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-neon/20 flex items-center justify-center text-neon text-xs font-bold">
-              A
-            </div>
-            <div className="text-xs">
-              <div className="text-text-primary font-medium">Admin</div>
-              <div className="text-text-muted">admin</div>
-            </div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
+              <div className={cn(
+                'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                isAdmin ? 'bg-neon/20 text-neon' : 'bg-surface-overlay text-text-secondary',
+              )}>
+                {user?.username.charAt(0).toUpperCase()}
+              </div>
+              <div className="text-xs text-left min-w-0">
+                <div className="text-text-primary font-medium truncate">{user?.username}</div>
+                <div className="text-text-muted">{user?.role}</div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="top" align="start" sideOffset={8}>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings size={14} />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => { logout(); navigate('/login'); }}>
+                <LogOut size={14} />
+                Log Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </aside>
 
