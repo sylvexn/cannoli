@@ -103,8 +103,8 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
         <tbody>
           {sorted.map(pokemon => (
             <tr key={pokemon.name} className="border-t border-border-subtle/50 hover:bg-surface-overlay/30">
-              <td className="px-2 py-1 text-text-primary font-medium truncate max-w-[120px]">{pokemon.name}</td>
-              <td className="py-1">
+              <td className="px-2 py-[3px] text-text-primary font-medium truncate max-w-[120px]">{pokemon.name}</td>
+              <td className="py-[3px]">
                 <PokemonSprite name={pokemon.name} size="xs" />
               </td>
               {STAT_KEYS.map(key => (

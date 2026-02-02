@@ -36,17 +36,16 @@ function multLabel(m: number): string {
 }
 
 function multColor(m: number): string {
-  if (m === 0) return 'bg-[#1a1a2e] text-[#666]';
+  if (m === 0) return 'bg-[#1a1a2e] text-[#555]';
   if (m <= 0.25) return 'bg-[#0d3320] text-[#4ade80]';
-  if (m === 0.5) return 'bg-[#0d2e1a] text-[#4ade80]';
-  if (m === 1) return 'bg-transparent text-text-muted';
+  if (m === 0.5) return 'bg-[#0d2e1a]/70 text-[#4ade80]/80';
+  if (m === 1) return '';
   if (m === 2) return 'bg-[#3b1515] text-[#f87171]';
   if (m >= 4) return 'bg-[#5c1a1a] text-[#fca5a5]';
   return '';
 }
 
 export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
-  // Compute defensive matchups for each Pokemon
   const chartA = useMemo(() =>
     teamA.map(p => ({
       name: p.name,
@@ -64,16 +63,13 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   );
 
   return (
-    <div className="flex gap-6">
-      {/* Team A chart */}
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-[#3b82f6] mb-2">My Team</div>
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <div className="text-xs font-medium text-[#3b82f6] mb-1.5">My Team</div>
         <TypeGrid chart={chartA} />
       </div>
-
-      {/* Team B chart */}
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-[#ef4444] mb-2">Opponent</div>
+      <div>
+        <div className="text-xs font-medium text-[#ef4444] mb-1.5">Opponent</div>
         <TypeGrid chart={chartB} />
       </div>
     </div>
@@ -94,10 +90,10 @@ function TypeGrid({
   }
 
   return (
-    <div className="rounded-lg border border-border-default overflow-x-auto">
-      <table className="w-full text-[11px]">
+    <div className="rounded-lg border border-border-default overflow-hidden">
+      <table className="w-full text-xs table-fixed">
         <thead>
-          <tr className="border-b border-border-subtle">
+          <tr className="border-b border-border-subtle bg-surface-overlay/30">
             <th className="w-10 px-1 py-1.5 text-left text-text-muted font-medium">Type</th>
             {chart.map(p => (
               <th key={p.name} className="px-0.5 py-1.5 text-center" title={p.name}>
@@ -108,8 +104,8 @@ function TypeGrid({
         </thead>
         <tbody>
           {POKEMON_TYPES.map(type => (
-            <tr key={type} className="border-b border-border-subtle/50">
-              <td className="px-1 py-0.5">
+            <tr key={type} className="border-b border-border-subtle/30">
+              <td className="px-1 py-[3px]">
                 <span
                   className="inline-block px-1 py-0.5 rounded text-[9px] font-bold text-white leading-none"
                   style={{ backgroundColor: TYPE_COLORS[type] }}
@@ -123,7 +119,7 @@ function TypeGrid({
                 return (
                   <td
                     key={p.name}
-                    className={cn('px-0.5 py-0.5 text-center font-mono font-bold', multColor(mult))}
+                    className={cn('py-[3px] text-center font-mono font-bold text-[11px]', multColor(mult))}
                   >
                     {multLabel(mult)}
                   </td>
