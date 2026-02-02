@@ -23,54 +23,48 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
   }, [teamA, teamB]);
 
   return (
-    <div className="space-y-6">
-      {/* Team Information View — side by side roster tables */}
-      <div className="grid grid-cols-2 gap-4">
-        <RosterTable team={teamA} side="a" />
-        <RosterTable team={teamB} side="b" />
-      </div>
+    <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+      {/* Team A roster */}
+      <RosterTable team={teamA} side="a" />
 
-      {/* Speed Tier Comparison */}
-      <div className="rounded-lg border border-border-default bg-surface-raised/50 p-4">
-        <h3 className="text-sm font-medium text-text-primary mb-3">Speed Tiers</h3>
-        <div className="space-y-0.5">
+      {/* Speed Tier Comparison — center column */}
+      <div className="w-72 rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
+        <div className="px-3 py-1.5 text-xs font-medium text-text-muted text-center border-b border-border-subtle bg-surface-overlay/30">
+          Speed Tiers
+        </div>
+        <div>
           {speedTiers.map((pokemon) => (
             <div
               key={`${pokemon.name}-${pokemon.side}`}
               className={cn(
-                'flex items-center gap-2 py-1 px-2 rounded text-sm',
+                'flex items-center py-0.5 px-1.5',
                 pokemon.side === 'a' ? 'bg-[#3b82f6]/5' : 'bg-[#ef4444]/5',
               )}
             >
-              <div className={cn(
-                'w-[40%] flex items-center gap-2',
-                pokemon.side === 'b' && 'flex-row-reverse',
-              )}>
+              {/* Left: Team A name+sprite */}
+              <div className="flex-1 min-w-0">
                 {pokemon.side === 'a' && (
-                  <div className="flex items-center gap-2 flex-1">
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <span className="text-[11px] text-text-primary truncate">{pokemon.name}</span>
                     <PokemonSprite name={pokemon.name} size="xs" />
-                    <span className="text-xs text-text-primary truncate">{pokemon.name}</span>
                   </div>
                 )}
               </div>
 
-              <div className="w-[20%] flex items-center justify-center">
-                <span className={cn(
-                  'text-sm font-mono font-bold tabular-nums px-2 py-0.5 rounded',
-                  pokemon.side === 'a' ? 'text-[#3b82f6]' : 'text-[#ef4444]',
-                )}>
-                  {pokemon.stats.spe}
-                </span>
-              </div>
-
-              <div className={cn(
-                'w-[40%] flex items-center gap-2',
-                pokemon.side === 'a' && 'flex-row-reverse',
+              {/* Center: speed value */}
+              <span className={cn(
+                'text-xs font-mono font-bold tabular-nums w-10 text-center shrink-0',
+                pokemon.side === 'a' ? 'text-[#3b82f6]' : 'text-[#ef4444]',
               )}>
+                {pokemon.stats.spe}
+              </span>
+
+              {/* Right: Team B name+sprite */}
+              <div className="flex-1 min-w-0">
                 {pokemon.side === 'b' && (
-                  <div className="flex items-center gap-2 flex-1 justify-end">
-                    <span className="text-xs text-text-primary truncate">{pokemon.name}</span>
+                  <div className="flex items-center gap-1.5">
                     <PokemonSprite name={pokemon.name} size="xs" />
+                    <span className="text-[11px] text-text-primary truncate">{pokemon.name}</span>
                   </div>
                 )}
               </div>
@@ -78,6 +72,9 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
           ))}
         </div>
       </div>
+
+      {/* Team B roster */}
+      <RosterTable team={teamB} side="b" />
     </div>
   );
 }
@@ -89,7 +86,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
 
   return (
     <div className="rounded-lg border border-border-default overflow-hidden">
-      <div className={cn('px-3 py-2 text-sm font-medium', colors.header)}>
+      <div className={cn('px-3 py-1.5 text-sm font-medium', colors.header)}>
         {side === 'a' ? 'My Team' : 'Opponent'}
       </div>
       <div className="divide-y divide-border-subtle">
@@ -97,7 +94,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
           <div className="px-3 py-8 text-center text-text-muted text-sm">No team selected</div>
         ) : (
           team.map(pokemon => (
-            <div key={pokemon.name} className={cn('flex items-center gap-2 px-2 py-1.5', colors.row)}>
+            <div key={pokemon.name} className={cn('flex items-center gap-2 px-2 py-1', colors.row)}>
               <PokemonSprite name={pokemon.name} size="sm" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
@@ -113,7 +110,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                 </div>
               </div>
               <TierBadge points={pokemon.tier} />
-              <div className="text-[10px] text-text-muted text-right w-20 shrink-0">
+              <div className="text-[10px] text-text-muted text-right shrink-0 max-w-[100px]">
                 {pokemon.abilities.slice(0, 2).join(', ')}
               </div>
             </div>

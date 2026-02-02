@@ -37,105 +37,99 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="rounded-lg border border-border-default overflow-hidden">
+      {/* Sticky sprite header — one row for both teams */}
+      <div className="sticky top-0 z-10 flex items-center border-b border-border-default bg-surface-raised">
+        <div className="w-32 shrink-0 px-3 py-1.5 text-[10px] text-text-muted font-medium">Move / Ability</div>
+        {/* Team A sprites */}
+        <div className="flex border-r border-border-default">
+          {teamA.map(p => (
+            <div key={`a-${p.name}`} className="w-9 flex justify-center py-1 bg-[#3b82f6]/5" title={p.name}>
+              <PokemonSprite name={p.name} size="xs" />
+            </div>
+          ))}
+        </div>
+        {/* Team B sprites */}
+        <div className="flex">
+          {teamB.map(p => (
+            <div key={`b-${p.name}`} className="w-9 flex justify-center py-1 bg-[#ef4444]/5" title={p.name}>
+              <PokemonSprite name={p.name} size="xs" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Categories */}
       {coverage.map(({ category, entries }) => {
         const isCollapsed = collapsed.has(category.id);
-        // Count how many entries have at least one Pokemon
         const aCount = entries.filter(e => e.teamA.length > 0).length;
         const bCount = entries.filter(e => e.teamB.length > 0).length;
 
         return (
-          <div key={category.id} className="rounded-lg border border-border-default overflow-hidden">
+          <div key={category.id}>
             {/* Category header */}
             <button
               onClick={() => toggleCategory(category.id)}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-surface-raised hover:bg-surface-overlay/60 transition-colors text-left"
+              className="w-full flex items-center gap-2 px-3 py-1.5 bg-surface-overlay/40 hover:bg-surface-overlay/60 transition-colors text-left border-b border-border-subtle/50"
             >
               <ChevronDown
-                size={14}
+                size={12}
                 className={cn(
-                  'text-text-muted transition-transform',
+                  'text-text-muted transition-transform shrink-0',
                   isCollapsed && '-rotate-90',
                 )}
               />
-              <span className="text-sm font-medium text-text-primary flex-1">{category.name}</span>
-              <div className="flex gap-3 text-[10px]">
-                <span className="text-[#3b82f6]">{aCount}/{entries.length}</span>
-                <span className="text-[#ef4444]">{bCount}/{entries.length}</span>
-              </div>
+              <span className="text-xs font-medium text-text-primary flex-1">{category.name}</span>
+              <span className="text-[10px] text-[#3b82f6] font-mono">{aCount}/{entries.length}</span>
+              <span className="text-[10px] text-[#ef4444] font-mono">{bCount}/{entries.length}</span>
             </button>
 
-            {/* Category content */}
-            {!isCollapsed && (
-              <div>
-                {/* Column headers: pokemon sprites */}
-                <div className="flex items-center border-t border-border-subtle/50 bg-surface-raised/30">
-                  <div className="w-36 shrink-0 px-3 py-1 text-[10px] text-text-muted">Move / Ability</div>
-                  {/* Team A columns */}
-                  {teamA.map(p => (
-                    <div key={`a-${p.name}`} className="w-8 flex justify-center py-1" title={p.name}>
-                      <PokemonSprite name={p.name} size="xs" />
-                    </div>
-                  ))}
-                  {/* Separator */}
-                  {teamA.length > 0 && teamB.length > 0 && (
-                    <div className="w-px bg-border-default mx-1 self-stretch" />
-                  )}
-                  {/* Team B columns */}
-                  {teamB.map(p => (
-                    <div key={`b-${p.name}`} className="w-8 flex justify-center py-1" title={p.name}>
-                      <PokemonSprite name={p.name} size="xs" />
-                    </div>
-                  ))}
+            {/* Entries */}
+            {!isCollapsed && entries.map(({ entry, teamA: matchesA, teamB: matchesB }) => (
+              <div
+                key={entry.moveId}
+                className="flex items-center border-b border-border-subtle/20 hover:bg-surface-overlay/10"
+              >
+                <div className="w-32 shrink-0 px-3 py-[3px]">
+                  <span className={cn(
+                    'text-[11px]',
+                    entry.isAbility ? 'text-draw italic' : 'text-text-secondary',
+                  )}>
+                    {entry.name}
+                  </span>
                 </div>
-
-                {/* Entry rows */}
-                {entries.map(({ entry, teamA: matchesA, teamB: matchesB }) => (
-                  <div
-                    key={entry.moveId}
-                    className="flex items-center border-t border-border-subtle/30 hover:bg-surface-overlay/20"
-                  >
-                    <div className="w-36 shrink-0 px-3 py-1 flex items-center gap-1">
-                      <span className={cn(
-                        'text-xs',
-                        entry.isAbility ? 'text-draw italic' : 'text-text-secondary',
-                      )}>
-                        {entry.name}
-                      </span>
-                      {entry.isAbility && (
-                        <span className="text-[8px] text-draw/60 uppercase">abl</span>
-                      )}
-                    </div>
-                    {/* Team A indicators */}
-                    {teamA.map(p => {
-                      const has = matchesA.includes(p.name);
-                      return (
-                        <div key={`a-${p.name}`} className="w-8 flex justify-center py-1">
-                          {has && (
-                            <div className="w-3 h-3 rounded-full bg-[#3b82f6]/80" />
-                          )}
-                        </div>
-                      );
-                    })}
-                    {/* Separator */}
-                    {teamA.length > 0 && teamB.length > 0 && (
-                      <div className="w-px mx-1" />
-                    )}
-                    {/* Team B indicators */}
-                    {teamB.map(p => {
-                      const has = matchesB.includes(p.name);
-                      return (
-                        <div key={`b-${p.name}`} className="w-8 flex justify-center py-1">
-                          {has && (
-                            <div className="w-3 h-3 rounded-full bg-[#ef4444]/80" />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
+                {/* Team A indicators */}
+                <div className="flex border-r border-border-default/30">
+                  {teamA.map(p => {
+                    const has = matchesA.includes(p.name);
+                    return (
+                      <div key={`a-${p.name}`} className="w-9 flex justify-center py-[3px]">
+                        {has && (
+                          <div className="w-4 h-4 rounded-full bg-[#3b82f6] flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-[#60a5fa]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Team B indicators */}
+                <div className="flex">
+                  {teamB.map(p => {
+                    const has = matchesB.includes(p.name);
+                    return (
+                      <div key={`b-${p.name}`} className="w-9 flex justify-center py-[3px]">
+                        {has && (
+                          <div className="w-4 h-4 rounded-full bg-[#ef4444] flex items-center justify-center">
+                            <div className="w-2 h-2 rounded-full bg-[#f87171]" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            )}
+            ))}
           </div>
         );
       })}
