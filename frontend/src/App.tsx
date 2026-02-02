@@ -15,14 +15,7 @@ import { StatsPage } from '@/pages/stats';
 import { TradeBlockPage } from '@/pages/trade-block';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="flex items-center justify-center h-64 text-text-muted">
-      <span className="text-lg">{title} — coming soon</span>
-    </div>
-  );
-}
+import { MatchupCenterPage } from '@/pages/matchup-center';
 
 export default function App() {
   return (
@@ -48,7 +41,7 @@ export default function App() {
                   <Route path="trades" element={<TradeBlockPage />} />
                 </Route>
 
-                <Route path="matchup" element={<Placeholder title="Matchup Center" />} />
+                <Route path="matchup" element={<MatchupCenterPage />} />
                 <Route path="settings" element={<UserSettingsPage />} />
 
                 <Route element={<ProtectedRoute requireAdmin />}>
