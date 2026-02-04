@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { typeColors } from '@/components/type-chip';
 import type { RosterPokemon } from '@/lib/types';
 import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon';
 import { getDefensiveMatchups } from '@/lib/type-effectiveness';
@@ -50,11 +51,11 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
-        <div className="text-xs font-medium text-[#3b82f6] mb-1.5">My Team</div>
+        <div className="text-xs font-heading font-semibold text-[#3b82f6] mb-1.5 uppercase tracking-wider">My Team</div>
         <TypeGrid chart={chartA} />
       </div>
       <div>
-        <div className="text-xs font-medium text-[#ef4444] mb-1.5">Opponent</div>
+        <div className="text-xs font-heading font-semibold text-[#ef4444] mb-1.5 uppercase tracking-wider">Opponent</div>
         <TypeGrid chart={chartB} />
       </div>
     </div>
@@ -92,8 +93,8 @@ function TypeGrid({
             <tr key={type} className="border-b border-border-subtle/30">
               <td className="px-1 py-[3px]">
                 <span
-                  className="inline-flex items-center justify-center rounded px-1 py-0.5 text-[9px] font-bold uppercase text-white leading-none"
-                  style={{ backgroundColor: `var(--color-type-${type})` }}
+                  className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase text-white leading-none"
+                  style={{ backgroundColor: typeColors[type] }}
                 >
                   {type.slice(0, 3)}
                 </span>

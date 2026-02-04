@@ -38,14 +38,19 @@ export function MatchupCenterPage() {
     <div className="flex flex-col h-full gap-3">
       {/* Header + Team Pickers */}
       <div className="flex items-center gap-4">
-        <h1 className="text-xl font-heading font-bold text-text-primary shrink-0">Matchup Center</h1>
+        <div className="shrink-0">
+          <h1 className="text-2xl font-heading font-bold tracking-tight">
+            <span className="text-neon">Matchup</span>
+            <span className="text-text-primary ml-1.5">Center</span>
+          </h1>
+        </div>
         <div className="flex-1 grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
           <TeamPicker
             source={state.teamASource}
             onSelect={(roster, source) => dispatch({ type: 'SET_TEAM_A', roster, source })}
             side="a"
           />
-          <span className="text-sm font-bold text-text-muted">vs</span>
+          <span className="text-xs font-heading font-bold text-text-muted uppercase tracking-widest">vs</span>
           <TeamPicker
             source={state.teamBSource}
             onSelect={(roster, source) => dispatch({ type: 'SET_TEAM_B', roster, source })}

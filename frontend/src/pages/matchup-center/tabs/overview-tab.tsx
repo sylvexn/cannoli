@@ -3,11 +3,11 @@ import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { AbilityChip } from '@/components/ability-chip';
 import { TierBadge } from '@/components/tier-badge';
+import { TypeChip } from '@/components/type-chip';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
-
 
 interface OverviewTabProps {
   teamA: RosterPokemon[];
@@ -28,7 +28,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
 
       {/* Speed Tier Comparison */}
       <div className="w-72 rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
-        <div className="px-3 py-1.5 text-xs font-medium text-text-muted text-center border-b border-border-subtle bg-surface-overlay/30">
+        <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-text-muted text-center border-b border-border-subtle bg-surface-overlay/30">
           Speed Tiers
         </div>
         <div>
@@ -72,17 +72,6 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
   );
 }
 
-function TypeChip({ type }: { type: string }) {
-  return (
-    <span
-      className="inline-flex items-center justify-center rounded px-1 py-[1px] text-[8px] font-bold uppercase tracking-wide text-white leading-none"
-      style={{ backgroundColor: `var(--color-type-${type})` }}
-    >
-      {type.slice(0, 3)}
-    </span>
-  );
-}
-
 function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) {
   const colors = side === 'a'
     ? { header: 'bg-[#3b82f6]/10 text-[#3b82f6]' }
@@ -98,17 +87,17 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
 
   return (
     <div className="rounded-lg border border-border-default overflow-hidden">
-      <div className={cn('px-3 py-1.5 text-sm font-medium', colors.header)}>
+      <div className={cn('px-3 py-1.5 text-sm font-heading font-semibold', colors.header)}>
         {side === 'a' ? 'My Team' : 'Opponent'}
       </div>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-8 px-1"></TableHead>
-            <TableHead className="text-xs">Name</TableHead>
-            <TableHead className="text-xs w-16">Type</TableHead>
-            <TableHead className="text-xs w-8 text-center">Tier</TableHead>
-            <TableHead className="text-xs text-right">Abilities</TableHead>
+            <TableHead className="text-[10px] uppercase tracking-wider text-text-muted">Name</TableHead>
+            <TableHead className="text-[10px] uppercase tracking-wider text-text-muted w-20">Type</TableHead>
+            <TableHead className="text-[10px] uppercase tracking-wider text-text-muted w-8 text-center">Tier</TableHead>
+            <TableHead className="text-[10px] uppercase tracking-wider text-text-muted text-right">Abilities</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -126,11 +115,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                 />
               </TableCell>
               <TableCell className="py-1">
-                <div className="flex items-center gap-0.5">
-                  {pokemon.types.map(t => (
-                    <TypeChip key={t} type={t} />
-                  ))}
-                </div>
+                <TypeChip types={pokemon.types as PokemonType[]} size="xs" />
               </TableCell>
               <TableCell className="py-1 text-center">
                 <TierBadge points={pokemon.tier} />
