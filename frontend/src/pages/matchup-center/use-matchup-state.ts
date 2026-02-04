@@ -41,7 +41,9 @@ type MatchupAction =
   | { type: 'SET_TAB'; tab: MatchupTab }
   | { type: 'ADD_SPEED_SLOT' }
   | { type: 'REMOVE_SPEED_SLOT'; id: string }
-  | { type: 'UPDATE_SPEED_SLOT'; id: string; updates: Partial<SpeedCalcSlot> };
+  | { type: 'UPDATE_SPEED_SLOT'; id: string; updates: Partial<SpeedCalcSlot> }
+  | { type: 'RESET_SUB_TEAMS' }
+  | { type: 'INIT_SPEED_SLOTS'; teamA: RosterPokemon[]; teamB: RosterPokemon[] };
 
 function toggleInSet(set: Set<string>, name: string, maxSize: number): Set<string> {
   const next = new Set(set);
@@ -87,9 +89,30 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
           s.id === action.id ? { ...s, ...action.updates } : s
         ),
       };
+    case 'RESET_SUB_TEAMS':
+      return { ...state, subTeamA: new Set(), subTeamB: new Set() };
+    case 'INIT_SPEED_SLOTS': {
+      const pickA = action.teamA.length > 0 ? action.teamA[Math.floor(Math.random() * action.teamA.length)] : null;
+      const pickB = action.teamB.length > 0 ? action.teamB[Math.floor(Math.random() * action.teamB.length)] : null;
+      const slots: SpeedCalcSlot[] = [];
+      if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+      if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+      if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+      return { ...state, speedCalcSlots: slots };
+    }
     default:
       return state;
   }
+}
+
+function makeInitialSpeedSlots(teamA: RosterPokemon[], teamB: RosterPokemon[]): SpeedCalcSlot[] {
+  const pickA = teamA.length > 0 ? teamA[Math.floor(Math.random() * teamA.length)] : null;
+  const pickB = teamB.length > 0 ? teamB[Math.floor(Math.random() * teamB.length)] : null;
+  const slots: SpeedCalcSlot[] = [];
+  if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+  if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+  if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+  return slots;
 }
 
 export function useMatchupState() {
@@ -126,15 +149,7 @@ export function useMatchupState() {
     subTeamA: new Set<string>(),
     subTeamB: new Set<string>(),
     activeTab: 'overview',
-    speedCalcSlots: [{
-      id: '1',
-      pokemonName: '',
-      level: 100,
-      evs: 252,
-      ivs: 31,
-      nature: 'positive',
-      boosts: 0,
-    }],
+    speedCalcSlots: makeInitialSpeedSlots(initialTeamA.roster, []),
   });
 
   // Derived: active rosters (sub-team if selected, otherwise full)

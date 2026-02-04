@@ -42,7 +42,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
   const allPokemon = useMemo(() => [...teamA, ...teamB], [teamA, teamB]);
 
   return (
-    <div className="grid grid-cols-[1fr_2fr] gap-4 items-start">
+    <div className="grid grid-cols-[minmax(180px,0.7fr)_2fr] gap-4 items-start">
       {/* Base Speed Column */}
       <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
         <div className="px-3 py-1.5 text-xs font-medium text-text-muted border-b border-border-subtle bg-surface-overlay/30">
