@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { useMatchupState } from './use-matchup-state';
@@ -10,18 +10,29 @@ import { StatsTab } from './tabs/stats-tab';
 import { SpeedTab } from './tabs/speed-tab';
 import { MovesTab } from './tabs/moves-tab';
 import {
-  LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords,
+  LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
 } from 'lucide-react';
 import type { MatchupTab } from './use-matchup-state';
 
 export function MatchupCenterPage() {
   const { state, dispatch, activeTeamA, activeTeamB } = useMatchupState();
+  const speedInitRef = useRef(false);
 
   // Preload sprites for both teams
   useEffect(() => {
     const names = [...state.teamA, ...state.teamB].map(p => p.name);
     if (names.length > 0) preloadSprites(names);
   }, [state.teamA, state.teamB]);
+
+  // Init speed slots with random Pokemon when both teams are loaded (first time only)
+  useEffect(() => {
+    if (!speedInitRef.current && state.teamA.length > 0 && state.teamB.length > 0) {
+      speedInitRef.current = true;
+      dispatch({ type: 'INIT_SPEED_SLOTS', teamA: state.teamA, teamB: state.teamB });
+    }
+  }, [state.teamA, state.teamB, dispatch]);
+
+  const hasSubTeam = state.subTeamA.size > 0 || state.subTeamB.size > 0;
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -44,7 +55,7 @@ export function MatchupCenterPage() {
       </div>
 
       {/* Roster Strip — always visible */}
-      <div className="flex gap-3">
+      <div className="flex gap-1.5 items-stretch">
         <RosterStrip
           team={state.teamA}
           subTeam={state.subTeamA}
@@ -52,6 +63,17 @@ export function MatchupCenterPage() {
           side="a"
           label={state.teamASource?.label}
         />
+        {/* Reset sub-teams button */}
+        <div className="flex items-center">
+          <button
+            onClick={() => dispatch({ type: 'RESET_SUB_TEAMS' })}
+            disabled={!hasSubTeam}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-20 disabled:cursor-default"
+            title="Reset selected 6"
+          >
+            <RotateCcw size={14} />
+          </button>
+        </div>
         <RosterStrip
           team={state.teamB}
           subTeam={state.subTeamB}
