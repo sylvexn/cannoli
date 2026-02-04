@@ -85,7 +85,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
         </div>
 
         <div className="grid gap-3" style={{
-          gridTemplateColumns: `repeat(${Math.min(slots.length, 4)}, 1fr)`,
+          gridTemplateColumns: `repeat(${Math.min(slots.length, 4)}, minmax(0, 220px))`,
         }}>
           {slots.map(slot => (
             <SpeedCalcCard

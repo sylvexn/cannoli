@@ -2,17 +2,12 @@ import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { AbilityChip } from '@/components/ability-chip';
+import { TierBadge } from '@/components/tier-badge';
+import { TeraIndicator } from '@/components/tera-indicator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { RosterPokemon } from '@/lib/types';
-import { Star } from 'lucide-react';
+import type { PokemonType } from '@/lib/pokemon';
 
-const TYPE_COLORS: Record<string, string> = {
-  normal: '#a8a878', fire: '#f08030', water: '#6890f0', electric: '#f8d030',
-  grass: '#78c850', ice: '#98d8d8', fighting: '#c03028', poison: '#a040a0',
-  ground: '#e0c068', flying: '#a890f0', psychic: '#f85888', bug: '#a8b820',
-  rock: '#b8a038', ghost: '#705898', dragon: '#7038f8', dark: '#705848',
-  steel: '#b8b8d0', fairy: '#ee99ac',
-};
 
 interface OverviewTabProps {
   teamA: RosterPokemon[];
@@ -81,7 +76,7 @@ function TypeChip({ type }: { type: string }) {
   return (
     <span
       className="inline-flex items-center justify-center rounded px-1 py-[1px] text-[8px] font-bold uppercase tracking-wide text-white leading-none"
-      style={{ backgroundColor: TYPE_COLORS[type] ?? '#888' }}
+      style={{ backgroundColor: `var(--color-type-${type})` }}
     >
       {type.slice(0, 3)}
     </span>
@@ -123,12 +118,12 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                 <PokemonSprite name={pokemon.name} size="sm" />
               </TableCell>
               <TableCell className="py-1">
-                <span className="text-sm text-text-primary font-medium">
-                  {pokemon.name}
-                </span>
-                {pokemon.isTeraCaptain && (
-                  <Star size={9} className="text-draw fill-draw inline ml-1 -mt-0.5" />
-                )}
+                <TeraIndicator
+                  name={pokemon.name}
+                  isTeraCaptain={pokemon.isTeraCaptain}
+                  teraTypes={pokemon.teraTypes as PokemonType[] | undefined}
+                  className="text-sm font-medium"
+                />
               </TableCell>
               <TableCell className="py-1">
                 <div className="flex items-center gap-0.5">
@@ -137,8 +132,8 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                   ))}
                 </div>
               </TableCell>
-              <TableCell className="py-1 text-center text-xs font-mono font-bold text-text-secondary">
-                {pokemon.tier}
+              <TableCell className="py-1 text-center">
+                <TierBadge points={pokemon.tier} />
               </TableCell>
               <TableCell className="py-1">
                 <div className="flex flex-wrap gap-0.5 justify-end">
