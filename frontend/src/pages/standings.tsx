@@ -15,6 +15,7 @@ import { TeamPopover } from '@/components/team-popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { TeraIndicator } from '@/components/tera-indicator';
 import { ChevronDown, ExternalLink, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
@@ -233,13 +234,12 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
               {player.roster.map(mon => (
                 <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0">
                   <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
-                  <span className={cn(
-                    'text-xs font-medium truncate flex-1',
-                    mon.isTeraCaptain ? 'text-pink' : 'text-text-primary',
-                  )}>
-                    {mon.name}
-                    {mon.isTeraCaptain && <span className="text-[9px] text-text-muted ml-1">(T)</span>}
-                  </span>
+                  <TeraIndicator
+                    name={mon.name}
+                    isTeraCaptain={mon.isTeraCaptain}
+                    teraTypes={mon.teraTypes}
+                    className="text-xs font-medium truncate flex-1"
+                  />
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />
                   <span className="tabular-nums text-[10px] shrink-0 w-12 text-right">

@@ -38,9 +38,9 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
   }
 
   return (
-    <div className="rounded-lg border border-border-default overflow-hidden relative">
+    <div className="border border-border-default rounded-lg">
       {/* Sticky sprite header */}
-      <div className="sticky top-0 z-10 flex items-center border-b border-border-default bg-surface-raised">
+      <div className="sticky top-0 z-10 flex items-center border-b border-border-default bg-surface-raised rounded-t-lg">
         <div className="w-36 shrink-0 px-3 py-2 text-[10px] text-text-muted font-medium">Move / Ability</div>
         {/* Team A sprites */}
         <div className="flex border-r border-border-default">

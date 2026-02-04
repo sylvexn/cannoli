@@ -4,6 +4,7 @@ import { RecordDisplay } from '@/components/record-display';
 import { PointCapBar } from '@/components/point-cap-bar';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
+import { TeraIndicator } from '@/components/tera-indicator';
 import type { Player } from '@/lib/types';
 import { rosterPointsUsed } from '@/lib/roster';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -123,16 +124,12 @@ export function TeamPopover({ player, children }: TeamPopoverProps) {
                   <div key={mon.name} className="flex items-center gap-1.5 py-1.5 px-2 rounded hover:bg-surface-overlay/60 transition-colors">
                     <TierBadge points={mon.tier} className="shrink-0" />
                     <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
-                    <div className="flex-1 min-w-0 flex items-center gap-1">
-                      <span className={`text-[11px] font-semibold truncate ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'}`}>
-                        {mon.name}
-                      </span>
-                      {mon.isTeraCaptain && (
-                        <span className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black leading-none border border-pink/40">
-                          T
-                        </span>
-                      )}
-                    </div>
+                    <TeraIndicator
+                      name={mon.name}
+                      isTeraCaptain={mon.isTeraCaptain}
+                      teraTypes={mon.teraTypes}
+                      className="flex-1 min-w-0 text-[11px] font-semibold truncate"
+                    />
                     <TypeChip types={mon.types} size="xs" className="shrink-0" />
                   </div>
                 ))}
