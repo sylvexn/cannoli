@@ -80,7 +80,19 @@ export const trades: Trade[] = [
     resolvedAt: '2026-02-24T08:00:00Z',
   },
 
-  // Pending proposals (submitted before deadline, still pending when deadline hit → expired)
+  // Pending proposal (awaiting admin)
+  {
+    id: 't9',
+    week: 7,
+    status: 'pending',
+    proposer: 'vvv',
+    recipient: 'llb',
+    offering: ['Meowscarada'],
+    requesting: ['Blaziken'],
+    proposedAt: '2026-03-08T11:00:00Z',
+  },
+
+  // Expired proposals (submitted before deadline, unresolved)
   {
     id: 't7',
     week: 8,
@@ -109,6 +121,10 @@ export const tradeBlockListings: TradeBlockListing[] = [
   { teamId: 'pow', pokemonName: 'Eevee', note: 'Open to any offers' },
   { teamId: 'gg', pokemonName: 'Electrode', note: 'Need ground coverage' },
   { teamId: 'hmm', pokemonName: 'Electrode', note: 'Will trade for any fighting type' },
+  { teamId: 'sas', pokemonName: 'Charizard', note: 'Looking for bulky water' },
+  { teamId: 'llb', pokemonName: 'Ferroseed' },
+  { teamId: 'vvv', pokemonName: 'Meowscarada', note: 'Need a spinner or defogger' },
+  { teamId: 'ak', pokemonName: 'Pawniard', note: 'Open to offers, need speed' },
 ];
 
 /** Get trades involving a specific team */
