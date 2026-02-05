@@ -37,7 +37,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               key={`${pokemon.name}-${pokemon.side}`}
               className={cn(
                 'flex items-center py-0.5 px-1.5',
-                pokemon.side === 'a' ? 'bg-[#3b82f6]/5' : 'bg-[#ef4444]/5',
+                pokemon.side === 'a' ? 'bg-[#3b82f6]/10' : 'bg-[#ef4444]/10',
               )}
             >
               <div className="flex-1 min-w-0">
