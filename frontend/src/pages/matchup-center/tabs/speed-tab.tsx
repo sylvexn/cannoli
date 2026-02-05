@@ -57,7 +57,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
                 key={`${entry.name}-${entry.side}-${i}`}
                 className={cn(
                   'flex items-center gap-2 px-2 py-[3px]',
-                  entry.side === 'a' ? 'bg-[#3b82f6]/5' : 'bg-[#ef4444]/5',
+                  entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
                 )}
               >
                 <PokemonSprite name={entry.name} size="xs" />
