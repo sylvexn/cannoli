@@ -43,7 +43,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               <div className="flex-1 min-w-0">
                 {pokemon.side === 'a' && (
                   <div className="flex items-center gap-1.5 justify-end">
-                    <span className="text-[11px] text-text-primary truncate">{pokemon.name}</span>
+                    <span className="text-[11px] font-mono text-text-primary truncate">{pokemon.name}</span>
                     <PokemonSprite name={pokemon.name} size="xs" />
                   </div>
                 )}
@@ -58,7 +58,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
                 {pokemon.side === 'b' && (
                   <div className="flex items-center gap-1.5">
                     <PokemonSprite name={pokemon.name} size="xs" />
-                    <span className="text-[11px] text-text-primary truncate">{pokemon.name}</span>
+                    <span className="text-[11px] font-mono text-text-primary truncate">{pokemon.name}</span>
                   </div>
                 )}
               </div>
@@ -111,7 +111,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                   name={pokemon.name}
                   isTeraCaptain={pokemon.isTeraCaptain}
                   teraTypes={pokemon.teraTypes as PokemonType[] | undefined}
-                  className="text-sm font-medium"
+                  className="text-sm font-mono font-medium"
                 />
               </TableCell>
               <TableCell className="py-1">

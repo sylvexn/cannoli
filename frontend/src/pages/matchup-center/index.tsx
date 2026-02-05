@@ -39,9 +39,9 @@ export function MatchupCenterPage() {
       {/* Header + Team Pickers */}
       <div className="flex items-center gap-4">
         <div className="shrink-0">
-          <h1 className="text-2xl font-heading font-bold tracking-tight">
+          <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
             <span className="text-neon">Matchup</span>
-            <span className="text-text-primary ml-1.5">Center</span>
+            <span className="text-text-primary ml-1">Center</span>
           </h1>
         </div>
         <div className="flex-1 grid grid-cols-[1fr_auto_1fr] gap-3 items-center">

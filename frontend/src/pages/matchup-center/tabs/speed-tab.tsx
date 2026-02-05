@@ -45,7 +45,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
     <div className="grid grid-cols-[minmax(180px,0.7fr)_2fr] gap-4 items-start">
       {/* Base Speed Column */}
       <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
-        <div className="px-3 py-1.5 text-xs font-medium text-text-muted border-b border-border-subtle bg-surface-overlay/30">
+        <div className="px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle bg-surface-overlay/30">
           Base Speed
         </div>
         {speedList.length === 0 ? (
@@ -61,7 +61,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
                 )}
               >
                 <PokemonSprite name={entry.name} size="xs" />
-                <span className="text-xs text-text-primary flex-1 truncate">{entry.name}</span>
+                <span className="text-xs font-mono text-text-primary flex-1 truncate">{entry.name}</span>
                 <span className={cn(
                   'text-xs font-mono font-bold tabular-nums',
                   entry.side === 'a' ? 'text-[#3b82f6]' : 'text-[#ef4444]',
@@ -77,7 +77,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
       {/* Speed Calculators */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-text-muted">Speed Calculator</div>
+          <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">Speed Calculator</div>
           <Button size="xs" variant="outline" onClick={onAddSlot}>
             <Plus size={12} />
             Add Slot
