@@ -4,7 +4,8 @@ import { AdminLeagues } from './admin-leagues';
 import { AdminTrades } from './admin-trades';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminMoveCategories } from './admin-move-categories';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords } from 'lucide-react';
+import { AdminSeason } from './admin-season';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -28,6 +29,10 @@ export function AdminPage() {
             <ArrowLeftRight size={14} />
             Trades
           </TabsTrigger>
+          <TabsTrigger value="season">
+            <CalendarCog size={14} />
+            Season
+          </TabsTrigger>
           <TabsTrigger value="moves">
             <Swords size={14} />
             Move Categories
@@ -46,6 +51,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="trades">
           <AdminTrades />
+        </TabsContent>
+        <TabsContent value="season">
+          <AdminSeason />
         </TabsContent>
         <TabsContent value="moves">
           <AdminMoveCategories />
