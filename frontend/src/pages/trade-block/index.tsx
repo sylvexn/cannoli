@@ -9,7 +9,6 @@ import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { AbilityChip } from '@/components/ability-chip';
-import { TeraIndicator } from '@/components/tera-indicator';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -138,12 +137,7 @@ export function TradeBlockPage() {
                       <PokemonSprite name={mon.name} size="md" className="shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <TeraIndicator
-                            name={mon.name}
-                            isTeraCaptain={mon.isTeraCaptain}
-                            teraTypes={mon.teraTypes as PokemonType[] | undefined}
-                            className="text-sm font-mono font-medium"
-                          />
+                          <span className="text-sm font-mono font-medium text-text-primary">{mon.name}</span>
                           <TierBadge points={mon.tier} />
                         </div>
                         <div className="flex items-center gap-1.5 mt-1">
