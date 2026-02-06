@@ -5,7 +5,8 @@ import { AdminTrades } from './admin-trades';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminMoveCategories } from './admin-move-categories';
 import { AdminSeason } from './admin-season';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog } from 'lucide-react';
+import { AdminTierList } from './admin-tier-list';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -33,6 +34,10 @@ export function AdminPage() {
             <CalendarCog size={14} />
             Season
           </TabsTrigger>
+          <TabsTrigger value="tiers">
+            <List size={14} />
+            Tier List
+          </TabsTrigger>
           <TabsTrigger value="moves">
             <Swords size={14} />
             Move Categories
@@ -54,6 +59,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="season">
           <AdminSeason />
+        </TabsContent>
+        <TabsContent value="tiers">
+          <AdminTierList />
         </TabsContent>
         <TabsContent value="moves">
           <AdminMoveCategories />
