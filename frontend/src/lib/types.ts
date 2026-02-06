@@ -122,3 +122,16 @@ export interface League {
   players: Player[];
   hasData: boolean;
 }
+
+export type EventCategory = 'admin' | 'auth' | 'config' | 'draft' | 'trade' | 'match' | 'team';
+
+export interface ActivityEvent {
+  id: string;
+  type: string;
+  category: EventCategory;
+  actor: string;
+  description: string;
+  leagueId?: string;
+  metadata: Record<string, unknown>;
+  timestamp: string;
+}

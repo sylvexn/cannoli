@@ -2,7 +2,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { AdminUsers } from './admin-users';
 import { AdminLeagues } from './admin-leagues';
 import { AdminTrades } from './admin-trades';
-import { Users, Globe, ArrowLeftRight } from 'lucide-react';
+import { AdminActivityLog } from './admin-activity-log';
+import { Users, Globe, ArrowLeftRight, ScrollText } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -26,6 +27,10 @@ export function AdminPage() {
             <ArrowLeftRight size={14} />
             Trades
           </TabsTrigger>
+          <TabsTrigger value="activity">
+            <ScrollText size={14} />
+            Activity Log
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -36,6 +41,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="trades">
           <AdminTrades />
+        </TabsContent>
+        <TabsContent value="activity">
+          <AdminActivityLog />
         </TabsContent>
       </Tabs>
     </div>
