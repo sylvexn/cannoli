@@ -6,7 +6,8 @@ import { AdminActivityLog } from './admin-activity-log';
 import { AdminMoveCategories } from './admin-move-categories';
 import { AdminSeason } from './admin-season';
 import { AdminTierList } from './admin-tier-list';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List } from 'lucide-react';
+import { AdminSiteSettings } from './admin-site-settings';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -42,6 +43,10 @@ export function AdminPage() {
             <Swords size={14} />
             Move Categories
           </TabsTrigger>
+          <TabsTrigger value="settings">
+            <Settings size={14} />
+            Site Settings
+          </TabsTrigger>
           <TabsTrigger value="activity">
             <ScrollText size={14} />
             Activity Log
@@ -65,6 +70,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="moves">
           <AdminMoveCategories />
+        </TabsContent>
+        <TabsContent value="settings">
+          <AdminSiteSettings />
         </TabsContent>
         <TabsContent value="activity">
           <AdminActivityLog />
