@@ -1,6 +1,5 @@
 # Project docs (local only)
 *.md
-!CLAUDE.md
 plan/
 
 # Dependencies
