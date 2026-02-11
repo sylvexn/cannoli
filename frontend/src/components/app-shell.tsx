@@ -76,7 +76,14 @@ export function AppShell() {
         {/* Logo */}
         <div className="px-3 pt-3 pb-2 border-b border-border-default">
           <NeonLogo color={activeLeagueColor} className="w-full h-auto" />
-          <p className="text-[10px] text-text-muted text-center -mt-1">Season 10</p>
+          <div className="flex items-center justify-center gap-1.5 -mt-1">
+            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-1.5 py-px text-[10px] font-mono text-neon leading-tight">
+              S10
+            </span>
+            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-1.5 py-px text-[10px] font-mono text-text-primary leading-tight">
+              ALPHA
+            </span>
+          </div>
         </div>
 
         {/* Nav */}
