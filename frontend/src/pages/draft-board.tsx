@@ -88,7 +88,10 @@ export function DraftBoardPage() {
       {/* Page header */}
       <div className="flex items-center justify-between gap-4 pb-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-heading font-bold text-text-primary">Draft Board</h1>
+          <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
+            <span className="text-draw">Draft</span>
+            <span className="text-text-primary ml-1">Board</span>
+          </h1>
           <SegmentedToggle
             value={state.mode}
             onChange={mode => dispatch({ type: 'SET_MODE', mode })}

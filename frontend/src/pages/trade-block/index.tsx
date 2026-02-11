@@ -74,7 +74,10 @@ export function TradeBlockPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-text-primary">Trade Block</h1>
+          <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+            <span className="text-purple-400">Trade</span>
+            <span className="text-text-primary ml-1">Block</span>
+          </h1>
           <p className="text-sm text-text-muted">Season {currentSeason.seasonNumber} trades & free agency</p>
         </div>
         {/* Deadline badge — compact */}

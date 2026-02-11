@@ -59,7 +59,10 @@ export function LeagueOverviewPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-heading font-bold text-text-primary">League Overview</h1>
+        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+          <span className="text-neon">League</span>
+          <span className="text-text-primary ml-1">Overview</span>
+        </h1>
         <p className="text-sm text-text-muted">{leagues.length} active leagues</p>
       </div>
 
