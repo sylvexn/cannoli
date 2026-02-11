@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import type { PokemonType } from '@/lib/pokemon';
+import { TYPE_COLORS } from '@/lib/constants';
 
 interface TeraIndicatorProps {
   /** Pokemon display name — rendered in pink when tera captain */
@@ -10,13 +11,6 @@ interface TeraIndicatorProps {
   className?: string;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  normal: '#a8a878', fire: '#f08030', water: '#6890f0', electric: '#f8d030',
-  grass: '#78c850', ice: '#98d8d8', fighting: '#c03028', poison: '#a040a0',
-  ground: '#e0c068', flying: '#a890f0', psychic: '#f85888', bug: '#a8b820',
-  rock: '#b8a038', ghost: '#705898', dragon: '#7038f8', dark: '#705848',
-  steel: '#b8b8d0', fairy: '#ee99ac',
-};
 
 /**
  * Displays a Pokemon name with tera captain styling.

@@ -13,21 +13,16 @@ import {
   User,
 } from 'lucide-react';
 import { players } from '@/mocks/players';
-import type { Player } from '@/lib/types';
-import type { DraftState, DraftAction, DraftPickEntry } from './types';
+import type { DraftState, DraftAction } from './types';
 
 interface DraftControlBarProps {
   state: DraftState;
   dispatch: (action: DraftAction) => void;
-  currentPick: DraftPickEntry | null;
-  playerLookup: Map<string, Player>;
 }
 
 export function DraftControlBar({
   state,
   dispatch,
-  currentPick,
-  playerLookup,
 }: DraftControlBarProps) {
   const progress = (state.currentPickIndex / state.allPicks.length) * 100;
   const isDone = state.currentPickIndex >= state.allPicks.length;

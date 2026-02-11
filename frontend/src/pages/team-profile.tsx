@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom';
 import { players, standings } from '@/mocks/players';
 import { getTeamMatches, currentSeason } from '@/mocks/season';
-import { TIER_LIST, TERA_BANNED, getEffectiveCost, canBeTeraCaptain, getTermCost } from '@/mocks/tier-list';
+import { TIER_LIST, getEffectiveCost, canBeTeraCaptain } from '@/mocks/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
@@ -17,11 +17,10 @@ import { KDDisplay } from '@/components/kd-display';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
-import { TypeBadge } from '@/components/type-badge';
+import { TYPE_COLORS } from '@/lib/constants';
 import { StatBar } from '@/components/stat-bar';
 import { PointCapBar } from '@/components/point-cap-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
@@ -105,8 +104,6 @@ interface TeraEdit {
 
 // Minimal data for a free agent in swap picker
 function freeAgentToRoster(fa: { name: string; tier: number }): RosterPokemon {
-  // We only need name/tier/types for theorycraft preview. Types will show as empty until we have full data.
-  const entry = TIER_LIST.find(e => e.name === fa.name);
   return {
     name: fa.name,
     tier: fa.tier,
@@ -133,12 +130,11 @@ export function TeamProfilePage() {
   }
 
   const rank = standings.findIndex(p => p.id === id) + 1;
-  const isPlayoff = rank <= 8;
 
-  return <TeamProfileContent player={player} rank={rank} isPlayoff={isPlayoff} />;
+  return <TeamProfileContent player={player} rank={rank} />;
 }
 
-function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank: number; isPlayoff: boolean }) {
+function TeamProfileContent({ player, rank }: { player: Player; rank: number }) {
   const leagueUrl = useLeagueUrl();
   const config = DEFAULT_LEAGUE_CONFIG;
 
@@ -506,7 +502,7 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                 ref={(el) => { if (el) spriteRefs.current.set(i, el); else spriteRefs.current.delete(i); }}
               >
                 <Tooltip>
-                  <TooltipTrigger asChild>
+                  <TooltipTrigger>
                     <div
                       onPointerDown={(e) => {
                         // Only start position drag from the sprite body (not tera badge)
@@ -861,8 +857,8 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
-                          <Tooltip delayDuration={200}>
-                            <TooltipTrigger asChild>
+                          <Tooltip>
+                            <TooltipTrigger>
                               <div className="flex items-center gap-2 cursor-default">
                                 <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
                                 <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
@@ -1063,13 +1059,6 @@ function TeamProfileContent({ player, rank, isPlayoff }: { player: Player; rank:
 // TYPE COVERAGE GRID — 18-type matrix with clear visual encoding
 // ═══════════════════════════════════════════════════════════════════
 
-const TYPE_COLORS: Record<PokemonType, string> = {
-  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
-  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
-  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
-  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
-  steel: '#b7b7ce', fairy: '#d685ad',
-};
 
 const TYPE_ABBR: Record<PokemonType, string> = {
   normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
@@ -1081,15 +1070,6 @@ const TYPE_ABBR: Record<PokemonType, string> = {
 // ═══════════════════════════════════════════════════════════════════
 // RANK BADGE — gold/silver/bronze for top 3, muted for others
 // ═══════════════════════════════════════════════════════════════════
-
-function StatBlock({ value, label }: { value: React.ReactNode; label: string }) {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="font-mono text-base font-bold tabular-nums tracking-tight leading-none">{value}</div>
-      <span className="text-[9px] font-medium text-text-muted uppercase tracking-widest mt-1.5">{label}</span>
-    </div>
-  );
-}
 
 function RankBadge({ rank, size = 'md' }: { rank: number; size?: 'sm' | 'md' }) {
   const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-base';
@@ -1174,7 +1154,7 @@ function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pc
   const visibleTiers = tiers.filter(t => (matchups as Record<string, { type: PokemonType }[]>)[t.key].length > 0);
 
   return (
-    <Tooltip delayDuration={0}>
+    <Tooltip>
       <TooltipTrigger
         style={{
           width: `${pct}%`,
