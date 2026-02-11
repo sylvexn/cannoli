@@ -74,14 +74,15 @@ export function AppShell() {
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-surface-raised border-r border-border-default flex flex-col">
         {/* Logo */}
-        <div className="px-3 pt-3 pb-2 border-b border-border-default">
+        <div className="px-3 pt-3 pb-3 border-b border-border-default">
           <NeonLogo color={activeLeagueColor} className="w-full h-auto" />
-          <div className="flex items-center justify-center gap-1.5 -mt-1">
-            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-1.5 py-px text-[10px] font-mono text-neon leading-tight">
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-neon leading-tight transition-all duration-200 hover:bg-neon/10 hover:border-neon/70 hover:shadow-[0_0_8px_rgba(34,211,238,0.3)] cursor-default">
               S10
             </span>
-            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-1.5 py-px text-[10px] font-mono text-text-primary leading-tight">
-              ALPHA
+            <span className="w-px h-3 bg-border-default" />
+            <span className="inline-flex items-center rounded border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-default">
+              alpha
             </span>
           </div>
         </div>
