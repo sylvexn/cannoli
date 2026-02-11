@@ -31,7 +31,7 @@ export function TypeEffectivenessTooltip({ types, children }: TypeEffectivenessT
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger>
         {children}
       </TooltipTrigger>
       <TooltipContent

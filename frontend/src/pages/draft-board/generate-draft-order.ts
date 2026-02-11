@@ -11,7 +11,6 @@ import type { DraftPickEntry, MockTrade } from './types';
 export function generateDraftOrder(playerList: Player[] = standings): DraftPickEntry[] {
   // Draft order: worst record picks first
   const draftOrder = [...playerList].reverse();
-  const teamCount = draftOrder.length;
 
   // Each team's picks sorted by tier (highest first = drafted earliest)
   const queues = new Map(

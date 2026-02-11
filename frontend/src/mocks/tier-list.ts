@@ -4,7 +4,6 @@
  * Tera cost schedule included for captain cost computation.
  */
 
-import type { PokemonType } from '@/lib/pokemon';
 
 export interface TierEntry {
   name: string;

@@ -1,4 +1,4 @@
-import { useReducer, useMemo, useEffect, useCallback } from 'react';
+import { useReducer, useMemo, useEffect } from 'react';
 import { TIER_LIST } from '@/mocks/tier-list';
 import { getPokemonData } from '@/mocks/pokemon-data';
 import { players, standings } from '@/mocks/players';

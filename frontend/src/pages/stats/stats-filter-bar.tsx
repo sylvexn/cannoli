@@ -1,6 +1,7 @@
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
+import { TYPE_COLORS } from '@/lib/constants';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,13 +15,6 @@ import { Search, X } from 'lucide-react';
 import { players } from '@/mocks/players';
 import { TeamLogo } from '@/components/team-logo';
 
-const TYPE_COLORS: Record<PokemonType, string> = {
-  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
-  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
-  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
-  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
-  steel: '#b7b7ce', fairy: '#d685ad',
-};
 
 export interface StatsFilters {
   search: string;

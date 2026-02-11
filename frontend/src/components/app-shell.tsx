@@ -99,7 +99,6 @@ export function AppShell() {
           {/* League sections */}
           {leagues.map(league => {
             const isOpen = openLeagues.has(league.id);
-            const isActiveLeague = activeLeagueId === league.id;
 
             return (
               <div key={league.id}>

@@ -162,8 +162,6 @@ export function DraftBoardPage() {
         <DraftControlBar
           state={state}
           dispatch={dispatch}
-          currentPick={currentPick}
-          playerLookup={playerLookup}
         />
       )}
 

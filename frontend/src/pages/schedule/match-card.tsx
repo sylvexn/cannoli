@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Match, Player, MatchPokemonEntry } from '@/lib/types';
-import type { PokemonType } from '@/lib/pokemon';
 import { TeamLogo } from '@/components/team-logo';
+import { TYPE_COLORS } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +11,6 @@ import { ChevronDown, ExternalLink, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 
-const TYPE_COLORS: Record<PokemonType, string> = {
-  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
-  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
-  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
-  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
-  steel: '#b7b7ce', fairy: '#d685ad',
-};
 
 interface MatchCardProps {
   match: Match;
@@ -201,7 +194,7 @@ function TeraIndicator({ entry, teamColor }: { entry: MatchPokemonEntry; teamCol
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
+      <TooltipTrigger>
         <span className="inline-flex items-center gap-0.5 shrink-0 cursor-default">
           <Zap className="w-3 h-3" style={{ color: teraColor }} fill={teraColor} />
         </span>

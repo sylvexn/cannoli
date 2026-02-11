@@ -8,8 +8,8 @@ interface AbilityChipProps {
 export function AbilityChip({ name }: AbilityChipProps) {
   const desc = getAbilityDesc(name);
   return (
-    <Tooltip delayDuration={150}>
-      <TooltipTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger>
         <span className="inline-flex items-center px-1.5 py-[2px] rounded bg-surface-overlay/60 text-[9px] font-medium text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors cursor-default leading-tight">
           {name}
         </span>

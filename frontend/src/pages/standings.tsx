@@ -11,12 +11,11 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
-import { TeamPopover } from '@/components/team-popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
-import { ChevronDown, ExternalLink, ArrowLeftRight, UserPlus } from 'lucide-react';
+import { ChevronDown, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 
