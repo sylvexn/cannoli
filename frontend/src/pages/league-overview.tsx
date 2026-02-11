@@ -58,9 +58,14 @@ export function LeagueOverviewPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
+      <div className="flex items-center gap-3">
         <h1 className="text-2xl font-heading font-bold text-text-primary">League Overview</h1>
-        <p className="text-sm text-text-muted">Season 10 &middot; {leagues.length} active leagues</p>
+        <Badge variant="outline" className="border-neon/40 bg-surface-base text-neon font-mono text-xs px-2 py-0.5">
+          S10
+        </Badge>
+        <Badge variant="outline" className="border-neon/40 bg-surface-base text-text-primary font-mono text-xs px-2 py-0.5">
+          ALPHA
+        </Badge>
       </div>
 
       {/* Announcement Banner */}
