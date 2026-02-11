@@ -8,5 +8,8 @@
     "build": "bun run --cwd frontend build",
     "check": "bun run --cwd frontend check",
     "lint": "bun run --cwd frontend lint"
+  },
+  "dependencies": {
+    "@fontsource-variable/cinzel": "^5.2.8"
   }
 }
