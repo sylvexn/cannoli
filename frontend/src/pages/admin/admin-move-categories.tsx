@@ -2,11 +2,6 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator,
@@ -24,6 +19,9 @@ import {
   Zap, Dna, RotateCcw, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { CategoryEditDialog } from './move-categories/category-edit-dialog';
+import { EntryEditDialog } from './move-categories/entry-edit-dialog';
+import { DeleteDialog } from './move-categories/delete-dialog';
 
 export function AdminMoveCategories() {
   const [categories, setCategories] = useState<MoveCategory[]>(
@@ -305,112 +303,33 @@ export function AdminMoveCategories() {
         })}
       </div>
 
-      {/* Edit Category Dialog */}
-      <Dialog open={editCatOpen} onOpenChange={setEditCatOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editCatId ? 'Rename Category' : 'New Category'}</DialogTitle>
-            <DialogDescription>
-              {editCatId ? 'Update the category name.' : 'Create a new move/ability category for matchup analysis.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1">
-            <label className="text-xs text-text-muted">Category Name</label>
-            <Input
-              value={editCatName}
-              onChange={e => setEditCatName(e.target.value)}
-              placeholder="e.g. Hazards, Priority, Weather"
-              autoFocus
-              onKeyDown={e => e.key === 'Enter' && saveCategory()}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCatOpen(false)}>Cancel</Button>
-            <Button
-              onClick={saveCategory}
-              disabled={!editCatName.trim()}
-              className="bg-neon text-surface-base hover:bg-neon/90"
-            >
-              {editCatId ? 'Save' : 'Create'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Dialogs */}
+      <CategoryEditDialog
+        open={editCatOpen}
+        onOpenChange={setEditCatOpen}
+        editCatId={editCatId}
+        editCatName={editCatName}
+        onEditCatNameChange={setEditCatName}
+        onSave={saveCategory}
+      />
 
-      {/* Edit Entry Dialog */}
-      <Dialog open={editEntryOpen} onOpenChange={setEditEntryOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editEntryIdx !== null ? 'Edit Entry' : 'Add Entry'}</DialogTitle>
-            <DialogDescription>
-              Add a move or ability to this category. Moves are checked against learnset data; abilities are checked against Pokemon abilities.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-xs text-text-muted">Name</label>
-              <Input
-                value={entryName}
-                onChange={e => setEntryName(e.target.value)}
-                placeholder="e.g. Stealth Rock, Drought"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && saveEntry()}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-text-muted">Type</label>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant={!entryIsAbility ? 'default' : 'outline'}
-                  onClick={() => setEntryIsAbility(false)}
-                  className={!entryIsAbility ? 'bg-neon text-surface-base' : undefined}
-                >
-                  <Zap size={12} />
-                  Move
-                </Button>
-                <Button
-                  size="sm"
-                  variant={entryIsAbility ? 'default' : 'outline'}
-                  onClick={() => setEntryIsAbility(true)}
-                  className={entryIsAbility ? 'bg-purple-500 text-white' : undefined}
-                >
-                  <Dna size={12} />
-                  Ability
-                </Button>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditEntryOpen(false)}>Cancel</Button>
-            <Button
-              onClick={saveEntry}
-              disabled={!entryName.trim()}
-              className="bg-neon text-surface-base hover:bg-neon/90"
-            >
-              {editEntryIdx !== null ? 'Save' : 'Add'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EntryEditDialog
+        open={editEntryOpen}
+        onOpenChange={setEditEntryOpen}
+        editEntryIdx={editEntryIdx}
+        entryName={entryName}
+        onEntryNameChange={setEntryName}
+        entryIsAbility={entryIsAbility}
+        onEntryIsAbilityChange={setEntryIsAbility}
+        onSave={saveEntry}
+      />
 
-      {/* Delete Confirmation */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              {deleteTarget?.entryIdx === undefined
-                ? 'This will delete the entire category and all its entries. This cannot be undone.'
-                : 'This will remove the entry from the category.'}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={executeDelete}>Delete</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        isEntryDelete={deleteTarget?.entryIdx !== undefined}
+        onConfirm={executeDelete}
+      />
     </div>
   );
 }

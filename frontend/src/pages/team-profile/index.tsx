@@ -4,116 +4,33 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom';
 import { players, standings } from '@/mocks/players';
 import { getTeamMatches, currentSeason } from '@/mocks/season';
-import { TIER_LIST, getEffectiveCost, canBeTeraCaptain } from '@/mocks/tier-list';
+import { getEffectiveCost, canBeTeraCaptain } from '@/mocks/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { TeamLogo } from '@/components/team-logo';
-import { AbilityChip } from '@/components/ability-chip';
 import { RecordDisplay } from '@/components/record-display';
-import { KDDisplay } from '@/components/kd-display';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
-import { TypeChip } from '@/components/type-chip';
 import { TYPE_COLORS } from '@/lib/constants';
-import { StatBar } from '@/components/stat-bar';
 import { PointCapBar } from '@/components/point-cap-bar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
-  ChevronDown, ChevronUp, X, Search, ArrowRightLeft,
+  X, ArrowRightLeft,
   Shield, Calendar, Zap,
 } from 'lucide-react';
 
-// ─── Type effectiveness (shared) ─────────────────────────────────
-import { TYPE_CHART, getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
-
-interface TypeHit { name: string; mult: number }
-interface TypeProfileEntry {
-  x4: TypeHit[];   // 4x super effective
-  x2: TypeHit[];   // 2x super effective
-  x05: TypeHit[];  // 0.5x resist
-  x025: TypeHit[]; // 0.25x resist
-  x0: TypeHit[];   // 0x immune
-}
-
-function getTeamDefensiveProfile(roster: RosterPokemon[]) {
-  const profile: Record<PokemonType, TypeProfileEntry> = {} as any;
-  for (const t of POKEMON_TYPES) profile[t] = { x4: [], x2: [], x05: [], x025: [], x0: [] };
-
-  for (const mon of roster) {
-    const effective: Record<PokemonType, number> = {} as any;
-    for (const t of POKEMON_TYPES) effective[t] = 1;
-
-    for (const monType of mon.types) {
-      const chart = TYPE_CHART[monType];
-      for (const w of chart.weak) effective[w] *= 2;
-      for (const r of chart.resist) effective[r] *= 0.5;
-      for (const i of chart.immune) effective[i] *= 0;
-    }
-
-    for (const t of POKEMON_TYPES) {
-      const m = effective[t];
-      const hit = { name: mon.name, mult: m };
-      if (m === 0) profile[t].x0.push(hit);
-      else if (m >= 4) profile[t].x4.push(hit);
-      else if (m >= 2) profile[t].x2.push(hit);
-      else if (m <= 0.25) profile[t].x025.push(hit);
-      else if (m <= 0.5) profile[t].x05.push(hit);
-    }
-  }
-  return profile;
-}
-
-// ─── Free agents (dynamic from tier list) ────────────────────────
-interface PoolEntry { name: string; tier: number; teraCost: number; drafted: boolean; draftedBy?: string }
-
-function computePool(allPlayers: Player[]): PoolEntry[] {
-  const draftedMap = new Map<string, string>();
-  for (const p of allPlayers) {
-    for (const mon of p.roster) draftedMap.set(mon.name, p.teamAbbrev);
-  }
-  return TIER_LIST
-    .map(entry => ({
-      name: entry.name,
-      tier: entry.tier,
-      teraCost: entry.teraCost,
-      drafted: draftedMap.has(entry.name),
-      draftedBy: draftedMap.get(entry.name),
-    }))
-    .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
-}
-
-// ─── Swap state ──────────────────────────────────────────────────
-interface SwapEntry {
-  index: number;
-  original: RosterPokemon;
-  replacement: RosterPokemon;
-}
-
-// ─── Tera edit state ─────────────────────────────────────────────
-interface TeraEdit {
-  index: number;
-  isTeraCaptain: boolean;
-  teraTypes: PokemonType[];
-}
-
-// Minimal data for a free agent in swap picker
-function freeAgentToRoster(fa: { name: string; tier: number }): RosterPokemon {
-  return {
-    name: fa.name,
-    tier: fa.tier,
-    types: [], // Would come from a Pokemon data API
-    isTeraCaptain: false,
-    stats: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-    abilities: [],
-    seasonStats: { kills: 0, deaths: 0, gp: 0 },
-  };
-}
+import { TYPE_ABBR, computePool, getTeamDefensiveProfile } from './utils';
+import type { SwapEntry, TeraEdit } from './utils';
+import { RankBadge } from './rank-badge';
+import { RosterTable } from './roster-table';
+import { TypeCoverageGridInner } from './type-coverage-grid';
+import { SwapPicker } from './theorycraft-mode';
 
 // ─── Main Page ───────────────────────────────────────────────────
 export function TeamProfilePage() {
@@ -154,12 +71,10 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const spriteRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [rosterOrder, setRosterOrder] = useState<number[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
   const pool = useMemo(() => computePool(players), []);
-  const [showTaken, setShowTaken] = useState(false);
 
   // Initialize roster order
   useEffect(() => {
@@ -226,7 +141,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       return [...prev, { index, original, replacement }];
     });
     setSwappingIndex(null);
-    setSearchQuery('');
   }
 
   function handleRevertSwap(index: number) {
@@ -241,7 +155,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     setTeraEditingIndex(null);
     setDraggingTeraFrom(null);
     setDraggingPosFrom(null);
-    setSearchQuery('');
   }
 
   function handlePositionSwap(fromDisplayIdx: number, toDisplayIdx: number) {
@@ -397,22 +310,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     };
   }, [isDragging]);
 
-  const SortIcon = ({ k }: { k: typeof sortKey }) => {
-    if (sortKey !== k) return null;
-    return sortDir === 'desc' ? <ChevronDown size={12} /> : <ChevronUp size={12} />;
-  };
-
-  const filteredAgents = useMemo(() => {
-    let list = showTaken ? pool : pool.filter(p => !p.drafted);
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(p => p.name.toLowerCase().includes(q));
-    }
-    return list;
-  }, [pool, searchQuery, showTaken]);
-
-  const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
-
   return (
     <div className="space-y-4">
       {/* Back nav */}
@@ -567,7 +464,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                       {/* Swap button on hover (theorycraft mode only) */}
                       {theorycraftMode && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); setSwappingIndex(isSwapping ? null : i); setSearchQuery(''); }}
+                          onClick={(e) => { e.stopPropagation(); setSwappingIndex(isSwapping ? null : i); }}
                           className={`absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-all p-1 rounded-md ${
                             isSwapping ? 'opacity-100 bg-neon/20 text-neon' : isSwapped ? 'opacity-100 bg-pink/20 text-pink' : 'bg-surface/80 text-text-muted hover:text-neon hover:bg-neon/10'
                           }`}
@@ -628,147 +525,17 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         </div>
 
         {/* Swap picker */}
-        {swappingIndex !== null && theorycraftMode && (() => {
-          const currentMon = activeRoster[swappingIndex];
-          const currentCost = getEffectiveCost(currentMon.name, currentMon.isTeraCaptain);
-          const visibleAgents = filteredAgents.slice(0, 200);
-          const hovered = hoveredAgent ? filteredAgents.find(a => a.name === hoveredAgent) : null;
-          const hoveredDelta = hovered ? hovered.tier - currentCost : 0;
-          const hoveredNewTotal = hovered ? pointsUsed + hoveredDelta : 0;
-          const hoveredExceeds = hovered ? hoveredNewTotal > config.pointCap : false;
-
-          return (
-            <div className="border-t border-border-subtle bg-surface-overlay/15">
-              {/* Toolbar */}
-              <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle/30 text-[10px]">
-                <ArrowRightLeft size={10} className="text-neon shrink-0" />
-                <span className="text-text-muted">Replacing</span>
-                <span className="text-text-primary font-semibold">{currentMon.name}</span>
-                <span className="font-mono text-text-muted">({currentCost}pt)</span>
-                <div className="flex-1" />
-                <label className="flex items-center gap-1 cursor-pointer select-none text-text-muted hover:text-text-secondary transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={showTaken}
-                    onChange={e => setShowTaken(e.target.checked)}
-                    className="w-3 h-3 rounded border-border-default accent-neon"
-                  />
-                  Show taken
-                </label>
-                <div className="flex items-center gap-1 bg-surface-overlay/50 rounded px-2 py-0.5 ml-1">
-                  <Search size={10} className="text-text-muted" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Filter..."
-                    className="w-28 bg-transparent text-[10px] text-text-primary placeholder:text-text-muted outline-none"
-                    autoFocus
-                  />
-                  {searchQuery && <button onClick={() => setSearchQuery('')} className="text-text-muted hover:text-text-primary"><X size={9} /></button>}
-                </div>
-                <span className="font-mono text-text-muted">{filteredAgents.length}</span>
-                <button onClick={() => { setSwappingIndex(null); setSearchQuery(''); setHoveredAgent(null); }} className="text-text-muted hover:text-text-primary ml-1"><X size={12} /></button>
-              </div>
-
-              <div className="flex" style={{ height: 320 }}>
-                {/* Grid */}
-                <div className="flex-1 overflow-y-auto p-2">
-                  <div className="flex flex-wrap gap-[3px] content-start">
-                    {visibleAgents.map(fa => {
-                      const wouldExceed = (pointsUsed + fa.tier - currentCost) > config.pointCap;
-                      const isHov = hoveredAgent === fa.name;
-                      return (
-                        <button
-                          key={fa.name}
-                          onClick={() => { if (!wouldExceed && !fa.drafted) { handleSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
-                          onMouseEnter={() => setHoveredAgent(fa.name)}
-                          onMouseLeave={() => { if (hoveredAgent === fa.name) setHoveredAgent(null); }}
-                          disabled={wouldExceed || fa.drafted}
-                          className={`relative w-11 h-11 rounded flex items-center justify-center transition-colors ${
-                            fa.drafted ? 'opacity-25 cursor-not-allowed'
-                            : wouldExceed ? 'opacity-15 cursor-not-allowed'
-                            : isHov ? 'bg-neon/15 ring-1 ring-neon/40'
-                            : 'hover:bg-surface-overlay/60'
-                          }`}
-                        >
-                          <PokemonSprite name={fa.name} size="sm" />
-                          <span
-                            className="absolute bottom-0 right-0 text-[7px] font-bold rounded-tl px-[3px] py-[1px] leading-none text-white/90"
-                            style={{ backgroundColor: `hsl(${Math.round(270 - ((Math.max(1, Math.min(20, fa.tier)) - 1) / 19) * 270)}, 75%, 45%)` }}
-                          >
-                            {fa.tier}
-                          </span>
-                          {fa.drafted && (
-                            <span className="absolute top-0 left-0 text-[6px] font-bold text-text-muted bg-surface/80 rounded-br px-[2px]">{fa.draftedBy}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                    {visibleAgents.length === 0 && (
-                      <p className="text-[11px] text-text-muted py-8 text-center w-full">No results</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Comparison panel */}
-                <div className="w-52 shrink-0 border-l border-border-subtle/30 p-3 flex flex-col">
-                  {hovered ? (
-                    <div className="space-y-2.5">
-                      {/* Large preview */}
-                      <div className="flex items-start gap-2.5">
-                        <PokemonSprite name={hovered.name} size="xl" />
-                        <div className="pt-1">
-                          <div className="text-sm font-semibold text-text-primary leading-tight">{hovered.name}</div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <TierBadge points={hovered.tier} />
-                            <span className="text-[10px] font-mono text-text-muted">{hovered.tier}pt</span>
-                          </div>
-                          {hovered.drafted && (
-                            <div className="text-[9px] text-draw font-medium mt-1">Drafted by {hovered.draftedBy}</div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Cost comparison */}
-                      <div className="rounded bg-surface-overlay/40 p-2 space-y-1 text-[10px] font-mono">
-                        <div className="flex justify-between">
-                          <span className="text-text-muted">Cost</span>
-                          <span>
-                            {currentCost} <span className="text-text-muted">&rarr;</span> {hovered.tier}
-                            <span className={`ml-1 font-semibold ${hoveredDelta > 0 ? 'text-loss' : hoveredDelta < 0 ? 'text-win' : 'text-text-muted'}`}>
-                              ({hoveredDelta > 0 ? '+' : ''}{hoveredDelta})
-                            </span>
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-text-muted">Team</span>
-                          <span className={hoveredExceeds ? 'text-loss font-semibold' : 'text-text-primary'}>
-                            {hoveredNewTotal}/{config.pointCap}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Swap preview */}
-                      <div className="flex items-center gap-1.5 text-[10px]">
-                        <PokemonSprite name={currentMon.name} size="xs" />
-                        <span className="text-loss line-through truncate">{currentMon.name}</span>
-                        <span className="text-text-muted shrink-0">&rarr;</span>
-                        <span className="text-neon font-medium truncate">{hovered.name}</span>
-                      </div>
-
-                      {hoveredExceeds && <div className="text-[9px] text-loss font-semibold">Over point cap</div>}
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted/50">
-                      Hover to preview
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+        {swappingIndex !== null && theorycraftMode && (
+          <SwapPicker
+            swappingIndex={swappingIndex}
+            activeRoster={activeRoster}
+            pool={pool}
+            pointsUsed={pointsUsed}
+            config={config}
+            onSwap={handleSwap}
+            onClose={() => { setSwappingIndex(null); }}
+          />
+        )}
 
         {/* Point cap bar — centered, wide */}
         <div className="px-6 py-2.5 border-t border-border-subtle">
@@ -789,158 +556,17 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
 
         {/* ─── ROSTER TABLE (2 cols) ─── */}
-        <Card className="xl:col-span-2 bg-surface-raised border-border-default flex flex-col">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Roster</CardTitle>
-              {theorycraftMode && swaps.length > 0 && (
-                <button onClick={handleResetAll} className="flex items-center gap-1 text-xs text-text-muted hover:text-loss transition-colors">
-                  <RotateCcw size={12} /> Reset all
-                </button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border-subtle text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    <th className="px-3 py-2.5 text-left w-12">
-                      <button onClick={() => handleSort('tier')} className="flex items-center gap-0.5 hover:text-neon transition-colors">
-                        Cost <SortIcon k="tier" />
-                      </button>
-                    </th>
-                    <th className="px-3 py-2.5 text-left">Pokemon</th>
-                    <th className="px-3 py-2.5 text-left">Type</th>
-                    <th className="px-3 py-2.5 text-left hidden lg:table-cell">Abilities</th>
-                    <th className="px-3 py-2.5 text-right font-mono">
-                      <button onClick={() => handleSort('kills')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
-                        K <SortIcon k="kills" />
-                      </button>
-                    </th>
-                    <th className="px-3 py-2.5 text-right font-mono">
-                      <button onClick={() => handleSort('deaths')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
-                        D <SortIcon k="deaths" />
-                      </button>
-                    </th>
-                    <th className="px-3 py-2.5 text-right font-mono">GP</th>
-                    <th className="px-3 py-2.5 text-right font-mono">
-                      <button onClick={() => handleSort('kpg')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
-                        KPG <SortIcon k="kpg" />
-                      </button>
-                    </th>
-                    <th className="px-3 py-2.5 text-right font-mono">
-                      <button onClick={() => handleSort('spe')} className="flex items-center gap-0.5 hover:text-neon transition-colors ml-auto">
-                        Spe <SortIcon k="spe" />
-                      </button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRoster.map(({ mon, originalIndex }) => {
-                    const isSwapped = swaps.some(s => s.index === originalIndex);
-                    const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
-                    const kpg = mon.seasonStats.gp ? (mon.seasonStats.kills / mon.seasonStats.gp).toFixed(1) : '—';
-                    const bst = mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe;
-
-                    return (
-                      <tr
-                        key={`${originalIndex}-${mon.name}`}
-                        className={`group border-b border-border-subtle/50 transition-colors ${isSwapped ? 'bg-pink/5' : 'hover:bg-surface-overlay/40'}`}
-                      >
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <TierBadge points={effectiveCost} />
-                            {mon.isTeraCaptain && effectiveCost !== mon.tier && (
-                              <span className="text-[9px] text-text-muted tabular-nums">({mon.tier})</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <div className="flex items-center gap-2 cursor-default">
-                                <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
-                                <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
-                                  {mon.name}
-                                </span>
-                                {mon.isTeraCaptain && (
-                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
-                                )}
-                                {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="right" align="start" className="bg-surface-raised border-border-default p-0 w-64">
-                              <div className="p-2.5">
-                                {/* Header */}
-                                <div className="flex items-start gap-2.5 mb-2">
-                                  <PokemonSprite name={mon.name} size="lg" />
-                                  <div className="flex-1 min-w-0 pt-0.5">
-                                    <div className="text-xs font-semibold text-text-primary">{mon.name}</div>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <TypeChip types={mon.types} size="xs" />
-                                      <TierBadge points={effectiveCost} />
-                                    </div>
-                                    {mon.isTeraCaptain && mon.teraTypes && mon.teraTypes.length > 0 && (
-                                      <div className="flex items-center gap-1 mt-1">
-                                        <span className="text-[7px] font-black text-pink">TERA</span>
-                                        {mon.teraTypes.map(t => (
-                                          <span key={t} className="text-[7px] font-bold uppercase rounded px-1 py-px text-white" style={{ backgroundColor: TYPE_COLORS[t] }}>{TYPE_ABBR[t]}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                {/* Stats */}
-                                <div className="space-y-0.5 mb-2">
-                                  <StatBar label="HP" value={mon.stats.hp} />
-                                  <StatBar label="Atk" value={mon.stats.atk} />
-                                  <StatBar label="Def" value={mon.stats.def} />
-                                  <StatBar label="SpA" value={mon.stats.spa} />
-                                  <StatBar label="SpD" value={mon.stats.spd} />
-                                  <StatBar label="Spe" value={mon.stats.spe} />
-                                </div>
-                                <div className="text-[9px] font-mono text-text-muted text-right">BST {bst}</div>
-                                {/* Abilities */}
-                                {mon.abilities.length > 0 && (
-                                  <div className="flex flex-wrap gap-0.5 mt-1.5 pt-1.5 border-t border-border-subtle/50">
-                                    {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
-                                  </div>
-                                )}
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <TypeChip types={mon.types} size="xs" />
-                        </td>
-                        <td className="px-3 py-2.5 hidden lg:table-cell">
-                          <div className="flex flex-wrap gap-0.5">
-                            {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-win">{mon.seasonStats.kills}</td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs font-semibold text-loss">{mon.seasonStats.deaths}</td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-muted">{mon.seasonStats.gp}</td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary font-semibold">{kpg}</td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs text-text-secondary">{mon.stats.spe}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Totals */}
-            <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted font-medium">
-              <span className="font-mono">{activeRoster.length} mon &middot; {pointsUsed}/{config.pointCap}pt</span>
-              <div className="flex items-center gap-3 font-mono">
-                <span>Tera <span className={captainCount > config.teraCaptainSlots ? 'text-loss' : 'text-pink'}>{captainCount}</span>/{config.teraCaptainSlots}</span>
-                <KDDisplay kills={teamKills} deaths={teamDeaths} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <RosterTable
+          activeRoster={activeRoster}
+          sortedRoster={sortedRoster}
+          swaps={swaps}
+          config={config}
+          theorycraftMode={theorycraftMode}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={handleSort}
+          onResetAll={handleResetAll}
+        />
 
         {/* ─── RIGHT COLUMN — Tabbed, stretches to match roster ─── */}
         <Card className="bg-surface-raised border-border-default flex flex-col min-h-0">
@@ -1051,221 +677,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         </div>,
         document.body,
       )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// TYPE COVERAGE GRID — 18-type matrix with clear visual encoding
-// ═══════════════════════════════════════════════════════════════════
-
-
-const TYPE_ABBR: Record<PokemonType, string> = {
-  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
-  ice: 'ICE', fighting: 'FIG', poison: 'POI', ground: 'GRO', flying: 'FLY',
-  psychic: 'PSY', bug: 'BUG', rock: 'ROC', ghost: 'GHO', dragon: 'DRA',
-  dark: 'DRK', steel: 'STL', fairy: 'FAI',
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// RANK BADGE — gold/silver/bronze for top 3, muted for others
-// ═══════════════════════════════════════════════════════════════════
-
-function RankBadge({ rank, size = 'md' }: { rank: number; size?: 'sm' | 'md' }) {
-  const sz = size === 'sm' ? 'w-7 h-7 text-xs' : 'w-10 h-10 text-base';
-
-  if (rank <= 3) {
-    return (
-      <div className={`rank-badge rank-badge-${rank} ${sz}`}>
-        {rank}
-      </div>
-    );
-  }
-
-  if (rank <= 8) {
-    return (
-      <div className={`${sz} rounded-full bg-neon/10 border border-neon/20 flex items-center justify-center font-bold tabular-nums text-neon`}>
-        {rank}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`${sz} rounded-full bg-surface-overlay border border-border-subtle flex items-center justify-center font-bold tabular-nums text-text-muted`}>
-      {rank}
-    </div>
-  );
-}
-
-const MULT_STYLES: Record<string, { bg: string; hover: string; border: string; text: string; label: string; textCls: string }> = {
-  '4':    { bg: 'rgba(220,38,38,0.7)',  hover: 'rgba(220,38,38,0.9)',  border: '#fca5a5', text: '#fff', label: '4x',  textCls: 'text-loss font-bold' },
-  '2':    { bg: 'rgba(239,68,68,0.5)',  hover: 'rgba(239,68,68,0.75)', border: '#f87171', text: '#fff', label: '2x',  textCls: 'text-loss' },
-  '0.5':  { bg: 'rgba(22,163,74,0.45)', hover: 'rgba(22,163,74,0.7)',  border: '#4ade80', text: '#fff', label: '½x', textCls: 'text-win' },
-  '0.25': { bg: 'rgba(21,128,61,0.6)',  hover: 'rgba(21,128,61,0.85)', border: '#22c55e', text: '#fff', label: '¼x', textCls: 'text-win font-bold' },
-  '0':    { bg: 'rgba(8,145,178,0.5)',  hover: 'rgba(8,145,178,0.75)', border: '#22d3ee', text: '#fff', label: '0x',  textCls: 'text-neon font-bold' },
-};
-
-function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'md' }) {
-  const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
-  const s = MULT_STYLES[key];
-  const px = size === 'sm' ? 18 : 22;
-  const fs = size === 'sm' ? 8 : 10;
-  return (
-    <span
-      style={{
-        minWidth: px,
-        height: px,
-        borderRadius: 9999,
-        backgroundColor: s.bg,
-        border: `1.5px solid ${s.border}`,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: fs,
-        fontWeight: 800,
-        color: s.text,
-        lineHeight: 1,
-        flexShrink: 0,
-        padding: '0 3px',
-      }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pct: number; types: PokemonType[] }) {
-  const key = mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
-  const s = MULT_STYLES[key];
-
-  const matchups = useMemo(() => {
-    const raw = getDefensiveMatchups(types);
-    return groupMatchups(raw);
-  }, [types.join(',')]);
-
-  const tiers: { key: string; label: string; color: string }[] = [
-    { key: 'x4', label: '4×', color: '#f87171' },
-    { key: 'x2', label: '2×', color: '#fb923c' },
-    { key: 'x05', label: '½×', color: '#4ade80' },
-    { key: 'x025', label: '¼×', color: '#22d3ee' },
-    { key: 'x0', label: '0×', color: '#a78bfa' },
-  ];
-
-  const visibleTiers = tiers.filter(t => (matchups as Record<string, { type: PokemonType }[]>)[t.key].length > 0);
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        style={{
-          width: `${pct}%`,
-          minWidth: 6,
-          height: '100%',
-          backgroundColor: s.bg,
-          display: 'block',
-          cursor: 'default',
-          borderRight: '1px solid rgba(10,10,15,0.3)',
-          transition: 'transform 0.2s cubic-bezier(0.34,1.56,0.64,1), background-color 0.15s',
-        }}
-        className="hover:!scale-y-[1.3] hover:rounded-sm hover:z-10"
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.hover; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = s.bg; }}
-      />
-      <TooltipContent side="top" className="bg-surface-overlay border-border-default p-0 max-w-[260px]">
-        {/* Header: sprite + name + mult + types */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border-subtle/30">
-          <PokemonSprite name={name} size="xs" />
-          <span className="text-[11px] text-text-primary font-medium">{name}</span>
-          <MultChip mult={mult} />
-          <div className="ml-auto flex gap-0.5">
-            {types.map(t => (
-              <span key={t} className="text-[8px] font-bold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[t] }}>
-                {t.slice(0, 3)}
-              </span>
-            ))}
-          </div>
-        </div>
-        {/* Defensive matchup chart */}
-        <div className="px-2.5 py-1.5 space-y-1">
-          {visibleTiers.map(tier => {
-            const entries = (matchups as Record<string, { type: PokemonType }[]>)[tier.key];
-            return (
-              <div key={tier.key} className="flex items-start gap-1.5">
-                <span className="text-[9px] font-bold tabular-nums w-4 shrink-0 text-right" style={{ color: tier.color }}>
-                  {tier.label}
-                </span>
-                <div className="flex flex-wrap gap-px">
-                  {entries.map(({ type }) => (
-                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[type] }}>
-                      {type.slice(0, 3)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
-  profile: Record<PokemonType, TypeProfileEntry>;
-  pokemonTypesMap: Map<string, PokemonType[]>;
-}) {
-  const maxCount = Math.max(
-    ...POKEMON_TYPES.map(t => {
-      const p = profile[t];
-      return p.x4.length + p.x2.length + p.x05.length + p.x025.length + p.x0.length;
-    }),
-    1
-  );
-
-  return (
-    <div className="px-2 py-2 flex-1 flex flex-col gap-[2px]">
-      {POKEMON_TYPES.map(type => {
-        const p = profile[type];
-        const totalWeak = p.x4.length + p.x2.length;
-        const totalResist = p.x05.length + p.x025.length;
-        const totalImmune = p.x0.length;
-        const hasAny = totalWeak + totalResist + totalImmune > 0;
-
-        return (
-          <div key={type} className="flex items-center gap-0 flex-1 min-h-[18px] group/row">
-            <span
-              className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l-full text-white shrink-0 leading-none flex items-center justify-center self-stretch"
-              style={{ backgroundColor: TYPE_COLORS[type] }}
-            >
-              {TYPE_ABBR[type]}
-            </span>
-
-            <div className="flex-1 self-stretch rounded-r-full overflow-hidden bg-surface-overlay/15" style={{ display: 'flex' }}>
-              {p.x4.map(h => <DefSegment key={`4x-${h.name}`} name={h.name} mult={4} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
-              {p.x2.map(h => <DefSegment key={`2x-${h.name}`} name={h.name} mult={2} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
-              {p.x05.map(h => <DefSegment key={`.5x-${h.name}`} name={h.name} mult={0.5} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
-              {p.x025.map(h => <DefSegment key={`.25x-${h.name}`} name={h.name} mult={0.25} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
-              {p.x0.map(h => <DefSegment key={`0x-${h.name}`} name={h.name} mult={0} pct={100 / maxCount} types={pokemonTypesMap.get(h.name) ?? []} />)}
-            </div>
-
-            {/* Counts by multiplier */}
-            <div className="w-[52px] shrink-0 flex items-center justify-end gap-[3px] pr-1.5 font-mono text-[9px] tabular-nums">
-              {p.x4.length > 0 && <span className="text-loss font-bold">{p.x4.length}</span>}
-              {p.x2.length > 0 && <span className="text-loss">{p.x2.length}</span>}
-              {p.x05.length > 0 && <span className="text-win">{p.x05.length}</span>}
-              {p.x025.length > 0 && <span className="text-win font-bold">{p.x025.length}</span>}
-              {p.x0.length > 0 && <span className="text-neon font-bold">{p.x0.length}</span>}
-              {!hasAny && <span className="text-text-muted/40">—</span>}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Legend */}
-      <div className="flex items-center justify-center gap-1.5 pt-2 pb-1 shrink-0">
-        {[4, 2, 0.5, 0.25, 0].map(m => (
-          <MultChip key={m} mult={m} size="sm" />
-        ))}
-      </div>
     </div>
   );
 }
