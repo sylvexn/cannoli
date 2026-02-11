@@ -342,22 +342,46 @@ aside {
   text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
 
-/* ── Sapphire ── */
+/* ── Sapphire — faceted gemstone ── */
 .league-banner-sapphire {
-  background: linear-gradient(135deg, #1e3a8a, #2563eb 40%, #1d4ed8 70%, #1e3a8a);
-  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3);
+  background:
+    linear-gradient(135deg, rgba(37,99,235,0) 20%, rgba(96,165,250,0.4) 35%, rgba(37,99,235,0) 50%),
+    linear-gradient(225deg, rgba(59,130,246,0) 15%, rgba(147,197,253,0.3) 30%, rgba(59,130,246,0) 45%),
+    linear-gradient(170deg, rgba(30,58,138,0) 40%, rgba(96,165,250,0.35) 55%, rgba(30,58,138,0) 70%),
+    linear-gradient(300deg, rgba(29,78,216,0) 30%, rgba(191,219,254,0.2) 45%, rgba(29,78,216,0) 55%),
+    linear-gradient(135deg, #172554 0%, #1e3a8a 15%, #1d4ed8 35%, #2563eb 50%, #1d4ed8 65%, #1e3a8a 85%, #172554 100%);
+  box-shadow:
+    0 1px 4px rgba(37, 99, 235, 0.4),
+    inset 0 1px 1px rgba(147, 197, 253, 0.2),
+    inset 0 -1px 1px rgba(23, 37, 84, 0.4);
 }
 
-/* ── Ruby ── */
+/* ── Ruby — faceted gemstone ── */
 .league-banner-ruby {
-  background: linear-gradient(135deg, #7f1d1d, #dc2626 40%, #b91c1c 70%, #7f1d1d);
-  box-shadow: 0 1px 4px rgba(220, 38, 38, 0.3);
+  background:
+    linear-gradient(135deg, rgba(220,38,38,0) 20%, rgba(252,165,165,0.35) 35%, rgba(220,38,38,0) 50%),
+    linear-gradient(225deg, rgba(239,68,68,0) 15%, rgba(254,202,202,0.25) 30%, rgba(239,68,68,0) 45%),
+    linear-gradient(170deg, rgba(127,29,29,0) 40%, rgba(252,165,165,0.3) 55%, rgba(127,29,29,0) 70%),
+    linear-gradient(300deg, rgba(185,28,28,0) 30%, rgba(254,226,226,0.15) 45%, rgba(185,28,28,0) 55%),
+    linear-gradient(135deg, #450a0a 0%, #7f1d1d 15%, #b91c1c 35%, #dc2626 50%, #b91c1c 65%, #7f1d1d 85%, #450a0a 100%);
+  box-shadow:
+    0 1px 4px rgba(220, 38, 38, 0.4),
+    inset 0 1px 1px rgba(254, 202, 202, 0.2),
+    inset 0 -1px 1px rgba(69, 10, 10, 0.4);
 }
 
-/* ── Emerald ── */
+/* ── Emerald — faceted gemstone ── */
 .league-banner-emerald {
-  background: linear-gradient(135deg, #14532d, #16a34a 40%, #15803d 70%, #14532d);
-  box-shadow: 0 1px 4px rgba(22, 163, 74, 0.3);
+  background:
+    linear-gradient(135deg, rgba(22,163,74,0) 20%, rgba(134,239,172,0.35) 35%, rgba(22,163,74,0) 50%),
+    linear-gradient(225deg, rgba(34,197,94,0) 15%, rgba(187,247,208,0.25) 30%, rgba(34,197,94,0) 45%),
+    linear-gradient(170deg, rgba(20,83,45,0) 40%, rgba(134,239,172,0.3) 55%, rgba(20,83,45,0) 70%),
+    linear-gradient(300deg, rgba(21,128,61,0) 30%, rgba(220,252,231,0.15) 45%, rgba(21,128,61,0) 55%),
+    linear-gradient(135deg, #052e16 0%, #14532d 15%, #15803d 35%, #16a34a 50%, #15803d 65%, #14532d 85%, #052e16 100%);
+  box-shadow:
+    0 1px 4px rgba(22, 163, 74, 0.4),
+    inset 0 1px 1px rgba(187, 247, 208, 0.2),
+    inset 0 -1px 1px rgba(5, 46, 22, 0.4);
 }
 
 /* ─── Neon Logo ─── */
