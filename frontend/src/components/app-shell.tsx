@@ -77,7 +77,7 @@ export function AppShell() {
         <div className="px-3 pt-3 pb-3 border-b border-border-default">
           <NeonLogo color={activeLeagueColor} className="w-full h-auto" />
           <div className="flex items-center justify-center gap-2 mt-1">
-            <span className="inline-flex items-center rounded border border-neon/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-neon leading-tight transition-all duration-200 hover:bg-neon/10 hover:border-neon/70 hover:shadow-[0_0_8px_rgba(34,211,238,0.3)] cursor-default">
+            <span className="inline-flex items-center rounded border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
               S10
             </span>
             <span className="w-px h-3 bg-border-default" />
