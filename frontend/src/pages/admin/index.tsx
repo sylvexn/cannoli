@@ -13,7 +13,10 @@ export function AdminPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold font-heading text-text-primary">Admin Panel</h1>
+        <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
+          <span className="text-loss">Admin</span>
+          <span className="text-text-primary ml-1">Panel</span>
+        </h1>
         <p className="text-sm text-text-muted">Site-wide configuration and management</p>
       </div>
 

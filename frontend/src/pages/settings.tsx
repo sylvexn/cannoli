@@ -45,7 +45,7 @@ export function UserSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold font-heading text-text-primary">Settings</h1>
+        <h1 className="text-xl font-mono font-bold tracking-tight uppercase text-text-primary">Settings</h1>
         <p className="text-sm text-text-muted">Manage your account</p>
       </div>
 

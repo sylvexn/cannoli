@@ -25,7 +25,10 @@ export function SchedulePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-heading font-bold text-text-primary">Schedule & Results</h1>
+        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+          <span className="text-pink">Schedule</span>
+          <span className="text-text-primary ml-1">&amp; Results</span>
+        </h1>
         <p className="text-sm text-text-muted">
           Season {currentSeason.seasonNumber} &middot; {currentSeason.totalWeeks} weeks
           {isCompleted && selectedWeek === currentSeason.currentWeek && ' — most recent'}
