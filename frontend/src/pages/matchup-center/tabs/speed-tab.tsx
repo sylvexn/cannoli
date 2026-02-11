@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -186,12 +186,11 @@ function LabeledInput({ label, value, onChange, min, max }: {
   return (
     <div className="flex items-center gap-1">
       <span className="text-[9px] text-text-muted w-7 shrink-0">{label}</span>
-      <Input
-        type="number"
+      <NumberInput
         value={value}
-        onChange={e => onChange(Number(e.target.value) || 0)}
+        onChange={onChange}
         min={min} max={max}
-        className="h-5 text-[11px] px-1"
+        className="h-5 text-[11px] [&_input]:px-1 [&_input]:h-5 [&_input]:text-[11px]"
       />
     </div>
   );

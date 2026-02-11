@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { leagues } from '@/mocks/leagues';
@@ -101,20 +101,18 @@ export function AdminLeagues() {
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       <Trophy size={10} /> Point Cap
                     </label>
-                    <Input
-                      type="number"
+                    <NumberInput
                       value={s.pointCap}
-                      onChange={e => updateSetting(league.id, 'pointCap', Number(e.target.value))}
+                      onChange={v => updateSetting(league.id, 'pointCap', v)}
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       <Swords size={10} /> Tera Captains
                     </label>
-                    <Input
-                      type="number"
+                    <NumberInput
                       value={s.teraCaptainSlots}
-                      onChange={e => updateSetting(league.id, 'teraCaptainSlots', Number(e.target.value))}
+                      onChange={v => updateSetting(league.id, 'teraCaptainSlots', v)}
                       min={0}
                       max={6}
                     />
@@ -123,10 +121,9 @@ export function AdminLeagues() {
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       <Calendar size={10} /> Trade Deadline
                     </label>
-                    <Input
-                      type="number"
+                    <NumberInput
                       value={s.tradeDeadlineWeek}
-                      onChange={e => updateSetting(league.id, 'tradeDeadlineWeek', Number(e.target.value))}
+                      onChange={v => updateSetting(league.id, 'tradeDeadlineWeek', v)}
                       min={1}
                       max={league.season.totalWeeks}
                     />
@@ -135,10 +132,9 @@ export function AdminLeagues() {
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       <Users size={10} /> Max Teams
                     </label>
-                    <Input
-                      type="number"
+                    <NumberInput
                       value={s.maxTeams}
-                      onChange={e => updateSetting(league.id, 'maxTeams', Number(e.target.value))}
+                      onChange={v => updateSetting(league.id, 'maxTeams', v)}
                       min={2}
                       max={20}
                     />
@@ -147,10 +143,9 @@ export function AdminLeagues() {
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       Roster Size
                     </label>
-                    <Input
-                      type="number"
+                    <NumberInput
                       value={s.rosterSize}
-                      onChange={e => updateSetting(league.id, 'rosterSize', Number(e.target.value))}
+                      onChange={v => updateSetting(league.id, 'rosterSize', v)}
                       min={6}
                       max={20}
                     />

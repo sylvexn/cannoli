@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -151,10 +152,9 @@ export function AdminSiteSettings() {
               <label className="text-xs text-text-muted flex items-center gap-1">
                 <Trophy size={10} /> Point Cap
               </label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultPointCap}
-                onChange={e => update('defaultPointCap', Number(e.target.value))}
+                onChange={v => update('defaultPointCap', v)}
                 min={50} max={200}
               />
             </div>
@@ -162,10 +162,9 @@ export function AdminSiteSettings() {
               <label className="text-xs text-text-muted flex items-center gap-1">
                 <Swords size={10} /> Tera Captain Slots
               </label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultTeraCaptainSlots}
-                onChange={e => update('defaultTeraCaptainSlots', Number(e.target.value))}
+                onChange={v => update('defaultTeraCaptainSlots', v)}
                 min={0} max={6}
               />
             </div>
@@ -173,37 +172,33 @@ export function AdminSiteSettings() {
               <label className="text-xs text-text-muted flex items-center gap-1">
                 <Users size={10} /> Max Teams
               </label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultMaxTeams}
-                onChange={e => update('defaultMaxTeams', Number(e.target.value))}
+                onChange={v => update('defaultMaxTeams', v)}
                 min={2} max={20}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-text-muted">Roster Size</label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultRosterSize}
-                onChange={e => update('defaultRosterSize', Number(e.target.value))}
+                onChange={v => update('defaultRosterSize', v)}
                 min={6} max={20}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-text-muted">Total Weeks</label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultTotalWeeks}
-                onChange={e => update('defaultTotalWeeks', Number(e.target.value))}
+                onChange={v => update('defaultTotalWeeks', v)}
                 min={1} max={30}
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-text-muted">Trade Deadline Week</label>
-              <Input
-                type="number"
+              <NumberInput
                 value={settings.defaultTradeDeadlineWeek}
-                onChange={e => update('defaultTradeDeadlineWeek', Number(e.target.value))}
+                onChange={v => update('defaultTradeDeadlineWeek', v)}
                 min={1} max={settings.defaultTotalWeeks}
               />
             </div>
