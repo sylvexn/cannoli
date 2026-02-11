@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
 import { Sparkles, Plus, X, Check } from 'lucide-react';
 import {
@@ -168,11 +169,11 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             </div>
             <div className="space-y-1 pt-2">
               <label className="text-xs text-text-muted">Season Number</label>
-              <input
-                type="number"
+              <NumberInput
                 value={config.seasonNumber}
-                onChange={e => setConfig(p => ({ ...p, seasonNumber: Number(e.target.value) }))}
-                className="w-24 bg-surface-overlay border border-border rounded px-2 py-1 text-sm text-text-primary"
+                onChange={v => setConfig(p => ({ ...p, seasonNumber: v }))}
+                min={1}
+                className="w-24"
               />
             </div>
           </div>
@@ -316,13 +317,11 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
               ] as const).map(([key, label, min, max]) => (
                 <div key={key} className="space-y-1">
                   <label className="text-xs text-text-muted">{label}</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     value={config[key]}
-                    onChange={e => setConfig(p => ({ ...p, [key]: Number(e.target.value) }))}
+                    onChange={v => setConfig(p => ({ ...p, [key]: v }))}
                     min={min}
                     max={max}
-                    className="w-full bg-surface-overlay border border-border rounded px-2 py-1.5 text-sm text-text-primary"
                   />
                 </div>
               ))}

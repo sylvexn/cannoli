@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -266,14 +267,12 @@ export function AdminTierList() {
           <div className="space-y-3">
             <div className="space-y-1">
               <label className="text-xs text-text-muted">Tier (1–20)</label>
-              <Input
-                type="number"
+              <NumberInput
                 value={editTier}
-                onChange={e => setEditTier(Number(e.target.value))}
+                onChange={setEditTier}
                 min={1}
                 max={20}
                 autoFocus
-                onKeyDown={e => e.key === 'Enter' && saveTier()}
               />
             </div>
             {editPokemon && editTier !== TIER_LIST.find(e => e.name === editPokemon.name)?.tier && (
