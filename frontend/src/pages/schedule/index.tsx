@@ -1,15 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
-import { players } from '@/mocks/players';
-import { currentSeason, getWeekMatches } from '@/mocks/season';
+import { useLeague } from '@/lib/league-context';
+import { useLeagueData } from '@/lib/league-data-context';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { WeekSelector } from './week-selector';
 import { MatchCard } from './match-card';
 
-const playerMap = new Map(players.map(p => [p.id, p]));
-
 export function SchedulePage() {
-  const [selectedWeek, setSelectedWeek] = useState(currentSeason.currentWeek);
-  const weekMatches = useMemo(() => getWeekMatches(selectedWeek), [selectedWeek]);
+  const league = useLeague();
+  const { players, getWeekMatches, loading } = useLeagueData();
+  const season = league.season;
+
+  const [selectedWeek, setSelectedWeek] = useState(season?.currentWeek ?? 1);
+
+  useEffect(() => {
+    if (season?.currentWeek) setSelectedWeek(season.currentWeek);
+  }, [season?.currentWeek]);
+
+  const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
+  const weekMatches = useMemo(() => getWeekMatches(selectedWeek), [getWeekMatches, selectedWeek]);
 
   useEffect(() => {
     const names = weekMatches.flatMap(m => {
@@ -18,9 +26,13 @@ export function SchedulePage() {
       return [...(home?.roster ?? []), ...(away?.roster ?? [])].map(p => p.name);
     });
     preloadSprites(names);
-  }, [weekMatches]);
+  }, [weekMatches, playerMap]);
 
-  const isCompleted = selectedWeek <= currentSeason.currentWeek;
+  if (loading || !season) {
+    return <div className="text-text-muted">Loading schedule...</div>;
+  }
+
+  const isCompleted = selectedWeek <= season.currentWeek;
 
   return (
     <div className="space-y-6">
@@ -30,14 +42,14 @@ export function SchedulePage() {
           <span className="text-text-primary ml-1">&amp; Results</span>
         </h1>
         <p className="text-sm text-text-muted">
-          Season {currentSeason.seasonNumber} &middot; {currentSeason.totalWeeks} weeks
-          {isCompleted && selectedWeek === currentSeason.currentWeek && ' — most recent'}
+          Season {season.seasonNumber} &middot; {season.totalWeeks} weeks
+          {isCompleted && selectedWeek === season.currentWeek && ' — most recent'}
         </p>
       </div>
 
       <WeekSelector
-        totalWeeks={currentSeason.totalWeeks}
-        currentWeek={currentSeason.currentWeek}
+        totalWeeks={season.totalWeeks}
+        currentWeek={season.currentWeek}
         selectedWeek={selectedWeek}
         onSelectWeek={setSelectedWeek}
       />

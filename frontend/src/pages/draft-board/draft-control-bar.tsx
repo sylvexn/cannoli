@@ -12,7 +12,7 @@ import {
   SkipBack, ChevronLeft, Play, Pause, ChevronRight, SkipForward,
   User,
 } from 'lucide-react';
-import { players } from '@/mocks/players';
+import { useLeagueData } from '@/lib/league-data-context';
 import type { DraftState, DraftAction } from './types';
 
 interface DraftControlBarProps {
@@ -24,6 +24,7 @@ export function DraftControlBar({
   state,
   dispatch,
 }: DraftControlBarProps) {
+  const { players } = useLeagueData();
   const progress = (state.currentPickIndex / state.allPicks.length) * 100;
   const isDone = state.currentPickIndex >= state.allPicks.length;
 

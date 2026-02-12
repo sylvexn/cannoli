@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
+import { AppDataProvider } from '@/lib/app-data-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { LeagueLayout } from '@/components/league-layout';
@@ -21,6 +22,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <AppDataProvider>
         <TooltipProvider>
           <Routes>
             {/* Public routes — no sidebar */}
@@ -51,6 +53,7 @@ export default function App() {
             </Route>
           </Routes>
         </TooltipProvider>
+        </AppDataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

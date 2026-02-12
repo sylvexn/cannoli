@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import { toast } from 'sonner';
 import { Save, Users, Calendar, Trophy, Swords } from 'lucide-react';
@@ -32,6 +32,7 @@ const phaseLabels: Record<string, { label: string; color: string }> = {
 };
 
 export function AdminLeagues() {
+  const { leagues } = useAppData();
   const [settings, setSettings] = useState<Record<string, LeagueSettings>>(
     Object.fromEntries(leagues.map(l => [l.id, { ...defaultSettings }]))
   );

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { leagues as defaultLeagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import {
   ChevronRight, Play, SkipForward, AlertTriangle,
@@ -17,6 +17,8 @@ import { LeagueEditDialog } from './season/league-edit-dialog';
 import { NewSeasonWizard } from './season/new-season-wizard';
 
 export function AdminSeason() {
+  const { leagues: defaultLeagues } = useAppData();
+
   // Editable league list (source of truth for the whole tab)
   const [leagueList, setLeagueList] = useState<EditableLeague[]>(
     defaultLeagues.map(l => ({ id: l.id, name: l.name, color: l.color }))

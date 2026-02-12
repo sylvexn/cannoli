@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { players } from '@/mocks/players';
-import { trades, tradeBlockListings, TRADE_DEADLINE_WEEK } from '@/mocks/trades';
-import { currentSeason } from '@/mocks/season';
+import { useLeagueData } from '@/lib/league-data-context';
+import { useLeague } from '@/lib/league-context';
 import type { Player, Trade } from '@/lib/types';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { TeamLogo } from '@/components/team-logo';
@@ -22,23 +21,46 @@ import type { PokemonType } from '@/lib/pokemon';
 import { CompactTradeCard } from './compact-trade-card';
 import { TradeProposeDialog } from './trade-propose-dialog';
 
-const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
+const TRADE_DEADLINE_WEEK = 7;
+const tradeBlockListings: { teamId: string; pokemonName: string; note?: string }[] = [];
 
 export function TradeBlockPage() {
   const leagueUrl = useLeagueUrl();
+  const { players, transactions } = useLeagueData();
+  const league = useLeague();
+  const currentSeason = league.season;
+  const playerMap = useMemo(() => new Map<string, Player>(players.map(p => [p.id, p])), [players]);
   const deadlinePassed = currentSeason.currentWeek > TRADE_DEADLINE_WEEK;
+
+  // Convert API transactions to Trade format
+  const trades: Trade[] = useMemo(() =>
+    transactions
+      .filter(t => t.type === 'fa' || t.type === 'trade')
+      .map(t => ({
+        id: `t${t.id}`,
+        week: t.week,
+        status: 'accepted' as const,
+        proposer: t.teamId,
+        recipient: t.otherTeamId || 'pool',
+        offering: t.pokemonOut ? [t.pokemonOut] : [],
+        requesting: t.pokemonIn ? [t.pokemonIn] : [],
+        proposedAt: '',
+        resolvedAt: '',
+      })),
+    [transactions],
+  );
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [proposeOpen, setProposeOpen] = useState<string | null>(null); // listing key
 
   const activeTrades = useMemo(
     () => trades.filter(t => t.status === 'pending' || t.status === 'expired').sort((a, b) => b.week - a.week),
-    [],
+    [trades],
   );
   const completedTrades = useMemo(() => {
     let list = trades.filter(t => t.status === 'accepted' || t.status === 'rejected');
     if (teamFilter) list = list.filter(t => t.proposer === teamFilter || t.recipient === teamFilter);
     return list.sort((a, b) => b.week - a.week);
-  }, [teamFilter]);
+  }, [trades, teamFilter]);
 
   // Group completed trades by week
   const tradesByWeek = useMemo(() => {
@@ -59,7 +81,7 @@ export function TradeBlockPage() {
       if (t.recipient !== 'pool') ids.add(t.recipient);
     }
     return [...ids].map(id => playerMap.get(id)).filter(Boolean) as Player[];
-  }, []);
+  }, [trades, playerMap]);
 
   useEffect(() => {
     const allNames = [
@@ -67,7 +89,7 @@ export function TradeBlockPage() {
       ...tradeBlockListings.map(l => l.pokemonName),
     ];
     preloadSprites(allNames);
-  }, []);
+  }, [trades]);
 
   return (
     <div className="space-y-5">

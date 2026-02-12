@@ -1,7 +1,7 @@
 import { useReducer, useMemo, useEffect } from 'react';
 import { TIER_LIST } from '@/mocks/tier-list';
 import { getPokemonData } from '@/mocks/pokemon-data';
-import { players, standings } from '@/mocks/players';
+import { useLeagueData } from '@/lib/league-data-context';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, MOCK_TRADES } from './generate-draft-order';
 import type {
@@ -78,7 +78,8 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
 }
 
 export function useDraftState() {
-  const allPicks = useMemo(() => generateDraftOrder(), []);
+  const { players, standings } = useLeagueData();
+  const allPicks = useMemo(() => generateDraftOrder(standings), [standings]);
 
   const initialState: DraftState = {
     mode: 'season',
@@ -123,14 +124,14 @@ export function useDraftState() {
       }
     }
     return map;
-  }, []);
+  }, [players]);
 
   // Build player lookup
   const playerLookup = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of players) map.set(p.id, p);
     return map;
-  }, []);
+  }, [players]);
 
   // Ownership map: pokemonName → PoolOwnership
   // In season mode: shows current ownership (draft + trades applied)
@@ -264,7 +265,7 @@ export function useDraftState() {
     }
 
     return rosters;
-  }, [ownershipMap]);
+  }, [players, ownershipMap]);
 
   // Points used per team
   const teamPoints = useMemo(() => {
@@ -278,7 +279,7 @@ export function useDraftState() {
   const isUserTurn = state.mode === 'live' && currentPick?.playerId === state.userTeamId;
 
   // Draft order: worst record picks first (same as generate-draft-order.ts)
-  const draftOrder = useMemo(() => [...standings].reverse(), []);
+  const draftOrder = useMemo(() => [...standings].reverse(), [standings]);
 
   return {
     state,

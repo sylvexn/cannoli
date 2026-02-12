@@ -4,13 +4,12 @@
  * is sorted by tier descending — higher-cost Pokemon drafted earlier.
  */
 
-import { standings } from '@/mocks/players';
 import type { Player } from '@/lib/types';
 import type { DraftPickEntry, MockTrade } from './types';
 
-export function generateDraftOrder(playerList: Player[] = standings): DraftPickEntry[] {
+export function generateDraftOrder(standings: Player[]): DraftPickEntry[] {
   // Draft order: worst record picks first
-  const draftOrder = [...playerList].reverse();
+  const draftOrder = [...standings].reverse();
 
   // Each team's picks sorted by tier (highest first = drafted earliest)
   const queues = new Map(

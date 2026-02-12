@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/lib/auth-context';
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
 
@@ -39,13 +39,14 @@ export function AppShell() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, logout } = useAuth();
+  const { leagues } = useAppData();
   const isWide = WIDE_ROUTES.some(r => pathname.includes(r));
 
   // Track active league for color theming
   const activeLeagueId = pathname.match(/^\/league\/([^/]+)/)?.[1] ?? null;
   const activeLeagueColor = useMemo(
     () => leagues.find(l => l.id === activeLeagueId)?.color,
-    [activeLeagueId],
+    [activeLeagueId, leagues],
   );
 
   // Track which league accordion is open — auto-open based on current route

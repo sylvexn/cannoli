@@ -1,4 +1,4 @@
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import type { RosterPokemon } from '@/lib/types';
 import type { TeamSource } from './use-matchup-state';
 
@@ -9,6 +9,7 @@ interface TeamPickerProps {
 }
 
 export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
+  const { leagues } = useAppData();
   return (
     <div className="relative">
       <select

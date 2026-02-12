@@ -2,8 +2,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { players, standings } from '@/mocks/players';
-import { getTeamMatches, currentSeason } from '@/mocks/season';
+import { useLeagueData } from '@/lib/league-data-context';
+import { useLeague } from '@/lib/league-context';
 import { getEffectiveCost, canBeTeraCaptain } from '@/mocks/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
@@ -35,6 +35,16 @@ import { SwapPicker } from './theorycraft-mode';
 // ─── Main Page ───────────────────────────────────────────────────
 export function TeamProfilePage() {
   const { id } = useParams<{ id: string }>();
+  const { players, standings, loading } = useLeagueData();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-text-muted text-sm">Loading...</p>
+      </div>
+    );
+  }
+
   const player = players.find(p => p.id === id);
 
   if (!player) {
@@ -53,6 +63,9 @@ export function TeamProfilePage() {
 
 function TeamProfileContent({ player, rank }: { player: Player; rank: number }) {
   const leagueUrl = useLeagueUrl();
+  const { players, getTeamMatches } = useLeagueData();
+  const league = useLeague();
+  const season = league.season;
   const config = DEFAULT_LEAGUE_CONFIG;
 
   // Preload sprites for entire roster + free agent pool (theorycraft swaps)
@@ -602,7 +615,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                   const theirScore = isHome ? match.awayScore : match.homeScore;
                   const won = hasResult && (myScore ?? 0) > (theirScore ?? 0);
                   const lost = hasResult && (myScore ?? 0) < (theirScore ?? 0);
-                  const isCurrent = match.week === currentSeason.currentWeek + 1;
+                  const isCurrent = match.week === (season?.currentWeek ?? 0) + 1;
 
                   return (
                     <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
