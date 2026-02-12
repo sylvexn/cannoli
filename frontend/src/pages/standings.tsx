@@ -24,8 +24,24 @@ export function StandingsPage() {
   const { players, standings, getWeekMatches, loading } = useLeagueData();
   const currentSeason = league.season;
 
-  const recentMatches = useMemo(() => getWeekMatches(currentSeason.currentWeek), [getWeekMatches, currentSeason.currentWeek]);
-  const upcomingMatches = useMemo(() => getWeekMatches(currentSeason.currentWeek + 1), [getWeekMatches, currentSeason.currentWeek]);
+  // Find the last completed week and next upcoming week
+  const { recentWeek, upcomingWeek } = useMemo(() => {
+    // Walk backwards from currentWeek to find last week with scores
+    let recent = currentSeason.currentWeek;
+    while (recent > 0) {
+      const wm = getWeekMatches(recent);
+      if (wm.length > 0 && wm.some(m => m.homeScore !== undefined)) break;
+      recent--;
+    }
+    // Upcoming is the first week after recent without scores
+    let upcoming = recent + 1;
+    const um = getWeekMatches(upcoming);
+    if (um.length === 0) upcoming = 0; // no upcoming
+    return { recentWeek: recent, upcomingWeek: upcoming };
+  }, [getWeekMatches, currentSeason.currentWeek]);
+
+  const recentMatches = useMemo(() => recentWeek > 0 ? getWeekMatches(recentWeek) : [], [getWeekMatches, recentWeek]);
+  const upcomingMatches = useMemo(() => upcomingWeek > 0 ? getWeekMatches(upcomingWeek) : [], [getWeekMatches, upcomingWeek]);
 
   function findPlayer(id: string) {
     return players.find(p => p.id === id);
@@ -71,15 +87,15 @@ export function StandingsPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-text-primary">
-                  Week {currentSeason.currentWeek + 1}
+                  {upcomingWeek > 0 ? `Week ${upcomingWeek}` : 'Season Complete'}
                 </CardTitle>
-                <Badge variant="outline" className="text-neon border-neon/30 text-[10px]">
-                  Upcoming
+                <Badge variant="outline" className={upcomingWeek > 0 ? 'text-neon border-neon/30 text-[10px]' : 'text-text-muted border-border-default text-[10px]'}>
+                  {upcomingWeek > 0 ? 'Upcoming' : 'Final'}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-1">
-              {upcomingMatches.map(match => {
+              {upcomingMatches.length > 0 ? upcomingMatches.map(match => {
                 const home = findPlayer(match.homePlayer);
                 const away = findPlayer(match.awayPlayer);
                 if (!home || !away) return null;
@@ -99,7 +115,11 @@ export function StandingsPage() {
                     </Link>
                   </div>
                 );
-              })}
+              }) : (
+                <div className="text-center py-4 text-text-muted text-sm">
+                  Regular season complete — playoffs next
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -107,7 +127,7 @@ export function StandingsPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-text-primary">
-                  Week {currentSeason.currentWeek}
+                  Week {recentWeek}
                 </CardTitle>
                 <Badge variant="outline" className="text-text-muted border-border-default text-[10px]">
                   Results

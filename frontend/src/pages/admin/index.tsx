@@ -7,7 +7,8 @@ import { AdminMoveCategories } from './admin-move-categories';
 import { AdminSeason } from './admin-season';
 import { AdminTierList } from './admin-tier-list';
 import { AdminSiteSettings } from './admin-site-settings';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings } from 'lucide-react';
+import { AdminTeams } from './admin-teams';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -29,6 +30,10 @@ export function AdminPage() {
           <TabsTrigger value="leagues">
             <Globe size={14} />
             Leagues
+          </TabsTrigger>
+          <TabsTrigger value="teams">
+            <Shield size={14} />
+            Teams
           </TabsTrigger>
           <TabsTrigger value="trades">
             <ArrowLeftRight size={14} />
@@ -61,6 +66,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="leagues">
           <AdminLeagues />
+        </TabsContent>
+        <TabsContent value="teams">
+          <AdminTeams />
         </TabsContent>
         <TabsContent value="trades">
           <AdminTrades />

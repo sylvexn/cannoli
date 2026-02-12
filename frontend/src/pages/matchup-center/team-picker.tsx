@@ -1,5 +1,9 @@
+import { useState, useEffect } from 'react';
 import { useAppData } from '@/lib/app-data-context';
+import { api } from '@/lib/api';
+import type { ApiTeam } from '@/lib/api';
 import type { RosterPokemon } from '@/lib/types';
+import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
 
 interface TeamPickerProps {
@@ -10,6 +14,17 @@ interface TeamPickerProps {
 
 export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   const { leagues } = useAppData();
+  const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
+
+  useEffect(() => {
+    if (leagues.length === 0) return;
+    Promise.all(
+      leagues.map(l => api.getTeams(l.id).then(teams => [l.id, teams] as const))
+    ).then(results => {
+      setTeamsPerLeague(Object.fromEntries(results));
+    });
+  }, [leagues]);
+
   return (
     <div className="relative">
       <select
@@ -19,13 +34,24 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
           if (!val) return;
           const [leagueId, teamId] = val.split(':');
           const league = leagues.find(l => l.id === leagueId);
-          const player = league?.players.find(p => p.id === teamId);
-          if (league && player) {
-            onSelect(player.roster, {
+          const teams = teamsPerLeague[leagueId] || [];
+          const team = teams.find(t => t.id === teamId);
+          if (league && team) {
+            const roster: RosterPokemon[] = team.roster.map(r => ({
+              name: r.name,
+              types: r.types as PokemonType[],
+              tier: r.tier,
+              isTeraCaptain: r.isTeraCaptain,
+              teraTypes: r.teraTypes as PokemonType[] | undefined,
+              stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+              abilities: r.abilities,
+              seasonStats: r.seasonStats,
+            }));
+            onSelect(roster, {
               type: 'league',
               leagueId,
               teamId,
-              label: `${player.teamName} (${league.name.replace(' League', '')})`,
+              label: `${team.teamName} (${league.name.replace(' League', '')})`,
             });
           }
         }}
@@ -37,22 +63,25 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
         <option value="" disabled>
           {side === 'a' ? 'Select your team...' : 'Select opponent...'}
         </option>
-        {leagues.map(league => (
-          <optgroup key={league.id} label={league.name}>
-            {league.players.length > 0 ? (
-              league.players.map(player => (
-                <option
-                  key={`${league.id}:${player.id}`}
-                  value={`${league.id}:${player.id}`}
-                >
-                  {player.teamName} ({player.record.wins}-{player.record.losses})
-                </option>
-              ))
-            ) : (
-              <option disabled>No teams yet</option>
-            )}
-          </optgroup>
-        ))}
+        {leagues.map(league => {
+          const teams = teamsPerLeague[league.id] || [];
+          return (
+            <optgroup key={league.id} label={league.name}>
+              {teams.length > 0 ? (
+                teams.map(team => (
+                  <option
+                    key={`${league.id}:${team.id}`}
+                    value={`${league.id}:${team.id}`}
+                  >
+                    {team.teamName} ({team.record.wins}-{team.record.losses})
+                  </option>
+                ))
+              ) : (
+                <option disabled>Loading...</option>
+              )}
+            </optgroup>
+          );
+        })}
       </select>
       <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
