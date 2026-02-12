@@ -37,9 +37,9 @@ export function LeagueLayout() {
   return (
     <LeagueProvider league={league}>
       <LeagueDataProvider leagueId={league.id}>
-        <div className="space-y-4">
+        <div className="flex flex-col h-full gap-4">
           {/* Breadcrumbs */}
-          <nav className="flex items-center gap-1 text-xs text-text-muted">
+          <nav className="flex items-center gap-1 text-xs text-text-muted shrink-0">
             <Link to="/" className="hover:text-text-primary transition-colors">
               Overview
             </Link>
@@ -59,8 +59,10 @@ export function LeagueLayout() {
             )}
           </nav>
 
-          {/* Page content */}
-          <Outlet />
+          {/* Page content — flex-1 so draft board can fill height */}
+          <div className="flex-1 min-h-0">
+            <Outlet />
+          </div>
         </div>
       </LeagueDataProvider>
     </LeagueProvider>
