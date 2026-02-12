@@ -8,9 +8,15 @@
     "build": "bun build src/index.ts --outdir dist --target bun"
   },
   "dependencies": {
-    "elysia": "^1.2.0"
+    "@elysiajs/cors": "^1.4.1",
+    "better-sqlite3": "^12.8.0",
+    "drizzle-orm": "^0.45.2",
+    "elysia": "^1.2.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.0"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "^1.2.0",
+    "drizzle-kit": "^0.31.10"
   }
 }
