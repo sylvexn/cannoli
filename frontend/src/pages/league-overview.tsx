@@ -1,5 +1,8 @@
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
+import { api } from '@/lib/api';
+import type { ApiTeam } from '@/lib/api';
 import { mockActivityLog } from '@/mocks/activity-log';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,8 +12,7 @@ import { cn } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/types';
 import {
   Megaphone, Users, Swords, ArrowLeftRight, Trophy,
-  ScrollText, UserPlus, ShieldCheck, LogIn, Play,
-  Check, Star, Settings, Sparkles, X, KeyRound, UserX,
+  ScrollText, Settings, Play, Check, Star, X,
 } from 'lucide-react';
 
 const phaseColors: Record<string, string> = {
@@ -20,18 +22,31 @@ const phaseColors: Record<string, string> = {
   offseason: 'text-text-muted bg-surface-overlay',
 };
 
-// Reuse icon map from activity log
 const EVENT_ICONS: Record<string, typeof Users> = {
-  user_created: UserPlus, user_role_changed: ShieldCheck, user_deactivated: UserX,
-  password_reset: KeyRound, password_changed: KeyRound, user_login: LogIn,
-  league_config_updated: Settings, phase_advanced: Play, season_created: Sparkles,
   draft_started: Play, draft_pick: Trophy, draft_completed: Check,
   trade_proposed: ArrowLeftRight, trade_approved: Check, trade_rejected: X,
   match_reported: Swords, tera_captain_set: Star, tera_types_changed: Star,
 };
 
+// League-relevant categories for the public feed
+const FEED_CATEGORIES = new Set(['draft', 'trade', 'match', 'team']);
+
 export function LeagueOverviewPage() {
   const { leagues, loading } = useAppData();
+  const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
+  const [teamsLoading, setTeamsLoading] = useState(true);
+
+  // Fetch teams for all leagues
+  useEffect(() => {
+    if (leagues.length === 0) return;
+    setTeamsLoading(true);
+    Promise.all(
+      leagues.map(l => api.getTeams(l.id).then(teams => [l.id, teams] as const))
+    ).then(results => {
+      setTeamsPerLeague(Object.fromEntries(results));
+      setTeamsLoading(false);
+    }).catch(() => setTeamsLoading(false));
+  }, [leagues]);
 
   if (loading) {
     return (
@@ -41,24 +56,20 @@ export function LeagueOverviewPage() {
     );
   }
 
-  // Trades will be fetched via dedicated endpoint later
-  const trades: { status: string }[] = [];
+  // Compute site-wide stats from fetched teams
+  const allTeams = Object.values(teamsPerLeague).flat();
+  const totalPlayers = allTeams.length;
+  const totalDrafted = allTeams.reduce((s, t) => s + t.roster.length, 0);
+  const totalMatches = allTeams.reduce((s, t) => s + t.record.wins + t.record.losses, 0) / 2;
 
-  // Compute site-wide stats
-  const totalPlayers = leagues.reduce((sum, l) => sum + l.players.length, 0);
-  const totalDrafted = leagues.reduce(
-    (sum, l) => sum + l.players.reduce((s, p) => s + p.roster.length, 0), 0
+  // Recent activity — league events only (draft, trade, match, team)
+  const recentActivity = useMemo(() =>
+    [...mockActivityLog]
+      .filter(e => FEED_CATEGORIES.has(e.category))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 8),
+    [],
   );
-  const totalTrades = trades.filter(t => t.status === 'accepted').length;
-  const totalMatches = leagues.reduce(
-    (sum, l) => sum + l.players.reduce((s, p) => s + p.record.wins + p.record.losses, 0), 0
-  ) / 2; // each match counted twice (once per player)
-
-  // Recent activity (exclude auth events for the feed)
-  const recentActivity = [...mockActivityLog]
-    .filter(e => e.category !== 'auth')
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 8);
 
   // Mock announcement (would come from site settings in real app)
   const announcement = {
@@ -85,10 +96,10 @@ export function LeagueOverviewPage() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard icon={Users} label="Players" value={totalPlayers} color="text-neon" />
-        <StatCard icon={Trophy} label="Pokemon Drafted" value={totalDrafted} color="text-draw" />
-        <StatCard icon={ArrowLeftRight} label="Trades" value={totalTrades} color="text-purple-400" />
-        <StatCard icon={Swords} label="Matches Played" value={Math.floor(totalMatches)} color="text-win" />
+        <StatCard icon={Users} label="Players" value={totalPlayers} color="text-neon" loading={teamsLoading} />
+        <StatCard icon={Trophy} label="Pokemon Drafted" value={totalDrafted} color="text-draw" loading={teamsLoading} />
+        <StatCard icon={ArrowLeftRight} label="Trades" value={0} color="text-purple-400" loading={false} />
+        <StatCard icon={Swords} label="Matches Played" value={Math.floor(totalMatches)} color="text-win" loading={teamsLoading} />
       </div>
 
       {/* Main content: League cards + Activity feed */}
@@ -96,7 +107,8 @@ export function LeagueOverviewPage() {
         {/* League cards (3 cols on xl) */}
         <div className="xl:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
           {leagues.map(league => {
-            const standings = [...league.players].sort(
+            const teams = teamsPerLeague[league.id] || [];
+            const standings = [...teams].sort(
               (a, b) => b.record.wins - a.record.wins || b.record.differential - a.record.differential,
             );
 
@@ -122,12 +134,14 @@ export function LeagueOverviewPage() {
                 </CardHeader>
 
                 <CardContent>
-                  {league.hasData && standings.length > 0 ? (
+                  {teamsLoading ? (
+                    <div className="text-center py-6 text-text-muted text-sm">Loading...</div>
+                  ) : standings.length > 0 ? (
                     <div className="space-y-1">
-                      {standings.slice(0, 6).map((player, i) => (
+                      {standings.slice(0, 6).map((team, i) => (
                         <Link
-                          key={player.id}
-                          to={`/league/${league.id}/teams/${player.id}`}
+                          key={team.id}
+                          to={`/league/${league.id}/teams/${team.id}`}
                           className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-surface-overlay/60 transition-colors group"
                         >
                           <span className={cn(
@@ -136,14 +150,14 @@ export function LeagueOverviewPage() {
                           )}>
                             {i + 1}
                           </span>
-                          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+                          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
                           <span className="text-xs text-text-primary group-hover:text-neon transition-colors truncate flex-1">
-                            {player.teamAbbrev}
+                            {team.teamAbbrev}
                           </span>
                           <RecordDisplay
-                            wins={player.record.wins}
-                            losses={player.record.losses}
-                            differential={player.record.differential}
+                            wins={team.record.wins}
+                            losses={team.record.losses}
+                            differential={team.record.differential}
                             className="text-[10px]"
                           />
                         </Link>
@@ -181,12 +195,6 @@ export function LeagueOverviewPage() {
                   <ActivityFeedItem key={event.id} event={event} />
                 ))}
               </div>
-              <Link
-                to="/admin"
-                className="block text-center text-[10px] text-text-muted hover:text-neon transition-colors py-2"
-              >
-                View all activity →
-              </Link>
             </CardContent>
           </Card>
         </div>
@@ -195,11 +203,12 @@ export function LeagueOverviewPage() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: {
+function StatCard({ icon: Icon, label, value, color, loading }: {
   icon: typeof Users;
   label: string;
   value: number;
   color: string;
+  loading: boolean;
 }) {
   return (
     <Card className="bg-surface-raised border-border-default">
@@ -208,7 +217,9 @@ function StatCard({ icon: Icon, label, value, color }: {
           <Icon size={18} />
         </div>
         <div>
-          <div className={`text-lg font-bold font-mono tabular-nums ${color}`}>{value}</div>
+          <div className={`text-lg font-bold font-mono tabular-nums ${color}`}>
+            {loading ? '—' : value}
+          </div>
           <div className="text-[10px] text-text-muted uppercase tracking-wide">{label}</div>
         </div>
       </CardContent>
