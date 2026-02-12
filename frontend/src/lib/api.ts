@@ -61,6 +61,9 @@ export interface ApiMatch {
   awayScore: number | null;
   replayUrl: string | null;
   phase: string;
+  playoffRound: string | null;
+  homeSeed: number | null;
+  awaySeed: number | null;
 }
 
 export interface ApiMatchPokemon {

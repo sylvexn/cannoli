@@ -157,6 +157,8 @@ export function DraftBoardPage() {
           onSelectTeam={id => dispatch({ type: 'SELECT_TEAM', teamId: id })}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}
+          currentDrafterId={currentPick?.playerId ?? null}
+          isLiveMode={state.mode === 'live'}
         />
       </div>
 

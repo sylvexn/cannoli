@@ -167,6 +167,9 @@ const app = new Elysia()
         awayScore: m.awayScore,
         replayUrl: m.replayUrl,
         phase: m.phase,
+        playoffRound: m.playoffRound,
+        homeSeed: m.homeSeed,
+        awaySeed: m.awaySeed,
       }));
   })
 

@@ -517,6 +517,152 @@ function main() {
     }
     console.log(`  ${matchPokemonCount} match pokemon entries`);
 
+    // ─── Playoffs ────────────────────────────────────────────────────────
+
+    const playoffSheet = sheet(wb, 'Playoffs');
+    const ROUND_LABELS: Record<string, { round: string; week: number }> = {
+      'Quarter Finals': { round: 'qf', week: 12 },
+      'Semi Finals': { round: 'sf', week: 13 },
+      'Finals': { round: 'f', week: 14 },
+    };
+
+    // Parse bracket: QF at cols 5-9, SF at cols 11-15, Finals at cols 17-21
+    // Each matchup = 2 rows: higher seed row, then lower seed row
+    // Col layout: seed, team name, W/L, score, matchId
+    const bracketCols = [
+      { startCol: 5, round: 'qf' },
+      { startCol: 11, round: 'sf' },
+      { startCol: 17, round: 'f' },
+    ];
+
+    let playoffMatchCount = 0;
+
+    for (const bc of bracketCols) {
+      const roundInfo = bc.round;
+      const week = roundInfo === 'qf' ? 12 : roundInfo === 'sf' ? 13 : 14;
+
+      // Scan for matchup pairs
+      for (let i = 4; i < playoffSheet.length - 1; i++) {
+        const row1 = playoffSheet[i] || [];
+        const row2 = playoffSheet[i + 2] || []; // opponent is 2 rows below
+
+        const team1Name = row1[bc.startCol + 1];
+        const team2Name = row2[bc.startCol + 1];
+        if (!team1Name || typeof team1Name !== 'string' || !team1Name.includes('(')) continue;
+        if (!team2Name || typeof team2Name !== 'string' || !team2Name.includes('(')) continue;
+
+        const team1Id = resolveTeamId(team1Name.toString());
+        const team2Id = resolveTeamId(team2Name.toString());
+        if (!team1Id || !team2Id) continue;
+
+        const seed1 = parseInt(row1[bc.startCol]?.toString().replace(/[^0-9]/g, '') || '0') || 0;
+        const seed2 = parseInt(row2[bc.startCol]?.toString().replace(/[^0-9]/g, '') || '0') || 0;
+        const score1 = typeof row1[bc.startCol + 3] === 'number' ? row1[bc.startCol + 3] : null;
+        const score2 = typeof row2[bc.startCol + 3] === 'number' ? row2[bc.startCol + 3] : null;
+
+        // Check we haven't already inserted this matchup
+        const existingMatch = sqlite.prepare(
+          'SELECT id FROM matches WHERE league_id = ? AND playoff_round = ? AND home_team_id = ? AND away_team_id = ?'
+        ).get(league.id, roundInfo, team1Id, team2Id);
+        if (existingMatch) continue;
+
+        const matchId = `${league.id}-${roundInfo}-${playoffMatchCount + 1}`;
+
+        db.insert(schema.matches).values({
+          id: matchId,
+          leagueId: league.id,
+          week,
+          homeTeamId: team1Id,
+          awayTeamId: team2Id,
+          homeScore: score1,
+          awayScore: score2,
+          phase: 'playoffs',
+          playoffRound: roundInfo,
+          homeSeed: seed1,
+          awaySeed: seed2,
+        }).run();
+        playoffMatchCount++;
+      }
+    }
+    console.log(`  ${playoffMatchCount} playoff matches`);
+
+    // ─── Playoff Match Stats ─────────────────────────────────────────────
+
+    if (wb.SheetNames.includes('Playoff Match Stats')) {
+      const playoffMatchStats = sheet(wb, 'Playoff Match Stats');
+      let playoffPokemonCount = 0;
+
+      // Same layout as regular match stats: columns of 11
+      // Col 0 = Quarter Finals, Col 11 = Semi Finals, Col 22 = Finals
+      const playoffRounds = [
+        { colBase: 0, round: 'qf' },
+        { colBase: 11, round: 'sf' },
+        { colBase: 22, round: 'f' },
+      ];
+
+      for (const pr of playoffRounds) {
+        for (let i = 6; i < playoffMatchStats.length; i++) {
+          const row = playoffMatchStats[i] || [];
+          const team1Name = row[pr.colBase + 1];
+          if (!team1Name || typeof team1Name !== 'string' || !team1Name.includes('(')) continue;
+          const team2Name = row[pr.colBase + 7];
+          if (!team2Name || typeof team2Name !== 'string' || !team2Name.includes('(')) continue;
+
+          const team1Id = resolveTeamId(team1Name.toString());
+          const team2Id = resolveTeamId(team2Name.toString());
+          if (!team1Id || !team2Id) continue;
+
+          // Find matching playoff match
+          const matchRow = sqlite.prepare(
+            'SELECT id FROM matches WHERE league_id = ? AND playoff_round = ? AND ((home_team_id = ? AND away_team_id = ?) OR (home_team_id = ? AND away_team_id = ?))'
+          ).get(league.id, pr.round, team1Id, team2Id, team2Id, team1Id) as any;
+          if (!matchRow) continue;
+
+          const isHomeFirst = sqlite.prepare(
+            'SELECT home_team_id FROM matches WHERE id = ?'
+          ).get(matchRow.id) as any;
+          const t1IsHome = isHomeFirst?.home_team_id === team1Id;
+
+          for (let j = i + 2; j < Math.min(i + 8, playoffMatchStats.length); j++) {
+            const pRow = playoffMatchStats[j] || [];
+
+            const homePokemon = pRow[pr.colBase + 1];
+            if (homePokemon && typeof homePokemon === 'string' && homePokemon.trim()) {
+              const cleanName = normalizePokemonName(homePokemon.toString());
+              const isTera = isTeraCaptain(homePokemon.toString());
+              db.insert(schema.matchPokemon).values({
+                matchId: matchRow.id,
+                teamId: t1IsHome ? team1Id : team2Id,
+                pokemonName: cleanName,
+                kills: parseInt(pRow[pr.colBase + 2]) || 0,
+                deaths: parseInt(pRow[pr.colBase + 3]) || 0,
+                teraUsed: isTera,
+                teraType: isTera ? 'unknown' : null,
+              }).run();
+              playoffPokemonCount++;
+            }
+
+            const awayPokemon = pRow[pr.colBase + 7];
+            if (awayPokemon && typeof awayPokemon === 'string' && awayPokemon.trim()) {
+              const cleanName = normalizePokemonName(awayPokemon.toString());
+              const isTera = isTeraCaptain(awayPokemon.toString());
+              db.insert(schema.matchPokemon).values({
+                matchId: matchRow.id,
+                teamId: t1IsHome ? team2Id : team1Id,
+                pokemonName: cleanName,
+                kills: parseInt(pRow[pr.colBase + 6]) || 0,
+                deaths: parseInt(pRow[pr.colBase + 5]) || 0,
+                teraUsed: isTera,
+                teraType: isTera ? 'unknown' : null,
+              }).run();
+              playoffPokemonCount++;
+            }
+          }
+        }
+      }
+      console.log(`  ${playoffPokemonCount} playoff pokemon entries`);
+    }
+
     // ─── Transactions ────────────────────────────────────────────────────
 
     const txSheet = sheet(wb, 'Transactions');

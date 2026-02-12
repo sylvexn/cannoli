@@ -20,6 +20,8 @@ export const leagues = sqliteTable('leagues', {
   name: text('name').notNull(),
   color: text('color').notNull(),
   seasonId: integer('season_id').notNull().references(() => seasons.id),
+  /** JSON array of team IDs in draft order */
+  draftOrder: text('draft_order'),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -95,6 +97,12 @@ export const matches = sqliteTable('matches', {
   awayScore: integer('away_score'),
   replayUrl: text('replay_url'),
   phase: text('phase', { enum: ['regular', 'playoffs'] }).notNull().default('regular'),
+  /** For playoffs: 'qf', 'sf', 'f' */
+  playoffRound: text('playoff_round'),
+  /** Seed of home team (1st, 2nd, etc.) */
+  homeSeed: integer('home_seed'),
+  /** Seed of away team */
+  awaySeed: integer('away_seed'),
 });
 
 // ─── Match Pokemon (per-match K/D for each Pokemon) ─────────────────────────
