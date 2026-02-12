@@ -113,11 +113,11 @@ const app = new Elysia()
 
         return {
           name: r.pokemonName,
-          types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean) : [],
+          types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
           tier: r.tier,
           isTeraCaptain: r.isTeraCaptain,
           teraTypes: r.isTeraCaptain
-            ? [r.teraType1, r.teraType2, r.teraType3].filter(Boolean)
+            ? [r.teraType1, r.teraType2, r.teraType3].filter(Boolean).map(t => t!.toLowerCase())
             : undefined,
           isShiny: r.isShiny,
           acquiredVia: r.acquiredVia,
@@ -278,7 +278,7 @@ const app = new Elysia()
         gp: s.gp,
         differential: s.kills - s.deaths,
         kpg: s.gp > 0 ? +(s.kills / s.gp).toFixed(2) : 0,
-        types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean) : [],
+        types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
         tier: pokemon?.tier || 0,
       };
     });
