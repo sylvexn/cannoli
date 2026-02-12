@@ -7,7 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { mockActivityLog, EVENT_CATEGORIES, CATEGORY_LABELS } from '@/mocks/activity-log';
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import type { ActivityEvent, EventCategory } from '@/lib/types';
 import {
   Search, Filter, X, UserPlus, KeyRound, ShieldCheck, UserX, LogIn,
@@ -49,6 +49,7 @@ const EVENT_ICONS: Record<string, typeof UserPlus> = {
 const PAGE_SIZE = 15;
 
 export function AdminActivityLog() {
+  const { leagues } = useAppData();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [leagueFilter, setLeagueFilter] = useState<string>('all');
@@ -207,6 +208,7 @@ export function AdminActivityLog() {
 }
 
 function EventRow({ event }: { event: ActivityEvent }) {
+  const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
 

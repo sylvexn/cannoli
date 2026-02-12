@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, X } from 'lucide-react';
-import { players } from '@/mocks/players';
+import { useLeagueData } from '@/lib/league-data-context';
 import { TeamLogo } from '@/components/team-logo';
 
 
@@ -40,6 +40,7 @@ interface StatsFilterBarProps {
 }
 
 export function StatsFilterBar({ filters, onUpdate, totalCount, filteredCount }: StatsFilterBarProps) {
+  const { players } = useLeagueData();
   const hasActiveFilters = filters.search || filters.teamId || filters.types.length > 0 || filters.tierMin !== 1 || filters.tierMax !== 20;
 
   return (

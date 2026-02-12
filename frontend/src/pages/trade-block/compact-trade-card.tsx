@@ -1,5 +1,5 @@
 import type { Player, Trade } from '@/lib/types';
-import { players } from '@/mocks/players';
+import { useLeagueData } from '@/lib/league-data-context';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
@@ -7,8 +7,6 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-
-const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
@@ -19,6 +17,8 @@ const statusConfig: Record<Trade['status'], { label: string; className: string }
 
 /** Compact horizontal trade card for proposals */
 export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl: (path: string) => string }) {
+  const { players } = useLeagueData();
+  const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
   const proposer = playerMap.get(trade.proposer);
   const isFreeAgent = trade.recipient === 'pool';
   const recipient = isFreeAgent ? null : playerMap.get(trade.recipient);

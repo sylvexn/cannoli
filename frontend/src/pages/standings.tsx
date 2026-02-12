@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { standings, players } from '@/mocks/players';
-import { currentSeason, recentMatches, upcomingMatches } from '@/mocks/season';
-import { getTeamTrades } from '@/mocks/trades';
+import { useLeagueData } from '@/lib/league-data-context';
+import { useLeague } from '@/lib/league-context';
 import { rosterPointsUsed } from '@/lib/roster';
 import type { Player, Trade } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
@@ -19,16 +18,24 @@ import { ChevronDown, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 
-function findPlayer(id: string) {
-  return players.find(p => p.id === id);
-}
-
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
+  const league = useLeague();
+  const { players, standings, getWeekMatches, loading } = useLeagueData();
+  const currentSeason = league.season;
+
+  const recentMatches = useMemo(() => getWeekMatches(currentSeason.currentWeek), [getWeekMatches, currentSeason.currentWeek]);
+  const upcomingMatches = useMemo(() => getWeekMatches(currentSeason.currentWeek + 1), [getWeekMatches, currentSeason.currentWeek]);
+
+  function findPlayer(id: string) {
+    return players.find(p => p.id === id);
+  }
 
   useEffect(() => {
     preloadSprites(players.flatMap(p => p.roster.map(m => m.name)));
-  }, []);
+  }, [players]);
+
+  if (loading) return <div className="text-text-muted">Loading...</div>;
 
   return (
     <div className="space-y-6">
@@ -152,10 +159,10 @@ export function StandingsPage() {
 
 function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: number; leagueUrl: (p: string) => string }) {
   const [expanded, setExpanded] = useState(false);
+  const { getTeamTrades } = useLeagueData();
   const isPlayoff = rank <= 8;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
-  const teamTrades = useMemo(() => getTeamTrades(player.id), [player.id]);
-  const completedTrades = teamTrades.filter(t => t.status === 'accepted');
+  const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
   const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
   const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
 

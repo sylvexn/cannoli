@@ -1,7 +1,7 @@
 import { useReducer, useMemo } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 
 export interface TeamSource {
   type: 'league' | 'custom';
@@ -118,6 +118,7 @@ function makeInitialSpeedSlots(teamA: RosterPokemon[], teamB: RosterPokemon[]): 
 export function useMatchupState() {
   // Try to auto-populate Team A with user's team
   const { user } = useAuth();
+  const { leagues } = useAppData();
   const initialTeamA = useMemo(() => {
     if (!user) return { roster: [] as RosterPokemon[], source: null as TeamSource | null };
     // Find user's team in any league (mock: match username to a player)
@@ -139,7 +140,7 @@ export function useMatchupState() {
       }
     }
     return { roster: [] as RosterPokemon[], source: null as TeamSource | null };
-  }, [user]);
+  }, [user, leagues]);
 
   const [state, dispatch] = useReducer(reducer, {
     teamA: initialTeamA.roster,

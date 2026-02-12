@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { computeLeagueStats, type PokemonLeagueStat } from '@/lib/pokemon-stats';
-import { players } from '@/mocks/players';
+import { useLeagueData } from '@/lib/league-data-context';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
@@ -13,8 +13,6 @@ import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { StatsFilterBar, defaultFilters, type StatsFilters } from './stats-filter-bar';
-
-const playerMap = new Map(players.map(p => [p.id, p]));
 
 type SortKey = 'kills' | 'deaths' | 'differential' | 'gp' | 'kpg' | 'tier' | 'name' | 'record';
 
@@ -63,7 +61,9 @@ function filterStats(stats: PokemonLeagueStat[], filters: StatsFilters): Pokemon
 }
 
 export function StatsPage() {
-  const allStats = useMemo(() => computeLeagueStats(), []);
+  const { players, loading } = useLeagueData();
+  const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
+  const allStats = useMemo(() => computeLeagueStats(players), [players]);
   const [filters, setFilters] = useState<StatsFilters>(defaultFilters);
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
 
@@ -93,6 +93,8 @@ export function StatsPage() {
   function handleFilterUpdate(partial: Partial<StatsFilters>) {
     setFilters(prev => ({ ...prev, ...partial }));
   }
+
+  if (loading) return <div className="text-text-muted text-sm">Loading stats...</div>;
 
   return (
     <div className="space-y-6">

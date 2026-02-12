@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
-import { leagues } from '@/mocks/leagues';
+import { useAppData } from '@/lib/app-data-context';
 import { mockActivityLog } from '@/mocks/activity-log';
-import { trades } from '@/mocks/trades';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
@@ -32,6 +31,19 @@ const EVENT_ICONS: Record<string, typeof Users> = {
 };
 
 export function LeagueOverviewPage() {
+  const { leagues, loading } = useAppData();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-text-muted text-sm">
+        Loading leagues...
+      </div>
+    );
+  }
+
+  // Trades will be fetched via dedicated endpoint later
+  const trades: { status: string }[] = [];
+
   // Compute site-wide stats
   const totalPlayers = leagues.reduce((sum, l) => sum + l.players.length, 0);
   const totalDrafted = leagues.reduce(
@@ -220,6 +232,7 @@ function AnnouncementBanner({ text, type }: { text: string; type: 'info' | 'warn
 }
 
 function ActivityFeedItem({ event }: { event: ActivityEvent }) {
+  const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
 
