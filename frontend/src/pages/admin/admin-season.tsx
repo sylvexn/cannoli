@@ -15,6 +15,7 @@ import {
 import { PHASES, phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
 import { NewSeasonWizard } from './season/new-season-wizard';
+import { DraftOrderEditor } from './season/draft-order-editor';
 
 export function AdminSeason() {
   const { leagues: defaultLeagues } = useAppData();
@@ -295,6 +296,21 @@ export function AdminSeason() {
             </Card>
           );
         })}
+      </div>
+
+      {/* Draft Order */}
+      <div className="space-y-3 pt-2">
+        <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider">
+          Draft Order
+        </h3>
+        {leagueList.map(league => (
+          <DraftOrderEditor
+            key={league.id}
+            leagueId={league.id}
+            leagueName={league.name}
+            leagueColor={league.color}
+          />
+        ))}
       </div>
 
       {/* Advance Phase Confirmation */}

@@ -65,6 +65,10 @@ export interface Match {
   homeScore?: number;
   awayScore?: number;
   replayUrl?: string;
+  phase?: 'regular' | 'playoffs';
+  playoffRound?: string | null;
+  homeSeed?: number | null;
+  awaySeed?: number | null;
   pokemonKD?: {
     home: MatchPokemonEntry[];
     away: MatchPokemonEntry[];

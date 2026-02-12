@@ -3,9 +3,10 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
 import { TierBadge } from '@/components/tier-badge';
 import { PointCapBar } from '@/components/point-cap-bar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ArrowRightLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 
@@ -18,6 +19,10 @@ interface DraftTeamSidebarProps {
   onSelectTeam: (teamId: string | null) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  /** Current drafter's team ID (live mode only) */
+  currentDrafterId?: string | null;
+  /** Whether we're in live draft mode */
+  isLiveMode?: boolean;
 }
 
 export function DraftTeamSidebar({
@@ -28,6 +33,8 @@ export function DraftTeamSidebar({
   onSelectTeam,
   collapsed,
   onToggleCollapse,
+  currentDrafterId,
+  isLiveMode,
 }: DraftTeamSidebarProps) {
   if (collapsed) {
     return (
@@ -45,8 +52,9 @@ export function DraftTeamSidebar({
             key={p.id}
             onClick={() => onSelectTeam(p.id)}
             className={cn(
-              'transition-all duration-150',
+              'transition-all duration-150 relative',
               selectedTeamId === p.id && 'ring-1 ring-neon rounded-full',
+              currentDrafterId === p.id && 'ring-1 ring-pink rounded-full animate-pulse',
             )}
           >
             <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
@@ -60,7 +68,9 @@ export function DraftTeamSidebar({
     <div className="w-[300px] flex-shrink-0 bg-surface-raised border-l border-border-default flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
-        <span className="text-xs font-heading font-semibold text-text-primary">Teams</span>
+        <span className="text-xs font-heading font-semibold text-text-primary">
+          {isLiveMode ? 'Draft Order' : 'Teams'}
+        </span>
         <Button
           variant="ghost"
           size="sm"
@@ -74,17 +84,20 @@ export function DraftTeamSidebar({
       {/* Team list */}
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {teamOrder.map(p => {
+          {teamOrder.map((p, orderIdx) => {
             const roster = teamRosters.get(p.id) ?? [];
             const points = teamPoints.get(p.id) ?? 0;
             const isSelected = selectedTeamId === p.id;
+            const isDrafter = currentDrafterId === p.id;
 
             return (
               <div
                 key={p.id}
                 className={cn(
                   'rounded-md border transition-all duration-150 overflow-hidden',
-                  isSelected
+                  isDrafter
+                    ? 'border-pink/50 bg-pink/5'
+                    : isSelected
                     ? 'border-border-default bg-surface-overlay/40'
                     : 'border-transparent hover:border-border-subtle hover:bg-surface-overlay/20',
                 )}
@@ -94,24 +107,43 @@ export function DraftTeamSidebar({
                   onClick={() => onSelectTeam(p.id)}
                   className="w-full flex items-center gap-2 px-2.5 py-2 cursor-pointer"
                 >
+                  {/* Draft position number */}
+                  {isLiveMode && (
+                    <span className="text-[10px] font-mono tabular-nums text-text-muted w-3 shrink-0">
+                      {orderIdx + 1}
+                    </span>
+                  )}
                   <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
                   <div className="flex-1 text-left min-w-0">
-                    <div className="text-xs font-medium text-text-primary truncate">{p.teamAbbrev}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-text-primary truncate">{p.teamAbbrev}</span>
+                      {isDrafter && (
+                        <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] px-1 py-0 h-3.5">
+                          <Zap size={8} className="mr-0.5" />
+                          OTC
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-text-muted">{p.name}</span>
                   </div>
                   <span className="text-[10px] font-mono tabular-nums text-text-muted">
                     {points}/110
                   </span>
                 </button>
 
-                {/* Expanded roster */}
+                {/* Expanded roster / pick history */}
                 {isSelected && (
                   <div className="px-2 pb-2 space-y-1">
                     <PointCapBar used={points} className="mb-1.5" />
-                    {roster.map(mon => (
+                    {roster.map((mon, pickIdx) => (
                       <div
                         key={mon.name}
                         className="flex items-center gap-1.5 py-0.5 group/row hover:bg-surface-overlay/40 rounded px-1 -mx-1"
                       >
+                        {/* Pick number */}
+                        <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">
+                          {pickIdx + 1}
+                        </span>
                         <PokemonSprite name={mon.name} size="xs" />
                         <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">
                           {mon.name}

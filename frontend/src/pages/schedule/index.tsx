@@ -4,20 +4,43 @@ import { useLeagueData } from '@/lib/league-data-context';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { WeekSelector } from './week-selector';
 import { MatchCard } from './match-card';
+import { PlayoffBracket } from './playoff-bracket';
+import { cn } from '@/lib/utils';
+import { Calendar, Trophy } from 'lucide-react';
+
+type ScheduleView = 'regular' | 'playoffs';
 
 export function SchedulePage() {
   const league = useLeague();
-  const { players, getWeekMatches, loading } = useLeagueData();
+  const { players, matches, getWeekMatches, loading } = useLeagueData();
   const season = league.season;
 
+  const hasPlayoffs = useMemo(
+    () => matches.some(m => m.phase === 'playoffs'),
+    [matches],
+  );
+
+  const [view, setView] = useState<ScheduleView>('regular');
   const [selectedWeek, setSelectedWeek] = useState(season?.currentWeek ?? 1);
 
   useEffect(() => {
     if (season?.currentWeek) setSelectedWeek(season.currentWeek);
   }, [season?.currentWeek]);
 
+  // Auto-select playoffs view if season is in playoffs phase
+  useEffect(() => {
+    if (season?.phase === 'playoffs' && hasPlayoffs) {
+      setView('playoffs');
+    }
+  }, [season?.phase, hasPlayoffs]);
+
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
-  const weekMatches = useMemo(() => getWeekMatches(selectedWeek), [getWeekMatches, selectedWeek]);
+
+  // Only show regular season matches in week view
+  const weekMatches = useMemo(
+    () => getWeekMatches(selectedWeek).filter(m => m.phase !== 'playoffs'),
+    [getWeekMatches, selectedWeek],
+  );
 
   useEffect(() => {
     const names = weekMatches.flatMap(m => {
@@ -36,32 +59,70 @@ export function SchedulePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-pink">Schedule</span>
-          <span className="text-text-primary ml-1">&amp; Results</span>
-        </h1>
-        <p className="text-sm text-text-muted">
-          Season {season.seasonNumber} &middot; {season.totalWeeks} weeks
-          {isCompleted && selectedWeek === season.currentWeek && ' — most recent'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+            <span className="text-pink">Schedule</span>
+            <span className="text-text-primary ml-1">&amp; Results</span>
+          </h1>
+          <p className="text-sm text-text-muted">
+            Season {season.seasonNumber} &middot; {season.totalWeeks} weeks
+            {view === 'regular' && isCompleted && selectedWeek === season.currentWeek && ' — most recent'}
+          </p>
+        </div>
+
+        {/* View toggle */}
+        {hasPlayoffs && (
+          <div className="flex rounded-lg border border-border-default overflow-hidden">
+            <button
+              onClick={() => setView('regular')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'regular'
+                  ? 'bg-surface-overlay text-text-primary'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+              )}
+            >
+              <Calendar size={13} />
+              Regular Season
+            </button>
+            <button
+              onClick={() => setView('playoffs')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'playoffs'
+                  ? 'bg-pink/10 text-pink'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+              )}
+            >
+              <Trophy size={13} />
+              Playoffs
+            </button>
+          </div>
+        )}
       </div>
 
-      <WeekSelector
-        totalWeeks={season.totalWeeks}
-        currentWeek={season.currentWeek}
-        selectedWeek={selectedWeek}
-        onSelectWeek={setSelectedWeek}
-      />
+      {view === 'regular' ? (
+        <>
+          <WeekSelector
+            totalWeeks={season.totalWeeks}
+            currentWeek={season.currentWeek}
+            selectedWeek={selectedWeek}
+            onSelectWeek={setSelectedWeek}
+          />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {weekMatches.map(match => {
-          const home = playerMap.get(match.homePlayer);
-          const away = playerMap.get(match.awayPlayer);
-          if (!home || !away) return null;
-          return <MatchCard key={match.id} match={match} homePlayer={home} awayPlayer={away} />;
-        })}
-      </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {weekMatches.map(match => {
+              const home = playerMap.get(match.homePlayer);
+              const away = playerMap.get(match.awayPlayer);
+              if (!home || !away) return null;
+              return <MatchCard key={match.id} match={match} homePlayer={home} awayPlayer={away} />;
+            })}
+          </div>
+        </>
+      ) : (
+        <PlayoffBracket />
+      )}
     </div>
   );
 }
