@@ -311,6 +311,130 @@ const app = new Elysia()
     return season || null;
   })
 
+  // ─── Archive (multi-season) ──────────────────────────────────────────
+
+  .get('/api/seasons', () => {
+    return db.select().from(schema.seasons)
+      .orderBy(desc(schema.seasons.seasonNumber))
+      .all()
+      .map(s => ({
+        id: s.id,
+        seasonNumber: s.seasonNumber,
+        phase: s.phase,
+        currentWeek: s.currentWeek,
+        totalWeeks: s.totalWeeks,
+      }));
+  })
+
+  .get('/api/seasons/:seasonId/leagues', ({ params }) => {
+    const seasonId = parseInt(params.seasonId);
+    const leagues = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.seasonId, seasonId))
+      .all();
+
+    return leagues.map(l => {
+      // Get teams with records
+      const teams = db.select().from(schema.teams)
+        .where(eq(schema.teams.leagueId, l.id))
+        .orderBy(asc(schema.teams.rank))
+        .all()
+        .map(team => {
+          const homeWins = db.select({ count: sql<number>`count(*)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score > away_score`))
+            .get()?.count || 0;
+          const awayWins = db.select({ count: sql<number>`count(*)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score > home_score`))
+            .get()?.count || 0;
+          const homeLosses = db.select({ count: sql<number>`count(*)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score < away_score`))
+            .get()?.count || 0;
+          const awayLosses = db.select({ count: sql<number>`count(*)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score < home_score`))
+            .get()?.count || 0;
+          const homeDiff = db.select({ diff: sql<number>`COALESCE(SUM(home_score - away_score), 0)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score IS NOT NULL`))
+            .get()?.diff || 0;
+          const awayDiff = db.select({ diff: sql<number>`COALESCE(SUM(away_score - home_score), 0)` })
+            .from(schema.matches)
+            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score IS NOT NULL`))
+            .get()?.diff || 0;
+
+          return {
+            id: team.id,
+            coachName: team.coachName,
+            teamName: team.teamName,
+            teamAbbrev: team.teamAbbrev,
+            teamColor: team.teamColor,
+            rank: team.rank,
+            record: {
+              wins: homeWins + awayWins,
+              losses: homeLosses + awayLosses,
+              differential: homeDiff + awayDiff,
+            },
+          };
+        });
+
+      // Get playoff matches
+      const playoffs = db.select().from(schema.matches)
+        .where(and(eq(schema.matches.leagueId, l.id), eq(schema.matches.phase, 'playoffs')))
+        .orderBy(asc(schema.matches.week))
+        .all()
+        .map(m => ({
+          id: m.id,
+          playoffRound: m.playoffRound,
+          homeTeamId: m.homeTeamId,
+          awayTeamId: m.awayTeamId,
+          homeScore: m.homeScore,
+          awayScore: m.awayScore,
+          homeSeed: m.homeSeed,
+          awaySeed: m.awaySeed,
+        }));
+
+      // Find champion (winner of finals, or last playoff match)
+      let champion: string | null = null;
+      const finals = playoffs.filter(m => m.playoffRound === 'f');
+      if (finals.length > 0 && finals[0].homeScore != null) {
+        champion = finals[0].homeScore! > finals[0].awayScore! ? finals[0].homeTeamId : finals[0].awayTeamId;
+      }
+
+      // Top 3 MVP stats
+      const mvps = db.select({
+        pokemonName: schema.matchPokemon.pokemonName,
+        teamId: schema.matchPokemon.teamId,
+        kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
+        deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
+        gp: sql<number>`COUNT(*)`,
+      }).from(schema.matchPokemon)
+        .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
+        .where(and(eq(schema.matches.leagueId, l.id), eq(schema.matches.phase, 'regular')))
+        .groupBy(schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
+        .orderBy(sql`SUM(${schema.matchPokemon.kills}) DESC`)
+        .limit(3)
+        .all();
+
+      return {
+        id: l.id,
+        name: l.name,
+        color: l.color,
+        teams: teams.sort((a, b) => b.record.wins - a.record.wins || b.record.differential - a.record.differential),
+        playoffs,
+        champion,
+        mvps: mvps.map(m => ({
+          pokemonName: m.pokemonName,
+          teamId: m.teamId,
+          kills: m.kills,
+          deaths: m.deaths,
+          gp: m.gp,
+        })),
+      };
+    });
+  })
+
   .listen(3001);
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
