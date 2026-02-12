@@ -1,28 +1,33 @@
 /**
- * Generates a mock snake draft order from existing roster data.
- * Worst record picks first (reversed standings). Each team's roster
- * is sorted by tier descending — higher-cost Pokemon drafted earlier.
+ * Generates a snake draft pick sequence from per-team draft picks + standings.
+ * Uses actual draft pick data from the API, ordered into snake-draft sequence.
  */
 
 import type { Player } from '@/lib/types';
+import type { ApiDraftPick } from '@/lib/api';
 import type { DraftPickEntry, MockTrade } from './types';
+import type { ApiTransaction } from '@/lib/api';
 
-export function generateDraftOrder(standings: Player[]): DraftPickEntry[] {
+export function generateDraftOrder(
+  standings: Player[],
+  draftPicks: ApiDraftPick[],
+): DraftPickEntry[] {
   // Draft order: worst record picks first
   const draftOrder = [...standings].reverse();
 
-  // Each team's picks sorted by tier (highest first = drafted earliest)
-  const queues = new Map(
-    draftOrder.map(p => [
-      p.id,
-      [...p.roster].sort((a, b) => b.tier - a.tier),
-    ])
-  );
+  // Build per-team pick queues sorted by pick number
+  const queues = new Map<string, ApiDraftPick[]>();
+  for (const p of draftOrder) {
+    const teamPicks = draftPicks
+      .filter(dp => dp.teamId === p.id)
+      .sort((a, b) => a.pickNumber - b.pickNumber);
+    queues.set(p.id, teamPicks);
+  }
 
   const picks: DraftPickEntry[] = [];
-  const rounds = Math.max(...draftOrder.map(p => p.roster.length));
+  const maxRounds = Math.max(...[...queues.values()].map(q => q.length), 0);
 
-  for (let round = 1; round <= rounds; round++) {
+  for (let round = 1; round <= maxRounds; round++) {
     // Snake: odd rounds go forward, even rounds go reverse
     const order = round % 2 === 1 ? draftOrder : [...draftOrder].reverse();
 
@@ -37,9 +42,9 @@ export function generateDraftOrder(standings: Player[]): DraftPickEntry[] {
         pick: i + 1,
         overallPick: picks.length + 1,
         playerId: player.id,
-        pokemonName: next.name,
+        pokemonName: next.pokemonName,
         tier: next.tier,
-        isTeraCaptain: next.isTeraCaptain,
+        isTeraCaptain: false,
       });
     }
   }
@@ -48,12 +53,30 @@ export function generateDraftOrder(standings: Player[]): DraftPickEntry[] {
 }
 
 /**
- * Mock trades that happened during the season.
- * These overlay onto draft results to show current ownership.
+ * Convert API transactions into trade overlays for the draft board.
  */
-export const MOCK_TRADES: MockTrade[] = [
-  { week: 3, fromTeamId: 'hmm', toTeamId: 'gwg', pokemonName: 'Electrode' },
-  { week: 5, fromTeamId: 'pow', toTeamId: 'fam', pokemonName: 'Sandaconda' },
-  { week: 5, fromTeamId: 'fam', toTeamId: 'pow', pokemonName: 'Cactus' }, // placeholder
-  { week: 7, fromTeamId: 'gg', toTeamId: 'ece', pokemonName: 'Drifblim' },
-];
+export function transactionsToTrades(transactions: ApiTransaction[]): MockTrade[] {
+  const trades: MockTrade[] = [];
+  for (const tx of transactions) {
+    if (tx.type !== 'fa' && tx.type !== 'trade') continue;
+    // Pokemon going out from teamId
+    if (tx.pokemonOut) {
+      trades.push({
+        week: tx.week,
+        fromTeamId: tx.teamId,
+        toTeamId: tx.otherTeamId || 'pool',
+        pokemonName: tx.pokemonOut,
+      });
+    }
+    // Pokemon coming in to teamId
+    if (tx.pokemonIn) {
+      trades.push({
+        week: tx.week,
+        fromTeamId: tx.otherTeamId || 'pool',
+        toTeamId: tx.teamId,
+        pokemonName: tx.pokemonIn,
+      });
+    }
+  }
+  return trades;
+}
