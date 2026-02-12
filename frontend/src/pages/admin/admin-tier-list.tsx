@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
@@ -8,129 +7,171 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
-import {
   TIER_LIST, TERA_BANNED, BANNED,
-  type TierEntry,
 } from '@/mocks/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import {
-  Search, X, Shield, ShieldOff, ChevronDown, Star,
+  Search, X, ChevronDown, Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+type BanStatus = 'available' | 'tera-banned' | 'banned';
+
+interface PoolEntry {
+  name: string;
+  baseTier: number;
+  tier: number;
+  status: BanStatus;
+  modified: boolean;
+}
+
+const STATUS_CONFIG: Record<BanStatus, { label: string; color: string; bg: string; border: string; next: BanStatus }> = {
+  available:     { label: 'Available',    color: 'text-win',  bg: 'bg-win/10',  border: 'border-win/30',  next: 'tera-banned' },
+  'tera-banned': { label: 'Tera Banned',  color: 'text-draw', bg: 'bg-draw/10', border: 'border-draw/30', next: 'banned' },
+  banned:        { label: 'Banned',       color: 'text-loss', bg: 'bg-loss/10', border: 'border-loss/30', next: 'available' },
+};
+
+function buildInitialPool(): PoolEntry[] {
+  const bannedSet = new Set(BANNED);
+  const teraSet = new Set(TERA_BANNED);
+
+  // Start with tier list entries
+  const entries: PoolEntry[] = TIER_LIST.map(e => ({
+    name: e.name,
+    baseTier: e.tier,
+    tier: e.tier,
+    status: teraSet.has(e.name) ? 'tera-banned' : 'available',
+    modified: false,
+  }));
+
+  // Add banned Pokemon that aren't already in the tier list
+  for (const name of bannedSet) {
+    if (!entries.some(e => e.name === name)) {
+      entries.push({
+        name,
+        baseTier: 0,
+        tier: 0,
+        status: 'banned',
+        modified: false,
+      });
+    }
+  }
+
+  return entries;
+}
+
 export function AdminTierList() {
+  const [pool, setPool] = useState<PoolEntry[]>(buildInitialPool);
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('all');
-  const [showFilter, setShowFilter] = useState<string>('all'); // all | tera-banned | available
-  const [teraBanned, setTeraBanned] = useState<Set<string>>(() => new Set(TERA_BANNED));
-  const [visibleCount, setVisibleCount] = useState(50);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [visibleCount, setVisibleCount] = useState(60);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editTierValue, setEditTierValue] = useState(0);
 
-  // Edit tier dialog
-  const [editOpen, setEditOpen] = useState(false);
-  const [editPokemon, setEditPokemon] = useState<TierEntry | null>(null);
-  const [editTier, setEditTier] = useState(0);
-
-  // Track tier overrides
-  const [tierOverrides, setTierOverrides] = useState<Map<string, number>>(new Map());
+  const poolMap = useMemo(() => new Map(pool.map(e => [e.name, e])), [pool]);
 
   const filtered = useMemo(() => {
-    let list = TIER_LIST.map(entry => ({
-      ...entry,
-      tier: tierOverrides.get(entry.name) ?? entry.tier,
-      teraBanned: teraBanned.has(entry.name),
-    }));
+    let list = [...pool];
 
     if (tierFilter !== 'all') {
       list = list.filter(e => e.tier === Number(tierFilter));
     }
-    if (showFilter === 'tera-banned') {
-      list = list.filter(e => teraBanned.has(e.name));
-    } else if (showFilter === 'available') {
-      list = list.filter(e => !teraBanned.has(e.name));
+    if (statusFilter !== 'all') {
+      list = list.filter(e => e.status === statusFilter);
     }
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(e => e.name.toLowerCase().includes(q));
     }
 
-    return list.sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
-  }, [search, tierFilter, showFilter, teraBanned, tierOverrides]);
+    return list.sort((a, b) => {
+      // Banned to bottom unless filtering by banned
+      if (statusFilter === 'all') {
+        if (a.status === 'banned' && b.status !== 'banned') return 1;
+        if (a.status !== 'banned' && b.status === 'banned') return -1;
+      }
+      return b.tier - a.tier || a.name.localeCompare(b.name);
+    });
+  }, [pool, search, tierFilter, statusFilter]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
 
-  function toggleTeraBan(name: string) {
-    setTeraBanned(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-        toast.success(`${name} removed from tera ban list`);
-      } else {
-        next.add(name);
-        toast.success(`${name} added to tera ban list`);
+  // Counts
+  const counts = useMemo(() => {
+    const c = { total: 0, available: 0, teraBanned: 0, banned: 0, modified: 0, tiers: {} as Record<number, number> };
+    for (const e of pool) {
+      c.total++;
+      if (e.status === 'available') c.available++;
+      else if (e.status === 'tera-banned') c.teraBanned++;
+      else c.banned++;
+      if (e.modified) c.modified++;
+      if (e.status !== 'banned') {
+        c.tiers[e.tier] = (c.tiers[e.tier] || 0) + 1;
       }
-      return next;
-    });
-  }
+    }
+    return c;
+  }, [pool]);
 
-  function openEditTier(entry: TierEntry & { tier: number }) {
-    setEditPokemon(entry);
-    setEditTier(entry.tier);
-    setEditOpen(true);
-  }
+  const cycleStatus = useCallback((name: string) => {
+    setPool(prev => prev.map(e => {
+      if (e.name !== name) return e;
+      const next = STATUS_CONFIG[e.status].next;
+      toast.success(`${name}: ${STATUS_CONFIG[next].label}`);
+      return { ...e, status: next, modified: true };
+    }));
+  }, []);
 
-  function saveTier() {
-    if (!editPokemon) return;
-    setTierOverrides(prev => {
-      const next = new Map(prev);
-      if (editTier === TIER_LIST.find(e => e.name === editPokemon.name)?.tier) {
-        next.delete(editPokemon.name);
-      } else {
-        next.set(editPokemon.name, editTier);
-      }
-      return next;
-    });
-    toast.success(`${editPokemon.name} set to Tier ${editTier}`);
-    setEditOpen(false);
-  }
+  const startEditTier = useCallback((name: string) => {
+    const entry = poolMap.get(name);
+    if (!entry) return;
+    setEditingName(name);
+    setEditTierValue(entry.tier);
+  }, [poolMap]);
+
+  const saveTier = useCallback(() => {
+    if (!editingName) return;
+    setPool(prev => prev.map(e => {
+      if (e.name !== editingName) return e;
+      const changed = editTierValue !== e.baseTier;
+      return { ...e, tier: editTierValue, modified: changed || e.status !== (TERA_BANNED.includes(e.name) ? 'tera-banned' : BANNED.includes(e.name) ? 'banned' : 'available') };
+    }));
+    toast.success(`${editingName} → Tier ${editTierValue}`);
+    setEditingName(null);
+  }, [editingName, editTierValue]);
+
+  const cancelEdit = useCallback(() => setEditingName(null), []);
 
   const activeFilters = (tierFilter !== 'all' ? 1 : 0) +
-    (showFilter !== 'all' ? 1 : 0) +
+    (statusFilter !== 'all' ? 1 : 0) +
     (search.trim() ? 1 : 0);
-
-  // Tier distribution
-  const tierCounts = useMemo(() => {
-    const counts: Record<number, number> = {};
-    for (const e of TIER_LIST) {
-      const tier = tierOverrides.get(e.name) ?? e.tier;
-      counts[tier] = (counts[tier] || 0) + 1;
-    }
-    return counts;
-  }, [tierOverrides]);
 
   return (
     <div className="space-y-4">
       {/* Stats strip */}
-      <div className="flex flex-wrap gap-3 text-sm items-center">
+      <div className="flex flex-wrap gap-4 text-sm items-center">
         <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Total:</span>
-          <span className="text-text-primary font-medium font-mono">{TIER_LIST.length}</span>
+          <span className="text-text-muted">Pool:</span>
+          <span className="text-text-primary font-medium font-mono">{counts.available}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Banned:</span>
-          <span className="text-loss font-medium font-mono">{BANNED.length}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'tera-banned' ? 'all' : 'tera-banned')}
+          className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+        >
           <span className="text-text-muted">Tera Banned:</span>
-          <span className="text-draw font-medium font-mono">{teraBanned.size}</span>
-        </div>
-        {tierOverrides.size > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-text-muted">Overrides:</span>
-            <span className="text-pink font-medium font-mono">{tierOverrides.size}</span>
+          <span className="text-draw font-medium font-mono">{counts.teraBanned}</span>
+        </button>
+        <button
+          onClick={() => setStatusFilter(statusFilter === 'banned' ? 'all' : 'banned')}
+          className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+        >
+          <span className="text-text-muted">Banned:</span>
+          <span className="text-loss font-medium font-mono">{counts.banned}</span>
+        </button>
+        {counts.modified > 0 && (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-pink font-medium font-mono">{counts.modified} unsaved changes</span>
           </div>
         )}
       </div>
@@ -141,12 +182,12 @@ export function AdminTierList() {
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <Input
             value={search}
-            onChange={e => { setSearch(e.target.value); setVisibleCount(50); }}
+            onChange={e => { setSearch(e.target.value); setVisibleCount(60); }}
             placeholder="Search Pokemon..."
             className="pl-8 h-8 text-sm"
           />
         </div>
-        <Select value={tierFilter} onValueChange={v => { setTierFilter(v ?? 'all'); setVisibleCount(50); }}>
+        <Select value={tierFilter} onValueChange={v => { setTierFilter(v ?? 'all'); setVisibleCount(60); }}>
           <SelectTrigger className="w-[120px] h-8 text-sm">
             <SelectValue placeholder="Tier" />
           </SelectTrigger>
@@ -154,25 +195,32 @@ export function AdminTierList() {
             <SelectItem value="all">All Tiers</SelectItem>
             {Array.from({ length: 20 }, (_, i) => 20 - i).map(t => (
               <SelectItem key={t} value={String(t)}>
-                Tier {t} ({tierCounts[t] || 0})
+                Tier {t} ({counts.tiers[t] || 0})
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <Select value={showFilter} onValueChange={v => { setShowFilter(v ?? 'all'); setVisibleCount(50); }}>
+        <Select value={statusFilter} onValueChange={v => { setStatusFilter(v ?? 'all'); setVisibleCount(60); }}>
           <SelectTrigger className="w-[150px] h-8 text-sm">
-            <SelectValue placeholder="Show" />
+            <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Pokemon</SelectItem>
-            <SelectItem value="tera-banned">Tera Banned</SelectItem>
-            <SelectItem value="available">Tera Available</SelectItem>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="available">
+              <span className="text-win">Available</span>
+            </SelectItem>
+            <SelectItem value="tera-banned">
+              <span className="text-draw">Tera Banned</span>
+            </SelectItem>
+            <SelectItem value="banned">
+              <span className="text-loss">Banned</span>
+            </SelectItem>
           </SelectContent>
         </Select>
         {activeFilters > 0 && (
           <Button
             size="sm" variant="ghost"
-            onClick={() => { setSearch(''); setTierFilter('all'); setShowFilter('all'); setVisibleCount(50); }}
+            onClick={() => { setSearch(''); setTierFilter('all'); setStatusFilter('all'); setVisibleCount(60); }}
             className="h-8 text-text-muted hover:text-text-primary"
           >
             <X size={12} />
@@ -192,43 +240,69 @@ export function AdminTierList() {
               No Pokemon match your filters
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
               {visible.map(entry => {
-                const isOverridden = tierOverrides.has(entry.name);
-                const isBanned = teraBanned.has(entry.name);
+                const cfg = STATUS_CONFIG[entry.status];
+                const isEditing = editingName === entry.name;
+
                 return (
                   <div
                     key={entry.name}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-surface-overlay/50 transition-colors group ${
-                      isBanned ? 'bg-draw/5' : ''
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md transition-colors ${
+                      entry.status === 'banned' ? 'opacity-50 hover:opacity-80' : 'hover:bg-surface-overlay/50'
                     }`}
                   >
                     <PokemonSprite name={entry.name} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm text-text-primary truncate block">{entry.name}</span>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={`shrink-0 text-[10px] px-1.5 font-mono cursor-pointer hover:bg-surface-overlay ${
-                        isOverridden ? 'border-pink/30 text-pink bg-pink/10' : ''
-                      }`}
-                      onClick={() => openEditTier(entry)}
-                    >
-                      T{entry.tier}
-                    </Badge>
-                    {isBanned && (
-                      <Star size={12} className="text-draw shrink-0" />
+
+                    {/* Name */}
+                    <span className={`text-sm flex-1 min-w-0 truncate ${
+                      entry.status === 'banned' ? 'text-text-muted line-through' : 'text-text-primary'
+                    }`}>
+                      {entry.name}
+                    </span>
+
+                    {/* Tier — click to edit inline */}
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <NumberInput
+                          value={editTierValue}
+                          onChange={setEditTierValue}
+                          min={0}
+                          max={20}
+                          className="w-16 h-6 text-xs"
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') saveTier();
+                            if (e.key === 'Escape') cancelEdit();
+                          }}
+                        />
+                        <button onClick={saveTier} className="text-win hover:text-win/80 p-0.5">
+                          <Check size={12} />
+                        </button>
+                        <button onClick={cancelEdit} className="text-text-muted hover:text-loss p-0.5">
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => startEditTier(entry.name)}
+                        className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded font-mono border transition-colors hover:bg-surface-overlay ${
+                          entry.modified && entry.tier !== entry.baseTier
+                            ? 'border-pink/30 text-pink bg-pink/10'
+                            : 'border-border-subtle text-text-secondary'
+                        }`}
+                      >
+                        T{entry.tier}
+                      </button>
                     )}
+
+                    {/* Status badge — click to cycle */}
                     <button
-                      onClick={() => toggleTeraBan(entry.name)}
-                      className={`shrink-0 p-1 rounded transition-colors ${
-                        isBanned
-                          ? 'text-draw hover:text-loss'
-                          : 'text-text-muted/30 opacity-0 group-hover:opacity-100 hover:text-draw'
-                      }`}
-                      title={isBanned ? 'Remove tera ban' : 'Add tera ban'}
+                      onClick={() => cycleStatus(entry.name)}
+                      className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full font-medium border transition-all hover:brightness-125 ${cfg.color} ${cfg.bg} ${cfg.border}`}
+                      title={`Click to change (→ ${STATUS_CONFIG[cfg.next].label})`}
                     >
-                      {isBanned ? <ShieldOff size={12} /> : <Shield size={12} />}
+                      {cfg.label}
                     </button>
                   </div>
                 );
@@ -243,7 +317,7 @@ export function AdminTierList() {
         <div className="flex justify-center">
           <Button
             variant="ghost" size="sm"
-            onClick={() => setVisibleCount(prev => prev + 50)}
+            onClick={() => setVisibleCount(prev => prev + 60)}
             className="text-text-muted hover:text-text-primary"
           >
             <ChevronDown size={14} />
@@ -251,44 +325,6 @@ export function AdminTierList() {
           </Button>
         </div>
       )}
-
-      {/* Edit Tier Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {editPokemon && <PokemonSprite name={editPokemon.name} size="sm" />}
-              Edit Tier — {editPokemon?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Adjust the tier point value for this Pokemon.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-xs text-text-muted">Tier (1–20)</label>
-              <NumberInput
-                value={editTier}
-                onChange={setEditTier}
-                min={1}
-                max={20}
-                autoFocus
-              />
-            </div>
-            {editPokemon && editTier !== TIER_LIST.find(e => e.name === editPokemon.name)?.tier && (
-              <p className="text-xs text-pink">
-                Changed from original tier {TIER_LIST.find(e => e.name === editPokemon.name)?.tier}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={saveTier} className="bg-neon text-surface-base hover:bg-neon/90">
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
