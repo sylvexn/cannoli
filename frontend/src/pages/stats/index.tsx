@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { computeLeagueStats, type PokemonLeagueStat } from '@/lib/pokemon-stats';
 import { useLeagueData } from '@/lib/league-data-context';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
+import { PokemonSideCard } from '@/components/pokemon-side-card';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { TeamLogo } from '@/components/team-logo';
@@ -66,6 +67,12 @@ export function StatsPage() {
   const allStats = useMemo(() => computeLeagueStats(players), [players]);
   const [filters, setFilters] = useState<StatsFilters>(defaultFilters);
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
+  const [selectedPokemon, setSelectedPokemon] = useState<string | null>(null);
+
+  // Find stat + owner for side card
+  const selectedStat = selectedPokemon ? allStats.find(s => s.name === selectedPokemon) : undefined;
+  const selectedOwner = selectedStat ? playerMap.get(selectedStat.teamId) : undefined;
+  const closeSideCard = useCallback(() => setSelectedPokemon(null), []);
 
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
@@ -138,12 +145,12 @@ export function StatsPage() {
                   <PokemonSprite name={stat.name} size="md" />
                 </div>
                 {/* Name */}
-                <Link
-                  to={leagueUrl(`/pokemon/${encodeURIComponent(stat.name)}`)}
-                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full"
+                <button
+                  onClick={() => setSelectedPokemon(stat.name)}
+                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full text-left cursor-pointer"
                 >
                   {stat.name}
-                </Link>
+                </button>
                 {/* Team */}
                 {team && (
                   <Link to={leagueUrl(`/teams/${team.id}`)} className="flex items-center gap-1 group/team">
@@ -222,13 +229,13 @@ export function StatsPage() {
                       <td className="px-2 py-1.5">
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
-                            <Link
-                              to={leagueUrl(`/pokemon/${encodeURIComponent(stat.name)}`)}
-                              className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block"
+                            <button
+                              onClick={() => setSelectedPokemon(stat.name)}
+                              className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block text-left cursor-pointer"
                             >
                               {stat.name}
                               {stat.isTeraCaptain && <span className="text-text-muted ml-1 text-[10px]">(T)</span>}
-                            </Link>
+                            </button>
                             {team && (
                               <Link
                                 to={leagueUrl(`/teams/${team.id}`)}
@@ -293,6 +300,14 @@ export function StatsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <PokemonSideCard
+        name={selectedPokemon}
+        onClose={closeSideCard}
+        owner={selectedOwner}
+        seasonStats={selectedStat ? { kills: selectedStat.kills, deaths: selectedStat.deaths, gp: selectedStat.gp } : undefined}
+        teraCaptain={selectedStat?.isTeraCaptain ? { teraTypes: [] } : undefined}
+      />
     </div>
   );
 }

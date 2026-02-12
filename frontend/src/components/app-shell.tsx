@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe,
-  Settings, LogOut,
+  Settings, LogOut, User,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -208,8 +208,18 @@ export function AppShell() {
           )}
         </nav>
 
-        {/* Footer — user dropdown */}
-        <div className="p-3 border-t border-border-default">
+        {/* Footer — My Team + user dropdown */}
+        <div className="p-3 border-t border-border-default space-y-2">
+          {/* My Team shortcut — greyed until user↔team mapping exists */}
+          <button
+            disabled
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted/40 cursor-not-allowed"
+            title="Team assignment not configured yet"
+          >
+            <User size={14} />
+            <span>My Team</span>
+          </button>
+
           <DropdownMenu>
             <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
               <div className={cn(
