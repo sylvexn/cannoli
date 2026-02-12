@@ -1,9 +1,12 @@
-import { useReducer, useMemo, useEffect } from 'react';
+import { useReducer, useMemo, useEffect, useState } from 'react';
 import { TIER_LIST } from '@/mocks/tier-list';
 import { getPokemonData } from '@/mocks/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
+import { useLeague } from '@/lib/league-context';
+import { api } from '@/lib/api';
+import type { ApiDraftPick } from '@/lib/api';
 import type { Player, RosterPokemon } from '@/lib/types';
-import { generateDraftOrder, MOCK_TRADES } from './generate-draft-order';
+import { generateDraftOrder, transactionsToTrades } from './generate-draft-order';
 import type {
   DraftState, DraftAction, PoolOwnership, Acquisition, DraftPickEntry,
 } from './types';
@@ -72,19 +75,39 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
       return { ...state, detailPokemon: action.name };
     case 'RESET_LIVE':
       return { ...state, currentPickIndex: 0, isPlaying: false, timerSeconds: PICK_TIMER_BASE, userPicks: {} };
+    case 'SYNC_DATA':
+      return {
+        ...state,
+        allPicks: action.allPicks,
+        trades: action.trades,
+        currentPickIndex: state.mode === 'season' ? action.allPicks.length : state.currentPickIndex,
+      };
     default:
       return state;
   }
 }
 
 export function useDraftState() {
-  const { players, standings } = useLeagueData();
-  const allPicks = useMemo(() => generateDraftOrder(standings), [standings]);
+  const league = useLeague();
+  const { players, standings, transactions } = useLeagueData();
+  const [draftPicks, setDraftPicks] = useState<ApiDraftPick[]>([]);
+
+  // Fetch draft picks from API
+  useEffect(() => {
+    api.getDraftPicks(league.id).then(setDraftPicks);
+  }, [league.id]);
+
+  const allPicks = useMemo(
+    () => draftPicks.length > 0 ? generateDraftOrder(standings, draftPicks) : [],
+    [standings, draftPicks],
+  );
+
+  const trades = useMemo(() => transactionsToTrades(transactions), [transactions]);
 
   const initialState: DraftState = {
     mode: 'season',
     allPicks,
-    trades: MOCK_TRADES,
+    trades,
     currentPickIndex: allPicks.length, // season mode shows all picks
     isPlaying: false,
     speed: 1,
@@ -105,6 +128,13 @@ export function useDraftState() {
   };
 
   const [state, dispatch] = useReducer(draftReducer, initialState);
+
+  // Sync picks + trades when they load from API
+  useEffect(() => {
+    if (allPicks.length > 0) {
+      dispatch({ type: 'SYNC_DATA', allPicks, trades });
+    }
+  }, [allPicks, trades]);
 
   // Timer tick for live mode
   useEffect(() => {

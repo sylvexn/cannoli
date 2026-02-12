@@ -93,4 +93,5 @@ export type DraftAction =
   | { type: 'SELECT_TEAM'; teamId: string | null }
   | { type: 'UPDATE_FILTERS'; filters: Partial<DraftFilters> }
   | { type: 'SET_DETAIL'; name: string | null }
-  | { type: 'RESET_LIVE' };
+  | { type: 'RESET_LIVE' }
+  | { type: 'SYNC_DATA'; allPicks: DraftPickEntry[]; trades: MockTrade[] };
