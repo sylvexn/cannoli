@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe,
-  Settings, LogOut, User,
+  Settings, LogOut, User, Archive,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -190,6 +190,19 @@ export function AppShell() {
           >
             <Swords size={16} />
             Matchup Center
+          </NavLink>
+
+          <NavLink
+            to="/archive"
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-purple-400/10 text-purple-400'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <Archive size={16} />
+            Season Archive
           </NavLink>
 
           {isAdmin && (

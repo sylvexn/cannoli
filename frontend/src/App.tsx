@@ -17,6 +17,7 @@ import { TradeBlockPage } from '@/pages/trade-block';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
 import { MatchupCenterPage } from '@/pages/matchup-center';
+import { ArchivePage } from '@/pages/archive';
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
                 </Route>
 
                 <Route path="matchup" element={<MatchupCenterPage />} />
+                <Route path="archive" element={<ArchivePage />} />
                 <Route path="settings" element={<UserSettingsPage />} />
 
                 <Route element={<ProtectedRoute requireAdmin />}>
