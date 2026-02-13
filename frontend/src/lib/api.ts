@@ -11,18 +11,30 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function postJson<T>(path: string, body?: unknown): Promise<T> {
+async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method,
+    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
     credentials: 'include',
-    body: body ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || `API error: ${res.status}`);
   }
   return res.json();
+}
+
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  return mutateJson('POST', path, body);
+}
+
+async function putJson<T>(path: string, body?: unknown): Promise<T> {
+  return mutateJson('PUT', path, body);
+}
+
+async function deleteJson<T>(path: string): Promise<T> {
+  return mutateJson('DELETE', path, undefined);
 }
 
 // ─── Types (matching backend response shapes) ────────────────────────────────
@@ -241,4 +253,59 @@ export const api = {
   getTradeBlock: (leagueId: string) => fetchJson<ApiTradeBlockListing[]>(`/api/leagues/${leagueId}/trade-block`),
 
   getTierList: () => fetchJson<ApiTierListEntry[]>('/api/tier-list'),
+
+  // Admin write
+  createUser: (username: string, role: string) =>
+    postJson<{ user: ApiAuthUser; password: string }>('/api/users', { username, role }),
+
+  updateUser: (id: string, data: { role?: string; active?: boolean }) =>
+    putJson<{ success: boolean }>(`/api/users/${id}`, data),
+
+  resetUserPassword: (id: string) =>
+    postJson<{ password: string }>(`/api/users/${id}/reset-password`),
+
+  saveSiteSettings: (settings: Record<string, unknown>) =>
+    putJson<{ success: boolean }>('/api/site-settings', settings),
+
+  updateTierListEntry: (name: string, data: { tier?: number; status?: string }) =>
+    putJson<{ success: boolean }>(`/api/tier-list/${encodeURIComponent(name)}`, data),
+
+  createMoveCategory: (name: string) =>
+    postJson<{ id: string; name: string }>('/api/move-categories', { name }),
+
+  updateMoveCategory: (id: string, name: string) =>
+    putJson<{ success: boolean }>(`/api/move-categories/${id}`, { name }),
+
+  deleteMoveCategory: (id: string) =>
+    deleteJson<{ success: boolean }>(`/api/move-categories/${id}`),
+
+  addMoveCategoryEntry: (catId: string, name: string, isAbility?: boolean) =>
+    postJson<{ success: boolean }>(`/api/move-categories/${catId}/entries`, { name, isAbility }),
+
+  deleteMoveCategoryEntry: (entryId: number) =>
+    deleteJson<{ success: boolean }>(`/api/move-category-entries/${entryId}`),
+
+  createLeague: (name: string, color: string) =>
+    postJson<{ id: string }>('/api/leagues', { name, color }),
+
+  updateLeague: (id: string, data: Record<string, unknown>) =>
+    putJson<{ success: boolean }>(`/api/leagues/${id}`, data),
+
+  deleteLeague: (id: string) =>
+    deleteJson<{ success: boolean }>(`/api/leagues/${id}`),
+
+  advancePhase: (leagueId: string, phase: string) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase }),
+
+  advanceWeek: (leagueId: string) =>
+    postJson<{ success: boolean; week: number }>(`/api/leagues/${leagueId}/week`),
+
+  saveDraftOrder: (leagueId: string, order: string[]) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft-order`, { order }),
+
+  approveTrade: (tradeId: string) =>
+    postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`),
+
+  rejectTrade: (tradeId: string, reason?: string) =>
+    postJson<{ success: boolean }>(`/api/trades/${tradeId}/reject`, { reason }),
 };

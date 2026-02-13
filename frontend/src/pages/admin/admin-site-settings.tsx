@@ -69,9 +69,11 @@ export function AdminSiteSettings() {
     setSettings(prev => ({ ...prev, [key]: value }));
   }
 
-  function handleSave() {
-    // TODO: PUT /api/site-settings (Phase D)
-    toast.success('Site settings saved (write API pending Phase D)');
+  async function handleSave() {
+    try {
+      await api.saveSiteSettings(settings);
+      toast.success('Site settings saved');
+    } catch (err: any) { toast.error(err.message); }
   }
 
   if (loading) {

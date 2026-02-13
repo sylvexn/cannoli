@@ -36,35 +36,45 @@ export function AdminUsers() {
       .finally(() => setLoading(false));
   }, []);
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!newUsername.trim()) return;
-    if (users.some(u => u.username === newUsername.trim())) {
-      toast.error('Username already exists');
-      return;
+    try {
+      const { user: created, password } = await api.createUser(newUsername.trim(), newRole);
+      setUsers(prev => [...prev, { ...created, mustChangePassword: true, active: true, createdAt: new Date().toISOString() }]);
+      setGeneratedPassword(password);
+      setNewUsername('');
+      setNewRole('user');
+      toast.success(`User "${created.username}" created`);
+    } catch (err: any) {
+      toast.error(err.message);
     }
-    // TODO: POST /api/users when write endpoints exist (Phase D)
-    const password = Math.random().toString(36).slice(2, 10);
-    setGeneratedPassword(password);
-    toast.success(`User creation requires write API (Phase D)`);
   }
 
-  function handleToggleActive(id: string) {
-    // TODO: PUT /api/users/:id when write endpoints exist (Phase D)
-    setUsers(prev => prev.map(u =>
-      u.id === id ? { ...u, active: !u.active } : u
-    ));
+  async function handleToggleActive(id: string) {
+    const user = users.find(u => u.id === id);
+    if (!user) return;
+    try {
+      await api.updateUser(id, { active: !user.active });
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, active: !u.active } : u));
+    } catch (err: any) { toast.error(err.message); }
   }
 
-  function handleToggleRole(id: string) {
-    // TODO: PUT /api/users/:id when write endpoints exist (Phase D)
-    setUsers(prev => prev.map(u =>
-      u.id === id ? { ...u, role: u.role === 'admin' ? 'user' : 'admin' } : u
-    ));
+  async function handleToggleRole(id: string) {
+    const target = users.find(u => u.id === id);
+    if (!target) return;
+    const newRole = target.role === 'admin' ? 'user' : 'admin';
+    try {
+      await api.updateUser(id, { role: newRole });
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
+    } catch (err: any) { toast.error(err.message); }
   }
 
-  function handleResetPassword(user: ApiAuthUser) {
-    // TODO: POST /api/users/:id/reset-password when write endpoints exist (Phase D)
-    toast.success(`Password reset for "${user.username}" — must change on next login`);
+  async function handleResetPassword(user: ApiAuthUser) {
+    try {
+      const { password } = await api.resetUserPassword(user.id);
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, mustChangePassword: true } : u));
+      toast.success(`Password reset for "${user.username}": ${password}`);
+    } catch (err: any) { toast.error(err.message); }
   }
 
   function closeCreateDialog() {
