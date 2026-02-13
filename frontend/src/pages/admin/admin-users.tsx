@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,8 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { mockUsers } from '@/mocks/auth';
-import type { User } from '@/lib/types';
+import { api } from '@/lib/api';
+import type { ApiAuthUser } from '@/lib/api';
 import {
   UserPlus, MoreHorizontal, KeyRound, ShieldCheck, ShieldOff,
   UserX, UserCheck, Copy, Eye, EyeOff,
@@ -21,12 +21,20 @@ import {
 import { toast } from 'sonner';
 
 export function AdminUsers() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<ApiAuthUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<'user' | 'admin'>('user');
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    api.getUsers()
+      .then(setUsers)
+      .catch(() => toast.error('Failed to load users'))
+      .finally(() => setLoading(false));
+  }, []);
 
   function handleCreate() {
     if (!newUsername.trim()) return;
@@ -34,38 +42,28 @@ export function AdminUsers() {
       toast.error('Username already exists');
       return;
     }
+    // TODO: POST /api/users when write endpoints exist (Phase D)
     const password = Math.random().toString(36).slice(2, 10);
-    const user: User = {
-      id: String(Date.now()),
-      username: newUsername.trim(),
-      role: newRole,
-      mustChangePassword: true,
-      active: true,
-      createdAt: new Date().toISOString(),
-    };
-    setUsers(prev => [...prev, user]);
     setGeneratedPassword(password);
-    setNewUsername('');
-    setNewRole('user');
-    toast.success(`User "${user.username}" created`);
+    toast.success(`User creation requires write API (Phase D)`);
   }
 
   function handleToggleActive(id: string) {
+    // TODO: PUT /api/users/:id when write endpoints exist (Phase D)
     setUsers(prev => prev.map(u =>
       u.id === id ? { ...u, active: !u.active } : u
     ));
   }
 
   function handleToggleRole(id: string) {
+    // TODO: PUT /api/users/:id when write endpoints exist (Phase D)
     setUsers(prev => prev.map(u =>
       u.id === id ? { ...u, role: u.role === 'admin' ? 'user' : 'admin' } : u
     ));
   }
 
-  function handleResetPassword(user: User) {
-    setUsers(prev => prev.map(u =>
-      u.id === user.id ? { ...u, mustChangePassword: true } : u
-    ));
+  function handleResetPassword(user: ApiAuthUser) {
+    // TODO: POST /api/users/:id/reset-password when write endpoints exist (Phase D)
     toast.success(`Password reset for "${user.username}" — must change on next login`);
   }
 
@@ -78,7 +76,11 @@ export function AdminUsers() {
   }
 
   const activeCount = users.filter(u => u.active).length;
-  const adminCount = users.filter(u => u.role === 'admin' && u.active).length;
+  const adminCount = users.filter(u => (u.role === 'admin' || u.role === 'dev') && u.active).length;
+
+  if (loading) {
+    return <div className="text-sm text-text-muted py-8 text-center">Loading users...</div>;
+  }
 
   return (
     <div className="space-y-4">
@@ -124,8 +126,8 @@ export function AdminUsers() {
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.role === 'admin' ? 'default' : 'outline'}
-                      className={user.role === 'admin' ? 'bg-neon/15 text-neon border-neon/30' : undefined}
+                      variant={(user.role === 'admin' || user.role === 'dev') ? 'default' : 'outline'}
+                      className={(user.role === 'admin' || user.role === 'dev') ? 'bg-neon/15 text-neon border-neon/30' : undefined}
                     >
                       {user.role}
                     </Badge>
