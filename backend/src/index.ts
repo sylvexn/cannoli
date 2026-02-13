@@ -2,18 +2,133 @@ import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { db, schema } from './db';
 import { eq, and, or, sql, asc, desc } from 'drizzle-orm';
+import {
+  hashPassword, verifyPassword,
+  createSession, validateSession, deleteSession,
+  sessionCookieString, clearSessionCookieString, parseSessionToken,
+} from './lib/auth';
+
+interface AuthUser {
+  id: string;
+  username: string;
+  role: 'dev' | 'admin' | 'user';
+  mustChangePassword: boolean;
+  active: boolean;
+  createdAt: string | null;
+}
 
 const app = new Elysia()
-  .use(cors())
+  .use(cors({
+    origin: [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      'https://cannoli.live',
+      'https://mock.cannoli.live',
+    ],
+    credentials: true,
+  }))
+
+  // ─── Auth context (available on every request) ──────────────────────
+  .derive(({ request }) => {
+    const cookieHeader = request.headers.get('cookie') ?? undefined;
+    const token = parseSessionToken(cookieHeader);
+    const user = token ? validateSession(token) : null;
+    return { user: user as AuthUser | null, sessionToken: token };
+  })
 
   .get('/', () => ({ message: 'cannoli api' }))
   .get('/health', () => ({ status: 'ok' }))
 
+  // ─── Auth Endpoints ─────────────────────────────────────────────────
+
+  .post('/api/auth/login', async ({ body, set }) => {
+    const { username, password } = body as { username: string; password: string };
+    if (!username || !password) {
+      set.status = 400;
+      return { error: 'Username and password required' };
+    }
+
+    const user = db.select().from(schema.users)
+      .where(eq(schema.users.username, username.toLowerCase().trim()))
+      .get();
+
+    if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
+      set.status = 401;
+      return { error: 'Invalid username or password' };
+    }
+
+    const token = createSession(user.id);
+    set.headers['set-cookie'] = sessionCookieString(token);
+
+    return {
+      user: {
+        id: String(user.id),
+        username: user.username,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+        active: user.active,
+        createdAt: user.createdAt,
+      },
+    };
+  })
+
+  .post('/api/auth/logout', ({ set, sessionToken }) => {
+    if (sessionToken) deleteSession(sessionToken);
+    set.headers['set-cookie'] = clearSessionCookieString();
+    return { success: true };
+  })
+
+  .get('/api/auth/me', ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { user: null };
+    }
+    return { user };
+  })
+
+  .post('/api/auth/change-password', ({ body, user, set }) => {
+    const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
+
+    if (!user) {
+      set.status = 401;
+      return { error: 'Not authenticated' };
+    }
+    if (!currentPassword || !newPassword) {
+      set.status = 400;
+      return { error: 'Current and new password required' };
+    }
+    if (newPassword.length < 4) {
+      set.status = 400;
+      return { error: 'Password must be at least 4 characters' };
+    }
+
+    const dbUser = db.select().from(schema.users)
+      .where(eq(schema.users.id, parseInt(user.id)))
+      .get();
+    if (!dbUser || !verifyPassword(currentPassword, dbUser.passwordHash)) {
+      set.status = 403;
+      return { error: 'Current password is incorrect' };
+    }
+
+    db.update(schema.users)
+      .set({ passwordHash: hashPassword(newPassword), mustChangePassword: false })
+      .where(eq(schema.users.id, dbUser.id))
+      .run();
+
+    return { success: true };
+  })
+
   // ─── Leagues ─────────────────────────────────────────────────────────
 
   .get('/api/leagues', () => {
-    const leagues = db.select().from(schema.leagues).all();
-    const season = db.select().from(schema.seasons).get();
+    // Return leagues for the latest season only
+    const season = db.select().from(schema.seasons)
+      .orderBy(desc(schema.seasons.seasonNumber))
+      .get();
+    if (!season) return [];
+    const leagues = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.seasonId, season.id))
+      .all();
     return leagues.map(l => ({
       id: l.id,
       name: l.name,
@@ -364,6 +479,22 @@ const app = new Elysia()
             .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score IS NOT NULL`))
             .get()?.diff || 0;
 
+          // Lightweight roster for archive display
+          const roster = db.select().from(schema.rosters)
+            .where(eq(schema.rosters.teamId, team.id))
+            .all()
+            .map(r => {
+              const poke = db.select().from(schema.pokemon)
+                .where(eq(schema.pokemon.name, r.pokemonName))
+                .get();
+              return {
+                name: r.pokemonName,
+                tier: r.tier,
+                types: poke ? [poke.type1, poke.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
+                isTeraCaptain: r.isTeraCaptain,
+              };
+            });
+
           return {
             id: team.id,
             coachName: team.coachName,
@@ -371,6 +502,7 @@ const app = new Elysia()
             teamAbbrev: team.teamAbbrev,
             teamColor: team.teamColor,
             rank: team.rank,
+            roster,
             record: {
               wins: homeWins + awayWins,
               losses: homeLosses + awayLosses,
