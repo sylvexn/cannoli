@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { Save, Megaphone, Settings, Trophy, Swords, Users, ScrollText } from 'lucide-react';
 
@@ -27,12 +27,12 @@ const INITIAL_SETTINGS: SiteSettings = {
   announcementEnabled: false,
   announcementText: '',
   announcementType: 'info',
-  defaultPointCap: DEFAULT_LEAGUE_CONFIG.pointCap,
-  defaultTeraCaptainSlots: DEFAULT_LEAGUE_CONFIG.teraCaptainSlots,
+  defaultPointCap: 110,
+  defaultTeraCaptainSlots: 2,
   defaultMaxTeams: 12,
-  defaultRosterSize: 11,
+  defaultRosterSize: 10,
   defaultTotalWeeks: 11,
-  defaultTradeDeadlineWeek: 8,
+  defaultTradeDeadlineWeek: 7,
 };
 
 const announcementTypes = [
@@ -43,13 +43,39 @@ const announcementTypes = [
 
 export function AdminSiteSettings() {
   const [settings, setSettings] = useState<SiteSettings>(INITIAL_SETTINGS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getSiteSettings()
+      .then(s => {
+        setSettings({
+          siteName: s.siteName || 'Cannoli',
+          announcementEnabled: !!s.announcement,
+          announcementText: s.announcement || '',
+          announcementType: (s.announcementType as SiteSettings['announcementType']) || 'info',
+          defaultPointCap: s.defaultPointCap || 110,
+          defaultTeraCaptainSlots: s.defaultTeraCaptainSlots || 2,
+          defaultMaxTeams: s.defaultMaxTeams || 12,
+          defaultRosterSize: s.defaultRosterSize || 10,
+          defaultTotalWeeks: 11,
+          defaultTradeDeadlineWeek: s.defaultTradeDeadlineWeek || 7,
+        });
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   function update<K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) {
     setSettings(prev => ({ ...prev, [key]: value }));
   }
 
   function handleSave() {
-    toast.success('Site settings saved');
+    // TODO: PUT /api/site-settings (Phase D)
+    toast.success('Site settings saved (write API pending Phase D)');
+  }
+
+  if (loading) {
+    return <div className="text-sm text-text-muted py-8 text-center">Loading settings...</div>;
   }
 
   return (
