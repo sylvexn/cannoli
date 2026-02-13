@@ -1,7 +1,8 @@
 /**
- * Import Season 10 data from xlsx files into SQLite.
+ * Import season data from xlsx files into SQLite.
  *
- * Usage: bun run scripts/import-xlsx.ts
+ * Standalone: bun run scripts/import-xlsx.ts
+ * Module:     import { importSeason } from './import-xlsx';
  *
  * Reads from: ../plan/imports/*.xlsx
  * Writes to:  ./data/cannoli.db
@@ -11,25 +12,13 @@ import XLSX from 'xlsx';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
+import { hashSync } from 'bcryptjs';
 import * as schema from '../src/db/schema';
 
-const IMPORTS_DIR = resolve(import.meta.dir, '../../plan/imports');
+export const IMPORTS_DIR = resolve(import.meta.dir, '../../plan/imports');
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 
-// ─── League config ───────────────────────────────────────────────────────────
-
-interface LeagueConfig {
-  id: string;
-  name: string;
-  color: string;
-  file: string;
-}
-
-const LEAGUES: LeagueConfig[] = [
-  { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 10.xlsx' },
-  { id: 'ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 10.xlsx' },
-  { id: 'emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 10.xlsx' },
-];
+const DEFAULT_USER_PASSWORD = 'password';
 
 // Team colors by league position (12 distinct colors)
 const TEAM_COLORS = [
@@ -68,46 +57,98 @@ function isTeraCaptain(name: string): boolean {
   return /\(T\)\s*$/.test(name);
 }
 
+// ─── Season config ──────────────────────────────────────────────────────────
+
+interface SeasonConfig {
+  seasonNumber: number;
+  files: { id: string; name: string; color: string; file: string }[];
+  phase?: 'draft' | 'regular' | 'playoffs' | 'offseason';
+  currentWeek?: number;
+  totalWeeks?: number;
+}
+
+export const S10_CONFIG: SeasonConfig = {
+  seasonNumber: 10,
+  phase: 'offseason',
+  currentWeek: 11,
+  totalWeeks: 11,
+  files: [
+    { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 10.xlsx' },
+    { id: 'ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 10.xlsx' },
+    { id: 'emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 10.xlsx' },
+  ],
+};
+
+export const S9_CONFIG: SeasonConfig = {
+  seasonNumber: 9,
+  phase: 'offseason',
+  currentWeek: 11,
+  totalWeeks: 11,
+  files: [
+    { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 9.xlsx' },
+    { id: 'ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 9.xlsx' },
+    { id: 'emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 9 .xlsx' },
+  ],
+};
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
-function main() {
-  console.log('Opening database:', DB_PATH);
-  const sqlite = new Database(DB_PATH);
-  sqlite.exec('PRAGMA journal_mode = WAL');
-  sqlite.exec('PRAGMA foreign_keys = OFF'); // Disable during import for speed
+export interface ImportResult {
+  /** Map of coach name → user ID for all created user accounts */
+  coachUserIds: Map<string, number>;
+  /** Map of coach name → team ID (e.g. 'sapphire-sas') */
+  coachTeamIds: Map<string, string>;
+}
+
+/**
+ * Import a season's data from XLSX files.
+ * Creates users for coaches if createUsers=true.
+ */
+export function importSeason(
+  sqlite: Database,
+  config: SeasonConfig,
+  opts: { createUsers?: boolean; clearExisting?: boolean } = {},
+): ImportResult {
+  const { createUsers = false, clearExisting = false } = opts;
   const db = drizzle(sqlite, { schema });
 
-  // Clear existing data
-  sqlite.exec(`
-    DELETE FROM match_pokemon;
-    DELETE FROM matches;
-    DELETE FROM transactions;
-    DELETE FROM draft_picks;
-    DELETE FROM rosters;
-    DELETE FROM teams;
-    DELETE FROM leagues;
-    DELETE FROM seasons;
-    DELETE FROM pokemon;
-  `);
+  sqlite.exec('PRAGMA foreign_keys = OFF');
+
+  if (clearExisting) {
+    sqlite.exec(`
+      DELETE FROM match_pokemon;
+      DELETE FROM matches;
+      DELETE FROM transactions;
+      DELETE FROM draft_picks;
+      DELETE FROM rosters;
+      DELETE FROM teams;
+      DELETE FROM leagues;
+      DELETE FROM seasons;
+      DELETE FROM pokemon;
+    `);
+  }
+
+  const allCoachTeamIds = new Map<string, string>();
+  const allCoachUserIds = new Map<string, number>();
 
   // ─── Season ──────────────────────────────────────────────────────────────
 
-  console.log('Creating season...');
-  db.insert(schema.seasons).values({
-    id: 1,
-    seasonNumber: 10,
-    phase: 'regular',
-    currentWeek: 11,
-    totalWeeks: 11,
+  console.log(`Creating season ${config.seasonNumber}...`);
+  const seasonRow = db.insert(schema.seasons).values({
+    seasonNumber: config.seasonNumber,
+    phase: config.phase || 'regular',
+    currentWeek: config.currentWeek ?? 11,
+    totalWeeks: config.totalWeeks ?? 11,
     pointCap: 110,
     teraCaptainSlots: 2,
     tradeDeadlineWeek: 7,
-  }).run();
+  }).returning().get();
+  const seasonId = seasonRow.id;
 
   // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
 
   console.log('Importing Pokemon reference data...');
-  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, LEAGUES[0].file));
+  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file));
   const pokemonSheet = sheet(refWb, 'Pokemon');
   // Row 1 = headers: Pokemon, Pts, Sprite, Mono Sprite, Smogon Name, Github Name, BW Sprite, Type1, Type2, HP, ATK, DEF, SPA, SPD, SPE, Ability1, Ability2, Hidden Ability, Shiny, Pokemon, Tera Banned
   const pokemonRows: typeof schema.pokemon.$inferInsert[] = [];
@@ -168,7 +209,7 @@ function main() {
 
   // ─── Per-league data ─────────────────────────────────────────────────────
 
-  for (const league of LEAGUES) {
+  for (const league of config.files) {
     console.log(`\nImporting ${league.name}...`);
     const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
 
@@ -177,7 +218,7 @@ function main() {
       id: league.id,
       name: league.name,
       color: league.color,
-      seasonId: 1,
+      seasonId,
     }).run();
 
     // ─── Teams from Standings sheet ──────────────────────────────────────
@@ -218,6 +259,34 @@ function main() {
       }).run();
     }
     console.log(`  ${teamIds.length} teams created`);
+
+    // ─── Create user accounts for coaches ────────────────────────────────
+
+    if (createUsers) {
+      const passwordHash = hashSync(DEFAULT_USER_PASSWORD, 10);
+      for (const [coach, teamId] of coachToTeamId) {
+        // Normalize username: lowercase, no spaces
+        const username = coach.toLowerCase().replace(/\s+/g, '');
+        allCoachTeamIds.set(username, teamId);
+
+        // Check if user already exists (same coach in multiple leagues across seasons)
+        const existing = sqlite.prepare('SELECT id FROM users WHERE username = ?').get(username) as any;
+        let userId: number;
+        if (existing) {
+          userId = existing.id;
+        } else {
+          const result = sqlite.prepare(
+            'INSERT INTO users (username, password_hash, role, must_change_password, active) VALUES (?, ?, ?, ?, ?) RETURNING id'
+          ).get(username, passwordHash, 'user', 1, 1) as any;
+          userId = result.id;
+        }
+        allCoachUserIds.set(username, userId);
+
+        // Link user to team
+        sqlite.prepare('UPDATE teams SET user_id = ? WHERE id = ?').run(userId, teamId);
+      }
+      console.log(`  ${coachToTeamId.size} coach accounts created/linked`);
+    }
 
     // Build a lookup: team full name -> teamId
     function resolveTeamId(nameStr: string): string | null {
@@ -728,7 +797,7 @@ function main() {
 
   // ─── Summary ───────────────────────────────────────────────────────────
 
-  console.log('\n=== Import Summary ===');
+  console.log(`\n=== Season ${config.seasonNumber} Import Summary ===`);
   const counts = {
     pokemon: (sqlite.prepare('SELECT COUNT(*) as c FROM pokemon').get() as any).c,
     teams: (sqlite.prepare('SELECT COUNT(*) as c FROM teams').get() as any).c,
@@ -740,8 +809,24 @@ function main() {
   };
   console.log(counts);
 
-  sqlite.close();
-  console.log('\nDone!');
+  sqlite.exec('PRAGMA foreign_keys = ON');
+  return { coachUserIds: allCoachUserIds, coachTeamIds: allCoachTeamIds };
 }
 
-main();
+// ─── Standalone runner ──────────────────────────────────────────────────────
+
+if (import.meta.main) {
+  const sqlite = new Database(DB_PATH);
+  sqlite.exec('PRAGMA journal_mode = WAL');
+
+  // Import S10 (primary, clears existing)
+  importSeason(sqlite, S10_CONFIG, { createUsers: true, clearExisting: true });
+
+  // Import S9 (historical, uses separate import script)
+  console.log('\n--- Importing S9 historical data ---');
+  const { importS9 } = await import('./import-s9');
+  importS9(sqlite);
+
+  sqlite.close();
+  console.log('\nAll imports done!');
+}
