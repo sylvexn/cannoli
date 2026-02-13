@@ -144,7 +144,7 @@ export function AdminUsers() {
                     )}
                   </TableCell>
                   <TableCell className="text-text-muted text-xs">
-                    {new Date(user.createdAt).toLocaleDateString()}
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>
