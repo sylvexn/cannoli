@@ -48,14 +48,6 @@ export function LeagueOverviewPage() {
     }).catch(() => setTeamsLoading(false));
   }, [leagues]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-text-muted text-sm">
-        Loading leagues...
-      </div>
-    );
-  }
-
   // Compute site-wide stats from fetched teams
   const allTeams = Object.values(teamsPerLeague).flat();
   const totalPlayers = allTeams.length;
@@ -77,6 +69,14 @@ export function LeagueOverviewPage() {
     text: 'Trade deadline is Week 8 — get your offers in!',
     type: 'warning' as const,
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20 text-text-muted text-sm">
+        Loading leagues...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
