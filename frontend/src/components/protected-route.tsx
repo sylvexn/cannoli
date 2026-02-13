@@ -24,7 +24,7 @@ export function ProtectedRoute({ requireAdmin }: ProtectedRouteProps) {
     return <Navigate to="/change-password" replace />;
   }
 
-  if (requireAdmin && user?.role !== 'admin') {
+  if (requireAdmin && user?.role !== 'admin' && user?.role !== 'dev') {
     return <Navigate to="/" replace />;
   }
 
