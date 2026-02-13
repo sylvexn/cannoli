@@ -15,6 +15,13 @@ interface ArchiveSeason {
   phase: string;
 }
 
+interface ArchiveRosterMon {
+  name: string;
+  tier: number;
+  types: string[];
+  isTeraCaptain: boolean;
+}
+
 interface ArchiveTeam {
   id: string;
   coachName: string;
@@ -22,6 +29,7 @@ interface ArchiveTeam {
   teamAbbrev: string;
   teamColor: string;
   rank: number;
+  roster: ArchiveRosterMon[];
   record: { wins: number; losses: number; differential: number };
 }
 
@@ -207,33 +215,7 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
         {/* Top 6 standings */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {league.teams.slice(0, 6).map((team, i) => (
-            <div
-              key={team.id}
-              className={cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors',
-                i < 3 ? 'bg-surface-overlay/30' : '',
-              )}
-            >
-              <span className={cn(
-                'text-xs font-bold font-mono w-5 text-center',
-                i === 0 ? 'text-draw' : i < 3 ? 'text-neon' : 'text-text-muted',
-              )}>
-                {i + 1}
-              </span>
-              <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-medium text-text-primary truncate block">
-                  {team.teamName}
-                </span>
-                <span className="text-[10px] text-text-muted">{team.coachName}</span>
-              </div>
-              <RecordDisplay
-                wins={team.record.wins}
-                losses={team.record.losses}
-                differential={team.record.differential}
-                className="text-[10px]"
-              />
-            </div>
+            <ArchiveTeamRow key={team.id} team={team} rank={i + 1} />
           ))}
         </div>
 
@@ -286,19 +268,7 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
             {/* Remaining standings */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
               {league.teams.slice(6).map((team, i) => (
-                <div key={team.id} className="flex items-center gap-2.5 px-3 py-1.5 rounded-md">
-                  <span className="text-xs font-bold font-mono w-5 text-center text-text-muted">
-                    {i + 7}
-                  </span>
-                  <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
-                  <span className="text-xs text-text-secondary flex-1 truncate">{team.teamName}</span>
-                  <RecordDisplay
-                    wins={team.record.wins}
-                    losses={team.record.losses}
-                    differential={team.record.differential}
-                    className="text-[10px]"
-                  />
-                </div>
+                <ArchiveTeamRow key={team.id} team={team} rank={i + 7} compact />
               ))}
             </div>
 
@@ -357,5 +327,63 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: number; compact?: boolean }) {
+  const [showRoster, setShowRoster] = useState(false);
+
+  return (
+    <div
+      className={cn(
+        'relative rounded-md transition-colors group',
+        compact ? 'px-2 py-1' : rank <= 3 ? 'bg-surface-overlay/30 px-3 py-2' : 'px-3 py-2',
+      )}
+      onMouseEnter={() => setShowRoster(true)}
+      onMouseLeave={() => setShowRoster(false)}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className={cn(
+          'text-xs font-bold font-mono w-5 text-center shrink-0',
+          rank === 1 ? 'text-draw' : rank <= 3 ? 'text-neon' : 'text-text-muted',
+        )}>
+          {rank}
+        </span>
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+        <div className="flex-1 min-w-0">
+          <span className={cn(
+            'text-xs font-medium truncate block',
+            compact ? 'text-text-secondary' : 'text-text-primary',
+          )}>
+            {team.teamName}
+          </span>
+          {!compact && <span className="text-[10px] text-text-muted">{team.coachName}</span>}
+        </div>
+        <RecordDisplay
+          wins={team.record.wins}
+          losses={team.record.losses}
+          differential={team.record.differential}
+          className="text-[10px]"
+        />
+      </div>
+
+      {/* Roster hover popover */}
+      {showRoster && team.roster.length > 0 && (
+        <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-lg border border-border-default bg-surface-raised shadow-card-lg p-2.5 space-y-1">
+          <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1">
+            Roster · {team.roster.reduce((s, r) => s + r.tier, 0)}pts
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            {team.roster.sort((a, b) => b.tier - a.tier).map(mon => (
+              <div key={mon.name} className="flex items-center gap-1.5">
+                <PokemonSprite name={mon.name} size="xs" />
+                <span className="text-[11px] text-text-primary truncate flex-1">{mon.name}</span>
+                <span className="text-[9px] font-mono text-text-muted">{mon.tier}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
