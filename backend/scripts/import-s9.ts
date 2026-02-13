@@ -41,17 +41,15 @@ function normalizePokemonName(name: string): string {
   return name.replace(/\s*\(T\)\s*$/, '').trim();
 }
 
-function main() {
-  console.log('Opening database:', DB_PATH);
-  const db = new Database(DB_PATH);
-  db.exec('PRAGMA journal_mode = WAL');
+export function importS9(db: Database) {
   db.exec('PRAGMA foreign_keys = OFF');
 
   // ─── Season 9 ──────────────────────────────────────────────────────────
 
   console.log('Creating Season 9...');
-  db.prepare(`INSERT INTO seasons (id, season_number, phase, current_week, total_weeks, point_cap, tera_captain_slots, trade_deadline_week)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(9, 9, 'offseason', 11, 11, 110, 2, 7);
+  const seasonRow = db.prepare(`INSERT INTO seasons (season_number, phase, current_week, total_weeks, point_cap, tera_captain_slots, trade_deadline_week)
+    VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`).get(9, 'offseason', 11, 11, 110, 2, 7) as any;
+  const seasonId = seasonRow.id;
 
   for (const league of LEAGUES) {
     console.log(`\nImporting ${league.name} (S9)...`);
@@ -59,7 +57,7 @@ function main() {
 
     // Create league
     db.prepare('INSERT INTO leagues (id, name, color, season_id) VALUES (?, ?, ?, ?)').run(
-      league.id, league.name, league.color, 9
+      league.id, league.name, league.color, seasonId
     );
 
     // ─── Teams from Standings ──────────────────────────────────────────
@@ -411,8 +409,14 @@ function main() {
   console.log('Season 9 draft picks:', (db.prepare("SELECT COUNT(*) as c FROM draft_picks WHERE league_id LIKE 's9-%'").get() as any).c);
   console.log('Season 9 transactions:', (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE league_id LIKE 's9-%'").get() as any).c);
 
-  db.close();
-  console.log('\nDone!');
+  db.exec('PRAGMA foreign_keys = ON');
+  console.log('\nS9 import done!');
 }
 
-main();
+// Standalone runner
+if (import.meta.main) {
+  const db = new Database(DB_PATH);
+  db.exec('PRAGMA journal_mode = WAL');
+  importS9(db);
+  db.close();
+}
