@@ -54,20 +54,24 @@ export function AdminTrades() {
   const pending = tradeList.filter(t => t.status === 'pending');
   const resolved = tradeList.filter(t => t.status !== 'pending');
 
-  function handleApprove(id: string) {
-    // TODO: POST /api/trades/:id/approve (Phase D)
-    setTradeList(prev => prev.map(t =>
-      t.id === id ? { ...t, status: 'accepted' as const } : t
-    ));
-    toast.success('Trade approved');
+  async function handleApprove(id: string) {
+    try {
+      await api.approveTrade(id);
+      setTradeList(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'accepted' as const } : t
+      ));
+      toast.success('Trade approved');
+    } catch (err: any) { toast.error(err.message); }
   }
 
-  function handleReject(id: string) {
-    // TODO: POST /api/trades/:id/reject (Phase D)
-    setTradeList(prev => prev.map(t =>
-      t.id === id ? { ...t, status: 'rejected' as const } : t
-    ));
-    toast.success('Trade rejected');
+  async function handleReject(id: string) {
+    try {
+      await api.rejectTrade(id);
+      setTradeList(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'rejected' as const } : t
+      ));
+      toast.success('Trade rejected');
+    } catch (err: any) { toast.error(err.message); }
   }
 
   if (loading) {

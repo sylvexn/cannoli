@@ -103,6 +103,7 @@ export function AdminTierList() {
     setPool(prev => prev.map(e => {
       if (e.name !== name) return e;
       const next = STATUS_CONFIG[e.status].next;
+      api.updateTierListEntry(name, { status: next }).catch(err => toast.error(err.message));
       toast.success(`${name}: ${STATUS_CONFIG[next].label}`);
       return { ...e, status: next, modified: true };
     }));
@@ -117,10 +118,10 @@ export function AdminTierList() {
 
   const saveTier = useCallback(() => {
     if (!editingName) return;
+    api.updateTierListEntry(editingName, { tier: editTierValue }).catch(err => toast.error(err.message));
     setPool(prev => prev.map(e => {
       if (e.name !== editingName) return e;
-      const changed = editTierValue !== e.baseTier;
-      return { ...e, tier: editTierValue, modified: changed || e.status !== (TERA_BANNED.includes(e.name) ? 'tera-banned' : BANNED.includes(e.name) ? 'banned' : 'available') };
+      return { ...e, tier: editTierValue, modified: editTierValue !== e.baseTier };
     }));
     toast.success(`${editingName} → Tier ${editTierValue}`);
     setEditingName(null);
