@@ -215,7 +215,10 @@ export function AdminMoveCategories() {
           return (
             <Collapsible key={cat.id} open={isOpen} onOpenChange={() => toggleOpen(cat.id)}>
               <Card>
-                <CollapsibleTrigger className="flex items-center gap-3 px-4 py-2.5 w-full cursor-pointer hover:bg-surface-overlay/50 transition-colors text-left">
+                <div
+                  className="flex items-center gap-3 px-4 py-2.5 w-full cursor-pointer hover:bg-surface-overlay/50 transition-colors text-left"
+                  onClick={() => toggleOpen(cat.id)}
+                >
                     <ChevronRight
                       size={14}
                       className={`text-text-muted shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`}
@@ -252,7 +255,7 @@ export function AdminMoveCategories() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                </CollapsibleTrigger>
+                </div>
 
                 <CollapsibleContent>
                   <CardContent className="pt-0 pb-3 px-4">
