@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { User } from './types';
-import { mockUsers, mockPasswords } from '@/mocks/auth';
+import { api } from './api';
 
 interface AuthContextValue {
   user: User | null;
@@ -16,39 +16,47 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = useCallback(async (username: string, password: string) => {
-    // Mock: validate against mock data
-    const found = mockUsers.find(u => u.username === username && u.active);
-    if (!found || mockPasswords[username] !== password) {
-      return { success: false, error: 'Invalid username or password' };
-    }
-    setUser(found);
-    return { success: true };
+  // Restore session on mount
+  useEffect(() => {
+    api.me()
+      .then(({ user: u }) => setUser(u as User | null))
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const logout = useCallback(() => {
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      const { user: u } = await api.login(username, password);
+      setUser(u as User);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Login failed' };
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    await api.logout().catch(() => {});
     setUser(null);
   }, []);
 
   const changePassword = useCallback(async (current: string, next: string) => {
-    if (!user) return { success: false, error: 'Not authenticated' };
-    if (mockPasswords[user.username] !== current) {
-      return { success: false, error: 'Current password is incorrect' };
+    try {
+      await api.changePassword(current, next);
+      setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Password change failed' };
     }
-    // Mock: update password and clear mustChangePassword
-    mockPasswords[user.username] = next;
-    setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
-    return { success: true };
-  }, [user]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{
       user,
       isLoading,
       isAuthenticated: !!user,
-      isAdmin: user?.role === 'admin',
+      isAdmin: user?.role === 'admin' || user?.role === 'dev',
       login,
       logout,
       changePassword,

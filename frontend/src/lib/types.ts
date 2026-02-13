@@ -4,10 +4,10 @@ import type { PokemonType } from './pokemon';
 export interface User {
   id: string;
   username: string;
-  role: 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user';
   mustChangePassword: boolean;
   active: boolean;
-  createdAt: string;
+  createdAt: string | null;
 }
 
 /** League-level configuration (admin-managed) */
