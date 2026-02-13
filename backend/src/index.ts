@@ -567,6 +567,178 @@ const app = new Elysia()
     });
   })
 
+  // ─── Users (admin read) ──────────────────────────────────────────────
+
+  .get('/api/users', ({ user, set }) => {
+    if (!user || (user.role !== 'dev' && user.role !== 'admin')) {
+      set.status = 403;
+      return { error: 'Forbidden' };
+    }
+    return db.select({
+      id: schema.users.id,
+      username: schema.users.username,
+      role: schema.users.role,
+      mustChangePassword: schema.users.mustChangePassword,
+      active: schema.users.active,
+      createdAt: schema.users.createdAt,
+    }).from(schema.users)
+      .orderBy(asc(schema.users.id))
+      .all()
+      .map(u => ({ ...u, id: String(u.id) }));
+  })
+
+  // ─── Activity Log ───────────────────────────────────────────────────
+
+  .get('/api/activity-log', ({ user, set, query }) => {
+    if (!user || (user.role !== 'dev' && user.role !== 'admin')) {
+      set.status = 403;
+      return { error: 'Forbidden' };
+    }
+
+    let rows = db.select().from(schema.activityLog)
+      .orderBy(desc(schema.activityLog.timestamp))
+      .all();
+
+    // Filter by category
+    const category = query.category as string | undefined;
+    if (category && category !== 'all') {
+      rows = rows.filter(r => r.category === category);
+    }
+
+    // Filter by league
+    const leagueId = query.leagueId as string | undefined;
+    if (leagueId && leagueId !== 'all') {
+      rows = rows.filter(r => r.leagueId === leagueId);
+    }
+
+    // Search
+    const search = (query.search as string || '').toLowerCase();
+    if (search) {
+      rows = rows.filter(r =>
+        r.description.toLowerCase().includes(search) ||
+        r.actor.toLowerCase().includes(search) ||
+        r.type.toLowerCase().includes(search) ||
+        (r.metadata || '').toLowerCase().includes(search)
+      );
+    }
+
+    // Pagination
+    const limit = parseInt(query.limit as string) || 50;
+    const offset = parseInt(query.offset as string) || 0;
+    const total = rows.length;
+    rows = rows.slice(offset, offset + limit);
+
+    return {
+      events: rows.map(r => ({
+        id: String(r.id),
+        type: r.type,
+        category: r.category,
+        actor: r.actor,
+        leagueId: r.leagueId,
+        description: r.description,
+        metadata: r.metadata ? JSON.parse(r.metadata) : {},
+        timestamp: r.timestamp,
+      })),
+      total,
+    };
+  })
+
+  // ─── Site Settings ──────────────────────────────────────────────────
+
+  .get('/api/site-settings', () => {
+    const row = db.select().from(schema.siteSettings).get();
+    if (!row) return { siteName: 'Cannoli', announcement: null, announcementType: 'info' };
+    return {
+      siteName: row.siteName,
+      announcement: row.announcement,
+      announcementType: row.announcementType,
+      defaultPointCap: row.defaultPointCap,
+      defaultTeraCaptainSlots: row.defaultTeraCaptainSlots,
+      defaultTradeDeadlineWeek: row.defaultTradeDeadlineWeek,
+      defaultRosterSize: row.defaultRosterSize,
+      defaultMaxTeams: row.defaultMaxTeams,
+    };
+  })
+
+  // ─── Move Categories ────────────────────────────────────────────────
+
+  .get('/api/move-categories', () => {
+    const cats = db.select().from(schema.moveCategories)
+      .orderBy(asc(schema.moveCategories.sortOrder))
+      .all();
+
+    return cats.map(cat => {
+      const entries = db.select().from(schema.moveCategoryEntries)
+        .where(eq(schema.moveCategoryEntries.categoryId, cat.id))
+        .all();
+      return {
+        id: cat.id,
+        name: cat.name,
+        entries: entries.map(e => ({
+          name: e.name,
+          moveId: e.moveId,
+          isAbility: e.isAbility,
+        })),
+      };
+    });
+  })
+
+  // ─── Trades (proposal lifecycle) ────────────────────────────────────
+
+  .get('/api/leagues/:leagueId/trades', ({ params }) => {
+    return db.select().from(schema.trades)
+      .where(eq(schema.trades.leagueId, params.leagueId))
+      .orderBy(desc(schema.trades.proposedAt))
+      .all()
+      .map(t => ({
+        id: String(t.id),
+        leagueId: t.leagueId,
+        week: t.week,
+        status: t.status,
+        proposerId: t.proposerId,
+        recipientId: t.recipientId,
+        offering: JSON.parse(t.offering),
+        requesting: JSON.parse(t.requesting),
+        proposedAt: t.proposedAt,
+        resolvedAt: t.resolvedAt,
+        resolvedBy: t.resolvedBy,
+        rejectReason: t.rejectReason,
+      }));
+  })
+
+  // ─── Trade Block Listings ───────────────────────────────────────────
+
+  .get('/api/leagues/:leagueId/trade-block', ({ params }) => {
+    return db.select().from(schema.tradeBlockListings)
+      .where(eq(schema.tradeBlockListings.leagueId, params.leagueId))
+      .all()
+      .map(l => ({
+        id: l.id,
+        teamId: l.teamId,
+        pokemonName: l.pokemonName,
+        note: l.note,
+      }));
+  })
+
+  // ─── Tier List (admin — all pokemon with tier/ban status) ───────────
+
+  .get('/api/tier-list', () => {
+    return db.select({
+      name: schema.pokemon.name,
+      tier: schema.pokemon.tier,
+      teraBanned: schema.pokemon.teraBanned,
+      banned: schema.pokemon.banned,
+    }).from(schema.pokemon)
+      .where(sql`${schema.pokemon.tier} > 0 OR ${schema.pokemon.banned} = 1 OR ${schema.pokemon.teraBanned} = 1`)
+      .orderBy(desc(schema.pokemon.tier), asc(schema.pokemon.name))
+      .all()
+      .map(p => ({
+        name: p.name,
+        tier: p.tier,
+        status: p.banned ? 'banned' as const : p.teraBanned ? 'tera-banned' as const : 'available' as const,
+      }));
+  })
+
   .listen(3001);
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);

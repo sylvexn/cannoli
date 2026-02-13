@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { trades } from '@/mocks/trades';
+import { api } from '@/lib/api';
+import type { ApiTrade } from '@/lib/api';
+import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
 
@@ -17,77 +19,60 @@ interface AdminTrade {
   offering: string[];
   requesting: string[];
   proposedAt: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
 }
 
-// Create mock pending trades for admin review (use existing trades as basis but mark as pending)
-const pendingTrades: AdminTrade[] = [
-  {
-    id: 'admin-t1',
-    leagueId: 'sapphire',
-    leagueName: 'Sapphire',
-    leagueColor: '#2563eb',
-    week: 9,
-    proposer: 'gwg',
-    recipient: 'fam',
-    offering: ['Qwilfish', 'Ferroseed'],
-    requesting: ['Cubchoo'],
-    proposedAt: '2026-03-28T14:30:00Z',
-    status: 'pending',
-  },
-  {
-    id: 'admin-t2',
-    leagueId: 'sapphire',
-    leagueName: 'Sapphire',
-    leagueColor: '#2563eb',
-    week: 9,
-    proposer: 'pow',
-    recipient: 'sas',
-    offering: ['Eevee'],
-    requesting: ['Pikachu'],
-    proposedAt: '2026-03-29T10:00:00Z',
-    status: 'pending',
-  },
-  {
-    id: 'admin-t3',
-    leagueId: 'ruby',
-    leagueName: 'Ruby',
-    leagueColor: '#dc2626',
-    week: 8,
-    proposer: 'trainer1',
-    recipient: 'trainer2',
-    offering: ['Larvitar'],
-    requesting: ['Gastly', 'Haunter'],
-    proposedAt: '2026-03-27T16:00:00Z',
-    status: 'pending',
-  },
-];
-
 export function AdminTrades() {
-  const [tradeList, setTradeList] = useState<AdminTrade[]>(pendingTrades);
+  const { leagues } = useAppData();
+  const [tradeList, setTradeList] = useState<AdminTrade[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (leagues.length === 0) return;
+    Promise.all(
+      leagues.map(l =>
+        api.getTrades(l.id).then(trades => trades.map(t => ({
+          id: t.id,
+          leagueId: t.leagueId,
+          leagueName: l.name.replace(' League', ''),
+          leagueColor: l.color,
+          week: t.week,
+          proposer: t.proposerId,
+          recipient: t.recipientId,
+          offering: t.offering,
+          requesting: t.requesting,
+          proposedAt: t.proposedAt || '',
+          status: t.status,
+        })))
+      )
+    ).then(results => {
+      setTradeList(results.flat());
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [leagues]);
 
   const pending = tradeList.filter(t => t.status === 'pending');
   const resolved = tradeList.filter(t => t.status !== 'pending');
 
   function handleApprove(id: string) {
+    // TODO: POST /api/trades/:id/approve (Phase D)
     setTradeList(prev => prev.map(t =>
-      t.id === id ? { ...t, status: 'approved' as const } : t
+      t.id === id ? { ...t, status: 'accepted' as const } : t
     ));
     toast.success('Trade approved');
   }
 
   function handleReject(id: string) {
+    // TODO: POST /api/trades/:id/reject (Phase D)
     setTradeList(prev => prev.map(t =>
       t.id === id ? { ...t, status: 'rejected' as const } : t
     ));
     toast.success('Trade rejected');
   }
 
-  // Recent completed trades from mock data
-  const recentCompleted = trades
-    .filter(t => t.status === 'accepted')
-    .slice(-3)
-    .reverse();
+  if (loading) {
+    return <div className="text-sm text-text-muted py-8 text-center">Loading trades...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -122,7 +107,7 @@ export function AdminTrades() {
         )}
       </div>
 
-      {/* Recent Decisions */}
+      {/* Resolved */}
       {resolved.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-text-primary">Recent Decisions</h3>
@@ -133,32 +118,6 @@ export function AdminTrades() {
           </div>
         </div>
       )}
-
-      {/* Recent Completed Trades */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-medium text-text-primary">Recently Completed</h3>
-        <div className="space-y-2">
-          {recentCompleted.map(trade => (
-            <Card key={trade.id}>
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center gap-3 text-sm">
-                  <Badge variant="outline" className="border-sapphire/30 text-sapphire bg-sapphire/10 shrink-0"
-                    style={{ borderColor: '#2563eb30', color: '#2563eb', backgroundColor: '#2563eb10' }}>
-                    Sapphire
-                  </Badge>
-                  <span className="text-text-muted">W{trade.week}</span>
-                  <span className="text-text-primary font-medium">{trade.proposer}</span>
-                  <ArrowLeftRight size={12} className="text-text-muted" />
-                  <span className="text-text-primary font-medium">{trade.recipient}</span>
-                  <span className="text-text-muted ml-auto text-xs">
-                    {trade.resolvedAt ? new Date(trade.resolvedAt).toLocaleDateString() : ''}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -232,11 +191,11 @@ function TradeApprovalCard({
               </>
             ) : (
               <Badge variant="outline" className={
-                trade.status === 'approved'
+                trade.status === 'accepted'
                   ? 'border-win/30 text-win bg-win/10'
                   : 'border-loss/30 text-loss bg-loss/10'
               }>
-                {trade.status === 'approved' ? 'Approved' : 'Rejected'}
+                {trade.status === 'accepted' ? 'Approved' : trade.status === 'rejected' ? 'Rejected' : 'Expired'}
               </Badge>
             )}
           </div>

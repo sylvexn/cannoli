@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,9 +6,16 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { mockActivityLog, EVENT_CATEGORIES, CATEGORY_LABELS } from '@/mocks/activity-log';
+import { api } from '@/lib/api';
+import type { ApiActivityEvent } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
-import type { ActivityEvent, EventCategory } from '@/lib/types';
+import type { EventCategory } from '@/lib/types';
+
+const EVENT_CATEGORIES: EventCategory[] = ['admin', 'auth', 'config', 'draft', 'trade', 'match', 'team'];
+const CATEGORY_LABELS: Record<string, string> = {
+  admin: 'Admin', auth: 'Auth', config: 'Config', draft: 'Draft',
+  trade: 'Trade', match: 'Match', team: 'Team',
+};
 import {
   Search, Filter, X, UserPlus, KeyRound, ShieldCheck, UserX, LogIn,
   Settings, Play, Trophy, ArrowLeftRight, Check, Swords, Star,
@@ -50,15 +57,20 @@ const PAGE_SIZE = 15;
 
 export function AdminActivityLog() {
   const { leagues } = useAppData();
+  const [allEvents, setAllEvents] = useState<ApiActivityEvent[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [leagueFilter, setLeagueFilter] = useState<string>('all');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
+  useEffect(() => {
+    api.getActivityLog({ limit: 500 })
+      .then(({ events }) => setAllEvents(events))
+      .catch(() => {});
+  }, []);
+
   const filtered = useMemo(() => {
-    let events = [...mockActivityLog].sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    let events = [...allEvents];
 
     if (categoryFilter !== 'all') {
       events = events.filter(e => e.category === categoryFilter);
@@ -77,7 +89,7 @@ export function AdminActivityLog() {
     }
 
     return events;
-  }, [search, categoryFilter, leagueFilter]);
+  }, [allEvents, search, categoryFilter, leagueFilter]);
 
   const visible = filtered.slice(0, visibleCount);
   const hasMore = visibleCount < filtered.length;
@@ -96,11 +108,11 @@ export function AdminActivityLog() {
   // Category breakdown counts
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const e of mockActivityLog) {
+    for (const e of allEvents) {
       counts[e.category] = (counts[e.category] || 0) + 1;
     }
     return counts;
-  }, []);
+  }, [allEvents]);
 
   return (
     <div className="space-y-4">
@@ -108,7 +120,7 @@ export function AdminActivityLog() {
       <div className="flex flex-wrap gap-3 text-sm">
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Total Events:</span>
-          <span className="text-text-primary font-medium font-mono">{mockActivityLog.length}</span>
+          <span className="text-text-primary font-medium font-mono">{allEvents.length}</span>
         </div>
         {EVENT_CATEGORIES.map(cat => (
           categoryCounts[cat] ? (
@@ -207,7 +219,7 @@ export function AdminActivityLog() {
   );
 }
 
-function EventRow({ event }: { event: ActivityEvent }) {
+function EventRow({ event }: { event: ApiActivityEvent }) {
   const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;

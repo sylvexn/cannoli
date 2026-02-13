@@ -134,6 +134,64 @@ export interface ApiAuthUser {
   createdAt: string | null;
 }
 
+// ─── Admin types ────────────────────────────────────────────────────────────
+
+export interface ApiActivityEvent {
+  id: string;
+  type: string;
+  category: string;
+  actor: string;
+  leagueId?: string | null;
+  description: string;
+  metadata: Record<string, unknown>;
+  timestamp: string | null;
+}
+
+export interface ApiSiteSettings {
+  siteName: string | null;
+  announcement: string | null;
+  announcementType: string | null;
+  defaultPointCap: number | null;
+  defaultTeraCaptainSlots: number | null;
+  defaultTradeDeadlineWeek: number | null;
+  defaultRosterSize: number | null;
+  defaultMaxTeams: number | null;
+}
+
+export interface ApiMoveCategory {
+  id: string;
+  name: string;
+  entries: { name: string; moveId: string; isAbility: boolean }[];
+}
+
+export interface ApiTrade {
+  id: string;
+  leagueId: string;
+  week: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  proposerId: string;
+  recipientId: string;
+  offering: string[];
+  requesting: string[];
+  proposedAt: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  rejectReason: string | null;
+}
+
+export interface ApiTradeBlockListing {
+  id: number;
+  teamId: string;
+  pokemonName: string;
+  note: string | null;
+}
+
+export interface ApiTierListEntry {
+  name: string;
+  tier: number;
+  status: 'available' | 'tera-banned' | 'banned';
+}
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -160,4 +218,27 @@ export const api = {
   getDraftPicks: (leagueId: string) => fetchJson<ApiDraftPick[]>(`/api/leagues/${leagueId}/draft`),
 
   getStats: (leagueId: string) => fetchJson<ApiPokemonStat[]>(`/api/leagues/${leagueId}/stats`),
+
+  // Admin read
+  getUsers: () => fetchJson<ApiAuthUser[]>('/api/users'),
+
+  getActivityLog: (params?: { category?: string; leagueId?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set('category', params.category);
+    if (params?.leagueId) q.set('leagueId', params.leagueId);
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    return fetchJson<{ events: ApiActivityEvent[]; total: number }>(`/api/activity-log?${q}`);
+  },
+
+  getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
+
+  getMoveCategories: () => fetchJson<ApiMoveCategory[]>('/api/move-categories'),
+
+  getTrades: (leagueId: string) => fetchJson<ApiTrade[]>(`/api/leagues/${leagueId}/trades`),
+
+  getTradeBlock: (leagueId: string) => fetchJson<ApiTradeBlockListing[]>(`/api/leagues/${leagueId}/trade-block`),
+
+  getTierList: () => fetchJson<ApiTierListEntry[]>('/api/tier-list'),
 };

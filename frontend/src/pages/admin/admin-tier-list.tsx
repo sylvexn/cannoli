@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,9 +6,7 @@ import { NumberInput } from '@/components/ui/number-input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  TIER_LIST, TERA_BANNED, BANNED,
-} from '@/mocks/tier-list';
+import { api } from '@/lib/api';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import {
   Search, X, ChevronDown, Check,
@@ -31,37 +29,24 @@ const STATUS_CONFIG: Record<BanStatus, { label: string; color: string; bg: strin
   banned:        { label: 'Banned',       color: 'text-loss', bg: 'bg-loss/10', border: 'border-loss/30', next: 'available' },
 };
 
-function buildInitialPool(): PoolEntry[] {
-  const bannedSet = new Set(BANNED);
-  const teraSet = new Set(TERA_BANNED);
-
-  // Start with tier list entries
-  const entries: PoolEntry[] = TIER_LIST.map(e => ({
-    name: e.name,
-    baseTier: e.tier,
-    tier: e.tier,
-    status: teraSet.has(e.name) ? 'tera-banned' : 'available',
-    modified: false,
-  }));
-
-  // Add banned Pokemon that aren't already in the tier list
-  for (const name of bannedSet) {
-    if (!entries.some(e => e.name === name)) {
-      entries.push({
-        name,
-        baseTier: 0,
-        tier: 0,
-        status: 'banned',
-        modified: false,
-      });
-    }
-  }
-
-  return entries;
-}
-
 export function AdminTierList() {
-  const [pool, setPool] = useState<PoolEntry[]>(buildInitialPool);
+  const [pool, setPool] = useState<PoolEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getTierList()
+      .then(entries => {
+        setPool(entries.map(e => ({
+          name: e.name,
+          baseTier: e.tier,
+          tier: e.tier,
+          status: e.status,
+          modified: false,
+        })));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');

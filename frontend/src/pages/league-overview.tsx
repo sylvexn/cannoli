@@ -2,14 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
-import type { ApiTeam } from '@/lib/api';
-import { mockActivityLog } from '@/mocks/activity-log';
+import type { ApiTeam, ApiActivityEvent, ApiSiteSettings } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
-import type { ActivityEvent } from '@/lib/types';
 import {
   Megaphone, Users, Swords, ArrowLeftRight, Trophy,
   ScrollText, Settings, Play, Check, Star, X,
@@ -55,20 +53,28 @@ export function LeagueOverviewPage() {
   const totalMatches = allTeams.reduce((s, t) => s + t.record.wins + t.record.losses, 0) / 2;
 
   // Recent activity — league events only (draft, trade, match, team)
-  const recentActivity = useMemo(() =>
-    [...mockActivityLog]
-      .filter(e => FEED_CATEGORIES.has(e.category))
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 8),
-    [],
-  );
+  const [recentActivity, setRecentActivity] = useState<ApiActivityEvent[]>([]);
+  const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
 
-  // Mock announcement (would come from site settings in real app)
-  const announcement = {
+  useEffect(() => {
+    api.getActivityLog({ limit: 20 })
+      .then(({ events }) => {
+        setRecentActivity(events
+          .filter(e => FEED_CATEGORIES.has(e.category))
+          .slice(0, 8)
+        );
+      })
+      .catch(() => {});
+    api.getSiteSettings()
+      .then(setSiteSettings)
+      .catch(() => {});
+  }, []);
+
+  const announcement = siteSettings?.announcement ? {
     enabled: true,
-    text: 'Trade deadline is Week 8 — get your offers in!',
-    type: 'warning' as const,
-  };
+    text: siteSettings.announcement,
+    type: (siteSettings.announcementType || 'info') as 'info' | 'warning' | 'success',
+  } : { enabled: false, text: '', type: 'info' as const };
 
   if (loading) {
     return (
@@ -242,7 +248,7 @@ function AnnouncementBanner({ text, type }: { text: string; type: 'info' | 'warn
   );
 }
 
-function ActivityFeedItem({ event }: { event: ActivityEvent }) {
+function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
   const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
