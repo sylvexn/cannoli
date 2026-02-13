@@ -729,7 +729,7 @@ const app = new Elysia()
       teraBanned: schema.pokemon.teraBanned,
       banned: schema.pokemon.banned,
     }).from(schema.pokemon)
-      .where(sql`${schema.pokemon.tier} > 0 OR ${schema.pokemon.banned} = 1 OR ${schema.pokemon.teraBanned} = 1`)
+      .where(sql`(${schema.pokemon.tier} > 0 OR ${schema.pokemon.banned} = 1 OR ${schema.pokemon.teraBanned} = 1) AND ${schema.pokemon.name} NOT LIKE '%(T)'`)
       .orderBy(desc(schema.pokemon.tier), asc(schema.pokemon.name))
       .all()
       .map(p => ({
