@@ -69,8 +69,8 @@ interface SeasonConfig {
 
 export const S10_CONFIG: SeasonConfig = {
   seasonNumber: 10,
-  phase: 'offseason',
-  currentWeek: 11,
+  phase: 'regular',
+  currentWeek: 8,
   totalWeeks: 11,
   files: [
     { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 10.xlsx' },
