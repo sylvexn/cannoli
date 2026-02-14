@@ -68,9 +68,11 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
     setDragIdx(null);
   }
 
-  function handleSave() {
-    // TODO: POST to backend when endpoint exists
-    toast.success(`Draft order saved for ${leagueName}`);
+  async function handleSave() {
+    try {
+      await api.saveDraftOrder(leagueId, order.map(t => t.id));
+      toast.success(`Draft order saved for ${leagueName}`);
+    } catch (err: any) { toast.error(err.message); }
   }
 
   if (loading) return <div className="text-text-muted text-xs py-2">Loading teams...</div>;
