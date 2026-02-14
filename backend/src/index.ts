@@ -657,6 +657,7 @@ const app = new Elysia()
       defaultTradeDeadlineWeek: row.defaultTradeDeadlineWeek,
       defaultRosterSize: row.defaultRosterSize,
       defaultMaxTeams: row.defaultMaxTeams,
+      defaultUserPassword: row.defaultUserPassword,
     };
   })
 
@@ -753,7 +754,8 @@ const app = new Elysia()
     const existing = db.select().from(schema.users).where(eq(schema.users.username, username.trim().toLowerCase())).get();
     if (existing) { set.status = 409; return { error: 'Username already exists' }; }
 
-    const password = Math.random().toString(36).slice(2, 10);
+    const settings = db.select().from(schema.siteSettings).get();
+    const password = settings?.defaultUserPassword || 'password';
     const result = db.insert(schema.users).values({
       username: username.trim().toLowerCase(),
       passwordHash: hashPassword(password),
@@ -783,7 +785,8 @@ const app = new Elysia()
   .post('/api/users/:id/reset-password', ({ params, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
     const userId = parseInt(params.id);
-    const password = Math.random().toString(36).slice(2, 10);
+    const settings = db.select().from(schema.siteSettings).get();
+    const password = settings?.defaultUserPassword || 'password';
 
     db.update(schema.users).set({
       passwordHash: hashPassword(password),
@@ -808,6 +811,7 @@ const app = new Elysia()
       defaultTradeDeadlineWeek: s.defaultTradeDeadlineWeek as number || 7,
       defaultRosterSize: s.defaultRosterSize as number || 10,
       defaultMaxTeams: s.defaultMaxTeams as number || 12,
+      defaultUserPassword: s.defaultUserPassword as string || 'password',
     }).where(eq(schema.siteSettings.id, 1)).run();
 
     return { success: true };

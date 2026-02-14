@@ -222,6 +222,7 @@ export const siteSettings = sqliteTable('site_settings', {
   defaultTradeDeadlineWeek: integer('default_trade_deadline_week').default(7),
   defaultRosterSize: integer('default_roster_size').default(10),
   defaultMaxTeams: integer('default_max_teams').default(12),
+  defaultUserPassword: text('default_user_password').default('password'),
 });
 
 // ─── Activity Log ───────────────────────────────────────────────────────────
