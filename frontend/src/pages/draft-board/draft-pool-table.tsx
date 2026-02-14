@@ -13,8 +13,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ArrowRightLeft } from 'lucide-react';
-import type { TierEntry } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import type { TierEntry } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 

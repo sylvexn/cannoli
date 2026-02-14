@@ -897,7 +897,7 @@ const app = new Elysia()
     return { id };
   })
 
-  .put('/api/leagues/:id', ({ params, body, user, set }) => {
+  .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color, pointCap, teraCaptainSlots, tradeDeadlineWeek, maxTeams, rosterSize } = body as Record<string, unknown>;
 
@@ -905,11 +905,11 @@ const app = new Elysia()
     if (name) leagueUpdates.name = name;
     if (color) leagueUpdates.color = color;
     if (Object.keys(leagueUpdates).length > 0) {
-      db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.id)).run();
+      db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
     }
 
     // Season-level settings update
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.id)).get();
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (league) {
       const seasonUpdates: Record<string, unknown> = {};
       if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
@@ -923,41 +923,41 @@ const app = new Elysia()
     return { success: true };
   })
 
-  .delete('/api/leagues/:id', ({ params, user, set }) => {
+  .delete('/api/leagues/:leagueId', ({ params, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
     // Cascade delete league data
     const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
-      .where(eq(schema.teams.leagueId, params.id)).all().map(t => t.id);
+      .where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
 
     for (const tid of teamIds) {
       db.delete(schema.rosters).where(eq(schema.rosters.teamId, tid)).run();
       db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, tid)).run();
     }
-    db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, params.id)).run();
-    db.delete(schema.matches).where(eq(schema.matches.leagueId, params.id)).run();
-    db.delete(schema.transactions).where(eq(schema.transactions.leagueId, params.id)).run();
-    db.delete(schema.trades).where(eq(schema.trades.leagueId, params.id)).run();
-    db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.leagueId, params.id)).run();
-    db.delete(schema.teams).where(eq(schema.teams.leagueId, params.id)).run();
-    db.delete(schema.leagues).where(eq(schema.leagues.id, params.id)).run();
+    db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, params.leagueId)).run();
+    db.delete(schema.matches).where(eq(schema.matches.leagueId, params.leagueId)).run();
+    db.delete(schema.transactions).where(eq(schema.transactions.leagueId, params.leagueId)).run();
+    db.delete(schema.trades).where(eq(schema.trades.leagueId, params.leagueId)).run();
+    db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.leagueId, params.leagueId)).run();
+    db.delete(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).run();
+    db.delete(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).run();
     return { success: true };
   })
 
   // ─── Season Management ──────────────────────────────────────────────
 
-  .post('/api/leagues/:id/phase', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
     const { phase } = body as { phase: string };
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.id)).get();
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     db.update(schema.seasons).set({ phase: phase as any }).where(eq(schema.seasons.id, league.seasonId)).run();
     return { success: true };
   })
 
-  .post('/api/leagues/:id/week', ({ params, user, set }) => {
+  .post('/api/leagues/:leagueId/week', ({ params, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.id)).get();
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
@@ -967,10 +967,10 @@ const app = new Elysia()
     return { success: true, week: season.currentWeek + 1 };
   })
 
-  .post('/api/leagues/:id/draft-order', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/draft-order', ({ params, body, user, set }) => {
     if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
-    db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.id)).run();
+    db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
     return { success: true };
   })
 
@@ -1024,6 +1024,95 @@ const app = new Elysia()
     }).where(eq(schema.trades.id, tradeId)).run();
 
     return { success: true };
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // USER WRITE ENDPOINTS (authenticated, own team only)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // ─── Trade Block Listings ───────────────────────────────────────────
+
+  .post('/api/leagues/:leagueId/trade-block', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    // Find the user's team in this league
+    const team = db.select().from(schema.teams)
+      .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
+      .get();
+
+    // Dev can specify teamId directly
+    const teamId = (user.role === 'dev' && (body as any).teamId) ? (body as any).teamId : team?.id;
+    if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
+
+    const { pokemonName, note } = body as { pokemonName: string; note?: string };
+    if (!pokemonName?.trim()) { set.status = 400; return { error: 'Pokemon name required' }; }
+
+    const result = db.insert(schema.tradeBlockListings).values({
+      leagueId: params.leagueId,
+      teamId,
+      pokemonName: pokemonName.trim(),
+      note: note?.trim() || null,
+    }).returning().get();
+
+    return { id: result.id };
+  })
+
+  .delete('/api/trade-block-listings/:id', ({ params, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const listing = db.select().from(schema.tradeBlockListings)
+      .where(eq(schema.tradeBlockListings.id, parseInt(params.id)))
+      .get();
+    if (!listing) { set.status = 404; return { error: 'Listing not found' }; }
+
+    // Verify ownership (or dev)
+    if (user.role !== 'dev') {
+      const team = db.select().from(schema.teams)
+        .where(and(eq(schema.teams.id, listing.teamId), eq(schema.teams.userId, parseInt(user.id))))
+        .get();
+      if (!team) { set.status = 403; return { error: 'Not your listing' }; }
+    }
+
+    db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.id, parseInt(params.id))).run();
+    return { success: true };
+  })
+
+  // ─── Trade Proposals ────────────────────────────────────────────────
+
+  .post('/api/leagues/:leagueId/trades/propose', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const team = db.select().from(schema.teams)
+      .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
+      .get();
+
+    const proposerId = (user.role === 'dev' && (body as any).proposerId) ? (body as any).proposerId : team?.id;
+    if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
+
+    const { recipientId, offering, requesting } = body as {
+      recipientId: string; offering: string[]; requesting: string[];
+    };
+
+    if (!recipientId) { set.status = 400; return { error: 'Recipient required' }; }
+    if (!offering?.length) { set.status = 400; return { error: 'Must offer at least one Pokemon' }; }
+    if (!requesting?.length) { set.status = 400; return { error: 'Must request at least one Pokemon' }; }
+
+    // Get current week from season
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+    const week = season?.currentWeek || 0;
+
+    const result = db.insert(schema.trades).values({
+      leagueId: params.leagueId,
+      week,
+      status: 'pending',
+      proposerId,
+      recipientId,
+      offering: JSON.stringify(offering),
+      requesting: JSON.stringify(requesting),
+    }).returning().get();
+
+    return { id: String(result.id) };
   })
 
   .listen(3001);

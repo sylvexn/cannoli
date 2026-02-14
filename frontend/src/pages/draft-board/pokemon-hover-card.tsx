@@ -11,8 +11,8 @@ import { Separator } from '@/components/ui/separator';
 import { ArrowRightLeft } from 'lucide-react';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
-import { getTierEntry } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import { getTierEntry } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 
 interface PokemonHoverCardProps {
   name: string;

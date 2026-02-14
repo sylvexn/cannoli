@@ -13,8 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
 import { Swords, Sparkles, X } from 'lucide-react';
 import { useLeagueUrl } from '@/lib/use-league-url';
-import { getTierEntry } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import { getTierEntry } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 import type { Player } from '@/lib/types';
 
 interface PokemonSideCardProps {

@@ -2,8 +2,8 @@ import { cn } from '@/lib/utils';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { PokemonCompactCard } from './pokemon-compact-card';
-import type { TierEntry } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import type { TierEntry } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 

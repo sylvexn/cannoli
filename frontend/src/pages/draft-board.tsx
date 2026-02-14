@@ -11,7 +11,7 @@ import { PokemonHoverCard } from './draft-board/pokemon-hover-card';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
 import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftControlBar } from './draft-board/draft-control-bar';
-import { TIER_LIST } from '@/mocks/tier-list';
+import { TIER_LIST } from '@/data/tier-list';
 
 /** Simple segmented toggle button group */
 function SegmentedToggle<T extends string>({

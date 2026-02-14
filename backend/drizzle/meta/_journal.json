@@ -22,6 +22,13 @@
       "when": 1775274010765,
       "tag": "0002_parallel_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1775278008616,
+      "tag": "0003_married_warstar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `site_settings` ADD `default_user_password` text DEFAULT 'password';

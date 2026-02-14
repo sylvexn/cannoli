@@ -1,6 +1,6 @@
 import { useReducer, useMemo, useEffect, useState } from 'react';
-import { TIER_LIST } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import { TIER_LIST } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { api } from '@/lib/api';

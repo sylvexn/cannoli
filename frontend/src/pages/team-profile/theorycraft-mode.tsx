@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 import type { LeagueConfig } from '@/lib/types';
-import { getEffectiveCost } from '@/mocks/tier-list';
+import { getEffectiveCost } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { ArrowRightLeft, Search, X } from 'lucide-react';

@@ -1,5 +1,5 @@
 import type { RosterPokemon, LeagueConfig } from './types';
-import { getEffectiveCost } from '@/mocks/tier-list';
+import { getEffectiveCost } from '@/data/tier-list';
 
 /** Calculate effective points used by a roster (accounts for tera captain cost markup) */
 export function rosterPointsUsed(roster: RosterPokemon[]): number {
