@@ -20,6 +20,7 @@ interface SiteSettings {
   defaultRosterSize: number;
   defaultTotalWeeks: number;
   defaultTradeDeadlineWeek: number;
+  defaultUserPassword: string;
 }
 
 const INITIAL_SETTINGS: SiteSettings = {
@@ -33,6 +34,7 @@ const INITIAL_SETTINGS: SiteSettings = {
   defaultRosterSize: 10,
   defaultTotalWeeks: 11,
   defaultTradeDeadlineWeek: 7,
+  defaultUserPassword: 'password',
 };
 
 const announcementTypes = [
@@ -59,6 +61,7 @@ export function AdminSiteSettings() {
           defaultRosterSize: s.defaultRosterSize || 10,
           defaultTotalWeeks: 11,
           defaultTradeDeadlineWeek: s.defaultTradeDeadlineWeek || 7,
+          defaultUserPassword: (s as any).defaultUserPassword || 'password',
         });
       })
       .catch(() => {})
@@ -98,6 +101,18 @@ export function AdminSiteSettings() {
               onChange={e => update('siteName', e.target.value)}
               className="max-w-xs"
             />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-text-muted">Default User Password</label>
+            <Input
+              value={settings.defaultUserPassword}
+              onChange={e => update('defaultUserPassword', e.target.value)}
+              placeholder="password"
+              className="max-w-xs font-mono"
+            />
+            <p className="text-[10px] text-text-muted">
+              New accounts and password resets use this password. Users must change it on first login.
+            </p>
           </div>
         </CardContent>
       </Card>
