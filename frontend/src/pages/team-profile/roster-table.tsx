@@ -1,6 +1,6 @@
 import type { RosterPokemon } from '@/lib/types';
 import type { LeagueConfig } from '@/lib/types';
-import { getEffectiveCost } from '@/mocks/tier-list';
+import { getEffectiveCost } from '@/data/tier-list';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { AbilityChip } from '@/components/ability-chip';

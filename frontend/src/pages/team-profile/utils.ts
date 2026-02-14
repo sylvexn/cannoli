@@ -1,7 +1,7 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import type { Player, RosterPokemon } from '@/lib/types';
-import { TIER_LIST } from '@/mocks/tier-list';
+import { TIER_LIST } from '@/data/tier-list';
 import { TYPE_CHART } from '@/lib/type-effectiveness';
 
 // ─── Type abbreviations ──────────────────────────────────────────

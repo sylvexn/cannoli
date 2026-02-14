@@ -308,4 +308,14 @@ export const api = {
 
   rejectTrade: (tradeId: string, reason?: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/reject`, { reason }),
+
+  // User write (own team)
+  addTradeBlockListing: (leagueId: string, data: { pokemonName: string; note?: string; teamId?: string }) =>
+    postJson<{ id: number }>(`/api/leagues/${leagueId}/trade-block`, data),
+
+  removeTradeBlockListing: (id: number) =>
+    deleteJson<{ success: boolean }>(`/api/trade-block-listings/${id}`),
+
+  proposeTrade: (leagueId: string, data: { recipientId: string; offering: string[]; requesting: string[]; proposerId?: string }) =>
+    postJson<{ id: string }>(`/api/leagues/${leagueId}/trades/propose`, data),
 };

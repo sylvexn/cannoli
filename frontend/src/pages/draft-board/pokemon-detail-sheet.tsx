@@ -16,8 +16,8 @@ import { ArrowRightLeft, Swords, Sparkles, X } from 'lucide-react';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
-import { getTierEntry } from '@/mocks/tier-list';
-import { getPokemonData } from '@/mocks/pokemon-data';
+import { getTierEntry } from '@/data/tier-list';
+import { getPokemonData } from '@/data/pokemon-data';
 
 interface PokemonDetailSheetProps {
   name: string | null;
