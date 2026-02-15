@@ -4,7 +4,8 @@ import { getPokemonData } from '@/data/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { api } from '@/lib/api';
-import type { ApiDraftPick } from '@/lib/api';
+import type { ApiDraftPick, ApiDraftState } from '@/lib/api';
+import { useDraftWebSocket } from './use-draft-websocket';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, transactionsToTrades } from './generate-draft-order';
 import type {
@@ -162,13 +163,68 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         demoStarted: false,
       };
 
-    // ─── Live mode (future) ───────────────────────────────────────────
-    case 'LIVE_SYNC':
-      // TODO: sync from WebSocket state
-      return state;
+    // ─── Live mode ─────────────────────────────────────────────────────
+    case 'LIVE_SYNC': {
+      const snap = action.snapshot;
+      const snakeOrder: SnakeSlot[] = (snap.snakeOrder ?? []).map(s => ({
+        round: s.round,
+        pick: s.pick,
+        overallPick: s.overallPick,
+        teamId: s.teamId,
+      }));
+      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map((p, i) => {
+        const slot = snakeOrder[i];
+        return {
+          round: slot?.round ?? 1,
+          pick: slot?.pick ?? 1,
+          overallPick: i + 1,
+          playerId: p.teamId,
+          pokemonName: p.pokemonName,
+          tier: p.tier,
+          isTeraCaptain: false,
+        };
+      });
 
-    case 'LIVE_PICK_MADE':
-      return state;
+      // Compute timer from server expiry
+      let timerSeconds = state.timerDuration;
+      if (snap.timerExpiresAt) {
+        const remaining = Math.max(0, Math.floor((new Date(snap.timerExpiresAt).getTime() - Date.now()) / 1000));
+        timerSeconds = remaining;
+      }
+
+      return {
+        ...state,
+        mode: 'live',
+        snakeOrder,
+        allPicks,
+        currentPickIndex: snap.currentPickIndex,
+        timerDuration: snap.timerDuration,
+        timerSeconds,
+        demoStarted: snap.status === 'in_progress' || snap.status === 'completed',
+        isPlaying: snap.status === 'in_progress',
+        pointCap: 110,
+      };
+    }
+
+    case 'LIVE_PICK_MADE': {
+      const pick = action.pick;
+      const slot = state.snakeOrder[state.allPicks.length];
+      const newPick: DraftPickEntry = {
+        round: slot?.round ?? 1,
+        pick: slot?.pick ?? 1,
+        overallPick: state.allPicks.length + 1,
+        playerId: pick.playerId,
+        pokemonName: pick.pokemonName,
+        tier: pick.tier,
+        isTeraCaptain: false,
+      };
+      return {
+        ...state,
+        allPicks: [...state.allPicks, newPick],
+        currentPickIndex: state.currentPickIndex + 1,
+        timerSeconds: state.timerDuration,
+      };
+    }
 
     default:
       return state;
@@ -255,13 +311,24 @@ export function useDraftState() {
     return () => clearInterval(demoTimerRef.current);
   }, [state.mode, state.demoStarted, state.isPlaying]);
 
+  // Timer tick for live mode (decrement client-side between WS syncs)
+  useEffect(() => {
+    if (state.mode !== 'live' || !state.demoStarted || !state.isPlaying) return;
+
+    const interval = setInterval(() => {
+      dispatch({ type: 'DEMO_TICK' }); // Reuse same tick action
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state.mode, state.demoStarted, state.isPlaying]);
+
   // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
-  const currentSlot = state.mode === 'demo' && state.demoStarted
+  const currentSlot = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted
     ? state.snakeOrder[state.currentPickIndex] ?? null
     : null;
 
-  const isUserTurn = state.mode === 'demo' && currentSlot?.teamId === state.userTeamId;
-  const isDemoComplete = state.mode === 'demo' && state.demoStarted && state.currentPickIndex >= state.snakeOrder.length;
+  const isUserTurn = (state.mode === 'demo' || state.mode === 'live') && currentSlot?.teamId === state.userTeamId;
+  const isDemoComplete = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted && state.currentPickIndex >= state.snakeOrder.length;
 
   useEffect(() => {
     if (state.mode !== 'demo' || !state.demoStarted || isDemoComplete) return;
@@ -292,11 +359,18 @@ export function useDraftState() {
     }
   }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, demoTeamPoints, draftedSet, state.pointCap, state.userTeamId]);
 
-  // ─── User pick handler for demo mode ─────────────────────────────
+  // ─── User pick handler ────────────────────────────────────────────
   const handleUserPick = useCallback((pokemonName: string) => {
-    if (state.mode !== 'demo' || !isUserTurn) return;
+    if (!isUserTurn) return;
 
-    // Validate
+    if (state.mode === 'live') {
+      handleLivePick(pokemonName);
+      return;
+    }
+
+    if (state.mode !== 'demo') return;
+
+    // Validate for demo mode
     if (draftedSet.has(pokemonName)) return;
     if (BANNED_SET.has(pokemonName)) return;
 
@@ -307,7 +381,55 @@ export function useDraftState() {
     if (teamPts + entry.tier > state.pointCap) return;
 
     dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
-  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, state.userTeamId, state.pointCap]);
+  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, state.userTeamId, state.pointCap, handleLivePick]);
+
+  // ─── Live mode: WebSocket connection ──────────────────────────────
+  const wsEnabled = state.mode === 'live';
+
+  const { connected: wsConnected, sendPick: wsSendPick } = useDraftWebSocket({
+    leagueId: league.id,
+    enabled: wsEnabled,
+    onState: useCallback((snapshot: ApiDraftState) => {
+      dispatch({ type: 'LIVE_SYNC', snapshot });
+    }, []),
+    onPickMade: useCallback((data) => {
+      dispatch({
+        type: 'LIVE_PICK_MADE',
+        pick: {
+          playerId: data.pick.teamId,
+          pokemonName: data.pick.pokemonName,
+          tier: data.pick.tier,
+          round: 0,
+          pick: 0,
+          overallPick: 0,
+          isTeraCaptain: false,
+        },
+      });
+      // Also sync full state from snapshot
+      if (data.snapshot) {
+        dispatch({ type: 'LIVE_SYNC', snapshot: data.snapshot });
+      }
+    }, []),
+    onError: useCallback((error: string) => {
+      console.error('[Draft WS]', error);
+    }, []),
+  });
+
+  // Fetch initial draft state when switching to live mode
+  useEffect(() => {
+    if (state.mode !== 'live') return;
+    api.getDraftState(league.id).then(snapshot => {
+      if (snapshot.status && snapshot.status !== 'not_started') {
+        dispatch({ type: 'LIVE_SYNC', snapshot });
+      }
+    }).catch(() => {});
+  }, [state.mode, league.id]);
+
+  // Live mode: handle user pick via WS
+  const handleLivePick = useCallback((pokemonName: string) => {
+    if (state.mode !== 'live' || !isUserTurn || !state.userTeamId) return;
+    wsSendPick(pokemonName, state.userTeamId);
+  }, [state.mode, isUserTurn, state.userTeamId, wsSendPick]);
 
   // ─── Shared lookups ──────────────────────────────────────────────
 
@@ -474,6 +596,7 @@ export function useDraftState() {
     draftOrder,
     handleUserPick,
     draftedSet,
+    wsConnected,
   };
 }
 
