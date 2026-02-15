@@ -121,6 +121,24 @@ export interface ApiDraftPick {
   tier: number;
 }
 
+export interface ApiSnakePick {
+  round: number;
+  pick: number;
+  overallPick: number;
+  teamId: string;
+}
+
+export interface ApiDraftState {
+  leagueId: string;
+  status: 'not_started' | 'in_progress' | 'paused' | 'completed';
+  currentPickIndex: number;
+  timerDuration: number;
+  timerExpiresAt: string | null;
+  picks: { teamId: string; pokemonName: string; tier: number; pickNumber: number }[];
+  snakeOrder: ApiSnakePick[];
+  teamPoints: Record<string, number>;
+}
+
 export interface ApiPokemonStat {
   pokemonName: string;
   teamId: string;
@@ -302,6 +320,24 @@ export const api = {
 
   saveDraftOrder: (leagueId: string, order: string[]) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft-order`, { order }),
+
+  getDraftState: (leagueId: string) =>
+    fetchJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/state`),
+
+  startDraft: (leagueId: string, timerDuration?: number) =>
+    postJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/start`, { timerDuration }),
+
+  draftPick: (leagueId: string, pokemonName: string, teamId?: string) =>
+    postJson<{ success: boolean; pick: ApiDraftPick }>(`/api/leagues/${leagueId}/draft/pick`, { pokemonName, teamId }),
+
+  pauseDraft: (leagueId: string) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/pause`),
+
+  resumeDraft: (leagueId: string) =>
+    postJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/resume`),
+
+  autoPick: (leagueId: string) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/auto-pick`),
 
   approveTrade: (tradeId: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`),
