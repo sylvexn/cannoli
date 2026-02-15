@@ -1,5 +1,6 @@
 # Project docs (local only)
 *.md
+!README.md
 plan/
 
 # Dependencies
