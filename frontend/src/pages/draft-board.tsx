@@ -49,7 +49,8 @@ export function DraftBoardPage() {
     state, dispatch,
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
-    rosterLookup, playerLookup, isUserTurn, draftOrder,
+    rosterLookup, playerLookup, isUserTurn, isDemoComplete,
+    draftOrder, handleUserPick,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -72,16 +73,18 @@ export function DraftBoardPage() {
     setHoverInfo(null);
   }, []);
 
+  const isLiveMode = state.mode === 'demo' && state.demoStarted;
+
   return (
     <div className="flex flex-col h-full">
-      {/* Live mode: on-the-clock banner */}
-      {state.mode === 'live' && currentPick && playerLookup.get(currentPick.playerId) && (
+      {/* Demo mode: on-the-clock banner */}
+      {isLiveMode && currentPick && playerLookup.get(currentPick.playerId) && !isDemoComplete && (
         <DraftOnTheClock
           pick={currentPick}
           player={playerLookup.get(currentPick.playerId)!}
           timerSeconds={state.timerSeconds}
           isUserTurn={isUserTurn}
-          totalPicks={state.allPicks.length}
+          totalPicks={state.snakeOrder.length}
         />
       )}
 
@@ -97,7 +100,7 @@ export function DraftBoardPage() {
             onChange={mode => dispatch({ type: 'SET_MODE', mode })}
             options={[
               { value: 'season', label: 'Season', icon: <History size={13} />, activeClass: 'bg-neon/10 text-neon' },
-              { value: 'live', label: 'Live Demo', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' },
+              { value: 'demo', label: 'Demo Draft', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' },
             ]}
           />
         </div>
@@ -158,15 +161,17 @@ export function DraftBoardPage() {
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}
           currentDrafterId={currentPick?.playerId ?? null}
-          isLiveMode={state.mode === 'live'}
+          isLiveMode={isLiveMode}
         />
       </div>
 
-      {/* Live mode: control bar */}
-      {state.mode === 'live' && (
+      {/* Demo mode: control bar */}
+      {state.mode === 'demo' && (
         <DraftControlBar
           state={state}
           dispatch={dispatch}
+          isDemoComplete={isDemoComplete}
+          draftOrder={draftOrder}
         />
       )}
 
@@ -191,7 +196,7 @@ export function DraftBoardPage() {
         ownershipMap={ownershipMap}
         playerLookup={playerLookup}
         canDraft={isUserTurn && !!state.detailPokemon && !ownershipMap.has(state.detailPokemon)}
-        onDraft={name => dispatch({ type: 'USER_PICK', pokemonName: name })}
+        onDraft={handleUserPick}
       />
     </div>
   );

@@ -9,24 +9,94 @@ import {
 } from '@/components/ui/select';
 import { TeamLogo } from '@/components/team-logo';
 import {
-  SkipBack, ChevronLeft, Play, Pause, ChevronRight, SkipForward,
-  User,
+  Play, RotateCcw, User, Timer, Trophy,
 } from 'lucide-react';
-import { useLeagueData } from '@/lib/league-data-context';
+import { generateSnakeSlots } from './use-draft-state';
 import type { DraftState, DraftAction } from './types';
 
 interface DraftControlBarProps {
   state: DraftState;
   dispatch: (action: DraftAction) => void;
+  isDemoComplete: boolean;
+  draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
 }
 
 export function DraftControlBar({
   state,
   dispatch,
+  isDemoComplete,
+  draftOrder,
 }: DraftControlBarProps) {
-  const { players } = useLeagueData();
-  const progress = (state.currentPickIndex / state.allPicks.length) * 100;
-  const isDone = state.currentPickIndex >= state.allPicks.length;
+  // Pre-start: show configuration
+  if (!state.demoStarted) {
+    return (
+      <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-3">
+        <div className="flex items-center gap-4">
+          {/* Your team selector */}
+          <div className="flex items-center gap-2">
+            <User size={13} className="text-text-muted" />
+            <Select
+              value={state.userTeamId ?? 'none'}
+              onValueChange={v => dispatch({ type: 'SET_USER_TEAM', teamId: v === 'none' ? null : v })}
+            >
+              <SelectTrigger className="h-7 w-[160px] text-xs bg-surface-overlay border-border-default">
+                <SelectValue placeholder="Pick your team..." />
+              </SelectTrigger>
+              <SelectContent>
+                {draftOrder.map((p, i) => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-text-muted w-3">{i + 1}</span>
+                      <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                      {p.teamAbbrev} — {p.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="w-px h-6 bg-border-subtle" />
+
+          {/* Timer info */}
+          <div className="flex items-center gap-1.5">
+            <Timer size={13} className="text-text-muted" />
+            <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
+          </div>
+
+          {/* Start button */}
+          <Button
+            onClick={() => {
+              if (!state.userTeamId) return;
+              const teamIds = draftOrder.map(p => p.id);
+              const snakeOrder = generateSnakeSlots(teamIds, 10);
+              dispatch({
+                type: 'DEMO_START',
+                snakeOrder,
+                userTeamId: state.userTeamId,
+                timerDuration: state.timerDuration || 30,
+                pointCap: 110,
+              });
+            }}
+            disabled={!state.userTeamId}
+            className={cn(
+              'ml-auto h-8 px-4 text-xs font-bold gap-1.5',
+              'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
+              'disabled:opacity-30',
+            )}
+          >
+            <Play size={14} />
+            Start Draft
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // In-progress / completed
+  const progress = state.snakeOrder.length > 0
+    ? (state.currentPickIndex / state.snakeOrder.length) * 100
+    : 0;
 
   return (
     <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-3">
@@ -39,116 +109,48 @@ export function DraftControlBar({
       </div>
 
       <div className="flex items-center gap-3">
-        {/* User team selector */}
+        {/* Your team */}
         <div className="flex items-center gap-2">
           <User size={13} className="text-text-muted" />
-          <Select
-            value={state.userTeamId ?? 'none'}
-            onValueChange={v => dispatch({ type: 'SET_USER_TEAM', teamId: v === 'none' ? null : v })}
-          >
-            <SelectTrigger className="h-7 w-[140px] text-xs bg-surface-overlay border-border-default">
-              <SelectValue placeholder="Pick a team..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none" className="text-xs">Auto (watch)</SelectItem>
-              {players.map(p => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                    {p.teamAbbrev} — {p.name}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="w-px h-6 bg-border-subtle" />
-
-        {/* Transport controls */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch({ type: 'RESET_LIVE' })}
-            className="h-7 w-7 p-0 text-text-muted hover:text-neon"
-            title="Reset to start"
-          >
-            <SkipBack size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch({ type: 'STEP_BACK' })}
-            disabled={state.currentPickIndex === 0}
-            className="h-7 w-7 p-0 text-text-muted hover:text-neon disabled:opacity-30"
-            title="Previous pick"
-          >
-            <ChevronLeft size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch({ type: state.isPlaying ? 'PAUSE' : 'PLAY' })}
-            disabled={isDone}
-            className={cn(
-              'h-8 w-8 p-0 rounded-full',
-              state.isPlaying
-                ? 'bg-pink/10 text-pink hover:bg-pink/20'
-                : 'bg-neon/10 text-neon hover:bg-neon/20',
-              'disabled:opacity-30',
-            )}
-            title={state.isPlaying ? 'Pause' : 'Play'}
-          >
-            {state.isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch({ type: 'STEP_FORWARD' })}
-            disabled={isDone}
-            className="h-7 w-7 p-0 text-text-muted hover:text-neon disabled:opacity-30"
-            title="Next pick"
-          >
-            <ChevronRight size={14} />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dispatch({ type: 'SET_PICK_INDEX', index: state.allPicks.length })}
-            disabled={isDone}
-            className="h-7 w-7 p-0 text-text-muted hover:text-neon disabled:opacity-30"
-            title="Skip to end"
-          >
-            <SkipForward size={14} />
-          </Button>
+          {state.userTeamId && (() => {
+            const p = draftOrder.find(t => t.id === state.userTeamId);
+            return p ? (
+              <span className="flex items-center gap-1.5 text-xs">
+                <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                <span className="text-text-primary font-medium">{p.teamAbbrev}</span>
+              </span>
+            ) : null;
+          })()}
         </div>
 
         <div className="w-px h-6 bg-border-subtle" />
 
         {/* Pick counter */}
         <div className="text-xs text-text-muted font-mono tabular-nums">
-          Pick <span className="text-text-primary">{Math.min(state.currentPickIndex + 1, state.allPicks.length)}</span>
-          <span className="text-text-muted"> / {state.allPicks.length}</span>
+          Pick <span className="text-text-primary">{Math.min(state.currentPickIndex + 1, state.snakeOrder.length)}</span>
+          <span className="text-text-muted"> / {state.snakeOrder.length}</span>
         </div>
 
-        {/* Speed selector */}
-        <div className="ml-auto flex rounded-lg border border-border-default overflow-hidden">
-          {([1, 2, 5] as const).map(s => (
-            <button
-              key={s}
-              onClick={() => dispatch({ type: 'SET_SPEED', speed: s })}
-              className={cn(
-                'text-[10px] font-medium h-6 px-2.5 transition-colors',
-                state.speed === s
-                  ? 'bg-neon/10 text-neon'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-              )}
-            >
-              {s}x
-            </button>
-          ))}
-        </div>
+        {isDemoComplete && (
+          <>
+            <div className="w-px h-6 bg-border-subtle" />
+            <div className="flex items-center gap-1.5 text-xs">
+              <Trophy size={13} className="text-win" />
+              <span className="text-win font-medium">Draft Complete!</span>
+            </div>
+          </>
+        )}
+
+        {/* Reset */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => dispatch({ type: 'DEMO_RESET' })}
+          className="ml-auto h-7 px-3 text-xs text-text-muted hover:text-neon gap-1.5"
+        >
+          <RotateCcw size={12} />
+          Reset
+        </Button>
       </div>
     </div>
   );
