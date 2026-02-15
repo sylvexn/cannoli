@@ -8,11 +8,14 @@ import type { Player } from '@/lib/types';
 interface PokemonCompactCardProps {
   name: string;
   types?: PokemonType[];
+  tier?: number;
   owner?: Player;
   isHighlighted?: boolean;
   isUserPickable?: boolean;
   dimmed?: boolean;
+  unaffordable?: boolean;
   recentlyPicked?: boolean;
+  showTier?: boolean;
   onClick: (name: string) => void;
   onHoverStart: (name: string, rect: DOMRect) => void;
   onHoverEnd: () => void;
@@ -21,11 +24,14 @@ interface PokemonCompactCardProps {
 export function PokemonCompactCard({
   name,
   types,
+  tier,
   owner,
   isHighlighted,
   isUserPickable,
   dimmed,
+  unaffordable,
   recentlyPicked,
+  showTier,
   onClick,
   onHoverStart,
   onHoverEnd,
@@ -76,6 +82,8 @@ export function PokemonCompactCard({
         isHighlighted && 'ring-1 shadow-glow-sm',
         // User can pick this
         isUserPickable && !owner && 'border-neon/30 hover:ring-neon/60 hover:shadow-[0_0_16px_rgba(34,211,238,0.25)]',
+        // Unaffordable (can't pick — over budget)
+        unaffordable && !owner && 'opacity-25 grayscale-[60%] pointer-events-auto',
         // Dimmed
         dimmed && 'opacity-30',
         // Recently picked animation
@@ -110,6 +118,23 @@ export function PokemonCompactCard({
             {owner.teamAbbrev}
           </span>
         </div>
+      )}
+
+      {/* Tier cost badge — shown during draft mode */}
+      {showTier && tier != null && (
+        <span className={cn(
+          'absolute top-0.5 right-0.5 z-10 min-w-[16px] h-[16px] px-1',
+          'flex items-center justify-center rounded-sm',
+          'text-[8px] font-mono font-bold leading-none',
+          'bg-surface/80 backdrop-blur-sm border',
+          unaffordable
+            ? 'text-loss/60 border-loss/20'
+            : isUserPickable
+            ? 'text-neon border-neon/30'
+            : 'text-text-muted border-border-subtle',
+        )}>
+          {tier}
+        </span>
       )}
 
       {/* Sprite */}

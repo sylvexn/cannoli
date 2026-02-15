@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { LayoutGrid, Table, Zap, History, Radio } from 'lucide-react';
@@ -11,7 +11,10 @@ import { PokemonHoverCard } from './draft-board/pokemon-hover-card';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
 import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftControlBar } from './draft-board/draft-control-bar';
+import { DraftPickLog } from './draft-board/draft-pick-log';
+import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
 import { TIER_LIST } from '@/data/tier-list';
+import { getTierEntry } from '@/data/tier-list';
 
 /** Simple segmented toggle button group */
 function SegmentedToggle<T extends string>({
@@ -50,34 +53,78 @@ export function DraftBoardPage() {
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
-    draftOrder, handleUserPick, wsConnected,
+    draftOrder, handleUserPick, wsConnected, userBudgetRemaining,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ name: string; rect: DOMRect } | null>(null);
+
+  // Quick-draft confirmation popover state
+  const [confirmPopover, setConfirmPopover] = useState<{ name: string; rect: DOMRect } | null>(null);
+
+  // Track card rects for popover positioning
+  const cardRectsRef = useRef<Map<string, DOMRect>>(new Map());
 
   // Preload sprites for all visible Pokemon in the current filtered pool
   useEffect(() => {
     preloadSprites(filteredPool.map(e => e.name));
   }, [filteredPool]);
 
+  const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
+
   const handleCardClick = useCallback((name: string) => {
+    // During draft, if it's user's turn and the Pokemon is pickable, show confirm popover
+    if (isLiveMode && isUserTurn && !ownershipMap.has(name)) {
+      const tierEntry = getTierEntry(name);
+      // Check affordability
+      if (tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining) {
+        const rect = cardRectsRef.current.get(name);
+        if (rect) {
+          setConfirmPopover({ name, rect });
+          setHoverInfo(null); // dismiss hover
+          return;
+        }
+      }
+    }
+    // Otherwise open the detail sheet
     dispatch({ type: 'SET_DETAIL', name });
-  }, [dispatch]);
+  }, [dispatch, isLiveMode, isUserTurn, ownershipMap, userBudgetRemaining]);
 
   const handleCardHoverStart = useCallback((name: string, rect: DOMRect) => {
-    setHoverInfo({ name, rect });
-  }, []);
+    // Store rect for later popover positioning
+    cardRectsRef.current.set(name, rect);
+    // Don't show hover while popover is open
+    if (!confirmPopover) {
+      setHoverInfo({ name, rect });
+    }
+  }, [confirmPopover]);
 
   const handleCardHoverEnd = useCallback(() => {
     setHoverInfo(null);
   }, []);
 
-  const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
+  const handleConfirmDraft = useCallback((name: string) => {
+    handleUserPick(name);
+    setConfirmPopover(null);
+  }, [handleUserPick]);
+
+  const handleViewDetails = useCallback((name: string) => {
+    setConfirmPopover(null);
+    dispatch({ type: 'SET_DETAIL', name });
+  }, [dispatch]);
+
+  // Compute budget after pick for popover
+  const popoverBudgetAfter = confirmPopover
+    ? (() => {
+        const tierEntry = getTierEntry(confirmPopover.name);
+        if (tierEntry && userBudgetRemaining != null) return userBudgetRemaining - tierEntry.tier;
+        return undefined;
+      })()
+    : undefined;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Demo mode: on-the-clock banner */}
+      {/* Draft mode: on-the-clock banner */}
       {isLiveMode && currentPick && playerLookup.get(currentPick.playerId) && !isDemoComplete && (
         <DraftOnTheClock
           pick={currentPick}
@@ -86,6 +133,14 @@ export function DraftBoardPage() {
           timerDuration={state.timerDuration}
           isUserTurn={isUserTurn}
           totalPicks={state.snakeOrder.length}
+        />
+      )}
+
+      {/* Draft mode: recent picks log */}
+      {isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
+        <DraftPickLog
+          picks={state.allPicks}
+          playerLookup={playerLookup}
         />
       )}
 
@@ -145,6 +200,8 @@ export function DraftBoardPage() {
               rosterLookup={rosterLookup}
               selectedTeamId={state.selectedTeamId}
               isUserPickable={isUserTurn}
+              showTierBadges={isLiveMode}
+              userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -172,6 +229,8 @@ export function DraftBoardPage() {
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}
           currentDrafterId={currentPick?.playerId ?? null}
           isLiveMode={isLiveMode}
+          userTeamId={state.userTeamId}
+          pointCap={state.pointCap}
         />
       </div>
 
@@ -185,8 +244,8 @@ export function DraftBoardPage() {
         />
       )}
 
-      {/* Hover card */}
-      {hoverInfo && (
+      {/* Hover card (hide when confirm popover is showing) */}
+      {hoverInfo && !confirmPopover && (
         <PokemonHoverCard
           name={hoverInfo.name}
           rect={hoverInfo.rect}
@@ -197,6 +256,17 @@ export function DraftBoardPage() {
           onMouseLeave={handleCardHoverEnd}
         />
       )}
+
+      {/* Quick-draft confirmation popover */}
+      <DraftConfirmPopover
+        name={confirmPopover?.name ?? null}
+        anchorRect={confirmPopover?.rect ?? null}
+        budgetAfter={popoverBudgetAfter}
+        onConfirm={handleConfirmDraft}
+        onViewDetails={handleViewDetails}
+        onClose={() => setConfirmPopover(null)}
+        rosterLookup={rosterLookup}
+      />
 
       {/* Detail sheet */}
       <PokemonDetailSheet

@@ -14,6 +14,10 @@ interface DraftPoolGridProps {
   rosterLookup: Map<string, RosterPokemon>;
   selectedTeamId: string | null;
   isUserPickable?: boolean;
+  /** Show tier cost badges on cards (draft mode) */
+  showTierBadges?: boolean;
+  /** User's remaining budget — cards above this are unaffordable */
+  userBudgetRemaining?: number;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -26,6 +30,8 @@ export function DraftPoolGrid({
   rosterLookup,
   selectedTeamId,
   isUserPickable,
+  showTierBadges,
+  userBudgetRemaining,
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
@@ -82,16 +88,20 @@ export function DraftPoolGrid({
                 const types = rosterMon?.types ?? pokeData?.types;
                 const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
                 const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
+                const unaffordable = showTierBadges && !ownership && userBudgetRemaining != null && entry.tier > userBudgetRemaining;
 
                 return (
                   <PokemonCompactCard
                     key={entry.name}
                     name={entry.name}
                     types={types}
+                    tier={entry.tier}
                     owner={owner}
                     isHighlighted={isHighlighted}
                     isUserPickable={isUserPickable && !ownership}
                     dimmed={dimmed}
+                    unaffordable={unaffordable}
+                    showTier={showTierBadges}
                     onClick={onCardClick}
                     onHoverStart={onCardHoverStart}
                     onHoverEnd={onCardHoverEnd}

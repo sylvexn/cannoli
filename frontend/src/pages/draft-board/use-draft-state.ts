@@ -60,7 +60,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
   switch (action.type) {
     case 'SET_MODE': {
       if (action.mode === 'season') {
-        return { ...state, mode: 'season', demoStarted: false, isPlaying: false };
+        return { ...state, mode: 'season', demoStarted: false, isPlaying: false, filters: DEFAULT_FILTERS };
       }
       if (action.mode === 'demo') {
         return {
@@ -114,6 +114,8 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         currentPickIndex: 0,
         isPlaying: true,
         demoStarted: true,
+        // Auto-switch to free-agent filter for drafting
+        filters: { ...state.filters, ownership: 'free-agent' },
       };
 
     case 'DEMO_PICK': {
@@ -579,6 +581,13 @@ export function useDraftState() {
   // Draft order: worst record picks first
   const draftOrder = useMemo(() => [...standings].reverse(), [standings]);
 
+  // User's remaining budget for affordability checks
+  const userBudgetRemaining = useMemo(() => {
+    if (!state.userTeamId) return undefined;
+    const spent = teamPoints.get(state.userTeamId) ?? 0;
+    return state.pointCap - spent;
+  }, [state.userTeamId, teamPoints, state.pointCap]);
+
   return {
     state,
     dispatch,
@@ -596,6 +605,7 @@ export function useDraftState() {
     handleUserPick,
     draftedSet,
     wsConnected,
+    userBudgetRemaining,
   };
 }
 
