@@ -225,6 +225,21 @@ export const siteSettings = sqliteTable('site_settings', {
   defaultUserPassword: text('default_user_password').default('password'),
 });
 
+// ─── Draft State (tracks active/completed drafts per league) ────────────────
+
+export const draftState = sqliteTable('draft_state', {
+  leagueId: text('league_id').primaryKey().references(() => leagues.id),
+  status: text('status', { enum: ['not_started', 'in_progress', 'paused', 'completed'] }).notNull().default('not_started'),
+  /** Index into the snake-order pick sequence (0-based) */
+  currentPickIndex: integer('current_pick_index').notNull().default(0),
+  /** Seconds per pick */
+  timerDuration: integer('timer_duration').notNull().default(120),
+  /** ISO timestamp when current pick timer started (null if paused/not started) */
+  timerStartedAt: text('timer_started_at'),
+  startedAt: text('started_at'),
+  completedAt: text('completed_at'),
+});
+
 // ─── Activity Log ───────────────────────────────────────────────────────────
 
 export const activityLog = sqliteTable('activity_log', {
