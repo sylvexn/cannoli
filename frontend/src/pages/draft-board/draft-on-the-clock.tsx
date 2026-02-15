@@ -9,6 +9,7 @@ interface DraftOnTheClockProps {
   pick: DraftPickEntry;
   player: Player;
   timerSeconds: number;
+  timerDuration: number;
   isUserTurn: boolean;
   totalPicks: number;
 }
@@ -17,10 +18,13 @@ export function DraftOnTheClock({
   pick,
   player,
   timerSeconds,
+  timerDuration,
   isUserTurn,
   totalPicks,
 }: DraftOnTheClockProps) {
-  const urgency = timerSeconds > 20 ? 'calm' : timerSeconds > 10 ? 'warning' : 'critical';
+  const urgency = timerSeconds > timerDuration * 0.6 ? 'calm'
+    : timerSeconds > timerDuration * 0.3 ? 'warning'
+    : 'critical';
 
   return (
     <div
@@ -89,7 +93,7 @@ export function DraftOnTheClock({
             urgency === 'warning' && 'bg-draw',
             urgency === 'critical' && 'bg-loss',
           )}
-          style={{ width: `${(timerSeconds / 30) * 100}%` }}
+          style={{ width: `${(timerSeconds / timerDuration) * 100}%` }}
         />
       </div>
     </div>

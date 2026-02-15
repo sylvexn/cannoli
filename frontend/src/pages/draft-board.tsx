@@ -83,6 +83,7 @@ export function DraftBoardPage() {
           pick={currentPick}
           player={playerLookup.get(currentPick.playerId)!}
           timerSeconds={state.timerSeconds}
+          timerDuration={state.timerDuration}
           isUserTurn={isUserTurn}
           totalPicks={state.snakeOrder.length}
         />
