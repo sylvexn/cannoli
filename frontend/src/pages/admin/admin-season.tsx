@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppData } from '@/lib/app-data-context';
+import { api } from '@/lib/api';
+import type { ApiDraftState } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  ChevronRight, Play, SkipForward, AlertTriangle,
-  Sparkles, Plus, Pencil, Trash2,
+  ChevronRight, Play, Pause, SkipForward, AlertTriangle,
+  Sparkles, Plus, Pencil, Trash2, Zap, RotateCcw, Timer,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -18,9 +20,8 @@ import { NewSeasonWizard } from './season/new-season-wizard';
 import { DraftOrderEditor } from './season/draft-order-editor';
 
 export function AdminSeason() {
-  const { leagues: defaultLeagues } = useAppData();
+  const { leagues: defaultLeagues, refreshLeagues } = useAppData();
 
-  // Editable league list (source of truth for the whole tab)
   const [leagueList, setLeagueList] = useState<EditableLeague[]>(
     defaultLeagues.map(l => ({ id: l.id, name: l.name, color: l.color }))
   );
@@ -28,6 +29,31 @@ export function AdminSeason() {
   const [leagueStates, setLeagueStates] = useState(
     Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }]))
   );
+
+  // Draft state per league
+  const [draftStates, setDraftStates] = useState<Record<string, ApiDraftState | null>>({});
+
+  // Fetch draft states for leagues in draft phase
+  const fetchDraftStates = useCallback(async () => {
+    const states: Record<string, ApiDraftState | null> = {};
+    for (const league of defaultLeagues) {
+      if (league.season?.phase === 'draft') {
+        try {
+          const s = await api.getDraftState(league.id);
+          states[league.id] = s;
+        } catch { states[league.id] = null; }
+      }
+    }
+    setDraftStates(states);
+  }, [defaultLeagues]);
+
+  useEffect(() => { fetchDraftStates(); }, [fetchDraftStates]);
+
+  // Sync when defaultLeagues changes
+  useEffect(() => {
+    setLeagueList(defaultLeagues.map(l => ({ id: l.id, name: l.name, color: l.color })));
+    setLeagueStates(Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }])));
+  }, [defaultLeagues]);
 
   // Advance phase confirmation
   const [advanceOpen, setAdvanceOpen] = useState(false);
@@ -58,19 +84,17 @@ export function AdminSeason() {
     setAdvanceOpen(true);
   }
 
-  function executeAdvance() {
+  async function executeAdvance() {
     if (!advanceTarget) return;
     const { leagueId, to } = advanceTarget;
-    setLeagueStates(prev => ({
-      ...prev,
-      [leagueId]: {
-        ...prev[leagueId],
-        phase: to,
-        currentWeek: to === 'regular' ? 1 : to === 'playoffs' ? 0 : prev[leagueId].currentWeek,
-      },
-    }));
-    const name = leagueList.find(l => l.id === leagueId)?.name;
-    toast.success(`${name} advanced to ${phaseConfig[to].label}`);
+    try {
+      await api.advancePhase(leagueId, to);
+      const name = leagueList.find(l => l.id === leagueId)?.name;
+      toast.success(`${name} advanced to ${phaseConfig[to].label}`);
+      refreshLeagues?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
     setAdvanceOpen(false);
     setAdvanceTarget(null);
   }
@@ -80,20 +104,48 @@ export function AdminSeason() {
     setWeekOpen(true);
   }
 
-  function executeWeekAdvance() {
+  async function executeWeekAdvance() {
     if (!weekTarget) return;
-    setLeagueStates(prev => ({
-      ...prev,
-      [weekTarget]: {
-        ...prev[weekTarget],
-        currentWeek: prev[weekTarget].currentWeek + 1,
-      },
-    }));
-    const name = leagueList.find(l => l.id === weekTarget)?.name;
-    const newWeek = leagueStates[weekTarget].currentWeek + 1;
-    toast.success(`${name} advanced to Week ${newWeek}`);
+    try {
+      const result = await api.advanceWeek(weekTarget);
+      const name = leagueList.find(l => l.id === weekTarget)?.name;
+      toast.success(`${name} advanced to Week ${result.week}`);
+      refreshLeagues?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
     setWeekOpen(false);
     setWeekTarget(null);
+  }
+
+  // Draft controls
+  async function handleStartDraft(leagueId: string) {
+    try {
+      const state = await api.startDraft(leagueId, 120);
+      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
+      toast.success('Draft started!');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  }
+
+  async function handlePauseDraft(leagueId: string) {
+    try {
+      await api.pauseDraft(leagueId);
+      setDraftStates(prev => ({
+        ...prev,
+        [leagueId]: prev[leagueId] ? { ...prev[leagueId]!, status: 'paused' } : null,
+      }));
+      toast.success('Draft paused');
+    } catch (err: any) { toast.error(err.message); }
+  }
+
+  async function handleResumeDraft(leagueId: string) {
+    try {
+      const state = await api.resumeDraft(leagueId);
+      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
+      toast.success('Draft resumed');
+    } catch (err: any) { toast.error(err.message); }
   }
 
   // League CRUD
@@ -111,27 +163,21 @@ export function AdminSeason() {
     setLeagueEditOpen(true);
   }
 
-  function saveLeague() {
+  async function saveLeague() {
     const name = editName.trim();
     if (!name) return;
 
-    if (editingLeague) {
-      setLeagueList(prev => prev.map(l =>
-        l.id === editingLeague.id ? { ...l, name, color: editColor } : l
-      ));
-      toast.success(`Updated "${name}"`);
-    } else {
-      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (leagueList.some(l => l.id === id)) {
-        toast.error('A league with this name already exists');
-        return;
+    try {
+      if (editingLeague) {
+        await api.updateLeague(editingLeague.id, { name, color: editColor });
+        toast.success(`Updated "${name}"`);
+      } else {
+        await api.createLeague(name, editColor);
+        toast.success(`Created "${name}"`);
       }
-      setLeagueList(prev => [...prev, { id, name, color: editColor }]);
-      setLeagueStates(prev => ({
-        ...prev,
-        [id]: { id: `s10-${id}`, seasonNumber: 10, phase: 'offseason' as const, currentWeek: 0, totalWeeks: 11 },
-      }));
-      toast.success(`Created "${name}"`);
+      refreshLeagues?.();
+    } catch (err: any) {
+      toast.error(err.message);
     }
     setLeagueEditOpen(false);
   }
@@ -141,16 +187,16 @@ export function AdminSeason() {
     setDeleteOpen(true);
   }
 
-  function executeDeleteLeague() {
+  async function executeDeleteLeague() {
     if (!deleteTarget) return;
-    const name = leagueList.find(l => l.id === deleteTarget)?.name;
-    setLeagueList(prev => prev.filter(l => l.id !== deleteTarget));
-    setLeagueStates(prev => {
-      const next = { ...prev };
-      delete next[deleteTarget];
-      return next;
-    });
-    toast.success(`Deleted "${name}"`);
+    try {
+      const name = leagueList.find(l => l.id === deleteTarget)?.name;
+      await api.deleteLeague(deleteTarget);
+      toast.success(`Deleted "${name}"`);
+      refreshLeagues?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
     setDeleteOpen(false);
     setDeleteTarget(null);
   }
@@ -161,7 +207,9 @@ export function AdminSeason() {
       <div className="flex items-center gap-4 text-sm">
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Current Season:</span>
-          <span className="text-text-primary font-medium font-mono">10</span>
+          <span className="text-text-primary font-medium font-mono">
+            {defaultLeagues[0]?.season?.seasonNumber ?? '—'}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Leagues:</span>
@@ -189,7 +237,9 @@ export function AdminSeason() {
           const nextPhase = getNextPhase(phase);
           const Icon = config.icon;
           const isRegular = phase === 'regular';
+          const isDraft = phase === 'draft';
           const atWeekLimit = isRegular && state.currentWeek >= state.totalWeeks;
+          const draftState = draftStates[league.id];
 
           return (
             <Card key={league.id}>
@@ -243,6 +293,76 @@ export function AdminSeason() {
                     </span>
                   ))}
                 </div>
+
+                {/* Draft controls */}
+                {isDraft && (
+                  <div className="space-y-2 rounded-md border border-draw/20 bg-draw/5 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Zap size={14} className="text-draw" />
+                        <span className="text-text-primary font-medium">Draft Engine</span>
+                        {draftState && (
+                          <Badge variant="outline" className={
+                            draftState.status === 'in_progress' ? 'text-win bg-win/10 border-win/30' :
+                            draftState.status === 'paused' ? 'text-draw bg-draw/10 border-draw/30' :
+                            draftState.status === 'completed' ? 'text-neon bg-neon/10 border-neon/30' :
+                            'text-text-muted'
+                          }>
+                            {draftState.status === 'in_progress' ? 'Live' :
+                             draftState.status === 'paused' ? 'Paused' :
+                             draftState.status === 'completed' ? 'Completed' : 'Not Started'}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {(!draftState || draftState.status === 'not_started') && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleStartDraft(league.id)}
+                            className="bg-win text-surface-base hover:bg-win/90 h-7 text-xs"
+                          >
+                            <Play size={12} />
+                            Start Draft
+                          </Button>
+                        )}
+                        {draftState?.status === 'in_progress' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handlePauseDraft(league.id)}
+                            className="h-7 text-xs"
+                          >
+                            <Pause size={12} />
+                            Pause
+                          </Button>
+                        )}
+                        {draftState?.status === 'paused' && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleResumeDraft(league.id)}
+                            className="bg-win text-surface-base hover:bg-win/90 h-7 text-xs"
+                          >
+                            <Play size={12} />
+                            Resume
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {draftState && draftState.status !== 'not_started' && (
+                      <div className="flex items-center gap-3 text-xs text-text-muted">
+                        <span className="font-mono tabular-nums">
+                          Pick {draftState.currentPickIndex} / {draftState.snakeOrder?.length ?? '?'}
+                        </span>
+                        <div className="flex-1 h-1 rounded-full bg-surface-overlay overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-draw transition-all"
+                            style={{ width: `${draftState.snakeOrder?.length ? (draftState.currentPickIndex / draftState.snakeOrder.length) * 100 : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Week progress (regular season only) */}
                 {isRegular && (
