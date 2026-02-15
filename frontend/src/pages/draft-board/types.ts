@@ -26,6 +26,14 @@ export interface DraftPickEntry {
   isTeraCaptain: boolean;
 }
 
+/** A slot in the snake-draft order (before a pick is made) */
+export interface SnakeSlot {
+  round: number;
+  pick: number;
+  overallPick: number;
+  teamId: string;
+}
+
 /** Mock trade for season history */
 export interface MockTrade {
   week: number;
@@ -59,39 +67,54 @@ export const DEFAULT_FILTERS: DraftFilters = {
   sortBy: 'tier-desc',
 };
 
+/**
+ * Draft modes:
+ * - season: historical view of completed draft + trades
+ * - demo: client-side simulated draft with AI auto-picks
+ * - live: real-time draft via WebSocket (future)
+ */
+export type DraftMode = 'season' | 'demo' | 'live';
+
 /** Draft state for the page */
 export interface DraftState {
-  mode: 'season' | 'live';
+  mode: DraftMode;
+  /** Season mode: historical picks. Demo/live: picks made so far. */
   allPicks: DraftPickEntry[];
+  /** Season mode only: trades to overlay on draft ownership */
   trades: MockTrade[];
-  /** In live mode: how many picks have been made so far (0..allPicks.length) */
+  /** Snake draft slot sequence (demo/live mode) */
+  snakeOrder: SnakeSlot[];
+  /** In demo/live: how many picks have been made (0..totalPicks) */
   currentPickIndex: number;
   isPlaying: boolean;
   speed: 1 | 2 | 5;
   timerSeconds: number;
+  timerDuration: number;
   userTeamId: string | null;
-  /** User overrides of auto-picks in live mode: pickIndex -> pokemonName */
-  userPicks: Record<number, string>;
   viewMode: 'grid' | 'table';
   selectedTeamId: string | null;
   filters: DraftFilters;
   detailPokemon: string | null;
+  /** Demo mode: whether the draft has started */
+  demoStarted: boolean;
+  /** Point cap for validation */
+  pointCap: number;
 }
 
 export type DraftAction =
-  | { type: 'SET_MODE'; mode: 'season' | 'live' }
+  | { type: 'SET_MODE'; mode: DraftMode }
   | { type: 'SET_VIEW_MODE'; mode: 'grid' | 'table' }
-  | { type: 'SET_PICK_INDEX'; index: number }
-  | { type: 'STEP_FORWARD' }
-  | { type: 'STEP_BACK' }
-  | { type: 'PLAY' }
-  | { type: 'PAUSE' }
-  | { type: 'SET_SPEED'; speed: 1 | 2 | 5 }
-  | { type: 'TICK_TIMER' }
-  | { type: 'USER_PICK'; pokemonName: string }
-  | { type: 'SET_USER_TEAM'; teamId: string | null }
   | { type: 'SELECT_TEAM'; teamId: string | null }
   | { type: 'UPDATE_FILTERS'; filters: Partial<DraftFilters> }
   | { type: 'SET_DETAIL'; name: string | null }
-  | { type: 'RESET_LIVE' }
-  | { type: 'SYNC_DATA'; allPicks: DraftPickEntry[]; trades: MockTrade[] };
+  // Season mode: sync historical data
+  | { type: 'SYNC_DATA'; allPicks: DraftPickEntry[]; trades: MockTrade[] }
+  // Demo mode actions
+  | { type: 'DEMO_START'; snakeOrder: SnakeSlot[]; userTeamId: string; timerDuration: number; pointCap: number }
+  | { type: 'DEMO_PICK'; pokemonName: string; tier: number }
+  | { type: 'DEMO_TICK' }
+  | { type: 'DEMO_RESET' }
+  | { type: 'SET_USER_TEAM'; teamId: string | null }
+  // Live mode actions (future)
+  | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState }
+  | { type: 'LIVE_PICK_MADE'; pick: DraftPickEntry };

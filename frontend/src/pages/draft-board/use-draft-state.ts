@@ -1,5 +1,5 @@
-import { useReducer, useMemo, useEffect, useState } from 'react';
-import { TIER_LIST } from '@/data/tier-list';
+import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'react';
+import { TIER_LIST, BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
@@ -8,73 +8,89 @@ import type { ApiDraftPick } from '@/lib/api';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, transactionsToTrades } from './generate-draft-order';
 import type {
-  DraftState, DraftAction, PoolOwnership, Acquisition, DraftPickEntry,
+  DraftState, DraftAction, PoolOwnership, Acquisition, DraftPickEntry, SnakeSlot,
 } from './types';
+import { DEFAULT_FILTERS } from './types';
 
-const PICK_TIMER_BASE = 30; // seconds per pick at 1x
+const DEMO_TIMER_DEFAULT = 30;
+const BANNED_SET = new Set(BANNED);
+
+// ─── Demo AI: pick a random valid Pokemon ───────────────────────────────────
+
+function demoAutoPick(
+  drafted: Set<string>,
+  teamPoints: number,
+  pointCap: number,
+): { name: string; tier: number } | null {
+  const remaining = pointCap - teamPoints;
+  const available = TIER_LIST.filter(
+    e => !drafted.has(e.name) && !BANNED_SET.has(e.name) && e.tier > 0 && e.tier <= remaining
+  );
+  if (available.length === 0) return null;
+
+  // Pick from top 3 tiers available, weighted random
+  available.sort((a, b) => b.tier - a.tier);
+  const topTier = available[0].tier;
+  const candidates = available.filter(e => e.tier >= topTier - 2);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// ─── Snake order generation (client-side) ───────────────────────────────────
+
+export function generateSnakeSlots(teamIds: string[], rounds: number): SnakeSlot[] {
+  const slots: SnakeSlot[] = [];
+  for (let round = 1; round <= rounds; round++) {
+    const order = round % 2 === 1 ? teamIds : [...teamIds].reverse();
+    for (let i = 0; i < order.length; i++) {
+      slots.push({
+        round,
+        pick: i + 1,
+        overallPick: slots.length + 1,
+        teamId: order[i],
+      });
+    }
+  }
+  return slots;
+}
+
+// ─── Reducer ────────────────────────────────────────────────────────────────
 
 function draftReducer(state: DraftState, action: DraftAction): DraftState {
   switch (action.type) {
     case 'SET_MODE': {
-      if (action.mode === 'live') {
-        return { ...state, mode: 'live', currentPickIndex: 0, isPlaying: false, timerSeconds: PICK_TIMER_BASE, userPicks: {} };
+      if (action.mode === 'season') {
+        return { ...state, mode: 'season', demoStarted: false, isPlaying: false };
       }
-      return { ...state, mode: 'season', currentPickIndex: state.allPicks.length, isPlaying: false };
-    }
-    case 'SET_VIEW_MODE':
-      return { ...state, viewMode: action.mode };
-    case 'SET_PICK_INDEX':
-      return { ...state, currentPickIndex: Math.max(0, Math.min(action.index, state.allPicks.length)) };
-    case 'STEP_FORWARD': {
-      if (state.currentPickIndex >= state.allPicks.length) return state;
-      const nextIndex = state.currentPickIndex + 1;
-      // If it's the user's turn, pause
-      const nextPick = state.allPicks[nextIndex];
-      const shouldPause = nextPick && nextPick.playerId === state.userTeamId;
-      return { ...state, currentPickIndex: nextIndex, timerSeconds: PICK_TIMER_BASE, isPlaying: shouldPause ? false : state.isPlaying };
-    }
-    case 'STEP_BACK':
-      return { ...state, currentPickIndex: Math.max(0, state.currentPickIndex - 1), timerSeconds: PICK_TIMER_BASE };
-    case 'PLAY':
-      return { ...state, isPlaying: true };
-    case 'PAUSE':
-      return { ...state, isPlaying: false };
-    case 'SET_SPEED':
-      return { ...state, speed: action.speed };
-    case 'TICK_TIMER': {
-      if (state.timerSeconds <= 1) {
-        // Timer expired — auto-advance
-        if (state.currentPickIndex >= state.allPicks.length) {
-          return { ...state, isPlaying: false, timerSeconds: 0 };
-        }
-        const nextIndex = state.currentPickIndex + 1;
-        const nextPick = state.allPicks[nextIndex];
-        const shouldPause = nextPick && nextPick.playerId === state.userTeamId;
+      if (action.mode === 'demo') {
         return {
           ...state,
-          currentPickIndex: nextIndex,
-          timerSeconds: PICK_TIMER_BASE,
-          isPlaying: shouldPause ? false : (nextIndex < state.allPicks.length),
+          mode: 'demo',
+          allPicks: [],
+          currentPickIndex: 0,
+          isPlaying: false,
+          timerSeconds: state.timerDuration,
+          demoStarted: false,
         };
       }
-      return { ...state, timerSeconds: state.timerSeconds - 1 };
+      return { ...state, mode: action.mode };
     }
-    case 'USER_PICK': {
-      const userPicks = { ...state.userPicks, [state.currentPickIndex]: action.pokemonName };
-      const nextIndex = state.currentPickIndex + 1;
-      const shouldPlay = nextIndex < state.allPicks.length;
-      return { ...state, userPicks, currentPickIndex: nextIndex, timerSeconds: PICK_TIMER_BASE, isPlaying: shouldPlay };
-    }
-    case 'SET_USER_TEAM':
-      return { ...state, userTeamId: action.teamId };
+
+    case 'SET_VIEW_MODE':
+      return { ...state, viewMode: action.mode };
+
     case 'SELECT_TEAM':
       return { ...state, selectedTeamId: state.selectedTeamId === action.teamId ? null : action.teamId };
+
     case 'UPDATE_FILTERS':
       return { ...state, filters: { ...state.filters, ...action.filters } };
+
     case 'SET_DETAIL':
       return { ...state, detailPokemon: action.name };
-    case 'RESET_LIVE':
-      return { ...state, currentPickIndex: 0, isPlaying: false, timerSeconds: PICK_TIMER_BASE, userPicks: {} };
+
+    case 'SET_USER_TEAM':
+      return { ...state, userTeamId: action.teamId };
+
+    // ─── Season mode ──────────────────────────────────────────────────
     case 'SYNC_DATA':
       return {
         ...state,
@@ -82,70 +98,219 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         trades: action.trades,
         currentPickIndex: state.mode === 'season' ? action.allPicks.length : state.currentPickIndex,
       };
+
+    // ─── Demo mode ────────────────────────────────────────────────────
+    case 'DEMO_START':
+      return {
+        ...state,
+        mode: 'demo',
+        snakeOrder: action.snakeOrder,
+        userTeamId: action.userTeamId,
+        timerDuration: action.timerDuration,
+        timerSeconds: action.timerDuration,
+        pointCap: action.pointCap,
+        allPicks: [],
+        currentPickIndex: 0,
+        isPlaying: true,
+        demoStarted: true,
+      };
+
+    case 'DEMO_PICK': {
+      const slot = state.snakeOrder[state.currentPickIndex];
+      if (!slot) return state;
+
+      const newPick: DraftPickEntry = {
+        round: slot.round,
+        pick: slot.pick,
+        overallPick: slot.overallPick,
+        playerId: slot.teamId,
+        pokemonName: action.pokemonName,
+        tier: action.tier,
+        isTeraCaptain: false,
+      };
+
+      const newPicks = [...state.allPicks, newPick];
+      const nextIndex = state.currentPickIndex + 1;
+      const isComplete = nextIndex >= state.snakeOrder.length;
+      const nextSlot = state.snakeOrder[nextIndex];
+      const isUserNext = nextSlot?.teamId === state.userTeamId;
+
+      return {
+        ...state,
+        allPicks: newPicks,
+        currentPickIndex: nextIndex,
+        timerSeconds: state.timerDuration,
+        isPlaying: isComplete ? false : !isUserNext,
+      };
+    }
+
+    case 'DEMO_TICK': {
+      if (state.timerSeconds <= 1) {
+        // Timer expired — will be handled by the effect (auto-pick)
+        return { ...state, timerSeconds: 0 };
+      }
+      return { ...state, timerSeconds: state.timerSeconds - 1 };
+    }
+
+    case 'DEMO_RESET':
+      return {
+        ...state,
+        allPicks: [],
+        currentPickIndex: 0,
+        isPlaying: false,
+        timerSeconds: state.timerDuration,
+        demoStarted: false,
+      };
+
+    // ─── Live mode (future) ───────────────────────────────────────────
+    case 'LIVE_SYNC':
+      // TODO: sync from WebSocket state
+      return state;
+
+    case 'LIVE_PICK_MADE':
+      return state;
+
     default:
       return state;
   }
 }
 
+// ─── Hook ───────────────────────────────────────────────────────────────────
+
 export function useDraftState() {
   const league = useLeague();
   const { players, standings, transactions } = useLeagueData();
+
+  // ─── Season data (historical picks from API) ─────────────────────
   const [draftPicks, setDraftPicks] = useState<ApiDraftPick[]>([]);
 
-  // Fetch draft picks from API
   useEffect(() => {
     api.getDraftPicks(league.id).then(setDraftPicks);
   }, [league.id]);
 
-  const allPicks = useMemo(
+  const seasonPicks = useMemo(
     () => draftPicks.length > 0 ? generateDraftOrder(standings, draftPicks) : [],
     [standings, draftPicks],
   );
 
   const trades = useMemo(() => transactionsToTrades(transactions), [transactions]);
 
+  // ─── Reducer ──────────────────────────────────────────────────────
   const initialState: DraftState = {
     mode: 'season',
-    allPicks,
+    allPicks: seasonPicks,
     trades,
-    currentPickIndex: allPicks.length, // season mode shows all picks
+    snakeOrder: [],
+    currentPickIndex: seasonPicks.length,
     isPlaying: false,
     speed: 1,
-    timerSeconds: PICK_TIMER_BASE,
+    timerSeconds: DEMO_TIMER_DEFAULT,
+    timerDuration: DEMO_TIMER_DEFAULT,
     userTeamId: null,
-    userPicks: {},
     viewMode: 'grid',
     selectedTeamId: null,
-    filters: {
-      search: '',
-      tierMin: 5,
-      tierMax: 20,
-      types: [],
-      ownership: 'all',
-      sortBy: 'tier-desc',
-    },
+    filters: DEFAULT_FILTERS,
     detailPokemon: null,
+    demoStarted: false,
+    pointCap: 110,
   };
 
   const [state, dispatch] = useReducer(draftReducer, initialState);
 
-  // Sync picks + trades when they load from API
+  // Sync season data when it loads
   useEffect(() => {
-    if (allPicks.length > 0) {
-      dispatch({ type: 'SYNC_DATA', allPicks, trades });
+    if (seasonPicks.length > 0) {
+      dispatch({ type: 'SYNC_DATA', allPicks: seasonPicks, trades });
     }
-  }, [allPicks, trades]);
+  }, [seasonPicks, trades]);
 
-  // Timer tick for live mode
+  // ─── Demo mode: AI auto-pick effect ──────────────────────────────
+  const demoTimerRef = useRef<ReturnType<typeof setInterval>>();
+
+  // Compute team points from current picks (for demo validation)
+  const demoTeamPoints = useMemo(() => {
+    if (state.mode !== 'demo') return new Map<string, number>();
+    const pts = new Map<string, number>();
+    for (const pick of state.allPicks) {
+      pts.set(pick.playerId, (pts.get(pick.playerId) ?? 0) + pick.tier);
+    }
+    return pts;
+  }, [state.mode, state.allPicks]);
+
+  const draftedSet = useMemo(() => {
+    return new Set(state.allPicks.map(p => p.pokemonName));
+  }, [state.allPicks]);
+
+  // Timer tick for demo mode
   useEffect(() => {
-    if (!state.isPlaying || state.mode !== 'live') return;
-    const interval = setInterval(() => {
-      dispatch({ type: 'TICK_TIMER' });
-    }, 1000 / state.speed);
-    return () => clearInterval(interval);
-  }, [state.isPlaying, state.speed, state.mode]);
+    if (state.mode !== 'demo' || !state.demoStarted || !state.isPlaying) {
+      clearInterval(demoTimerRef.current);
+      return;
+    }
 
-  // Build roster lookup: pokemonName → RosterPokemon (from all players' rosters)
+    demoTimerRef.current = setInterval(() => {
+      dispatch({ type: 'DEMO_TICK' });
+    }, 1000);
+
+    return () => clearInterval(demoTimerRef.current);
+  }, [state.mode, state.demoStarted, state.isPlaying]);
+
+  // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
+  const currentSlot = state.mode === 'demo' && state.demoStarted
+    ? state.snakeOrder[state.currentPickIndex] ?? null
+    : null;
+
+  const isUserTurn = state.mode === 'demo' && currentSlot?.teamId === state.userTeamId;
+  const isDemoComplete = state.mode === 'demo' && state.demoStarted && state.currentPickIndex >= state.snakeOrder.length;
+
+  useEffect(() => {
+    if (state.mode !== 'demo' || !state.demoStarted || isDemoComplete) return;
+    if (!currentSlot || isUserTurn) return;
+
+    // AI picks after a short delay (simulates thinking)
+    const delay = setTimeout(() => {
+      const teamPts = demoTeamPoints.get(currentSlot.teamId) ?? 0;
+      const pick = demoAutoPick(draftedSet, teamPts, state.pointCap);
+      if (pick) {
+        dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
+      }
+    }, 300 + Math.random() * 700); // 300-1000ms thinking time
+
+    return () => clearTimeout(delay);
+  }, [state.mode, state.demoStarted, currentSlot, isUserTurn, isDemoComplete, demoTeamPoints, draftedSet, state.pointCap]);
+
+  // Auto-pick for user on timer expiry
+  useEffect(() => {
+    if (state.mode !== 'demo' || !state.demoStarted || !isUserTurn) return;
+    if (state.timerSeconds > 0) return;
+
+    // Timer expired for user — auto-pick
+    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
+    const pick = demoAutoPick(draftedSet, teamPts, state.pointCap);
+    if (pick) {
+      dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
+    }
+  }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, demoTeamPoints, draftedSet, state.pointCap, state.userTeamId]);
+
+  // ─── User pick handler for demo mode ─────────────────────────────
+  const handleUserPick = useCallback((pokemonName: string) => {
+    if (state.mode !== 'demo' || !isUserTurn) return;
+
+    // Validate
+    if (draftedSet.has(pokemonName)) return;
+    if (BANNED_SET.has(pokemonName)) return;
+
+    const entry = TIER_LIST.find(e => e.name === pokemonName);
+    if (!entry) return;
+
+    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
+    if (teamPts + entry.tier > state.pointCap) return;
+
+    dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
+  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, state.userTeamId, state.pointCap]);
+
+  // ─── Shared lookups ──────────────────────────────────────────────
+
   const rosterLookup = useMemo(() => {
     const map = new Map<string, RosterPokemon>();
     for (const player of players) {
@@ -156,72 +321,58 @@ export function useDraftState() {
     return map;
   }, [players]);
 
-  // Build player lookup
   const playerLookup = useMemo(() => {
     const map = new Map<string, Player>();
     for (const p of players) map.set(p.id, p);
     return map;
   }, [players]);
 
-  // Ownership map: pokemonName → PoolOwnership
-  // In season mode: shows current ownership (draft + trades applied)
-  // In live mode: shows ownership up to currentPickIndex
+  // ─── Ownership map ───────────────────────────────────────────────
   const ownershipMap = useMemo(() => {
     const map = new Map<string, PoolOwnership>();
-    const picksToShow = state.mode === 'season' ? state.allPicks.length : state.currentPickIndex;
 
-    // Apply draft picks
-    for (let i = 0; i < picksToShow; i++) {
-      const pick = state.allPicks[i];
-      const pokemonName = state.userPicks[i] ?? pick.pokemonName;
-      map.set(pokemonName, {
-        teamId: pick.playerId,
-        acquisition: {
-          method: 'drafted',
-          round: pick.round,
-          pick: pick.pick,
-        },
-      });
-    }
-
-    // In season mode, apply trades on top
     if (state.mode === 'season') {
+      // Show all historical picks
+      for (const pick of state.allPicks) {
+        map.set(pick.pokemonName, {
+          teamId: pick.playerId,
+          acquisition: { method: 'drafted', round: pick.round, pick: pick.pick },
+        });
+      }
+      // Apply trades on top
       for (const trade of state.trades) {
         const existing = map.get(trade.pokemonName);
         if (existing) {
           map.set(trade.pokemonName, {
             teamId: trade.toTeamId,
-            acquisition: {
-              method: 'traded',
-              week: trade.week,
-              fromTeamId: trade.fromTeamId,
-            },
+            acquisition: { method: 'traded', week: trade.week, fromTeamId: trade.fromTeamId },
           });
         }
+      }
+    } else {
+      // Demo/live: show picks made so far
+      for (const pick of state.allPicks) {
+        map.set(pick.pokemonName, {
+          teamId: pick.playerId,
+          acquisition: { method: 'drafted', round: pick.round, pick: pick.pick },
+        });
       }
     }
 
     return map;
-  }, [state.allPicks, state.currentPickIndex, state.mode, state.trades, state.userPicks]);
+  }, [state.allPicks, state.trades, state.mode]);
 
-  // Filtered + sorted pool
+  // ─── Filtered pool ───────────────────────────────────────────────
   const filteredPool = useMemo(() => {
     let pool = TIER_LIST.filter(entry => {
-      // Tier range
       if (entry.tier < state.filters.tierMin || entry.tier > state.filters.tierMax) return false;
-
-      // Search
       if (state.filters.search) {
         const q = state.filters.search.toLowerCase();
         if (!entry.name.toLowerCase().includes(q)) return false;
       }
-
-      // Ownership filter
       const owned = ownershipMap.has(entry.name);
       if (state.filters.ownership === 'owned' && !owned) return false;
       if (state.filters.ownership === 'free-agent' && owned) return false;
-
-      // Type filter — cross-reference roster data or pokedex
       if (state.filters.types.length > 0) {
         const rosterMon = rosterLookup.get(entry.name);
         const pokeData = getPokemonData(entry.name);
@@ -231,11 +382,9 @@ export function useDraftState() {
           if (!hasType) return false;
         }
       }
-
       return true;
     });
 
-    // Sort
     switch (state.filters.sortBy) {
       case 'tier-desc':
         pool = [...pool].sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
@@ -250,11 +399,9 @@ export function useDraftState() {
         pool = [...pool].sort((a, b) => b.name.localeCompare(a.name));
         break;
     }
-
     return pool;
   }, [state.filters, ownershipMap, rosterLookup]);
 
-  // Group by tier for grid view
   const poolByTier = useMemo(() => {
     const groups = new Map<number, typeof filteredPool>();
     for (const entry of filteredPool) {
@@ -262,42 +409,44 @@ export function useDraftState() {
       group.push(entry);
       groups.set(entry.tier, group);
     }
-    // Sort tiers descending
     return [...groups.entries()].sort((a, b) => b[0] - a[0]);
   }, [filteredPool]);
 
-  // Current pick info (live mode)
+  // ─── Current pick info ───────────────────────────────────────────
   const currentPick = useMemo((): DraftPickEntry | null => {
-    if (state.mode !== 'live') return null;
-    return state.allPicks[state.currentPickIndex] ?? null;
-  }, [state.mode, state.currentPickIndex, state.allPicks]);
+    if (state.mode === 'season') return null;
+    if (!state.demoStarted) return null;
+    const slot = state.snakeOrder[state.currentPickIndex];
+    if (!slot) return null;
+    // Return a placeholder pick entry for the on-the-clock banner
+    return {
+      round: slot.round,
+      pick: slot.pick,
+      overallPick: slot.overallPick,
+      playerId: slot.teamId,
+      pokemonName: '', // not yet picked
+      tier: 0,
+      isTeraCaptain: false,
+    };
+  }, [state.mode, state.demoStarted, state.snakeOrder, state.currentPickIndex]);
 
-  // Team rosters derived from ownership map
+  // ─── Team rosters from ownership ─────────────────────────────────
   const teamRosters = useMemo(() => {
     const rosters = new Map<string, { name: string; tier: number; acquisition: Acquisition }[]>();
     for (const p of players) rosters.set(p.id, []);
-
     for (const [pokemonName, ownership] of ownershipMap) {
       const entry = rosters.get(ownership.teamId);
       const tierEntry = TIER_LIST.find(t => t.name === pokemonName);
       if (entry) {
-        entry.push({
-          name: pokemonName,
-          tier: tierEntry?.tier ?? 0,
-          acquisition: ownership.acquisition,
-        });
+        entry.push({ name: pokemonName, tier: tierEntry?.tier ?? 0, acquisition: ownership.acquisition });
       }
     }
-
-    // Sort each roster by tier descending
     for (const [, roster] of rosters) {
       roster.sort((a, b) => b.tier - a.tier);
     }
-
     return rosters;
   }, [players, ownershipMap]);
 
-  // Points used per team
   const teamPoints = useMemo(() => {
     const points = new Map<string, number>();
     for (const [teamId, roster] of teamRosters) {
@@ -306,9 +455,7 @@ export function useDraftState() {
     return points;
   }, [teamRosters]);
 
-  const isUserTurn = state.mode === 'live' && currentPick?.playerId === state.userTeamId;
-
-  // Draft order: worst record picks first (same as generate-draft-order.ts)
+  // Draft order: worst record picks first
   const draftOrder = useMemo(() => [...standings].reverse(), [standings]);
 
   return {
@@ -323,6 +470,10 @@ export function useDraftState() {
     rosterLookup,
     playerLookup,
     isUserTurn,
+    isDemoComplete,
     draftOrder,
+    handleUserPick,
+    draftedSet,
   };
 }
+
