@@ -50,7 +50,7 @@ export function TradeBlockPage() {
     [transactions],
   );
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
-  const [proposeOpen, setProposeOpen] = useState<string | null>(null); // listing key
+  const [proposeOpen, setProposeOpen] = useState<{ teamId: string } | null>(null);
 
   const activeTrades = useMemo(
     () => trades.filter(t => t.status === 'pending' || t.status === 'expired').sort((a, b) => b.week - a.week),
@@ -185,7 +185,7 @@ export function TradeBlockPage() {
                             size="xs"
                             variant="outline"
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-neon border-neon/30 hover:bg-neon/10 mt-0.5"
-                            onClick={() => setProposeOpen(`${listing.teamId}-${listing.pokemonName}`)}
+                            onClick={() => setProposeOpen({ teamId: listing.teamId })}
                           >
                             <Send size={10} />
                           </Button>
@@ -327,7 +327,11 @@ export function TradeBlockPage() {
       </div>
 
       {/* Propose Trade Dialog */}
-      <TradeProposeDialog open={!!proposeOpen} onClose={() => setProposeOpen(null)} />
+      <TradeProposeDialog
+        open={!!proposeOpen}
+        onClose={() => setProposeOpen(null)}
+        recipientTeamId={proposeOpen?.teamId}
+      />
     </div>
   );
 }
