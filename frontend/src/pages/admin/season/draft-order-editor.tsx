@@ -70,7 +70,7 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
 
   async function handleSave() {
     try {
-      await api.saveDraftOrder(leagueId, order.map(t => t.id));
+      await api.saveDraftOrder(leagueId, order);
       toast.success(`Draft order saved for ${leagueName}`);
     } catch (err: any) { toast.error(err.message); }
   }
