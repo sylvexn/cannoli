@@ -339,6 +339,9 @@ export const api = {
   autoPick: (leagueId: string) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/auto-pick`),
 
+  generateSchedule: (leagueId: string) =>
+    postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`),
+
   approveTrade: (tradeId: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`),
 
