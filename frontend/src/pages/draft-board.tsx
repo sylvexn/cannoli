@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
-import { LayoutGrid, Table, Zap, History } from 'lucide-react';
+import { LayoutGrid, Table, Zap, History, Radio } from 'lucide-react';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
 import { DraftPoolGrid } from './draft-board/draft-pool-grid';
@@ -50,7 +50,7 @@ export function DraftBoardPage() {
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
-    draftOrder, handleUserPick,
+    draftOrder, handleUserPick, wsConnected,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -73,7 +73,7 @@ export function DraftBoardPage() {
     setHoverInfo(null);
   }, []);
 
-  const isLiveMode = state.mode === 'demo' && state.demoStarted;
+  const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
 
   return (
     <div className="flex flex-col h-full">
@@ -101,9 +101,18 @@ export function DraftBoardPage() {
             onChange={mode => dispatch({ type: 'SET_MODE', mode })}
             options={[
               { value: 'season', label: 'Season', icon: <History size={13} />, activeClass: 'bg-neon/10 text-neon' },
-              { value: 'demo', label: 'Demo Draft', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' },
+              { value: 'demo', label: 'Demo', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' },
+              { value: 'live', label: 'Live', icon: <Radio size={13} />, activeClass: 'bg-win/10 text-win' },
             ]}
           />
+          {state.mode === 'live' && (
+            <span className={cn(
+              'text-[10px] font-mono',
+              wsConnected ? 'text-win' : 'text-text-muted',
+            )}>
+              {wsConnected ? '● Connected' : '○ Connecting...'}
+            </span>
+          )}
         </div>
 
         <SegmentedToggle
@@ -166,8 +175,8 @@ export function DraftBoardPage() {
         />
       </div>
 
-      {/* Demo mode: control bar */}
-      {state.mode === 'demo' && (
+      {/* Draft mode: control bar */}
+      {(state.mode === 'demo' || state.mode === 'live') && (
         <DraftControlBar
           state={state}
           dispatch={dispatch}
