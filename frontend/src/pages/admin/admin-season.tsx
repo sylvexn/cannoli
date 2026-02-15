@@ -379,7 +379,22 @@ export function AdminSeason() {
                         style={{ width: `${(state.currentWeek / state.totalWeeks) * 100}%` }}
                       />
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const result = await api.generateSchedule(league.id);
+                            toast.success(`Generated ${result.matchCount} matches`);
+                            refreshLeagues?.();
+                          } catch (err: any) { toast.error(err.message); }
+                        }}
+                        className="text-draw border-draw/30 hover:bg-draw/10"
+                      >
+                        <Sparkles size={12} />
+                        Generate Schedule
+                      </Button>
                       <Button
                         size="xs"
                         variant="outline"

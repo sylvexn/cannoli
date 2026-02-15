@@ -11,6 +11,7 @@ import {
   getDraftSnapshot, startDraft, executePick, handleTimerExpiry,
   generateSnakeOrder,
 } from './lib/draft-engine';
+import { generateLeagueSchedule } from './lib/schedule-generator';
 
 interface AuthUser {
   id: string;
@@ -1035,6 +1036,15 @@ const app = new Elysia()
     const result = handleTimerExpiry(params.leagueId);
     if (!result) { set.status = 400; return { error: 'Cannot auto-pick' }; }
     return result;
+  })
+
+  // ─── Schedule Generation ────────────────────────────────────────────
+
+  .post('/api/leagues/:leagueId/schedule/generate', ({ params, user, set }) => {
+    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    const result = generateLeagueSchedule(params.leagueId);
+    if (!result.success) { set.status = 400; return { error: result.error }; }
+    return { success: true, matchCount: result.matchCount };
   })
 
   // ─── Trade Approve/Reject ──────────────────────────────────────────
