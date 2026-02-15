@@ -359,30 +359,6 @@ export function useDraftState() {
     }
   }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, demoTeamPoints, draftedSet, state.pointCap, state.userTeamId]);
 
-  // ─── User pick handler ────────────────────────────────────────────
-  const handleUserPick = useCallback((pokemonName: string) => {
-    if (!isUserTurn) return;
-
-    if (state.mode === 'live') {
-      handleLivePick(pokemonName);
-      return;
-    }
-
-    if (state.mode !== 'demo') return;
-
-    // Validate for demo mode
-    if (draftedSet.has(pokemonName)) return;
-    if (BANNED_SET.has(pokemonName)) return;
-
-    const entry = TIER_LIST.find(e => e.name === pokemonName);
-    if (!entry) return;
-
-    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
-    if (teamPts + entry.tier > state.pointCap) return;
-
-    dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
-  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, state.userTeamId, state.pointCap, handleLivePick]);
-
   // ─── Live mode: WebSocket connection ──────────────────────────────
   const wsEnabled = state.mode === 'live';
 
@@ -405,7 +381,6 @@ export function useDraftState() {
           isTeraCaptain: false,
         },
       });
-      // Also sync full state from snapshot
       if (data.snapshot) {
         dispatch({ type: 'LIVE_SYNC', snapshot: data.snapshot });
       }
@@ -430,6 +405,30 @@ export function useDraftState() {
     if (state.mode !== 'live' || !isUserTurn || !state.userTeamId) return;
     wsSendPick(pokemonName, state.userTeamId);
   }, [state.mode, isUserTurn, state.userTeamId, wsSendPick]);
+
+  // ─── User pick handler ────────────────────────────────────────────
+  const handleUserPick = useCallback((pokemonName: string) => {
+    if (!isUserTurn) return;
+
+    if (state.mode === 'live') {
+      handleLivePick(pokemonName);
+      return;
+    }
+
+    if (state.mode !== 'demo') return;
+
+    // Validate for demo mode
+    if (draftedSet.has(pokemonName)) return;
+    if (BANNED_SET.has(pokemonName)) return;
+
+    const entry = TIER_LIST.find(e => e.name === pokemonName);
+    if (!entry) return;
+
+    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
+    if (teamPts + entry.tier > state.pointCap) return;
+
+    dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
+  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, state.userTeamId, state.pointCap, handleLivePick]);
 
   // ─── Shared lookups ──────────────────────────────────────────────
 
