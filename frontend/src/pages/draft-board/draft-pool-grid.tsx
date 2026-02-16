@@ -18,6 +18,8 @@ interface DraftPoolGridProps {
   showTierBadges?: boolean;
   /** User's remaining budget — cards above this are unaffordable */
   userBudgetRemaining?: number;
+  /** Draft queue for showing queue indicators on cards */
+  draftQueue?: string[];
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -32,6 +34,7 @@ export function DraftPoolGrid({
   isUserPickable,
   showTierBadges,
   userBudgetRemaining,
+  draftQueue = [],
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
@@ -89,6 +92,8 @@ export function DraftPoolGrid({
                 const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
                 const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
                 const unaffordable = showTierBadges && !ownership && userBudgetRemaining != null && entry.tier > userBudgetRemaining;
+                const qIdx = draftQueue.indexOf(entry.name);
+                const queuePosition = qIdx >= 0 ? qIdx + 1 : undefined;
 
                 return (
                   <PokemonCompactCard
@@ -102,6 +107,7 @@ export function DraftPoolGrid({
                     dimmed={dimmed}
                     unaffordable={unaffordable}
                     showTier={showTierBadges}
+                    queuePosition={queuePosition}
                     onClick={onCardClick}
                     onHoverStart={onCardHoverStart}
                     onHoverEnd={onCardHoverEnd}

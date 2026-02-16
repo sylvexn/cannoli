@@ -6,9 +6,10 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
+import { getTierEntry } from '@/data/tier-list';
 
 interface DraftTeamSidebarProps {
   /** Players in display order (draft order during draft, standings after) */
@@ -27,6 +28,9 @@ interface DraftTeamSidebarProps {
   userTeamId?: string | null;
   /** Point cap for the league */
   pointCap?: number;
+  /** User's draft queue (max 3 Pokemon names) */
+  draftQueue?: string[];
+  onQueueRemove?: (name: string) => void;
 }
 
 export function DraftTeamSidebar({
@@ -41,6 +45,8 @@ export function DraftTeamSidebar({
   isLiveMode,
   userTeamId,
   pointCap = 110,
+  draftQueue = [],
+  onQueueRemove,
 }: DraftTeamSidebarProps) {
   // Collapsed state — always the same
   if (collapsed) {
@@ -84,6 +90,8 @@ export function DraftTeamSidebar({
         onToggleCollapse={onToggleCollapse}
         onSelectTeam={onSelectTeam}
         selectedTeamId={selectedTeamId}
+        draftQueue={draftQueue}
+        onQueueRemove={onQueueRemove}
       />
     );
   }
@@ -125,6 +133,8 @@ function DraftFocusedPanel({
   onToggleCollapse: () => void;
   onSelectTeam: (teamId: string | null) => void;
   selectedTeamId: string | null;
+  draftQueue?: string[];
+  onQueueRemove?: (name: string) => void;
 }) {
   const ROSTER_SIZE = 10;
   const userPlayer = teamOrder.find(p => p.id === userTeamId);
@@ -215,6 +225,47 @@ function DraftFocusedPanel({
               ) : (
                 <div className="text-[10px] text-text-muted text-center py-2">No picks yet</div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Draft queue */}
+        {draftQueue && draftQueue.length > 0 && (
+          <div className="p-3 border-b border-border-default">
+            <div className="flex items-center gap-1.5 mb-2">
+              <ListOrdered size={11} className="text-pink" />
+              <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
+                Queue
+              </span>
+              <span className="text-[9px] font-mono text-text-muted/50 ml-auto">{draftQueue.length}/3</span>
+            </div>
+            <div className="space-y-0.5">
+              {draftQueue.map((name, idx) => {
+                const tierEntry = getTierEntry(name);
+                return (
+                  <div
+                    key={name}
+                    className="flex items-center gap-1.5 py-0.5 px-1 rounded bg-pink/5 border border-pink/10 -mx-1 group/q"
+                  >
+                    <span className="text-[9px] font-mono tabular-nums text-pink/50 w-3 shrink-0 text-right">
+                      {idx + 1}
+                    </span>
+                    <PokemonSprite name={name} size="xs" />
+                    <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">
+                      {name}
+                    </span>
+                    {tierEntry && <TierBadge points={tierEntry.tier} />}
+                    {onQueueRemove && (
+                      <button
+                        onClick={() => onQueueRemove(name)}
+                        className="opacity-0 group-hover/q:opacity-100 p-0.5 rounded text-text-muted hover:text-loss transition-all"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

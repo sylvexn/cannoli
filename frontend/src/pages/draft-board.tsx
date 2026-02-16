@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { LayoutGrid, Table, Zap, History, Radio } from 'lucide-react';
+import { toast } from 'sonner';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
 import { DraftPoolGrid } from './draft-board/draft-pool-grid';
@@ -73,15 +74,15 @@ export function DraftBoardPage() {
   const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
 
   const handleCardClick = useCallback((name: string) => {
-    // During draft, if it's user's turn and the Pokemon is pickable, show confirm popover
-    if (isLiveMode && isUserTurn && !ownershipMap.has(name)) {
+    // During draft, show popover for free agents (for drafting or queueing)
+    if (isLiveMode && !ownershipMap.has(name)) {
       const tierEntry = getTierEntry(name);
-      // Check affordability
-      if (tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining) {
+      const affordable = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
+      if (affordable || !isUserTurn) {
         const rect = cardRectsRef.current.get(name);
         if (rect) {
           setConfirmPopover({ name, rect });
-          setHoverInfo(null); // dismiss hover
+          setHoverInfo(null);
           return;
         }
       }
@@ -102,6 +103,32 @@ export function DraftBoardPage() {
   const handleCardHoverEnd = useCallback(() => {
     setHoverInfo(null);
   }, []);
+
+  const handleQueueAdd = useCallback((name: string) => {
+    dispatch({ type: 'QUEUE_ADD', name });
+    toast.info(`${name} added to queue`);
+  }, [dispatch]);
+
+  const handleQueueRemove = useCallback((name: string) => {
+    dispatch({ type: 'QUEUE_REMOVE', name });
+  }, [dispatch]);
+
+  // Toast when a queued Pokemon gets drafted by someone else
+  const prevQueueRef = useRef<string[]>([]);
+  useEffect(() => {
+    const prev = prevQueueRef.current;
+    if (prev.length > 0 && isLiveMode) {
+      for (const name of prev) {
+        if (!state.draftQueue.includes(name) && ownershipMap.has(name)) {
+          const owner = ownershipMap.get(name);
+          const player = owner ? playerLookup.get(owner.teamId) : undefined;
+          const teamName = player?.teamAbbrev ?? 'someone';
+          toast.warning(`${name} was drafted by ${teamName}`, { description: 'Removed from your queue' });
+        }
+      }
+    }
+    prevQueueRef.current = state.draftQueue;
+  }, [state.draftQueue, ownershipMap, isLiveMode, playerLookup]);
 
   const handleConfirmDraft = useCallback((name: string) => {
     handleUserPick(name);
@@ -203,6 +230,7 @@ export function DraftBoardPage() {
               isUserPickable={isUserTurn}
               showTierBadges={isLiveMode}
               userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+              draftQueue={isLiveMode ? state.draftQueue : undefined}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -232,6 +260,8 @@ export function DraftBoardPage() {
           isLiveMode={isLiveMode}
           userTeamId={state.userTeamId}
           pointCap={state.pointCap}
+          draftQueue={state.draftQueue}
+          onQueueRemove={handleQueueRemove}
         />
       </div>
 
@@ -265,8 +295,12 @@ export function DraftBoardPage() {
         budgetAfter={popoverBudgetAfter}
         onConfirm={handleConfirmDraft}
         onViewDetails={handleViewDetails}
+        onQueue={handleQueueAdd}
         onClose={() => setConfirmPopover(null)}
         rosterLookup={rosterLookup}
+        isQueued={confirmPopover ? state.draftQueue.includes(confirmPopover.name) : false}
+        queueFull={state.draftQueue.length >= 3}
+        isUserTurn={isUserTurn}
       />
 
       {/* Detail sheet */}

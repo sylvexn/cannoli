@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppDataProvider } from '@/lib/app-data-context';
+import { Toaster } from '@/components/ui/sonner';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
 import { LeagueLayout } from '@/components/league-layout';
@@ -55,6 +56,7 @@ export default function App() {
             </Route>
           </Routes>
         </TooltipProvider>
+        <Toaster position="bottom-right" />
         </AppDataProvider>
       </AuthProvider>
     </BrowserRouter>
