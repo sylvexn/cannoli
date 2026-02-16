@@ -442,7 +442,7 @@ function SeasonTeamList({
 
       {/* Team list */}
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="p-1.5 space-y-0.5">
           {teamOrder.map((p, orderIdx) => {
             const roster = teamRosters.get(p.id) ?? [];
             const points = teamPoints.get(p.id) ?? 0;
@@ -464,7 +464,7 @@ function SeasonTeamList({
                 {/* Team header */}
                 <button
                   onClick={() => onSelectTeam(p.id)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 cursor-pointer"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 cursor-pointer"
                 >
                   {/* Draft position number */}
                   {isLiveMode && (
@@ -473,18 +473,13 @@ function SeasonTeamList({
                     </span>
                   )}
                   <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-text-primary truncate">{p.teamAbbrev}</span>
-                      {isDrafter && (
-                        <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] px-1 py-0 h-3.5">
-                          <Zap size={8} className="mr-0.5" />
-                          OTC
-                        </Badge>
-                      )}
-                    </div>
-                    <span className="text-[9px] text-text-muted">{p.name}</span>
-                  </div>
+                  <span className="text-xs font-medium text-text-primary truncate flex-1 text-left">{p.teamAbbrev}</span>
+                  {isDrafter && (
+                    <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] px-1 py-0 h-3.5">
+                      <Zap size={8} className="mr-0.5" />
+                      OTC
+                    </Badge>
+                  )}
                   <span className="text-[10px] font-mono tabular-nums text-text-muted">
                     {points}/110
                   </span>
