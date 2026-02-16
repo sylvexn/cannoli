@@ -315,9 +315,12 @@ export function useDraftState() {
     return new Set(state.allPicks.map(p => p.pokemonName));
   }, [state.allPicks]);
 
-  // Timer tick for demo mode
+  // Timer tick for demo mode — runs whenever draft is active (isPlaying OR user's turn)
+  const demoTimerActive = state.mode === 'demo' && state.demoStarted && !state.timerPaused
+    && state.currentPickIndex < state.snakeOrder.length;
+
   useEffect(() => {
-    if (state.mode !== 'demo' || !state.demoStarted || !state.isPlaying || state.timerPaused) {
+    if (!demoTimerActive) {
       clearInterval(demoTimerRef.current);
       return;
     }
@@ -327,18 +330,21 @@ export function useDraftState() {
     }, 1000);
 
     return () => clearInterval(demoTimerRef.current);
-  }, [state.mode, state.demoStarted, state.isPlaying, state.timerPaused]);
+  }, [demoTimerActive]);
 
   // Timer tick for live mode (decrement client-side between WS syncs)
+  const liveTimerActive = state.mode === 'live' && state.demoStarted && !state.timerPaused
+    && state.currentPickIndex < state.snakeOrder.length;
+
   useEffect(() => {
-    if (state.mode !== 'live' || !state.demoStarted || !state.isPlaying || state.timerPaused) return;
+    if (!liveTimerActive) return;
 
     const interval = setInterval(() => {
       dispatch({ type: 'DEMO_TICK' }); // Reuse same tick action
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [state.mode, state.demoStarted, state.isPlaying, state.timerPaused]);
+  }, [liveTimerActive]);
 
   // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
   const currentSlot = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted
