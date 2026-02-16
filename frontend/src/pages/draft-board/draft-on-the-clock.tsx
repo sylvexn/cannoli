@@ -92,7 +92,8 @@ export function DraftOnTheClock({
         </div>
       </div>
 
-      {/* Timer progress bar */}
+      {/* Timer progress bar — uses max(timerSeconds, timerDuration) as denominator
+           so adding time scales proportionally instead of clipping at 100% */}
       <div className="mt-2 h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
         <div
           className={cn(
@@ -101,7 +102,7 @@ export function DraftOnTheClock({
             urgency === 'warning' && 'bg-draw',
             urgency === 'critical' && 'bg-loss',
           )}
-          style={{ width: `${(timerSeconds / timerDuration) * 100}%` }}
+          style={{ width: `${(timerSeconds / Math.max(timerSeconds, timerDuration)) * 100}%` }}
         />
       </div>
     </div>
