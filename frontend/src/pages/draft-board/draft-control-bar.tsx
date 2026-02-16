@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import { TeamLogo } from '@/components/team-logo';
 import {
-  Play, Pause, RotateCcw, User, Timer, Trophy, Plus,
+  Play, Pause, RotateCcw, User, Timer, Trophy,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
@@ -34,8 +34,8 @@ export function DraftControlBar({
   // Pre-start: show configuration
   if (!state.demoStarted) {
     return (
-      <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-3">
-        <div className="flex items-center gap-4">
+      <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-2.5">
+        <div className="flex items-center gap-3">
           {/* Your team selector */}
           <div className="flex items-center gap-2">
             <User size={13} className="text-text-muted" />
@@ -75,7 +75,7 @@ export function DraftControlBar({
                   step={5}
                   className="w-[68px] h-7 text-xs"
                 />
-                <span className="text-[10px] text-text-muted">sec/pick</span>
+                <span className="text-[10px] text-text-muted">s/pick</span>
               </>
             ) : (
               <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
@@ -117,23 +117,22 @@ export function DraftControlBar({
     : 0;
 
   return (
-    <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-3">
+    <div className="mt-2 rounded-lg border border-border-default bg-surface-raised px-3 py-2">
       {/* Progress bar */}
-      <div className="h-1 w-full rounded-full bg-surface-overlay overflow-hidden mb-3">
+      <div className="h-0.5 w-full rounded-full bg-surface-overlay overflow-hidden mb-2">
         <div
           className="h-full rounded-full bg-pink transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Your team */}
-        <div className="flex items-center gap-2">
-          <User size={13} className="text-text-muted" />
+        <div className="flex items-center gap-1.5">
           {state.userTeamId && (() => {
             const p = draftOrder.find(t => t.id === state.userTeamId);
             return p ? (
-              <span className="flex items-center gap-1.5 text-xs">
+              <span className="flex items-center gap-1 text-xs">
                 <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
                 <span className="text-text-primary font-medium">{p.teamAbbrev}</span>
               </span>
@@ -141,99 +140,69 @@ export function DraftControlBar({
           })()}
         </div>
 
-        <div className="w-px h-6 bg-border-subtle" />
+        <div className="w-px h-5 bg-border-subtle" />
 
         {/* Pick counter */}
-        <div className="text-xs text-text-muted font-mono tabular-nums">
-          Pick <span className="text-text-primary">{Math.min(state.currentPickIndex + 1, state.snakeOrder.length)}</span>
-          <span className="text-text-muted"> / {state.snakeOrder.length}</span>
-        </div>
+        <span className="text-[11px] text-text-muted font-mono tabular-nums">
+          {Math.min(state.currentPickIndex + 1, state.snakeOrder.length)}<span className="text-text-muted/50">/{state.snakeOrder.length}</span>
+        </span>
 
         {isDemoComplete && (
           <>
-            <div className="w-px h-6 bg-border-subtle" />
-            <div className="flex items-center gap-1.5 text-xs">
-              <Trophy size={13} className="text-win" />
-              <span className="text-win font-medium">Draft Complete!</span>
+            <div className="w-px h-5 bg-border-subtle" />
+            <div className="flex items-center gap-1 text-xs">
+              <Trophy size={12} className="text-win" />
+              <span className="text-win font-medium">Complete</span>
             </div>
           </>
         )}
 
-        {/* Admin timer controls — only during active draft */}
+        {/* Admin timer controls */}
         {isAdmin && !isDemoComplete && (
           <>
-            <div className="w-px h-6 bg-border-subtle" />
+            <div className="w-px h-5 bg-border-subtle" />
 
             {/* Pause / Resume */}
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
               className={cn(
-                'h-7 px-2 text-xs gap-1',
+                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors',
                 state.timerPaused
-                  ? 'text-draw hover:text-draw'
-                  : 'text-text-muted hover:text-neon',
+                  ? 'text-draw hover:bg-draw/10'
+                  : 'text-text-muted hover:text-neon hover:bg-neon/5',
               )}
             >
-              {state.timerPaused ? (
-                <>
-                  <Play size={12} />
-                  Resume
-                </>
-              ) : (
-                <>
-                  <Pause size={12} />
-                  Pause
-                </>
-              )}
-            </Button>
+              {state.timerPaused ? <Play size={10} /> : <Pause size={10} />}
+              {state.timerPaused ? 'Resume' : 'Pause'}
+            </button>
 
-            {/* Add time buttons */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 15 })}
-              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
-            >
-              <Plus size={10} />
-              15s
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 30 })}
-              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
-            >
-              <Plus size={10} />
-              30s
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 60 })}
-              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
-            >
-              <Plus size={10} />
-              60s
-            </Button>
+            {/* Add time — compact pill group */}
+            <div className="flex items-center rounded border border-border-subtle overflow-hidden">
+              {[15, 30, 60].map(s => (
+                <button
+                  key={s}
+                  onClick={() => dispatch({ type: 'ADD_TIME', seconds: s })}
+                  className="px-1.5 py-0.5 text-[10px] font-mono text-text-muted hover:text-neon hover:bg-neon/5 transition-colors border-r border-border-subtle last:border-r-0"
+                >
+                  +{s}s
+                </button>
+              ))}
+            </div>
 
             {state.timerPaused && (
-              <span className="text-[10px] font-mono text-draw animate-pulse">PAUSED</span>
+              <span className="text-[9px] font-mono text-draw animate-pulse">PAUSED</span>
             )}
           </>
         )}
 
-        {/* Reset */}
-        <Button
-          variant="ghost"
-          size="sm"
+        {/* Reset — pushed right */}
+        <button
           onClick={() => dispatch({ type: 'DEMO_RESET' })}
-          className="ml-auto h-7 px-3 text-xs text-text-muted hover:text-neon gap-1.5"
+          className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-text-muted hover:text-neon transition-colors"
         >
-          <RotateCcw size={12} />
+          <RotateCcw size={10} />
           Reset
-        </Button>
+        </button>
       </div>
     </div>
   );

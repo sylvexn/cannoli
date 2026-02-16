@@ -136,7 +136,7 @@ function DraftFocusedPanel({
   const otherTeams = teamOrder.filter(p => p.id !== userTeamId);
 
   return (
-    <div className="w-[280px] flex-shrink-0 bg-surface-raised border-l border-border-default flex flex-col">
+    <div className="w-[280px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <span className="text-xs font-heading font-semibold text-text-primary">Your Draft</span>
@@ -292,7 +292,7 @@ function SeasonTeamList({
   isLiveMode?: boolean;
 }) {
   return (
-    <div className="w-[300px] flex-shrink-0 bg-surface-raised border-l border-border-default flex flex-col">
+    <div className="w-[300px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
         <span className="text-xs font-heading font-semibold text-text-primary">
