@@ -6,7 +6,7 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 
@@ -126,10 +126,13 @@ function DraftFocusedPanel({
   onSelectTeam: (teamId: string | null) => void;
   selectedTeamId: string | null;
 }) {
+  const ROSTER_SIZE = 10;
   const userPlayer = teamOrder.find(p => p.id === userTeamId);
   const userRoster = teamRosters.get(userTeamId) ?? [];
   const userPoints = teamPoints.get(userTeamId) ?? 0;
   const remaining = pointCap - userPoints;
+  const picksLeft = Math.max(0, ROSTER_SIZE - userRoster.length);
+  const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
   const otherTeams = teamOrder.filter(p => p.id !== userTeamId);
 
   return (
@@ -171,6 +174,25 @@ function DraftFocusedPanel({
                 {remaining}pt left
               </span>
             </div>
+
+            {/* Avg per remaining pick */}
+            {picksLeft > 0 && (
+              <div className={cn(
+                'mt-1.5 px-2 py-1 rounded text-[10px] font-mono flex items-center justify-between',
+                avgPerPick <= 2 ? 'bg-loss/10 border border-loss/20' : 'bg-surface-overlay/40',
+              )}>
+                <span className="text-text-muted">
+                  ~<span className={cn(
+                    'font-bold',
+                    avgPerPick <= 2 ? 'text-loss' : avgPerPick <= 4 ? 'text-draw' : 'text-text-primary',
+                  )}>{avgPerPick.toFixed(1)}</span>pt/pick
+                </span>
+                <span className="text-text-muted/60">{picksLeft} picks left</span>
+                {avgPerPick <= 2 && (
+                  <AlertTriangle size={10} className="text-loss animate-pulse" />
+                )}
+              </div>
+            )}
 
             {/* Your roster */}
             <div className="mt-3 space-y-0.5">
