@@ -102,6 +102,8 @@ export interface DraftState {
   pointCap: number;
   /** Queued Pokemon names the user wants to draft (max 3, priority order) */
   draftQueue: string[];
+  /** Auto-draft the first available queued Pokemon when it's user's turn */
+  autoDraftQueue: boolean;
 }
 
 export type DraftAction =
@@ -127,6 +129,7 @@ export type DraftAction =
   | { type: 'QUEUE_ADD'; name: string }
   | { type: 'QUEUE_REMOVE'; name: string }
   | { type: 'QUEUE_REORDER'; queue: string[] }
+  | { type: 'TOGGLE_AUTO_DRAFT_QUEUE' }
   // Live mode actions (future)
   | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState }
   | { type: 'LIVE_PICK_MADE'; pick: DraftPickEntry };

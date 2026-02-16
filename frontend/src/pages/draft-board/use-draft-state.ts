@@ -259,6 +259,9 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
     case 'QUEUE_REORDER':
       return { ...state, draftQueue: action.queue };
 
+    case 'TOGGLE_AUTO_DRAFT_QUEUE':
+      return { ...state, autoDraftQueue: !state.autoDraftQueue };
+
     default:
       return state;
   }
@@ -304,6 +307,7 @@ export function useDraftState() {
     demoStarted: false,
     pointCap: 110,
     draftQueue: [],
+    autoDraftQueue: false,
   };
 
   const [state, dispatch] = useReducer(draftReducer, initialState);
@@ -399,6 +403,31 @@ export function useDraftState() {
       dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
     }
   }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, demoTeamPoints, draftedSet, state.pointCap, state.userTeamId]);
+
+  // Auto-draft from queue when it's user's turn and autoDraftQueue is enabled
+  useEffect(() => {
+    if (!isUserTurn || !state.autoDraftQueue || state.draftQueue.length === 0) return;
+    if (!state.demoStarted || isDemoComplete) return;
+
+    // Find first queued Pokemon that's still available and affordable
+    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
+    const remaining = state.pointCap - teamPts;
+    const candidate = state.draftQueue.find(name => {
+      if (draftedSet.has(name)) return false;
+      const entry = TIER_LIST.find(e => e.name === name);
+      return entry && entry.tier <= remaining;
+    });
+
+    if (!candidate) return;
+
+    const entry = TIER_LIST.find(e => e.name === candidate)!;
+    // Small delay so the user sees it's their turn before auto-pick fires
+    const delay = setTimeout(() => {
+      dispatch({ type: 'DEMO_PICK', pokemonName: candidate, tier: entry.tier });
+    }, 500);
+
+    return () => clearTimeout(delay);
+  }, [isUserTurn, state.autoDraftQueue, state.draftQueue, state.demoStarted, isDemoComplete, demoTeamPoints, draftedSet, state.pointCap, state.userTeamId]);
 
   // ─── Live mode: WebSocket connection ──────────────────────────────
   const wsEnabled = state.mode === 'live';

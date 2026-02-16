@@ -113,6 +113,14 @@ export function DraftBoardPage() {
     dispatch({ type: 'QUEUE_REMOVE', name });
   }, [dispatch]);
 
+  const handleDraftFromQueue = useCallback(() => {
+    if (!isUserTurn || state.draftQueue.length === 0) return;
+    const name = state.draftQueue[0];
+    if (!ownershipMap.has(name)) {
+      handleUserPick(name);
+    }
+  }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
+
   // Toast when a queued Pokemon gets drafted by someone else
   const prevQueueRef = useRef<string[]>([]);
   useEffect(() => {
@@ -262,6 +270,10 @@ export function DraftBoardPage() {
           pointCap={state.pointCap}
           draftQueue={state.draftQueue}
           onQueueRemove={handleQueueRemove}
+          autoDraftQueue={state.autoDraftQueue}
+          onToggleAutoDraft={() => dispatch({ type: 'TOGGLE_AUTO_DRAFT_QUEUE' })}
+          onDraftFromQueue={handleDraftFromQueue}
+          isUserTurn={isUserTurn}
         />
       </div>
 
