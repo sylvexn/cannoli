@@ -123,6 +123,8 @@ function DraftFocusedPanel({
   onToggleCollapse,
   onSelectTeam,
   selectedTeamId,
+  draftQueue = [],
+  onQueueRemove,
 }: {
   teamOrder: Player[];
   teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
