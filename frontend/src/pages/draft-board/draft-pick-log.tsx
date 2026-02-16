@@ -40,7 +40,7 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
 
       <div
         ref={scrollRef}
-        className="flex gap-1.5 overflow-x-auto scrollbar-none pb-1"
+        className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1"
       >
         {visible.map((pick, i) => {
           const player = playerLookup.get(pick.playerId);
