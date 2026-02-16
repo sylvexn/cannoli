@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
+import { FeedbackDialog } from './feedback-dialog';
 
 const phaseColors: Record<string, string> = {
   draft: 'text-draw bg-draw/10',
@@ -233,6 +234,8 @@ export function AppShell() {
             <span>My Team</span>
           </button>
 
+          <FeedbackDialog />
+
           <DropdownMenu>
             <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
               <div className={cn(
@@ -262,8 +265,8 @@ export function AppShell() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto bg-surface">
-        <div className={isWide ? 'p-4 h-full' : 'max-w-7xl mx-auto p-6'}>
+      <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
+        <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-7xl mx-auto p-6'}>
           <Outlet />
         </div>
       </main>
