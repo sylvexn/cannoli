@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { TeamLogo } from '@/components/team-logo';
 import { Badge } from '@/components/ui/badge';
-import { Timer, Zap } from 'lucide-react';
+import { Timer, Pause, Zap } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { DraftPickEntry } from './types';
 
@@ -12,6 +12,7 @@ interface DraftOnTheClockProps {
   timerDuration: number;
   isUserTurn: boolean;
   totalPicks: number;
+  timerPaused?: boolean;
 }
 
 export function DraftOnTheClock({
@@ -21,6 +22,7 @@ export function DraftOnTheClock({
   timerDuration,
   isUserTurn,
   totalPicks,
+  timerPaused,
 }: DraftOnTheClockProps) {
   const urgency = timerSeconds > timerDuration * 0.6 ? 'calm'
     : timerSeconds > timerDuration * 0.3 ? 'warning'
@@ -73,12 +75,18 @@ export function DraftOnTheClock({
         <div className={cn(
           'flex items-center gap-2 px-3 py-1.5 rounded-md',
           'border font-mono tabular-nums text-lg font-bold',
-          urgency === 'calm' && 'border-border-subtle text-neon',
-          urgency === 'warning' && 'border-draw/30 text-draw bg-draw/5',
-          urgency === 'critical' && 'border-loss/30 text-loss bg-loss/5 animate-pulse',
+          timerPaused
+            ? 'border-draw/30 text-draw bg-draw/5'
+            : urgency === 'calm' ? 'border-border-subtle text-neon'
+            : urgency === 'warning' ? 'border-draw/30 text-draw bg-draw/5'
+            : 'border-loss/30 text-loss bg-loss/5 animate-pulse',
         )}>
-          <Timer size={16} />
-          <span>
+          {timerPaused ? (
+            <Pause size={16} />
+          ) : (
+            <Timer size={16} />
+          )}
+          <span className={timerPaused ? 'animate-pulse' : ''}>
             {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
           </span>
         </div>

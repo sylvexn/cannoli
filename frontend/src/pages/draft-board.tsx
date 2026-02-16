@@ -133,6 +133,7 @@ export function DraftBoardPage() {
           timerDuration={state.timerDuration}
           isUserTurn={isUserTurn}
           totalPicks={state.snakeOrder.length}
+          timerPaused={state.timerPaused}
         />
       )}
 

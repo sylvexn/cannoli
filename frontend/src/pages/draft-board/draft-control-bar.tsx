@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -9,8 +10,9 @@ import {
 } from '@/components/ui/select';
 import { TeamLogo } from '@/components/team-logo';
 import {
-  Play, RotateCcw, User, Timer, Trophy,
+  Play, Pause, RotateCcw, User, Timer, Trophy, Plus,
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
 import type { DraftState, DraftAction } from './types';
 
@@ -27,6 +29,8 @@ export function DraftControlBar({
   isDemoComplete,
   draftOrder,
 }: DraftControlBarProps) {
+  const { isAdmin } = useAuth();
+
   // Pre-start: show configuration
   if (!state.demoStarted) {
     return (
@@ -58,10 +62,24 @@ export function DraftControlBar({
 
           <div className="w-px h-6 bg-border-subtle" />
 
-          {/* Timer info */}
+          {/* Timer duration — editable for admin/dev, read-only for others */}
           <div className="flex items-center gap-1.5">
             <Timer size={13} className="text-text-muted" />
-            <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
+            {isAdmin ? (
+              <>
+                <NumberInput
+                  value={state.timerDuration}
+                  onChange={v => dispatch({ type: 'SET_TIMER_DURATION', duration: v })}
+                  min={10}
+                  max={300}
+                  step={5}
+                  className="w-[68px] h-7 text-xs"
+                />
+                <span className="text-[10px] text-text-muted">sec/pick</span>
+              </>
+            ) : (
+              <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
+            )}
           </div>
 
           {/* Start button */}
@@ -138,6 +156,71 @@ export function DraftControlBar({
               <Trophy size={13} className="text-win" />
               <span className="text-win font-medium">Draft Complete!</span>
             </div>
+          </>
+        )}
+
+        {/* Admin timer controls — only during active draft */}
+        {isAdmin && !isDemoComplete && (
+          <>
+            <div className="w-px h-6 bg-border-subtle" />
+
+            {/* Pause / Resume */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
+              className={cn(
+                'h-7 px-2 text-xs gap-1',
+                state.timerPaused
+                  ? 'text-draw hover:text-draw'
+                  : 'text-text-muted hover:text-neon',
+              )}
+            >
+              {state.timerPaused ? (
+                <>
+                  <Play size={12} />
+                  Resume
+                </>
+              ) : (
+                <>
+                  <Pause size={12} />
+                  Pause
+                </>
+              )}
+            </Button>
+
+            {/* Add time buttons */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 15 })}
+              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
+            >
+              <Plus size={10} />
+              15s
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 30 })}
+              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
+            >
+              <Plus size={10} />
+              30s
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => dispatch({ type: 'ADD_TIME', seconds: 60 })}
+              className="h-7 px-2 text-xs text-text-muted hover:text-neon gap-0.5"
+            >
+              <Plus size={10} />
+              60s
+            </Button>
+
+            {state.timerPaused && (
+              <span className="text-[10px] font-mono text-draw animate-pulse">PAUSED</span>
+            )}
           </>
         )}
 

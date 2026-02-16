@@ -114,6 +114,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         currentPickIndex: 0,
         isPlaying: true,
         demoStarted: true,
+        timerPaused: false,
         // Auto-switch to free-agent filter for drafting
         filters: { ...state.filters, ownership: 'free-agent' },
       };
@@ -162,6 +163,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         currentPickIndex: 0,
         isPlaying: false,
         timerSeconds: state.timerDuration,
+        timerPaused: false,
         demoStarted: false,
       };
 
@@ -228,6 +230,19 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
       };
     }
 
+    // ─── Timer controls (admin/dev) ──────────────────────────────────
+    case 'SET_TIMER_DURATION':
+      return { ...state, timerDuration: action.duration, timerSeconds: state.demoStarted ? state.timerSeconds : action.duration };
+
+    case 'PAUSE_TIMER':
+      return { ...state, timerPaused: true };
+
+    case 'RESUME_TIMER':
+      return { ...state, timerPaused: false };
+
+    case 'ADD_TIME':
+      return { ...state, timerSeconds: state.timerSeconds + action.seconds };
+
     default:
       return state;
   }
@@ -264,6 +279,7 @@ export function useDraftState() {
     speed: 1,
     timerSeconds: DEMO_TIMER_DEFAULT,
     timerDuration: DEMO_TIMER_DEFAULT,
+    timerPaused: false,
     userTeamId: null,
     viewMode: 'grid',
     selectedTeamId: null,
@@ -301,7 +317,7 @@ export function useDraftState() {
 
   // Timer tick for demo mode
   useEffect(() => {
-    if (state.mode !== 'demo' || !state.demoStarted || !state.isPlaying) {
+    if (state.mode !== 'demo' || !state.demoStarted || !state.isPlaying || state.timerPaused) {
       clearInterval(demoTimerRef.current);
       return;
     }
@@ -311,18 +327,18 @@ export function useDraftState() {
     }, 1000);
 
     return () => clearInterval(demoTimerRef.current);
-  }, [state.mode, state.demoStarted, state.isPlaying]);
+  }, [state.mode, state.demoStarted, state.isPlaying, state.timerPaused]);
 
   // Timer tick for live mode (decrement client-side between WS syncs)
   useEffect(() => {
-    if (state.mode !== 'live' || !state.demoStarted || !state.isPlaying) return;
+    if (state.mode !== 'live' || !state.demoStarted || !state.isPlaying || state.timerPaused) return;
 
     const interval = setInterval(() => {
       dispatch({ type: 'DEMO_TICK' }); // Reuse same tick action
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [state.mode, state.demoStarted, state.isPlaying]);
+  }, [state.mode, state.demoStarted, state.isPlaying, state.timerPaused]);
 
   // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
   const currentSlot = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted

@@ -90,6 +90,7 @@ export interface DraftState {
   speed: 1 | 2 | 5;
   timerSeconds: number;
   timerDuration: number;
+  timerPaused: boolean;
   userTeamId: string | null;
   viewMode: 'grid' | 'table';
   selectedTeamId: string | null;
@@ -115,6 +116,11 @@ export type DraftAction =
   | { type: 'DEMO_TICK' }
   | { type: 'DEMO_RESET' }
   | { type: 'SET_USER_TEAM'; teamId: string | null }
+  // Timer controls (admin/dev)
+  | { type: 'SET_TIMER_DURATION'; duration: number }
+  | { type: 'PAUSE_TIMER' }
+  | { type: 'RESUME_TIMER' }
+  | { type: 'ADD_TIME'; seconds: number }
   // Live mode actions (future)
   | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState }
   | { type: 'LIVE_PICK_MADE'; pick: DraftPickEntry };
