@@ -16,6 +16,8 @@ interface PokemonCompactCardProps {
   unaffordable?: boolean;
   recentlyPicked?: boolean;
   showTier?: boolean;
+  /** Queue position (1-3) if queued, undefined if not */
+  queuePosition?: number;
   onClick: (name: string) => void;
   onHoverStart: (name: string, rect: DOMRect) => void;
   onHoverEnd: () => void;
@@ -32,6 +34,7 @@ export function PokemonCompactCard({
   unaffordable,
   recentlyPicked,
   showTier,
+  queuePosition,
   onClick,
   onHoverStart,
   onHoverEnd,
@@ -81,7 +84,9 @@ export function PokemonCompactCard({
         // Highlighted (team selected in sidebar)
         isHighlighted && 'ring-1 shadow-glow-sm',
         // User can pick this
-        isUserPickable && !owner && 'border-neon/30 hover:ring-neon/60 hover:shadow-[0_0_16px_rgba(34,211,238,0.25)]',
+        isUserPickable && !owner && !queuePosition && 'border-neon/30 hover:ring-neon/60 hover:shadow-[0_0_16px_rgba(34,211,238,0.25)]',
+        // Queued
+        queuePosition && 'border-pink/40 ring-1 ring-pink/30 shadow-[0_0_10px_rgba(232,121,249,0.15)]',
         // Unaffordable (can't pick — over budget)
         unaffordable && !owner && 'opacity-25 grayscale-[60%] pointer-events-auto',
         // Dimmed
@@ -118,6 +123,13 @@ export function PokemonCompactCard({
             {owner.teamAbbrev}
           </span>
         </div>
+      )}
+
+      {/* Queue position badge */}
+      {queuePosition && (
+        <span className="absolute top-0.5 left-0.5 z-10 w-[14px] h-[14px] flex items-center justify-center rounded-sm bg-pink/90 text-white text-[8px] font-mono font-bold leading-none">
+          {queuePosition}
+        </span>
       )}
 
       {/* Tier cost badge — shown during draft mode */}

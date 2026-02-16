@@ -145,6 +145,8 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         currentPickIndex: nextIndex,
         timerSeconds: state.timerDuration,
         isPlaying: isComplete ? false : !isUserNext,
+        // Remove drafted Pokemon from queue
+        draftQueue: state.draftQueue.filter(n => n !== action.pokemonName),
       };
     }
 
@@ -165,6 +167,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         timerSeconds: state.timerDuration,
         timerPaused: false,
         demoStarted: false,
+        draftQueue: [],
       };
 
     // ─── Live mode ─────────────────────────────────────────────────────
@@ -227,6 +230,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         allPicks: [...state.allPicks, newPick],
         currentPickIndex: state.currentPickIndex + 1,
         timerSeconds: state.timerDuration,
+        draftQueue: state.draftQueue.filter(n => n !== pick.pokemonName),
       };
     }
 
@@ -242,6 +246,18 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
 
     case 'ADD_TIME':
       return { ...state, timerSeconds: state.timerSeconds + action.seconds };
+
+    // ─── Draft queue ──────────────────────────────────────────────────
+    case 'QUEUE_ADD': {
+      if (state.draftQueue.length >= 3 || state.draftQueue.includes(action.name)) return state;
+      return { ...state, draftQueue: [...state.draftQueue, action.name] };
+    }
+
+    case 'QUEUE_REMOVE':
+      return { ...state, draftQueue: state.draftQueue.filter(n => n !== action.name) };
+
+    case 'QUEUE_REORDER':
+      return { ...state, draftQueue: action.queue };
 
     default:
       return state;
@@ -287,6 +303,7 @@ export function useDraftState() {
     detailPokemon: null,
     demoStarted: false,
     pointCap: 110,
+    draftQueue: [],
   };
 
   const [state, dispatch] = useReducer(draftReducer, initialState);

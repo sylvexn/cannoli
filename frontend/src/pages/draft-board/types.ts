@@ -100,6 +100,8 @@ export interface DraftState {
   demoStarted: boolean;
   /** Point cap for validation */
   pointCap: number;
+  /** Queued Pokemon names the user wants to draft (max 3, priority order) */
+  draftQueue: string[];
 }
 
 export type DraftAction =
@@ -121,6 +123,10 @@ export type DraftAction =
   | { type: 'PAUSE_TIMER' }
   | { type: 'RESUME_TIMER' }
   | { type: 'ADD_TIME'; seconds: number }
+  // Draft queue
+  | { type: 'QUEUE_ADD'; name: string }
+  | { type: 'QUEUE_REMOVE'; name: string }
+  | { type: 'QUEUE_REORDER'; queue: string[] }
   // Live mode actions (future)
   | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState }
   | { type: 'LIVE_PICK_MADE'; pick: DraftPickEntry };

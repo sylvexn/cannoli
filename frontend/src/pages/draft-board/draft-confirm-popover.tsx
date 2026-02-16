@@ -5,7 +5,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Info } from 'lucide-react';
+import { Sparkles, Info, ListOrdered } from 'lucide-react';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import type { RosterPokemon } from '@/lib/types';
@@ -20,8 +20,15 @@ interface DraftConfirmPopoverProps {
   budgetAfter?: number;
   onConfirm: (name: string) => void;
   onViewDetails: (name: string) => void;
+  onQueue?: (name: string) => void;
   onClose: () => void;
   rosterLookup: Map<string, RosterPokemon>;
+  /** Whether this Pokemon is already in the queue */
+  isQueued?: boolean;
+  /** Whether queue is full (3) */
+  queueFull?: boolean;
+  /** Whether it's the user's turn right now */
+  isUserTurn?: boolean;
 }
 
 export function DraftConfirmPopover({
@@ -30,8 +37,12 @@ export function DraftConfirmPopover({
   budgetAfter,
   onConfirm,
   onViewDetails,
+  onQueue,
   onClose,
   rosterLookup,
+  isQueued,
+  queueFull,
+  isUserTurn,
 }: DraftConfirmPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +87,13 @@ export function DraftConfirmPopover({
       onClose();
     }
   }, [name, onViewDetails, onClose]);
+
+  const handleQueue = useCallback(() => {
+    if (name && onQueue) {
+      onQueue(name);
+      onClose();
+    }
+  }, [name, onQueue, onClose]);
 
   if (!name || !anchorRect) return null;
 
@@ -151,13 +169,39 @@ export function DraftConfirmPopover({
 
         {/* Actions */}
         <div className="flex gap-1.5 mt-2.5">
-          <Button
-            onClick={handleConfirm}
-            className="flex-1 h-8 text-xs font-bold bg-neon hover:bg-neon/90 text-surface gap-1"
-          >
-            <Sparkles size={12} />
-            Draft
-          </Button>
+          {isUserTurn ? (
+            <Button
+              onClick={handleConfirm}
+              className="flex-1 h-8 text-xs font-bold bg-neon hover:bg-neon/90 text-surface gap-1"
+            >
+              <Sparkles size={12} />
+              Draft
+            </Button>
+          ) : onQueue && !isQueued && !queueFull ? (
+            <Button
+              onClick={handleQueue}
+              className="flex-1 h-8 text-xs font-bold bg-pink/10 text-pink border border-pink/30 hover:bg-pink/20 gap-1"
+            >
+              <ListOrdered size={12} />
+              Queue
+            </Button>
+          ) : isQueued ? (
+            <span className="flex-1 flex items-center justify-center h-8 text-xs text-pink font-medium gap-1">
+              <ListOrdered size={12} />
+              Queued
+            </span>
+          ) : null}
+          {/* Queue button alongside Draft when it's user's turn */}
+          {isUserTurn && onQueue && !isQueued && !queueFull && (
+            <Button
+              variant="ghost"
+              onClick={handleQueue}
+              className="h-8 px-2 text-xs text-pink hover:text-pink hover:bg-pink/10 gap-0.5"
+              title="Add to queue"
+            >
+              <ListOrdered size={12} />
+            </Button>
+          )}
           <Button
             variant="ghost"
             onClick={handleDetails}
