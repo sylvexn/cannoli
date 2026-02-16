@@ -31,6 +31,11 @@ interface DraftTeamSidebarProps {
   /** User's draft queue (max 3 Pokemon names) */
   draftQueue?: string[];
   onQueueRemove?: (name: string) => void;
+  autoDraftQueue?: boolean;
+  onToggleAutoDraft?: () => void;
+  /** Manually draft the top queued Pokemon */
+  onDraftFromQueue?: () => void;
+  isUserTurn?: boolean;
 }
 
 export function DraftTeamSidebar({
@@ -47,6 +52,10 @@ export function DraftTeamSidebar({
   pointCap = 110,
   draftQueue = [],
   onQueueRemove,
+  autoDraftQueue,
+  onToggleAutoDraft,
+  onDraftFromQueue,
+  isUserTurn: isUserTurnProp,
 }: DraftTeamSidebarProps) {
   // Collapsed state — always the same
   if (collapsed) {
@@ -92,6 +101,10 @@ export function DraftTeamSidebar({
         selectedTeamId={selectedTeamId}
         draftQueue={draftQueue}
         onQueueRemove={onQueueRemove}
+        autoDraftQueue={autoDraftQueue}
+        onToggleAutoDraft={onToggleAutoDraft}
+        onDraftFromQueue={onDraftFromQueue}
+        isUserTurn={isUserTurnProp}
       />
     );
   }
@@ -125,6 +138,10 @@ function DraftFocusedPanel({
   selectedTeamId,
   draftQueue = [],
   onQueueRemove,
+  autoDraftQueue,
+  onToggleAutoDraft,
+  onDraftFromQueue,
+  isUserTurn,
 }: {
   teamOrder: Player[];
   teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
@@ -137,6 +154,10 @@ function DraftFocusedPanel({
   selectedTeamId: string | null;
   draftQueue?: string[];
   onQueueRemove?: (name: string) => void;
+  autoDraftQueue?: boolean;
+  onToggleAutoDraft?: () => void;
+  onDraftFromQueue?: () => void;
+  isUserTurn?: boolean;
 }) {
   const ROSTER_SIZE = 10;
   const userPlayer = teamOrder.find(p => p.id === userTeamId);
@@ -269,6 +290,64 @@ function DraftFocusedPanel({
                 );
               })}
             </div>
+
+            {/* Auto-draft toggle */}
+            {onToggleAutoDraft && (
+              <button
+                onClick={onToggleAutoDraft}
+                className={cn(
+                  'mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all',
+                  'border',
+                  autoDraftQueue
+                    ? 'bg-pink/10 border-pink/30 text-pink'
+                    : 'bg-surface-overlay/30 border-border-subtle text-text-muted hover:border-border-default hover:text-text-secondary',
+                )}
+              >
+                <div className={cn(
+                  'w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0',
+                  autoDraftQueue ? 'bg-pink' : 'bg-surface-overlay',
+                )}>
+                  <div className={cn(
+                    'absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
+                    autoDraftQueue ? 'left-3' : 'left-0.5',
+                  )} />
+                </div>
+                <span>Auto-draft from queue</span>
+              </button>
+            )}
+
+            {/* Quick draft from queue button — shown when toggle is OFF and it's user's turn */}
+            {!autoDraftQueue && isUserTurn && onDraftFromQueue && (
+              <button
+                onClick={onDraftFromQueue}
+                className={cn(
+                  'group/qd mt-1.5 w-full relative overflow-hidden',
+                  'flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md',
+                  'bg-gradient-to-r from-pink/20 via-neon/20 to-pink/20',
+                  'border border-pink/30 hover:border-neon/50',
+                  'transition-all duration-300',
+                  'hover:shadow-[0_0_16px_rgba(232,121,249,0.2)]',
+                )}
+              >
+                {/* Shimmer effect on hover */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover/qd:translate-x-full transition-transform duration-700" />
+                <Zap size={12} className="text-neon relative" />
+                <span className="text-[11px] font-bold text-text-primary relative">
+                  Draft #{1}
+                </span>
+                <span className="text-[10px] text-text-muted relative truncate max-w-[100px]">
+                  {draftQueue[0]}
+                </span>
+                {/* Tooltip on hover */}
+                <span className={cn(
+                  'absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[9px] font-mono',
+                  'bg-surface text-text-secondary border border-border-subtle whitespace-nowrap',
+                  'opacity-0 group-hover/qd:opacity-100 transition-opacity pointer-events-none',
+                )}>
+                  Draft top of queue
+                </span>
+              </button>
+            )}
           </div>
         )}
 
