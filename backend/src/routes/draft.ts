@@ -3,6 +3,33 @@ import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { getDraftSnapshot, startDraft, executePick, handleTimerExpiry } from '../lib/draft-engine';
 
+// ─── Presence tracking per league ──────────────────────────────────────────
+
+interface DraftPresence {
+  teamId: string | null; // null = spectator/admin
+  username: string;
+  role: 'dev' | 'admin' | 'user' | 'spectator';
+}
+
+const leaguePresence = new Map<string, Map</* ws id */ object, DraftPresence>>();
+
+function getPresenceList(leagueId: string) {
+  const presence = leaguePresence.get(leagueId);
+  if (!presence) return { players: [] as { teamId: string; username: string }[], spectators: [] as { username: string; role: string }[] };
+
+  const players: { teamId: string; username: string }[] = [];
+  const spectators: { username: string; role: string }[] = [];
+
+  for (const [, p] of presence) {
+    if (p.teamId) {
+      players.push({ teamId: p.teamId, username: p.username });
+    } else {
+      spectators.push({ username: p.username, role: p.role });
+    }
+  }
+  return { players, spectators };
+}
+
 export const draftRoutes = new Elysia()
 
   .get('/api/leagues/:leagueId/draft/state', ({ params }) => {
@@ -68,11 +95,32 @@ export const draftRoutes = new Elysia()
       ws.subscribe(`draft:${leagueId}`);
       const snapshot = getDraftSnapshot(leagueId);
       ws.send(JSON.stringify({ type: 'draft_state', data: snapshot ?? { status: 'not_started', leagueId } }));
+      // Send current presence
+      ws.send(JSON.stringify({ type: 'presence', data: getPresenceList(leagueId) }));
     },
     message(ws, message) {
       try {
         const msg = typeof message === 'string' ? JSON.parse(message) : message;
         const leagueId = (ws.data as any).params.leagueId;
+
+        if (msg.type === 'identify') {
+          // Client identifies themselves: { type: 'identify', teamId?, username, role }
+          const { teamId, username, role } = msg;
+          if (!username) return;
+
+          if (!leaguePresence.has(leagueId)) leaguePresence.set(leagueId, new Map());
+          leaguePresence.get(leagueId)!.set(ws, {
+            teamId: teamId || null,
+            username,
+            role: role || 'spectator',
+          });
+
+          // Broadcast updated presence to all
+          const presenceMsg = JSON.stringify({ type: 'presence', data: getPresenceList(leagueId) });
+          ws.publish(`draft:${leagueId}`, presenceMsg);
+          ws.send(presenceMsg);
+          return;
+        }
 
         if (msg.type === 'pick') {
           const { pokemonName, teamId } = msg;
@@ -104,5 +152,14 @@ export const draftRoutes = new Elysia()
     close(ws) {
       const leagueId = (ws.data as any).params.leagueId;
       ws.unsubscribe(`draft:${leagueId}`);
+
+      // Remove from presence and broadcast
+      const presence = leaguePresence.get(leagueId);
+      if (presence) {
+        presence.delete(ws);
+        const presenceMsg = JSON.stringify({ type: 'presence', data: getPresenceList(leagueId) });
+        ws.publish(`draft:${leagueId}`, presenceMsg);
+        if (presence.size === 0) leaguePresence.delete(leagueId);
+      }
     },
   });

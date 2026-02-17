@@ -42,39 +42,8 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
   const allPokemon = useMemo(() => [...teamA, ...teamB], [teamA, teamB]);
 
   return (
-    <div className="grid grid-cols-[minmax(180px,0.7fr)_2fr] gap-4 items-start">
-      {/* Base Speed Column */}
-      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
-        <div className="px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle bg-surface-overlay/30">
-          Base Speed
-        </div>
-        {speedList.length === 0 ? (
-          <div className="p-4 text-center text-text-muted text-sm">No teams loaded</div>
-        ) : (
-          <div>
-            {speedList.map((entry, i) => (
-              <div
-                key={`${entry.name}-${entry.side}-${i}`}
-                className={cn(
-                  'flex items-center gap-2 px-2 py-[3px]',
-                  entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
-                )}
-              >
-                <PokemonSprite name={entry.name} size="xs" />
-                <span className="text-xs font-mono text-text-primary flex-1 truncate">{entry.name}</span>
-                <span className={cn(
-                  'text-xs font-mono font-bold tabular-nums',
-                  entry.side === 'a' ? 'text-[#3b82f6]' : 'text-[#ef4444]',
-                )}>
-                  {entry.spe}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Speed Calculators */}
+    <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+      {/* Speed Calculators — Left */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">Speed Calculator</div>
@@ -84,8 +53,10 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
           </Button>
         </div>
 
-        <div className="grid gap-3" style={{
-          gridTemplateColumns: `repeat(${Math.min(slots.length, 4)}, minmax(0, 220px))`,
+        <div className="grid gap-3 grid-cols-1" style={{
+          gridTemplateColumns: slots.length > 2
+            ? `repeat(2, minmax(0, 200px))`
+            : `repeat(${slots.length}, minmax(0, 200px))`,
         }}>
           {slots.map(slot => (
             <SpeedCalcCard
@@ -98,6 +69,41 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
           ))}
         </div>
       </div>
+
+      {/* Base Speed Column — Center */}
+      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden w-[260px]">
+        <div className="px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle bg-surface-overlay/30 text-center">
+          Base Speed
+        </div>
+        {speedList.length === 0 ? (
+          <div className="p-4 text-center text-text-muted text-sm">No teams loaded</div>
+        ) : (
+          <div>
+            {speedList.map((entry, i) => (
+              <div
+                key={`${entry.name}-${entry.side}-${i}`}
+                className={cn(
+                  'flex items-center gap-2 px-2.5 py-[3px]',
+                  entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
+                )}
+              >
+                <PokemonSprite name={entry.name} size="xs" />
+                <span className="text-xs font-mono text-text-primary whitespace-nowrap">{entry.name}</span>
+                <span className="flex-1" />
+                <span className={cn(
+                  'text-xs font-mono font-bold tabular-nums shrink-0',
+                  entry.side === 'a' ? 'text-[#3b82f6]' : 'text-[#ef4444]',
+                )}>
+                  {entry.spe}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Right spacer — keeps center column centered */}
+      <div />
     </div>
   );
 }

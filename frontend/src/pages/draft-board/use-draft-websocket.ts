@@ -6,8 +6,13 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { ApiDraftState } from '@/lib/api';
 
+export interface DraftPresenceData {
+  players: { teamId: string; username: string }[];
+  spectators: { username: string; role: string }[];
+}
+
 export interface DraftWSMessage {
-  type: 'draft_state' | 'pick_made' | 'error';
+  type: 'draft_state' | 'pick_made' | 'presence' | 'error';
   data?: any;
   error?: string;
 }
@@ -17,6 +22,7 @@ interface UseDraftWebSocketOptions {
   enabled: boolean;
   onState: (state: ApiDraftState) => void;
   onPickMade: (data: { pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number }; snapshot: ApiDraftState }) => void;
+  onPresence: (data: DraftPresenceData) => void;
   onError: (error: string) => void;
 }
 
@@ -25,18 +31,22 @@ export function useDraftWebSocket({
   enabled,
   onState,
   onPickMade,
+  onPresence,
   onError,
 }: UseDraftWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const [connected, setConnected] = useState(false);
+  const pendingIdentifyRef = useRef<{ teamId: string | null; username: string; role: string } | null>(null);
 
   // Stable callback refs
   const onStateRef = useRef(onState);
   const onPickMadeRef = useRef(onPickMade);
+  const onPresenceRef = useRef(onPresence);
   const onErrorRef = useRef(onError);
   onStateRef.current = onState;
   onPickMadeRef.current = onPickMade;
+  onPresenceRef.current = onPresence;
   onErrorRef.current = onError;
 
   const connect = useCallback(() => {
@@ -52,6 +62,10 @@ export function useDraftWebSocket({
     ws.onopen = () => {
       setConnected(true);
       clearTimeout(reconnectTimerRef.current);
+      // Send pending identify if we have one
+      if (pendingIdentifyRef.current && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'identify', ...pendingIdentifyRef.current }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -63,6 +77,9 @@ export function useDraftWebSocket({
             break;
           case 'pick_made':
             onPickMadeRef.current(msg.data);
+            break;
+          case 'presence':
+            onPresenceRef.current(msg.data);
             break;
           case 'error':
             onErrorRef.current(msg.error ?? 'Unknown error');
@@ -109,6 +126,14 @@ export function useDraftWebSocket({
     };
   }, [enabled, connect]);
 
+  // Send identity to server (call after connecting)
+  const identify = useCallback((teamId: string | null, username: string, role: string) => {
+    pendingIdentifyRef.current = { teamId, username, role };
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'identify', teamId, username, role }));
+    }
+  }, []);
+
   // Send a pick via WebSocket
   const sendPick = useCallback((pokemonName: string, teamId: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -118,5 +143,5 @@ export function useDraftWebSocket({
     wsRef.current.send(JSON.stringify({ type: 'pick', pokemonName, teamId }));
   }, []);
 
-  return { connected, sendPick };
+  return { connected, sendPick, identify };
 }
