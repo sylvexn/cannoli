@@ -263,20 +263,20 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
     : `${diffDays}d ago`;
 
   return (
-    <div className="flex items-start gap-2 px-4 py-2 hover:bg-surface-overlay/30 transition-colors">
+    <div className="flex items-start gap-2 px-3 py-2 hover:bg-surface-overlay/30 transition-colors overflow-hidden">
       <Icon size={12} className="text-text-muted shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
-        <div className="text-[11px] text-text-secondary leading-tight">
+      <div className="flex-1 min-w-0 overflow-hidden">
+        <p className="text-[11px] text-text-secondary leading-tight truncate">
           <span className="font-medium text-text-primary">{event.actor}</span>{' '}
-          <span className="truncate">{event.description.toLowerCase()}</span>
-        </div>
+          {event.description.toLowerCase()}
+        </p>
         <div className="flex items-center gap-1.5 mt-0.5">
           {league && (
-            <span className="text-[9px] font-medium" style={{ color: league.color }}>
+            <span className="text-[9px] font-medium shrink-0" style={{ color: league.color }}>
               {league.name.replace(' League', '')}
             </span>
           )}
-          <span className="text-[9px] text-text-muted">{timeStr}</span>
+          <span className="text-[9px] text-text-muted shrink-0">{timeStr}</span>
         </div>
       </div>
     </div>

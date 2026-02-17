@@ -3,9 +3,11 @@ import { TIER_LIST, BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
+import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import type { ApiDraftPick, ApiDraftState } from '@/lib/api';
 import { useDraftWebSocket } from './use-draft-websocket';
+import type { DraftPresenceData } from './use-draft-websocket';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { generateDraftOrder, transactionsToTrades } from './generate-draft-order';
 import type {
@@ -272,6 +274,10 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
 export function useDraftState() {
   const league = useLeague();
   const { players, standings, transactions } = useLeagueData();
+  const { user } = useAuth();
+
+  // ─── Presence tracking ───────────────────────────────────────────
+  const [presence, setPresence] = useState<DraftPresenceData>({ players: [], spectators: [] });
 
   // ─── Season data (historical picks from API) ─────────────────────
   const [draftPicks, setDraftPicks] = useState<ApiDraftPick[]>([]);
@@ -432,7 +438,7 @@ export function useDraftState() {
   // ─── Live mode: WebSocket connection ──────────────────────────────
   const wsEnabled = state.mode === 'live';
 
-  const { connected: wsConnected, sendPick: wsSendPick } = useDraftWebSocket({
+  const { connected: wsConnected, sendPick: wsSendPick, identify: wsIdentify } = useDraftWebSocket({
     leagueId: league.id,
     enabled: wsEnabled,
     onState: useCallback((snapshot: ApiDraftState) => {
@@ -455,10 +461,20 @@ export function useDraftState() {
         dispatch({ type: 'LIVE_SYNC', snapshot: data.snapshot });
       }
     }, []),
+    onPresence: useCallback((data: DraftPresenceData) => {
+      setPresence(data);
+    }, []),
     onError: useCallback((error: string) => {
       console.error('[Draft WS]', error);
     }, []),
   });
+
+  // Identify ourselves when connected
+  useEffect(() => {
+    if (!wsConnected || !user) return;
+    const teamId = state.userTeamId || null;
+    wsIdentify(teamId, user.username, user.role);
+  }, [wsConnected, user, state.userTeamId, wsIdentify]);
 
   // Fetch initial draft state when switching to live mode
   useEffect(() => {
@@ -673,6 +689,7 @@ export function useDraftState() {
     handleUserPick,
     draftedSet,
     wsConnected,
+    presence,
     userBudgetRemaining,
   };
 }

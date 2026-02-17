@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { TYPE_COLORS } from '@/lib/constants';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { NumberInput } from '@/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -50,33 +51,21 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
         {/* Tier range */}
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] uppercase text-text-muted font-medium">Tier</span>
-          <Select
-            value={String(filters.tierMin)}
-            onValueChange={v => onUpdate({ tierMin: Number(v) })}
-          >
-            <SelectTrigger className="h-8 w-16 text-xs bg-surface-raised border-border-default">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 20 }, (_, i) => i + 1).map(n => (
-                <SelectItem key={n} value={String(n)} className="text-xs">{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NumberInput
+            value={filters.tierMin}
+            onChange={v => onUpdate({ tierMin: Math.min(v, filters.tierMax) })}
+            min={1}
+            max={20}
+            className="w-[60px] h-8 text-xs"
+          />
           <span className="text-text-muted text-xs">–</span>
-          <Select
-            value={String(filters.tierMax)}
-            onValueChange={v => onUpdate({ tierMax: Number(v) })}
-          >
-            <SelectTrigger className="h-8 w-16 text-xs bg-surface-raised border-border-default">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: 20 }, (_, i) => i + 1).map(n => (
-                <SelectItem key={n} value={String(n)} className="text-xs">{n}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <NumberInput
+            value={filters.tierMax}
+            onChange={v => onUpdate({ tierMax: Math.max(v, filters.tierMin) })}
+            min={1}
+            max={20}
+            className="w-[60px] h-8 text-xs"
+          />
         </div>
 
         {/* Ownership filter */}

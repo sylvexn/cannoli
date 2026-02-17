@@ -1,6 +1,15 @@
+import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { NumberInput } from '@/components/ui/number-input';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -10,17 +19,21 @@ import {
 } from '@/components/ui/select';
 import { TeamLogo } from '@/components/team-logo';
 import {
-  Play, Pause, RotateCcw, User, Timer, Trophy,
+  Play, Pause, RotateCcw, User, Timer, Trophy, AlertTriangle,
+  Circle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
 import type { DraftState, DraftAction } from './types';
+import type { DraftPresenceData } from './use-draft-websocket';
 
 interface DraftControlBarProps {
   state: DraftState;
   dispatch: (action: DraftAction) => void;
   isDemoComplete: boolean;
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
+  presence?: DraftPresenceData;
+  wsConnected?: boolean;
 }
 
 export function DraftControlBar({
@@ -28,86 +41,245 @@ export function DraftControlBar({
   dispatch,
   isDemoComplete,
   draftOrder,
+  presence,
+  wsConnected,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();
+  const [shiftHeld, setShiftHeld] = useState(false);
+  const [forceStartOpen, setForceStartOpen] = useState(false);
+
+  // Track connected team IDs
+  const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
+  const allConnected = draftOrder.every(p => connectedTeamIds.has(p.id));
+  const disconnectedTeams = draftOrder.filter(p => !connectedTeamIds.has(p.id));
+
+  const handleStartClick = useCallback((e: React.MouseEvent) => {
+    if (!state.userTeamId) return;
+
+    if (e.shiftKey && !allConnected) {
+      // Force start — show confirmation
+      setForceStartOpen(true);
+      return;
+    }
+
+    const teamIds = draftOrder.map(p => p.id);
+    const snakeOrder = generateSnakeSlots(teamIds, 10);
+    dispatch({
+      type: 'DEMO_START',
+      snakeOrder,
+      userTeamId: state.userTeamId,
+      timerDuration: state.timerDuration || 30,
+      pointCap: 110,
+    });
+  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch, allConnected]);
+
+  const handleForceStart = useCallback(() => {
+    if (!state.userTeamId) return;
+    const teamIds = draftOrder.map(p => p.id);
+    const snakeOrder = generateSnakeSlots(teamIds, 10);
+    dispatch({
+      type: 'DEMO_START',
+      snakeOrder,
+      userTeamId: state.userTeamId,
+      timerDuration: state.timerDuration || 30,
+      pointCap: 110,
+    });
+    setForceStartOpen(false);
+  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
 
   // Pre-start: show configuration
   if (!state.demoStarted) {
     return (
-      <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          {/* Your team selector */}
-          <div className="flex items-center gap-2">
-            <User size={13} className="text-text-muted" />
-            <Select
-              value={state.userTeamId ?? 'none'}
-              onValueChange={v => dispatch({ type: 'SET_USER_TEAM', teamId: v === 'none' ? null : v })}
-            >
-              <SelectTrigger className="h-7 w-[160px] text-xs bg-surface-overlay border-border-default">
-                <SelectValue placeholder="Pick your team..." />
-              </SelectTrigger>
-              <SelectContent>
-                {draftOrder.map((p, i) => (
-                  <SelectItem key={p.id} value={p.id} className="text-xs">
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-mono text-text-muted w-3">{i + 1}</span>
-                      <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                      {p.teamAbbrev} — {p.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <>
+        <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            {/* Your team selector */}
+            <div className="flex items-center gap-2">
+              <User size={13} className="text-text-muted" />
+              <Select
+                value={state.userTeamId ?? 'none'}
+                onValueChange={v => dispatch({ type: 'SET_USER_TEAM', teamId: v === 'none' ? null : v })}
+              >
+                <SelectTrigger className="h-7 w-[160px] text-xs bg-surface-overlay border-border-default">
+                  <SelectValue placeholder="Pick your team..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {draftOrder.map((p, i) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-text-muted w-3">{i + 1}</span>
+                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                        {p.teamAbbrev} — {p.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="w-px h-6 bg-border-subtle" />
+            <div className="w-px h-6 bg-border-subtle" />
 
-          {/* Timer duration — editable for admin/dev, read-only for others */}
-          <div className="flex items-center gap-1.5">
-            <Timer size={13} className="text-text-muted" />
-            {isAdmin ? (
+            {/* Timer duration */}
+            <div className="flex items-center gap-1.5">
+              <Timer size={13} className="text-text-muted" />
+              {isAdmin ? (
+                <>
+                  <NumberInput
+                    value={state.timerDuration}
+                    onChange={v => dispatch({ type: 'SET_TIMER_DURATION', duration: v })}
+                    min={10}
+                    max={300}
+                    step={5}
+                    className="w-[68px] h-7 text-xs"
+                  />
+                  <span className="text-[10px] text-text-muted">s/pick</span>
+                </>
+              ) : (
+                <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
+              )}
+            </div>
+
+            {/* Connected count badge */}
+            {state.mode === 'live' && presence && (
               <>
-                <NumberInput
-                  value={state.timerDuration}
-                  onChange={v => dispatch({ type: 'SET_TIMER_DURATION', duration: v })}
-                  min={10}
-                  max={300}
-                  step={5}
-                  className="w-[68px] h-7 text-xs"
-                />
-                <span className="text-[10px] text-text-muted">s/pick</span>
+                <div className="w-px h-6 bg-border-subtle" />
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px] gap-1 px-2 py-0.5',
+                    allConnected
+                      ? 'text-win border-win/30 bg-win/10'
+                      : 'text-draw border-draw/30 bg-draw/10',
+                  )}
+                >
+                  <Circle size={6} className={allConnected ? 'fill-win text-win' : 'fill-draw text-draw'} />
+                  {connectedTeamIds.size}/{draftOrder.length} online
+                </Badge>
               </>
-            ) : (
-              <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
             )}
-          </div>
 
-          {/* Start button */}
-          <Button
-            onClick={() => {
-              if (!state.userTeamId) return;
-              const teamIds = draftOrder.map(p => p.id);
-              const snakeOrder = generateSnakeSlots(teamIds, 10);
-              dispatch({
-                type: 'DEMO_START',
-                snakeOrder,
-                userTeamId: state.userTeamId,
-                timerDuration: state.timerDuration || 30,
-                pointCap: 110,
-              });
-            }}
-            disabled={!state.userTeamId}
-            className={cn(
-              'ml-auto h-8 px-4 text-xs font-bold gap-1.5',
-              'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
-              'disabled:opacity-30',
-            )}
-          >
-            <Play size={14} />
-            Start Draft
-          </Button>
+            {/* Start button with hover tooltip */}
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleStartClick}
+                    onMouseEnter={(e) => setShiftHeld(e.shiftKey)}
+                    onMouseMove={(e) => setShiftHeld(e.shiftKey)}
+                    onMouseLeave={() => setShiftHeld(false)}
+                    disabled={!state.userTeamId}
+                    className={cn(
+                      'ml-auto h-8 px-4 text-xs font-bold gap-1.5 transition-all',
+                      shiftHeld && !allConnected
+                        ? 'bg-loss/20 text-loss border border-loss/40 hover:bg-loss/30'
+                        : 'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
+                      'disabled:opacity-30',
+                    )}
+                  >
+                    {shiftHeld && !allConnected ? (
+                      <>
+                        <AlertTriangle size={14} />
+                        Force Start
+                      </>
+                    ) : (
+                      <>
+                        <Play size={14} />
+                        Start Draft
+                      </>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                {state.mode === 'live' && presence && (
+                  <TooltipContent side="bottom" className="p-0 w-[200px]">
+                    <div className="px-3 py-2 space-y-1.5">
+                      <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                        Connection Status
+                      </div>
+                      {/* Players */}
+                      {draftOrder.map(p => {
+                        const online = connectedTeamIds.has(p.id);
+                        return (
+                          <div key={p.id} className="flex items-center gap-1.5 text-xs">
+                            <Circle
+                              size={6}
+                              className={cn(
+                                online ? 'fill-win text-win' : 'fill-loss text-loss',
+                              )}
+                            />
+                            <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                            <span className={cn(
+                              'flex-1 truncate',
+                              online ? 'text-text-primary' : 'text-text-muted',
+                            )}>
+                              {p.teamAbbrev}
+                            </span>
+                            <span className="text-[9px] text-text-muted">
+                              {online ? 'online' : 'offline'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {/* Spectators */}
+                      {(presence.spectators.length > 0) && (
+                        <div className="pt-1 border-t border-border-subtle">
+                          <div className="text-[9px] text-text-muted">
+                            {presence.spectators.length} spectator{presence.spectators.length !== 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      )}
+                      {/* Shift hint */}
+                      {!allConnected && (
+                        <div className="pt-1 border-t border-border-subtle text-[9px] text-text-muted">
+                          Hold <kbd className="px-1 py-0.5 rounded bg-surface-overlay border border-border-subtle text-[8px] font-mono">Shift</kbd> to force start
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
-      </div>
+
+        {/* Force Start Confirmation Dialog */}
+        <Dialog open={forceStartOpen} onOpenChange={setForceStartOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle size={16} className="text-loss" />
+                Force Start Draft
+              </DialogTitle>
+              <DialogDescription>
+                {disconnectedTeams.length} player{disconnectedTeams.length !== 1 ? 's' : ''} not connected:
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1 py-2">
+              {disconnectedTeams.map(p => (
+                <div key={p.id} className="flex items-center gap-2 text-sm">
+                  <Circle size={6} className="fill-loss text-loss" />
+                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                  <span className="text-text-primary">{p.teamAbbrev}</span>
+                  <span className="text-text-muted">— {p.name}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-text-muted">
+              Force-started drafts with missing players will use auto-pick for disconnected teams. This session will be cleaned up if not completed.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setForceStartOpen(false)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={handleForceStart}
+                className="gap-1.5"
+              >
+                <AlertTriangle size={14} />
+                Force Start
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
@@ -157,12 +329,27 @@ export function DraftControlBar({
           </>
         )}
 
+        {/* Online count (live mode, during draft) */}
+        {state.mode === 'live' && presence && !isDemoComplete && (
+          <>
+            <div className="w-px h-5 bg-border-subtle" />
+            <span className="text-[10px] text-text-muted font-mono">
+              <Circle size={5} className="inline fill-win text-win mr-0.5 -mt-px" />
+              {connectedTeamIds.size}/{draftOrder.length}
+            </span>
+            {presence.spectators.length > 0 && (
+              <span className="text-[9px] text-text-muted/60">
+                +{presence.spectators.length} spec
+              </span>
+            )}
+          </>
+        )}
+
         {/* Admin timer controls */}
         {isAdmin && !isDemoComplete && (
           <>
             <div className="w-px h-5 bg-border-subtle" />
 
-            {/* Pause / Resume */}
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
               className={cn(
@@ -176,7 +363,6 @@ export function DraftControlBar({
               {state.timerPaused ? 'Resume' : 'Pause'}
             </button>
 
-            {/* Add time — compact pill group */}
             <div className="flex items-center rounded border border-border-subtle overflow-hidden">
               {[15, 30, 60].map(s => (
                 <button
@@ -195,7 +381,7 @@ export function DraftControlBar({
           </>
         )}
 
-        {/* Reset — pushed right */}
+        {/* Reset */}
         <button
           onClick={() => dispatch({ type: 'DEMO_RESET' })}
           className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-text-muted hover:text-neon transition-colors"

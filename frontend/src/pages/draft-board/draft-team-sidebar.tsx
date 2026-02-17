@@ -6,9 +6,10 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered, Circle, Eye } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
+import type { DraftPresenceData } from './use-draft-websocket';
 import { getTierEntry } from '@/data/tier-list';
 
 interface DraftTeamSidebarProps {
@@ -36,6 +37,8 @@ interface DraftTeamSidebarProps {
   /** Manually draft the top queued Pokemon */
   onDraftFromQueue?: () => void;
   isUserTurn?: boolean;
+  /** Live presence data from WebSocket */
+  presence?: DraftPresenceData;
 }
 
 export function DraftTeamSidebar({
@@ -56,7 +59,9 @@ export function DraftTeamSidebar({
   onToggleAutoDraft,
   onDraftFromQueue,
   isUserTurn: isUserTurnProp,
+  presence,
 }: DraftTeamSidebarProps) {
+  const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
   // Collapsed state — always the same
   if (collapsed) {
     return (
@@ -105,6 +110,8 @@ export function DraftTeamSidebar({
         onToggleAutoDraft={onToggleAutoDraft}
         onDraftFromQueue={onDraftFromQueue}
         isUserTurn={isUserTurnProp}
+        connectedTeamIds={connectedTeamIds}
+        presence={presence}
       />
     );
   }
@@ -120,6 +127,8 @@ export function DraftTeamSidebar({
       onToggleCollapse={onToggleCollapse}
       currentDrafterId={currentDrafterId}
       isLiveMode={isLiveMode}
+      connectedTeamIds={connectedTeamIds}
+      presence={presence}
     />
   );
 }
@@ -158,6 +167,8 @@ function DraftFocusedPanel({
   onToggleAutoDraft?: () => void;
   onDraftFromQueue?: () => void;
   isUserTurn?: boolean;
+  connectedTeamIds?: Set<string>;
+  presence?: DraftPresenceData;
 }) {
   const ROSTER_SIZE = 10;
   const userPlayer = teamOrder.find(p => p.id === userTeamId);
@@ -353,8 +364,16 @@ function DraftFocusedPanel({
 
         {/* Other teams — compact view */}
         <div className="p-2">
-          <div className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5 px-1">
-            All Teams
+          <div className="flex items-center gap-2 mb-1.5 px-1">
+            <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
+              All Teams
+            </span>
+            {presence && presence.spectators.length > 0 && (
+              <span className="text-[9px] text-text-muted/50 ml-auto flex items-center gap-1">
+                <Eye size={9} />
+                {presence.spectators.length}
+              </span>
+            )}
           </div>
           <div className="space-y-0.5">
             {otherTeams.map(p => {
@@ -362,6 +381,7 @@ function DraftFocusedPanel({
               const roster = teamRosters.get(p.id) ?? [];
               const isDrafter = currentDrafterId === p.id;
               const isSelected = selectedTeamId === p.id;
+              const isOnline = connectedTeamIds?.has(p.id);
 
               return (
                 <button
@@ -376,6 +396,12 @@ function DraftFocusedPanel({
                       : 'border border-transparent hover:bg-surface-overlay/20 hover:border-border-subtle',
                   )}
                 >
+                  {connectedTeamIds && connectedTeamIds.size > 0 && (
+                    <Circle size={5} className={cn(
+                      'shrink-0',
+                      isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
+                    )} />
+                  )}
                   <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
                   <span className="text-[11px] font-medium text-text-primary flex-1 text-left truncate">
                     {p.teamAbbrev}
@@ -422,6 +448,8 @@ function SeasonTeamList({
   onToggleCollapse: () => void;
   currentDrafterId?: string | null;
   isLiveMode?: boolean;
+  connectedTeamIds?: Set<string>;
+  presence?: DraftPresenceData;
 }) {
   return (
     <div className="w-[300px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
@@ -471,6 +499,12 @@ function SeasonTeamList({
                     <span className="text-[10px] font-mono tabular-nums text-text-muted w-3 shrink-0">
                       {orderIdx + 1}
                     </span>
+                  )}
+                  {isLiveMode && connectedTeamIds && connectedTeamIds.size > 0 && (
+                    <Circle size={5} className={cn(
+                      'shrink-0',
+                      connectedTeamIds.has(p.id) ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
+                    )} />
                   )}
                   <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
                   <span className="text-xs font-medium text-text-primary truncate flex-1 text-left">{p.teamAbbrev}</span>

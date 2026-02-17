@@ -55,7 +55,7 @@ export function DraftBoardPage() {
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
-    draftOrder, handleUserPick, wsConnected, userBudgetRemaining,
+    draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -290,6 +290,7 @@ export function DraftBoardPage() {
           onToggleAutoDraft={() => dispatch({ type: 'TOGGLE_AUTO_DRAFT_QUEUE' })}
           onDraftFromQueue={handleDraftFromQueue}
           isUserTurn={isUserTurn}
+          presence={presence}
         />
       </div>
 
@@ -300,6 +301,8 @@ export function DraftBoardPage() {
           dispatch={dispatch}
           isDemoComplete={isDemoComplete}
           draftOrder={draftOrder}
+          presence={presence}
+          wsConnected={wsConnected}
         />
       )}
 
