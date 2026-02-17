@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { NumberInput } from '@/components/ui/number-input';
@@ -7,9 +7,6 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
-} from '@/components/ui/tooltip';
 import {
   Select,
   SelectContent,
@@ -20,7 +17,7 @@ import {
 import { TeamLogo } from '@/components/team-logo';
 import {
   Play, Pause, RotateCcw, User, Timer, Trophy, AlertTriangle,
-  Circle,
+  Circle, Eye,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
@@ -47,17 +44,34 @@ export function DraftControlBar({
   const { isAdmin } = useAuth();
   const [shiftHeld, setShiftHeld] = useState(false);
   const [forceStartOpen, setForceStartOpen] = useState(false);
+  const [hoverOpen, setHoverOpen] = useState(false);
+  const hoverRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Global shift tracking
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => setShiftHeld(e.shiftKey);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
+    };
+  }, []);
 
   // Track connected team IDs
   const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
   const allConnected = draftOrder.every(p => connectedTeamIds.has(p.id));
   const disconnectedTeams = draftOrder.filter(p => !connectedTeamIds.has(p.id));
 
+  // Spectators: group dev+admin as "admins", rest as spectators
+  const adminSpecs = presence?.spectators.filter(s => s.role === 'dev' || s.role === 'admin') ?? [];
+  const viewerSpecs = presence?.spectators.filter(s => s.role !== 'dev' && s.role !== 'admin') ?? [];
+
   const handleStartClick = useCallback((e: React.MouseEvent) => {
     if (!state.userTeamId) return;
 
     if (e.shiftKey && !allConnected) {
-      // Force start — show confirmation
       setForceStartOpen(true);
       return;
     }
@@ -158,86 +172,102 @@ export function DraftControlBar({
               </>
             )}
 
-            {/* Start button with hover tooltip */}
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={handleStartClick}
-                    onMouseEnter={(e) => setShiftHeld(e.shiftKey)}
-                    onMouseMove={(e) => setShiftHeld(e.shiftKey)}
-                    onMouseLeave={() => setShiftHeld(false)}
-                    disabled={!state.userTeamId}
-                    className={cn(
-                      'ml-auto h-8 px-4 text-xs font-bold gap-1.5 transition-all',
-                      shiftHeld && !allConnected
-                        ? 'bg-loss/20 text-loss border border-loss/40 hover:bg-loss/30'
-                        : 'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
-                      'disabled:opacity-30',
-                    )}
-                  >
-                    {shiftHeld && !allConnected ? (
-                      <>
-                        <AlertTriangle size={14} />
-                        Force Start
-                      </>
-                    ) : (
-                      <>
-                        <Play size={14} />
-                        Start Draft
-                      </>
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                {state.mode === 'live' && presence && (
-                  <TooltipContent side="bottom" className="p-0 w-[200px]">
-                    <div className="px-3 py-2 space-y-1.5">
-                      <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                        Connection Status
-                      </div>
-                      {/* Players */}
-                      {draftOrder.map(p => {
-                        const online = connectedTeamIds.has(p.id);
-                        return (
-                          <div key={p.id} className="flex items-center gap-1.5 text-xs">
-                            <Circle
-                              size={6}
-                              className={cn(
-                                online ? 'fill-win text-win' : 'fill-loss text-loss',
-                              )}
-                            />
-                            <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                            <span className={cn(
-                              'flex-1 truncate',
-                              online ? 'text-text-primary' : 'text-text-muted',
-                            )}>
-                              {p.teamAbbrev}
-                            </span>
-                            <span className="text-[9px] text-text-muted">
-                              {online ? 'online' : 'offline'}
-                            </span>
-                          </div>
-                        );
-                      })}
-                      {/* Spectators */}
-                      {(presence.spectators.length > 0) && (
-                        <div className="pt-1 border-t border-border-subtle">
-                          <div className="text-[9px] text-text-muted">
-                            {presence.spectators.length} spectator{presence.spectators.length !== 1 ? 's' : ''}
-                          </div>
+            {/* Spacer pushes button right */}
+            <div className="flex-1" />
+
+            {/* Start button with hover panel */}
+            <div
+              className="relative"
+              ref={hoverRef}
+              onMouseEnter={() => setHoverOpen(true)}
+              onMouseLeave={() => setHoverOpen(false)}
+            >
+              <Button
+                ref={buttonRef}
+                onClick={handleStartClick}
+                disabled={!state.userTeamId}
+                className={cn(
+                  'h-8 px-4 text-xs font-bold gap-1.5 transition-all',
+                  shiftHeld && !allConnected
+                    ? 'bg-loss/20 text-loss border border-loss/40 hover:bg-loss/30'
+                    : 'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
+                  'disabled:opacity-30',
+                )}
+              >
+                {shiftHeld && !allConnected ? (
+                  <>
+                    <AlertTriangle size={14} />
+                    Force Start
+                  </>
+                ) : (
+                  <>
+                    <Play size={14} />
+                    Start Draft
+                  </>
+                )}
+              </Button>
+
+              {/* Connection status hover panel */}
+              {hoverOpen && state.mode === 'live' && presence && (
+                <div className="absolute right-0 top-full mt-2 w-[220px] z-50 rounded-lg border border-border-default bg-surface-raised shadow-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="px-3 py-1.5 border-b border-border-subtle bg-surface-overlay/30">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">
+                      Connection Status
+                    </span>
+                  </div>
+
+                  {/* Player list */}
+                  <div className="px-2 py-1.5 space-y-0.5">
+                    {draftOrder.map(p => {
+                      const online = connectedTeamIds.has(p.id);
+                      return (
+                        <div key={p.id} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-surface-overlay/30">
+                          <Circle
+                            size={6}
+                            className={cn(
+                              'shrink-0',
+                              online ? 'fill-win text-win' : 'fill-loss text-loss',
+                            )}
+                          />
+                          <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                          <span className={cn(
+                            'text-[11px] flex-1 truncate',
+                            online ? 'text-text-primary' : 'text-text-muted',
+                          )}>
+                            {p.teamAbbrev}
+                          </span>
+                          <span className={cn(
+                            'text-[9px] font-mono',
+                            online ? 'text-win/70' : 'text-loss/70',
+                          )}>
+                            {online ? 'on' : 'off'}
+                          </span>
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Admins + Spectators footer */}
+                  {(adminSpecs.length > 0 || viewerSpecs.length > 0) && (
+                    <div className="px-3 py-1.5 border-t border-border-subtle bg-surface-overlay/20 flex items-center gap-2 text-[9px] text-text-muted">
+                      {adminSpecs.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Circle size={5} className="fill-neon text-neon" />
+                          {adminSpecs.length} admin{adminSpecs.length !== 1 ? 's' : ''}
+                        </span>
                       )}
-                      {/* Shift hint */}
-                      {!allConnected && (
-                        <div className="pt-1 border-t border-border-subtle text-[9px] text-text-muted">
-                          Hold <kbd className="px-1 py-0.5 rounded bg-surface-overlay border border-border-subtle text-[8px] font-mono">Shift</kbd> to force start
-                        </div>
+                      {viewerSpecs.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Eye size={9} />
+                          {viewerSpecs.length} spectator{viewerSpecs.length !== 1 ? 's' : ''}
+                        </span>
                       )}
                     </div>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -337,9 +367,10 @@ export function DraftControlBar({
               <Circle size={5} className="inline fill-win text-win mr-0.5 -mt-px" />
               {connectedTeamIds.size}/{draftOrder.length}
             </span>
-            {presence.spectators.length > 0 && (
-              <span className="text-[9px] text-text-muted/60">
-                +{presence.spectators.length} spec
+            {(adminSpecs.length > 0 || viewerSpecs.length > 0) && (
+              <span className="text-[9px] text-text-muted/60 flex items-center gap-0.5">
+                <Eye size={8} />
+                {adminSpecs.length + viewerSpecs.length}
               </span>
             )}
           </>
