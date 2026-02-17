@@ -209,7 +209,7 @@ export function DraftControlBar({
 
               {/* Connection status hover panel */}
               {hoverOpen && state.mode === 'live' && presence && (
-                <div className="absolute right-0 top-full mt-2 w-[220px] z-50 rounded-lg border border-border-default bg-surface-raised shadow-lg overflow-hidden">
+                <div className="absolute right-0 bottom-full mb-2 w-[220px] z-50 rounded-lg border border-border-default bg-surface-raised shadow-lg overflow-hidden">
                   {/* Header */}
                   <div className="px-3 py-1.5 border-b border-border-subtle bg-surface-overlay/30">
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">
