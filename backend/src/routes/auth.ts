@@ -6,10 +6,8 @@ import {
   createSession, deleteSession,
   sessionCookieString, clearSessionCookieString,
 } from '../lib/auth';
-import { authPlugin } from '../middleware/auth';
 
 export const authRoutes = new Elysia()
-  .use(authPlugin)
 
   .post('/api/auth/login', async ({ body, set }) => {
     const { username, password } = body as { username: string; password: string };

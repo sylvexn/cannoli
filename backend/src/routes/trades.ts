@@ -1,10 +1,8 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, desc } from 'drizzle-orm';
-import { authPlugin } from '../middleware/auth';
 
 export const tradeRoutes = new Elysia()
-  .use(authPlugin)
 
   // ─── Trade Reads ───────────────────────────────────────────────────
 

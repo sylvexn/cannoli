@@ -2,10 +2,8 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { getDraftSnapshot, startDraft, executePick, handleTimerExpiry } from '../lib/draft-engine';
-import { authPlugin } from '../middleware/auth';
 
 export const draftRoutes = new Elysia()
-  .use(authPlugin)
 
   .get('/api/leagues/:leagueId/draft/state', ({ params }) => {
     const snapshot = getDraftSnapshot(params.leagueId);

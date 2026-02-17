@@ -3,10 +3,8 @@ import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { hashPassword } from '../lib/auth';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
-import { authPlugin } from '../middleware/auth';
 
 export const adminRoutes = new Elysia()
-  .use(authPlugin)
 
   // ─── Users (admin read) ──────────────────────────────────────────────
 
