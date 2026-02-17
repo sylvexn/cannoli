@@ -90,6 +90,7 @@ export interface LeagueSeason {
   phase: 'draft' | 'regular' | 'playoffs' | 'offseason';
   currentWeek: number;
   totalWeeks: number;
+  tradeDeadlineWeek: number;
 }
 
 export interface TierPokemon {
@@ -127,7 +128,7 @@ export interface League {
   hasData: boolean;
 }
 
-export type EventCategory = 'admin' | 'auth' | 'config' | 'draft' | 'trade' | 'match' | 'team';
+export type EventCategory = 'admin' | 'auth' | 'config' | 'draft' | 'trade' | 'match' | 'team' | 'scrim';
 
 export interface ActivityEvent {
   id: string;

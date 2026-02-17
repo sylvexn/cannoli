@@ -121,6 +121,22 @@ export const matches = sqliteTable('matches', {
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
   replayUrl: text('replay_url'),
+  /** Match lifecycle: scheduled → ready → in_progress → completed (or disputed) */
+  status: text('status', { enum: ['scheduled', 'ready', 'in_progress', 'completed', 'disputed'] }).notNull().default('scheduled'),
+  /** Whether home team has readied up */
+  readyHome: integer('ready_home', { mode: 'boolean' }).notNull().default(false),
+  /** Whether away team has readied up */
+  readyAway: integer('ready_away', { mode: 'boolean' }).notNull().default(false),
+  /** ISO timestamp when match started on PS */
+  startedAt: text('started_at'),
+  /** ISO timestamp when match completed */
+  completedAt: text('completed_at'),
+  /** Pokemon Showdown room ID */
+  psRoomId: text('ps_room_id'),
+  /** Full replay protocol log (JSON) */
+  replayLog: text('replay_log'),
+  /** JSON array of warning strings from post-match validation */
+  warnings: text('warnings'),
   phase: text('phase', { enum: ['regular', 'playoffs'] }).notNull().default('regular'),
   /** For playoffs: 'qf', 'sf', 'f' */
   playoffRound: text('playoff_round'),
@@ -245,11 +261,49 @@ export const draftState = sqliteTable('draft_state', {
 export const activityLog = sqliteTable('activity_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   type: text('type').notNull(),
-  category: text('category', { enum: ['admin', 'auth', 'config', 'draft', 'trade', 'match', 'team'] }).notNull(),
+  category: text('category', { enum: ['admin', 'auth', 'config', 'draft', 'trade', 'match', 'team', 'scrim'] }).notNull(),
   actor: text('actor').notNull(),
   leagueId: text('league_id'),
   description: text('description').notNull(),
   /** JSON blob for event-specific data */
   metadata: text('metadata'),
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
+});
+
+// ─── Match Ready Log (audit trail for ready-up events) ─────────────────
+
+export const matchReadyLog = sqliteTable('match_ready_log', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  matchId: text('match_id').notNull().references(() => matches.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  event: text('event', { enum: ['ready', 'unready', 'timeout', 'disconnect'] }).notNull(),
+  timestamp: text('timestamp').default(sql`(datetime('now'))`),
+});
+
+// ─── Scrims (unofficial practice matches — tracked but not in standings) ───
+
+export const scrims = sqliteTable('scrims', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Optional league context (null for cross-league scrims) */
+  leagueId: text('league_id'),
+  homeTeamId: text('home_team_id').notNull().references(() => teams.id),
+  awayTeamId: text('away_team_id').notNull().references(() => teams.id),
+  homeScore: integer('home_score'),
+  awayScore: integer('away_score'),
+  replayUrl: text('replay_url'),
+  psRoomId: text('ps_room_id'),
+  playedAt: text('played_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──
+
+export const scrimPokemon = sqliteTable('scrim_pokemon', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  scrimId: integer('scrim_id').notNull().references(() => scrims.id, { onDelete: 'cascade' }),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  pokemonName: text('pokemon_name').notNull(),
+  kills: integer('kills').notNull().default(0),
+  deaths: integer('deaths').notNull().default(0),
+  teraUsed: integer('tera_used', { mode: 'boolean' }).notNull().default(false),
+  teraType: text('tera_type'),
 });
