@@ -1,10 +1,8 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
-import { authPlugin } from '../middleware/auth';
 
 export const leagueRoutes = new Elysia()
-  .use(authPlugin)
 
   // ─── Leagues ─────────────────────────────────────────────────────────
 

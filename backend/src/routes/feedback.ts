@@ -1,13 +1,11 @@
 import { Elysia } from 'elysia';
 import { Octokit } from 'octokit';
-import { authPlugin } from '../middleware/auth';
 
 const ghToken = process.env.GITHUB_TOKEN;
 const ghRepo = process.env.GITHUB_REPO;
 const octokit = ghToken ? new Octokit({ auth: ghToken }) : null;
 
 export const feedbackRoutes = new Elysia()
-  .use(authPlugin)
 
   .post('/api/feedback', async ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }

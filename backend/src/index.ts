@@ -1,5 +1,7 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
+import { parseSessionToken, validateSession } from './lib/auth';
+import type { AuthUser } from './middleware/auth';
 
 import { authRoutes } from './routes/auth';
 import { leagueRoutes } from './routes/leagues';
@@ -19,6 +21,14 @@ const app = new Elysia()
     ],
     credentials: true,
   }))
+
+  // Auth context — derived once, available to all routes
+  .derive(({ request }) => {
+    const cookieHeader = request.headers.get('cookie') ?? undefined;
+    const token = parseSessionToken(cookieHeader);
+    const user = token ? validateSession(token) : null;
+    return { user: user as AuthUser | null, sessionToken: token };
+  })
 
   .get('/', () => ({ message: 'cannoli api' }))
   .get('/health', () => ({ status: 'ok' }))
