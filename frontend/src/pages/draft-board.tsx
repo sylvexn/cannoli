@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
-import { LayoutGrid, Table, Zap, History, Radio } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { LayoutGrid, Table, Zap, History, Radio, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
@@ -197,12 +198,27 @@ export function DraftBoardPage() {
             ]}
           />
           {state.mode === 'live' && (
-            <span className={cn(
-              'text-[10px] font-mono',
-              wsConnected ? 'text-win' : 'text-text-muted',
-            )}>
-              {wsConnected ? '● Connected' : '○ Connecting...'}
-            </span>
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-[10px] gap-1.5 px-2 py-0.5 font-mono',
+                wsConnected
+                  ? 'text-win border-win/30 bg-win/10'
+                  : 'text-draw border-draw/30 bg-draw/10',
+              )}
+            >
+              {wsConnected ? (
+                <>
+                  <Wifi size={10} />
+                  Connected
+                </>
+              ) : (
+                <>
+                  <Loader2 size={10} className="animate-spin" />
+                  Connecting...
+                </>
+              )}
+            </Badge>
           )}
         </div>
 

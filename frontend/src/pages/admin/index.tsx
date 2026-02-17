@@ -8,7 +8,9 @@ import { AdminSeason } from './admin-season';
 import { AdminTierList } from './admin-tier-list';
 import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield } from 'lucide-react';
+import { AdminFeedback } from './admin-feedback';
+import { AdminMatches } from './admin-matches';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield, MessageSquare, Trophy } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -39,6 +41,10 @@ export function AdminPage() {
             <ArrowLeftRight size={14} />
             Trades
           </TabsTrigger>
+          <TabsTrigger value="matches">
+            <Trophy size={14} />
+            Matches
+          </TabsTrigger>
           <TabsTrigger value="season">
             <CalendarCog size={14} />
             Season
@@ -59,6 +65,10 @@ export function AdminPage() {
             <ScrollText size={14} />
             Activity Log
           </TabsTrigger>
+          <TabsTrigger value="feedback">
+            <MessageSquare size={14} />
+            Feedback
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users">
@@ -72,6 +82,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="trades">
           <AdminTrades />
+        </TabsContent>
+        <TabsContent value="matches">
+          <AdminMatches />
         </TabsContent>
         <TabsContent value="season">
           <AdminSeason />
@@ -87,6 +100,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="activity">
           <AdminActivityLog />
+        </TabsContent>
+        <TabsContent value="feedback">
+          <AdminFeedback />
         </TabsContent>
       </Tabs>
     </div>

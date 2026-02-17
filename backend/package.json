@@ -15,6 +15,7 @@
     "better-sqlite3": "^12.8.0",
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.2.0",
+    "octokit": "^5.0.5",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

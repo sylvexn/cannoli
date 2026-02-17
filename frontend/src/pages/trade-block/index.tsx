@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import type { Player, Trade } from '@/lib/types';
+import type { ApiTradeBlockListing } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
@@ -21,16 +23,20 @@ import type { PokemonType } from '@/lib/pokemon';
 import { CompactTradeCard } from './compact-trade-card';
 import { TradeProposeDialog } from './trade-propose-dialog';
 
-const TRADE_DEADLINE_WEEK = 7;
-const tradeBlockListings: { teamId: string; pokemonName: string; note?: string }[] = [];
-
 export function TradeBlockPage() {
   const leagueUrl = useLeagueUrl();
   const { players, transactions } = useLeagueData();
   const league = useLeague();
   const currentSeason = league.season;
   const playerMap = useMemo(() => new Map<string, Player>(players.map(p => [p.id, p])), [players]);
-  const deadlinePassed = currentSeason.currentWeek > TRADE_DEADLINE_WEEK;
+  const tradeDeadlineWeek = currentSeason.tradeDeadlineWeek ?? 7;
+  const deadlinePassed = currentSeason.currentWeek > tradeDeadlineWeek;
+
+  // Fetch trade block listings from API
+  const [tradeBlockListings, setTradeBlockListings] = useState<ApiTradeBlockListing[]>([]);
+  useEffect(() => {
+    api.getTradeBlock(league.id).then(setTradeBlockListings).catch(() => {});
+  }, [league.id]);
 
   // Convert API transactions to Trade format
   const trades: Trade[] = useMemo(() =>
@@ -106,12 +112,12 @@ export function TradeBlockPage() {
         {deadlinePassed ? (
           <Badge variant="outline" className="text-loss border-loss/30 bg-loss/10 gap-1.5 px-3 py-1">
             <AlertTriangle size={12} />
-            Deadline passed (Week {TRADE_DEADLINE_WEEK})
+            Deadline passed (Week {tradeDeadlineWeek})
           </Badge>
         ) : (
           <Badge variant="outline" className="text-neon border-neon/30 bg-neon/10 gap-1.5 px-3 py-1">
             <Clock size={12} />
-            Deadline: Week {TRADE_DEADLINE_WEEK} · {TRADE_DEADLINE_WEEK - currentSeason.currentWeek}w left
+            Deadline: Week {tradeDeadlineWeek} · {tradeDeadlineWeek - currentSeason.currentWeek}w left
           </Badge>
         )}
       </div>

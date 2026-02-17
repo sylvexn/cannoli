@@ -49,6 +49,7 @@ export interface ApiLeague {
     phase: 'draft' | 'regular' | 'playoffs' | 'offseason';
     currentWeek: number;
     totalWeeks: number;
+    tradeDeadlineWeek: number;
   } | null;
 }
 
@@ -86,10 +87,29 @@ export interface ApiMatch {
   homeScore: number | null;
   awayScore: number | null;
   replayUrl: string | null;
+  status: 'scheduled' | 'ready' | 'in_progress' | 'completed' | 'disputed';
   phase: string;
   playoffRound: string | null;
   homeSeed: number | null;
   awaySeed: number | null;
+}
+
+export interface ApiAdminMatch {
+  id: string;
+  leagueId: string;
+  week: number;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: string;
+  replayUrl: string | null;
+  warnings: string[];
+  phase: string;
+  playoffRound: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  psRoomId: string | null;
 }
 
 export interface ApiMatchPokemon {
@@ -220,6 +240,17 @@ export interface ApiTierListEntry {
   name: string;
   tier: number;
   status: 'available' | 'tera-banned' | 'banned';
+}
+
+export interface ApiFeedbackIssue {
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  labels: (string | undefined)[];
+  createdAt: string;
+  closedAt: string | null;
+  url: string;
 }
 
 export const api = {
@@ -357,4 +388,35 @@ export const api = {
 
   proposeTrade: (leagueId: string, data: { recipientId: string; offering: string[]; requesting: string[]; proposerId?: string }) =>
     postJson<{ id: string }>(`/api/leagues/${leagueId}/trades/propose`, data),
+
+  // Feedback
+  submitFeedback: (title: string, description: string, page?: string) =>
+    postJson<{ success: boolean; issueNumber: number; issueUrl: string }>('/api/feedback', { title, description, page }),
+
+  getFeedbackIssues: (state?: 'open' | 'closed' | 'all') =>
+    fetchJson<ApiFeedbackIssue[]>(`/api/admin/issues${state ? `?state=${state}` : ''}`),
+
+  // Match management
+  getAdminMatches: (params?: { leagueId?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.leagueId) q.set('leagueId', params.leagueId);
+    if (params?.status) q.set('status', params.status);
+    return fetchJson<ApiAdminMatch[]>(`/api/admin/matches?${q}`);
+  },
+
+  recordMatchResult: (matchId: string, data: {
+    homeScore: number;
+    awayScore: number;
+    replayUrl?: string;
+    pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
+    warnings?: string[];
+  }) => postJson<{ success: boolean }>(`/api/matches/${matchId}/result`, data),
+
+  dismissMatchWarnings: (matchId: string) =>
+    postJson<{ success: boolean }>(`/api/matches/${matchId}/dismiss-warnings`),
+
+  generatePlayoffs: (leagueId: string, topN?: number) =>
+    postJson<{ success: boolean; matchCount: number; seedings: { seed: number; teamId: string }[] }>(
+      `/api/leagues/${leagueId}/playoffs/generate`, { topN }
+    ),
 };
