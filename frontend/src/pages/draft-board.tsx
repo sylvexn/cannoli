@@ -56,6 +56,7 @@ export function DraftBoardPage() {
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
+    draftTimerEnabled, draftDemoVisible,
   } = useDraftState();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -193,7 +194,7 @@ export function DraftBoardPage() {
             onChange={mode => dispatch({ type: 'SET_MODE', mode })}
             options={[
               { value: 'season', label: 'Season', icon: <History size={13} />, activeClass: 'bg-neon/10 text-neon' },
-              { value: 'demo', label: 'Demo', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' },
+              ...(draftDemoVisible ? [{ value: 'demo' as const, label: 'Demo', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' }] : []),
               { value: 'live', label: 'Live', icon: <Radio size={13} />, activeClass: 'bg-win/10 text-win' },
             ]}
           />
@@ -303,6 +304,7 @@ export function DraftBoardPage() {
           draftOrder={draftOrder}
           presence={presence}
           wsConnected={wsConnected}
+          timerEnabled={draftTimerEnabled}
         />
       )}
 

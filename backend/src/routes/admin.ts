@@ -150,6 +150,8 @@ export const adminRoutes = new Elysia()
       defaultRosterSize: s.defaultRosterSize as number || 10,
       defaultMaxTeams: s.defaultMaxTeams as number || 12,
       defaultUserPassword: s.defaultUserPassword as string || 'password',
+      draftTimerEnabled: s.draftTimerEnabled !== undefined ? !!s.draftTimerEnabled : true,
+      draftDemoVisible: s.draftDemoVisible !== undefined ? !!s.draftDemoVisible : true,
     }).where(eq(schema.siteSettings.id, 1)).run();
 
     return { success: true };

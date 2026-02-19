@@ -239,6 +239,10 @@ export const siteSettings = sqliteTable('site_settings', {
   defaultRosterSize: integer('default_roster_size').default(10),
   defaultMaxTeams: integer('default_max_teams').default(12),
   defaultUserPassword: text('default_user_password').default('password'),
+  /** Whether the draft pick timer is enabled */
+  draftTimerEnabled: integer('draft_timer_enabled', { mode: 'boolean' }).notNull().default(true),
+  /** Whether the demo mode is visible on the draft board */
+  draftDemoVisible: integer('draft_demo_visible', { mode: 'boolean' }).notNull().default(true),
 });
 
 // ─── Draft State (tracks active/completed drafts per league) ────────────────
