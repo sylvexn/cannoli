@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
 import { Swords, Sparkles, X } from 'lucide-react';
-import { useLeagueUrl } from '@/lib/use-league-url';
+import { useLeagueOptional } from '@/lib/league-context';
 import { getTierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { Player } from '@/lib/types';
@@ -35,7 +35,8 @@ export function PokemonSideCard({
   seasonStats,
   teraCaptain,
 }: PokemonSideCardProps) {
-  const leagueUrl = useLeagueUrl();
+  const league = useLeagueOptional();
+  const leagueUrl = (path: string) => league ? `/league/${league.id}${path.startsWith('/') ? path : `/${path}`}` : '#';
   const isOpen = !!name;
 
   useEffect(() => {
