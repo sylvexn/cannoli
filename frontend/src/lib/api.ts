@@ -206,6 +206,7 @@ export interface ApiSiteSettings {
   defaultTradeDeadlineWeek: number | null;
   defaultRosterSize: number | null;
   defaultMaxTeams: number | null;
+  defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
 }

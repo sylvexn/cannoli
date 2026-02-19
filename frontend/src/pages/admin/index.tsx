@@ -11,11 +11,10 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
-import { AdminDraft } from './admin-draft';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, Zap,
+  Trophy,
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,7 +44,6 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'season', label: 'Season', icon: CalendarCog, component: AdminSeason },
       { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches },
       { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades },
-      { id: 'draft', label: 'Draft', icon: Zap, component: AdminDraft },
     ],
   },
   {
@@ -53,7 +51,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList },
       { id: 'moves', label: 'Move Categories', icon: Swords, component: AdminMoveCategories },
-      { id: 'settings', label: 'Site Settings', icon: Settings, component: AdminSiteSettings },
+      { id: 'settings', label: 'Settings', icon: Settings, component: AdminSiteSettings },
     ],
   },
   {
