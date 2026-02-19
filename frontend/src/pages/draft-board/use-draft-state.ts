@@ -279,6 +279,17 @@ export function useDraftState() {
   // ─── Presence tracking ───────────────────────────────────────────
   const [presence, setPresence] = useState<DraftPresenceData>({ players: [], spectators: [] });
 
+  // ─── Draft settings from admin ──────────────────────────────────
+  const [draftTimerEnabled, setDraftTimerEnabled] = useState(true);
+  const [draftDemoVisible, setDraftDemoVisible] = useState(true);
+
+  useEffect(() => {
+    api.getSiteSettings().then(s => {
+      setDraftTimerEnabled(s.draftTimerEnabled ?? true);
+      setDraftDemoVisible(s.draftDemoVisible ?? true);
+    }).catch(() => {});
+  }, []);
+
   // ─── Season data (historical picks from API) ─────────────────────
   const [draftPicks, setDraftPicks] = useState<ApiDraftPick[]>([]);
 
@@ -691,6 +702,8 @@ export function useDraftState() {
     wsConnected,
     presence,
     userBudgetRemaining,
+    draftTimerEnabled,
+    draftDemoVisible,
   };
 }
 

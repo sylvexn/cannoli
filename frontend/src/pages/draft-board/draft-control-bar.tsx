@@ -31,6 +31,7 @@ interface DraftControlBarProps {
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
   presence?: DraftPresenceData;
   wsConnected?: boolean;
+  timerEnabled?: boolean;
 }
 
 export function DraftControlBar({
@@ -40,6 +41,7 @@ export function DraftControlBar({
   draftOrder,
   presence,
   wsConnected,
+  timerEnabled = true,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();
   const [shiftHeld, setShiftHeld] = useState(false);
@@ -133,25 +135,27 @@ export function DraftControlBar({
 
             <div className="w-px h-6 bg-border-subtle" />
 
-            {/* Timer duration */}
-            <div className="flex items-center gap-1.5">
-              <Timer size={13} className="text-text-muted" />
-              {isAdmin ? (
-                <>
-                  <NumberInput
-                    value={state.timerDuration}
-                    onChange={v => dispatch({ type: 'SET_TIMER_DURATION', duration: v })}
-                    min={10}
-                    max={300}
-                    step={5}
-                    className="w-[68px] h-7 text-xs"
-                  />
-                  <span className="text-[10px] text-text-muted">s/pick</span>
-                </>
-              ) : (
-                <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
-              )}
-            </div>
+            {/* Timer duration — hidden when timer disabled */}
+            {timerEnabled && (
+              <div className="flex items-center gap-1.5">
+                <Timer size={13} className="text-text-muted" />
+                {isAdmin ? (
+                  <>
+                    <NumberInput
+                      value={state.timerDuration}
+                      onChange={v => dispatch({ type: 'SET_TIMER_DURATION', duration: v })}
+                      min={10}
+                      max={300}
+                      step={5}
+                      className="w-[68px] h-7 text-xs"
+                    />
+                    <span className="text-[10px] text-text-muted">s/pick</span>
+                  </>
+                ) : (
+                  <span className="text-[10px] text-text-muted">{state.timerDuration}s per pick</span>
+                )}
+              </div>
+            )}
 
             {/* Connected count badge */}
             {state.mode === 'live' && presence && (
@@ -376,8 +380,8 @@ export function DraftControlBar({
           </>
         )}
 
-        {/* Admin timer controls */}
-        {isAdmin && !isDemoComplete && (
+        {/* Admin timer controls — hidden when timer disabled */}
+        {isAdmin && !isDemoComplete && timerEnabled && (
           <>
             <div className="w-px h-5 bg-border-subtle" />
 

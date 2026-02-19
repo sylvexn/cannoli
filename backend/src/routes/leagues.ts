@@ -411,6 +411,8 @@ export const leagueRoutes = new Elysia()
       defaultRosterSize: row.defaultRosterSize,
       defaultMaxTeams: row.defaultMaxTeams,
       defaultUserPassword: row.defaultUserPassword,
+      draftTimerEnabled: row.draftTimerEnabled ?? true,
+      draftDemoVisible: row.draftDemoVisible ?? true,
     };
   })
 

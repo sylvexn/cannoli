@@ -10,7 +10,8 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield, MessageSquare, Trophy } from 'lucide-react';
+import { AdminDraft } from './admin-draft';
+import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield, MessageSquare, Trophy, Zap } from 'lucide-react';
 
 export function AdminPage() {
   return (
@@ -44,6 +45,10 @@ export function AdminPage() {
           <TabsTrigger value="matches">
             <Trophy size={14} />
             Matches
+          </TabsTrigger>
+          <TabsTrigger value="draft">
+            <Zap size={14} />
+            Draft
           </TabsTrigger>
           <TabsTrigger value="season">
             <CalendarCog size={14} />
@@ -85,6 +90,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="matches">
           <AdminMatches />
+        </TabsContent>
+        <TabsContent value="draft">
+          <AdminDraft />
         </TabsContent>
         <TabsContent value="season">
           <AdminSeason />
