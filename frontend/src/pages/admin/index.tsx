@@ -1,4 +1,5 @@
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { AdminUsers } from './admin-users';
 import { AdminLeagues } from './admin-leagues';
 import { AdminTrades } from './admin-trades';
@@ -11,108 +12,110 @@ import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
 import { AdminDraft } from './admin-draft';
-import { Users, Globe, ArrowLeftRight, ScrollText, Swords, CalendarCog, List, Settings, Shield, MessageSquare, Trophy, Zap } from 'lucide-react';
+import {
+  Users, Globe, ArrowLeftRight, ScrollText, Swords,
+  CalendarCog, List, Settings, Shield, MessageSquare,
+  Trophy, Zap,
+} from 'lucide-react';
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: typeof Users;
+  component: React.ComponentType;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'People',
+    items: [
+      { id: 'users', label: 'Users', icon: Users, component: AdminUsers },
+      { id: 'teams', label: 'Teams', icon: Shield, component: AdminTeams },
+    ],
+  },
+  {
+    label: 'League',
+    items: [
+      { id: 'leagues', label: 'Leagues', icon: Globe, component: AdminLeagues },
+      { id: 'season', label: 'Season', icon: CalendarCog, component: AdminSeason },
+      { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches },
+      { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades },
+      { id: 'draft', label: 'Draft', icon: Zap, component: AdminDraft },
+    ],
+  },
+  {
+    label: 'Config',
+    items: [
+      { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList },
+      { id: 'moves', label: 'Move Categories', icon: Swords, component: AdminMoveCategories },
+      { id: 'settings', label: 'Site Settings', icon: Settings, component: AdminSiteSettings },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { id: 'activity', label: 'Activity Log', icon: ScrollText, component: AdminActivityLog },
+      { id: 'feedback', label: 'Feedback', icon: MessageSquare, component: AdminFeedback },
+    ],
+  },
+];
+
+const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 
 export function AdminPage() {
+  const [activeId, setActiveId] = useState('users');
+  const activeItem = ALL_ITEMS.find(i => i.id === activeId) ?? ALL_ITEMS[0];
+  const ActiveComponent = activeItem.component;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-loss">Admin</span>
-          <span className="text-text-primary ml-1">Panel</span>
-        </h1>
-        <p className="text-sm text-text-muted">Site-wide configuration and management</p>
+    <div className="flex gap-0 min-h-[calc(100vh-8rem)]">
+      {/* Sidebar */}
+      <nav className="w-[180px] shrink-0 border-r border-border-default pr-1 pt-1 space-y-4">
+        {NAV_GROUPS.map(group => (
+          <div key={group.label}>
+            <div className="px-3 mb-1 text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-text-muted/50">
+              {group.label}
+            </div>
+            <div className="space-y-0.5">
+              {group.items.map(item => {
+                const Icon = item.icon;
+                const isActive = item.id === activeId;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveId(item.id)}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-colors',
+                      isActive
+                        ? 'bg-surface-overlay text-text-primary font-medium'
+                        : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                    )}
+                  >
+                    <Icon size={14} className={isActive ? 'text-neon' : ''} />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 pl-6 pt-1">
+        <div className="mb-4">
+          <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
+            <span className="text-loss">Admin</span>
+            <span className="text-text-primary ml-1">{activeItem.label}</span>
+          </h1>
+        </div>
+        <ActiveComponent />
       </div>
-
-      <Tabs defaultValue="users">
-        <TabsList variant="line">
-          <TabsTrigger value="users">
-            <Users size={14} />
-            Users
-          </TabsTrigger>
-          <TabsTrigger value="leagues">
-            <Globe size={14} />
-            Leagues
-          </TabsTrigger>
-          <TabsTrigger value="teams">
-            <Shield size={14} />
-            Teams
-          </TabsTrigger>
-          <TabsTrigger value="trades">
-            <ArrowLeftRight size={14} />
-            Trades
-          </TabsTrigger>
-          <TabsTrigger value="matches">
-            <Trophy size={14} />
-            Matches
-          </TabsTrigger>
-          <TabsTrigger value="draft">
-            <Zap size={14} />
-            Draft
-          </TabsTrigger>
-          <TabsTrigger value="season">
-            <CalendarCog size={14} />
-            Season
-          </TabsTrigger>
-          <TabsTrigger value="tiers">
-            <List size={14} />
-            Tier List
-          </TabsTrigger>
-          <TabsTrigger value="moves">
-            <Swords size={14} />
-            Move Categories
-          </TabsTrigger>
-          <TabsTrigger value="settings">
-            <Settings size={14} />
-            Site Settings
-          </TabsTrigger>
-          <TabsTrigger value="activity">
-            <ScrollText size={14} />
-            Activity Log
-          </TabsTrigger>
-          <TabsTrigger value="feedback">
-            <MessageSquare size={14} />
-            Feedback
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="users">
-          <AdminUsers />
-        </TabsContent>
-        <TabsContent value="leagues">
-          <AdminLeagues />
-        </TabsContent>
-        <TabsContent value="teams">
-          <AdminTeams />
-        </TabsContent>
-        <TabsContent value="trades">
-          <AdminTrades />
-        </TabsContent>
-        <TabsContent value="matches">
-          <AdminMatches />
-        </TabsContent>
-        <TabsContent value="draft">
-          <AdminDraft />
-        </TabsContent>
-        <TabsContent value="season">
-          <AdminSeason />
-        </TabsContent>
-        <TabsContent value="tiers">
-          <AdminTierList />
-        </TabsContent>
-        <TabsContent value="moves">
-          <AdminMoveCategories />
-        </TabsContent>
-        <TabsContent value="settings">
-          <AdminSiteSettings />
-        </TabsContent>
-        <TabsContent value="activity">
-          <AdminActivityLog />
-        </TabsContent>
-        <TabsContent value="feedback">
-          <AdminFeedback />
-        </TabsContent>
-      </Tabs>
     </div>
   );
 }
