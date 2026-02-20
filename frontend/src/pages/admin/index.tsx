@@ -12,6 +12,7 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
+import { ChevronDown } from 'lucide-react';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
@@ -23,6 +24,8 @@ interface NavItem {
   label: string;
   icon: typeof Users;
   component: React.ComponentType;
+  /** Max height for the content area — tall sections get internal scroll */
+  maxH?: string;
 }
 
 interface NavGroup {
@@ -34,7 +37,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'People',
     items: [
-      { id: 'users', label: 'Users', icon: Users, component: AdminUsers },
+      { id: 'users', label: 'Users', icon: Users, component: AdminUsers, maxH: 'max-h-[60vh]' },
       { id: 'teams', label: 'Teams', icon: Shield, component: AdminTeams },
     ],
   },
@@ -43,14 +46,14 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'leagues', label: 'Leagues', icon: Globe, component: AdminLeagues },
       { id: 'season', label: 'Season', icon: CalendarCog, component: AdminSeason },
-      { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches },
-      { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades },
+      { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches, maxH: 'max-h-[60vh]' },
+      { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades, maxH: 'max-h-[50vh]' },
     ],
   },
   {
     label: 'Config',
     items: [
-      { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList },
+      { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList, maxH: 'max-h-[60vh]' },
       { id: 'moves', label: 'Move Categories', icon: Swords, component: AdminMoveCategories },
       { id: 'settings', label: 'Settings', icon: Settings, component: AdminSiteSettings },
     ],
@@ -58,7 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'System',
     items: [
-      { id: 'activity', label: 'Activity Log', icon: ScrollText, component: AdminActivityLog },
+      { id: 'activity', label: 'Activity Log', icon: ScrollText, component: AdminActivityLog, maxH: 'max-h-[50vh]' },
       { id: 'feedback', label: 'Feedback', icon: MessageSquare, component: AdminFeedback },
     ],
   },
@@ -69,6 +72,7 @@ const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 export function AdminPage() {
   const [searchParams] = useSearchParams();
   const [activeId, setActiveId] = useState('users');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const isScrollingRef = useRef(false);
 
@@ -77,14 +81,13 @@ export function AdminPage() {
     const tab = searchParams.get('tab');
     if (tab && ALL_ITEMS.some(i => i.id === tab)) {
       setActiveId(tab);
-      // Defer scroll to after render
       requestAnimationFrame(() => {
         sectionRefs.current[tab]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     }
   }, []);
 
-  // Track which section is visible via IntersectionObserver
+  // Track which section is visible
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -109,10 +112,26 @@ export function AdminPage() {
 
   const scrollTo = useCallback((id: string) => {
     setActiveId(id);
+    // Expand if collapsed
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     isScrollingRef.current = true;
-    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Re-enable observer after scroll settles
+    requestAnimationFrame(() => {
+      sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     setTimeout(() => { isScrollingRef.current = false; }, 800);
+  }, []);
+
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }, []);
 
   return (
@@ -156,23 +175,46 @@ export function AdminPage() {
       </nav>
 
       {/* All sections — single scrollable column */}
-      <div className="flex-1 min-w-0 pl-6 pt-1 space-y-14 pb-[50vh]">
+      <div className="flex-1 min-w-0 pl-6 pt-1 space-y-6 pb-[50vh]">
         {ALL_ITEMS.map(item => {
           const Component = item.component;
           const Icon = item.icon;
+          const isCollapsed = collapsed.has(item.id);
+
           return (
             <section
               key={item.id}
               ref={el => { sectionRefs.current[item.id] = el; }}
               data-section-id={item.id}
+              className="rounded-lg border border-border-default bg-surface-raised/30 overflow-hidden"
             >
-              <div className="flex items-center gap-2 mb-4 pb-2 border-b border-border-subtle">
-                <Icon size={16} className="text-text-muted" />
-                <h2 className="text-base font-mono font-bold tracking-tight uppercase text-text-primary">
+              {/* Collapsible header */}
+              <button
+                onClick={() => toggleCollapse(item.id)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-surface-overlay/20 transition-colors"
+              >
+                <Icon size={15} className="text-text-muted shrink-0" />
+                <h2 className="text-sm font-mono font-bold tracking-tight uppercase text-text-primary">
                   {item.label}
                 </h2>
-              </div>
-              <Component />
+                <ChevronDown
+                  size={14}
+                  className={cn(
+                    'ml-auto text-text-muted transition-transform duration-200',
+                    isCollapsed && '-rotate-90',
+                  )}
+                />
+              </button>
+
+              {/* Content */}
+              {!isCollapsed && (
+                <div className={cn(
+                  'px-4 pb-4 pt-1',
+                  item.maxH && `${item.maxH} overflow-y-auto`,
+                )}>
+                  <Component />
+                </div>
+              )}
             </section>
           );
         })}
