@@ -16,12 +16,21 @@ export function AdminFeedback() {
   const [filter, setFilter] = useState<FilterState>('open');
   const [error, setError] = useState<string | null>(null);
 
+  const [unconfigured, setUnconfigured] = useState(false);
+
   function load(state: FilterState) {
+    if (unconfigured) return;
     setLoading(true);
     setError(null);
     api.getFeedbackIssues(state)
       .then(setIssues)
-      .catch(e => setError(e.message))
+      .catch(e => {
+        const msg = e.message || '';
+        if (msg.includes('not configured') || msg.includes('503')) {
+          setUnconfigured(true);
+        }
+        setError(msg);
+      })
       .finally(() => setLoading(false));
   }
 
