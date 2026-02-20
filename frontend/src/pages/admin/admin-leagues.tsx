@@ -33,9 +33,12 @@ const phaseLabels: Record<string, { label: string; color: string }> = {
 
 export function AdminLeagues() {
   const { leagues } = useAppData();
-  const [settings, setSettings] = useState<Record<string, LeagueSettings>>(
-    Object.fromEntries(leagues.map(l => [l.id, { ...defaultSettings }]))
-  );
+  const [settings, setSettings] = useState<Record<string, LeagueSettings>>({});
+
+  // Re-initialize settings when leagues load
+  if (leagues.length > 0 && Object.keys(settings).length === 0) {
+    setSettings(Object.fromEntries(leagues.map(l => [l.id, { ...defaultSettings }])));
+  }
 
   function updateSetting(leagueId: string, key: keyof LeagueSettings, value: number) {
     setSettings(prev => ({
@@ -71,8 +74,8 @@ export function AdminLeagues() {
       {/* League cards */}
       <div className="grid gap-4">
         {leagues.map(league => {
-          const s = settings[league.id];
-          const phase = phaseLabels[league.season.phase];
+          const s = settings[league.id] ?? defaultSettings;
+          const phase = phaseLabels[league.season.phase] ?? phaseLabels.offseason;
           return (
             <Card key={league.id}>
               <CardHeader className="pb-3">
