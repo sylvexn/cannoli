@@ -36,7 +36,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'People',
     items: [
-      { id: 'users', label: 'Users', icon: Users, component: AdminUsers, maxH: 'max-h-[60vh]' },
+      { id: 'users', label: 'Users', icon: Users, component: AdminUsers, maxH: 'max-h-[40vh]' },
       { id: 'teams', label: 'Teams', icon: Shield, component: AdminTeams },
     ],
   },

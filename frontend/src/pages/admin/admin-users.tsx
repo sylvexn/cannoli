@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -16,13 +15,17 @@ import { api } from '@/lib/api';
 import type { ApiAuthUser } from '@/lib/api';
 import {
   UserPlus, MoreHorizontal, KeyRound, ShieldCheck, ShieldOff,
-  UserX, UserCheck, Copy, Eye, EyeOff,
+  UserX, UserCheck, Copy, Eye, EyeOff, Search, ArrowUpDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 export function AdminUsers() {
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<'username' | 'role' | 'status' | 'created'>('username');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [createOpen, setCreateOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<'user' | 'admin'>('user');
@@ -35,6 +38,29 @@ export function AdminUsers() {
       .catch(() => toast.error('Failed to load users'))
       .finally(() => setLoading(false));
   }, []);
+
+  const toggleSort = useCallback((col: typeof sortBy) => {
+    if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortBy(col); setSortDir('asc'); }
+  }, [sortBy]);
+
+  const filtered = useMemo(() => {
+    let list = users;
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(u => u.username.includes(q) || u.role.includes(q));
+    }
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...list].sort((a, b) => {
+      switch (sortBy) {
+        case 'username': return dir * a.username.localeCompare(b.username);
+        case 'role': return dir * a.role.localeCompare(b.role);
+        case 'status': return dir * (Number(b.active) - Number(a.active));
+        case 'created': return dir * ((a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
+        default: return 0;
+      }
+    });
+  }, [users, search, sortBy, sortDir]);
 
   async function handleCreate() {
     if (!newUsername.trim()) return;
@@ -93,106 +119,122 @@ export function AdminUsers() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Stats strip */}
-      <div className="flex gap-4 text-sm">
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Total:</span>
-          <span className="text-text-primary font-medium">{users.length}</span>
+    <div className="space-y-3">
+      {/* Header: stats + search + create */}
+      <div className="flex items-center gap-3">
+        <div className="flex gap-3 text-xs text-text-muted">
+          <span>{users.length} total</span>
+          <span className="text-win">{activeCount} active</span>
+          <span className="text-neon">{adminCount} admin</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Active:</span>
-          <span className="text-win font-medium">{activeCount}</span>
+        <div className="relative flex-1 max-w-[200px] ml-auto">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted" size={12} />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search users..."
+            className="pl-7 h-7 text-xs bg-surface-overlay border-border-default"
+          />
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Admins:</span>
-          <span className="text-neon font-medium">{adminCount}</span>
-        </div>
-        <div className="ml-auto">
-          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-neon text-surface-base hover:bg-neon/90">
-            <UserPlus size={14} />
-            Create User
-          </Button>
-        </div>
+        <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-neon text-surface-base hover:bg-neon/90 h-7 text-xs">
+          <UserPlus size={12} />
+          Create
+        </Button>
       </div>
 
-      {/* Users table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Password</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map(user => (
-                <TableRow key={user.id} className={!user.active ? 'opacity-50' : undefined}>
-                  <TableCell className="font-medium">{user.username}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={(user.role === 'admin' || user.role === 'dev') ? 'default' : 'outline'}
-                      className={(user.role === 'admin' || user.role === 'dev') ? 'bg-neon/15 text-neon border-neon/30' : undefined}
-                    >
-                      {user.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={user.active
-                      ? 'border-win/30 text-win bg-win/10'
-                      : 'border-loss/30 text-loss bg-loss/10'
-                    }>
-                      {user.active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.mustChangePassword && (
-                      <span className="text-xs text-draw">Must change</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-text-muted text-xs">
-                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="p-1 rounded hover:bg-surface-overlay transition-colors outline-none">
-                        <MoreHorizontal size={14} />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleResetPassword(user)}>
-                          <KeyRound size={14} />
-                          Reset Password
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleToggleRole(user.id)}>
-                          {user.role === 'admin'
-                            ? <><ShieldOff size={14} /> Demote to User</>
-                            : <><ShieldCheck size={14} /> Promote to Admin</>
-                          }
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => handleToggleActive(user.id)}
-                          variant={user.active ? 'destructive' : 'default'}
-                        >
-                          {user.active
-                            ? <><UserX size={14} /> Deactivate</>
-                            : <><UserCheck size={14} /> Reactivate</>
-                          }
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Column headers */}
+      <div className="flex items-center gap-3 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted/50">
+        <SortHeader label="User" col="username" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[120px]" />
+        <SortHeader label="Role" col="role" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[48px]" />
+        <SortHeader label="St" col="status" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[14px]" />
+        <span className="w-[44px]" />
+        <span className="flex-1" />
+        <SortHeader label="Created" col="created" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[70px] text-right" />
+        <span className="w-[20px]" />
+      </div>
+
+      {/* Compact user list */}
+      <div className="divide-y divide-border-subtle/30">
+        {filtered.map(user => (
+          <div
+            key={user.id}
+            className={cn(
+              'flex items-center gap-3 px-2 py-1.5 hover:bg-surface-overlay/20 transition-colors rounded',
+              !user.active && 'opacity-40',
+            )}
+          >
+            {/* Username */}
+            <span className="text-[13px] font-medium text-text-primary w-[120px] truncate">
+              {user.username}
+            </span>
+
+            {/* Role badge */}
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-[10px] px-1.5 py-0 h-4 w-[48px] justify-center',
+                (user.role === 'admin' || user.role === 'dev')
+                  ? 'bg-neon/10 text-neon border-neon/30'
+                  : 'text-text-muted border-border-subtle',
+              )}
+            >
+              {user.role}
+            </Badge>
+
+            {/* Status dot */}
+            <div className={cn(
+              'w-1.5 h-1.5 rounded-full shrink-0',
+              user.active ? 'bg-win' : 'bg-loss',
+            )} />
+
+            {/* Must change pw */}
+            {user.mustChangePassword && (
+              <span className="text-[9px] text-draw font-mono">pw reset</span>
+            )}
+
+            <span className="flex-1" />
+
+            {/* Created date */}
+            <span className="text-[10px] text-text-muted/60 font-mono tabular-nums w-[70px] text-right">
+              {user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'}
+            </span>
+
+            {/* Actions */}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none">
+                <MoreHorizontal size={13} className="text-text-muted" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleResetPassword(user)}>
+                  <KeyRound size={14} />
+                  Reset Password
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleToggleRole(user.id)}>
+                  {user.role === 'admin'
+                    ? <><ShieldOff size={14} /> Demote to User</>
+                    : <><ShieldCheck size={14} /> Promote to Admin</>
+                  }
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => handleToggleActive(user.id)}
+                  variant={user.active ? 'destructive' : 'default'}
+                >
+                  {user.active
+                    ? <><UserX size={14} /> Deactivate</>
+                    : <><UserCheck size={14} /> Reactivate</>
+                  }
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-sm text-text-muted text-center py-4">
+            {search ? 'No users match search' : 'No users'}
+          </div>
+        )}
+      </div>
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={open => { if (!open) closeCreateDialog(); }}>
@@ -284,5 +326,31 @@ export function AdminUsers() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function SortHeader({ label, col, active, dir, onSort, className }: {
+  label: string;
+  col: string;
+  active: string;
+  dir: 'asc' | 'desc';
+  onSort: (col: any) => void;
+  className?: string;
+}) {
+  const isActive = active === col;
+  return (
+    <button
+      onClick={() => onSort(col)}
+      className={cn(
+        'flex items-center gap-0.5 hover:text-text-secondary transition-colors',
+        isActive && 'text-text-secondary',
+        className,
+      )}
+    >
+      {label}
+      {isActive && (
+        <span className="text-[8px]">{dir === 'asc' ? '▲' : '▼'}</span>
+      )}
+    </button>
   );
 }
