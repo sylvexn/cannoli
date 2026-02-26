@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
+import { isStaff } from '../lib/auth';
 
 export const leagueRoutes = new Elysia()
 
@@ -437,6 +438,228 @@ export const leagueRoutes = new Elysia()
         })),
       };
     });
+  })
+
+  // ─── Tier List ─────────────────────────────────────────────────────
+
+  // ─── Tera Captain Management ──────────────────────────────────────
+
+  .put('/api/teams/:teamId/tera-captains', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    // Check authorization: team owner or staff (admin/dev can override any team)
+    if (!isStaff(user) && team.userId !== parseInt(user.id)) {
+      set.status = 403;
+      return { error: 'Not your team' };
+    }
+
+    const { captains } = body as {
+      captains: { pokemonName: string; teraTypes: string[] }[];
+    };
+
+    if (!Array.isArray(captains)) {
+      set.status = 400;
+      return { error: 'captains array required' };
+    }
+
+    // Get season config for captain slot limit
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
+    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+    const maxCaptains = season?.teraCaptainSlots ?? 2;
+
+    if (captains.length > maxCaptains) {
+      set.status = 400;
+      return { error: `Max ${maxCaptains} tera captains allowed` };
+    }
+
+    // Validate eligibility: not tera-banned, tier ≤ 9
+    for (const c of captains) {
+      const pkmn = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, c.pokemonName)).get();
+      if (pkmn?.teraBanned) {
+        set.status = 400;
+        return { error: `${c.pokemonName} is tera-banned` };
+      }
+      if (pkmn && pkmn.tier > 9) {
+        set.status = 400;
+        return { error: `${c.pokemonName} is tier ${pkmn.tier} — captains must be tier 9 or below` };
+      }
+      if (c.teraTypes.length > 3) {
+        set.status = 400;
+        return { error: `Max 3 tera types per captain` };
+      }
+    }
+
+    // Clear all existing tera captains for this team
+    db.update(schema.rosters).set({
+      isTeraCaptain: false,
+      teraType1: null,
+      teraType2: null,
+      teraType3: null,
+    }).where(eq(schema.rosters.teamId, params.teamId)).run();
+
+    // Set new captains
+    for (const c of captains) {
+      db.update(schema.rosters).set({
+        isTeraCaptain: true,
+        teraType1: c.teraTypes[0] ?? null,
+        teraType2: c.teraTypes[1] ?? null,
+        teraType3: c.teraTypes[2] ?? null,
+      }).where(and(
+        eq(schema.rosters.teamId, params.teamId),
+        eq(schema.rosters.pokemonName, c.pokemonName),
+      )).run();
+    }
+
+    // Log tera change transaction
+    if (league) {
+      const week = season?.currentWeek ?? 0;
+      for (const c of captains) {
+        db.insert(schema.transactions).values({
+          leagueId: team.leagueId,
+          week,
+          type: 'tera_change',
+          teamId: params.teamId,
+          teraPokemon: c.pokemonName,
+        }).run();
+      }
+
+      db.insert(schema.activityLog).values({
+        type: 'tera_captains_updated',
+        category: 'team',
+        actor: user.username,
+        leagueId: team.leagueId,
+        description: `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
+        metadata: JSON.stringify({ teamId: params.teamId, captains }),
+      }).run();
+    }
+
+    return { success: true };
+  })
+
+  // ─── Free Agent Pool ────────────────────────────────────────────────
+
+  .get('/api/leagues/:leagueId/free-agents', ({ params }) => {
+    // Get all rostered pokemon names in this league
+    const teams = db.select().from(schema.teams)
+      .where(eq(schema.teams.leagueId, params.leagueId))
+      .all();
+    const teamIds = teams.map(t => t.id);
+
+    const rostered = new Set(
+      teamIds.flatMap(tid =>
+        db.select({ name: schema.rosters.pokemonName })
+          .from(schema.rosters)
+          .where(eq(schema.rosters.teamId, tid))
+          .all()
+          .map(r => r.name)
+      )
+    );
+
+    // Get all draftable pokemon (tier > 0, not banned)
+    const allPokemon = db.select({
+      name: schema.pokemon.name,
+      tier: schema.pokemon.tier,
+      type1: schema.pokemon.type1,
+      type2: schema.pokemon.type2,
+      hp: schema.pokemon.hp,
+      atk: schema.pokemon.atk,
+      def: schema.pokemon.def,
+      spa: schema.pokemon.spa,
+      spd: schema.pokemon.spd,
+      spe: schema.pokemon.spe,
+    }).from(schema.pokemon)
+      .where(and(sql`${schema.pokemon.tier} > 0`, eq(schema.pokemon.banned, false)))
+      .all();
+
+    return allPokemon
+      .filter(p => !rostered.has(p.name))
+      .map(p => ({
+        name: p.name,
+        tier: p.tier,
+        type1: p.type1,
+        type2: p.type2,
+        stats: { hp: p.hp, atk: p.atk, def: p.def, spa: p.spa, spd: p.spd, spe: p.spe },
+      }));
+  })
+
+  .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const { teamId, pokemonName, dropPokemonName } = body as {
+      teamId: string;
+      pokemonName: string;
+      dropPokemonName?: string;
+    };
+
+    if (!teamId || !pokemonName) {
+      set.status = 400;
+      return { error: 'teamId and pokemonName required' };
+    }
+
+    // Verify team exists in league
+    const team = db.select().from(schema.teams)
+      .where(and(eq(schema.teams.id, teamId), eq(schema.teams.leagueId, params.leagueId)))
+      .get();
+    if (!team) { set.status = 404; return { error: 'Team not found in league' }; }
+
+    // Verify pokemon exists and is available
+    const pkmn = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
+    if (!pkmn) { set.status = 404; return { error: 'Pokemon not found' }; }
+
+    const alreadyRostered = db.select().from(schema.rosters)
+      .where(eq(schema.rosters.pokemonName, pokemonName))
+      .all()
+      .some(r => {
+        const t = db.select().from(schema.teams).where(eq(schema.teams.id, r.teamId)).get();
+        return t?.leagueId === params.leagueId;
+      });
+    if (alreadyRostered) { set.status = 400; return { error: `${pokemonName} is already rostered` }; }
+
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+    const week = season?.currentWeek ?? 0;
+
+    // Drop pokemon if specified
+    if (dropPokemonName) {
+      db.delete(schema.rosters)
+        .where(and(eq(schema.rosters.teamId, teamId), eq(schema.rosters.pokemonName, dropPokemonName)))
+        .run();
+    }
+
+    // Add new pokemon to roster
+    db.insert(schema.rosters).values({
+      teamId,
+      pokemonName,
+      tier: pkmn.tier,
+      acquiredVia: 'fa',
+      acquiredWeek: week,
+    }).run();
+
+    // Transaction record
+    db.insert(schema.transactions).values({
+      leagueId: params.leagueId,
+      week,
+      type: 'fa',
+      teamId,
+      pokemonIn: pokemonName,
+      pointsIn: pkmn.tier,
+      pokemonOut: dropPokemonName || null,
+    }).run();
+
+    // Activity log
+    db.insert(schema.activityLog).values({
+      type: 'fa_pickup',
+      category: 'trade',
+      actor: user.username,
+      leagueId: params.leagueId,
+      description: `FA: ${team.teamName} picked up ${pokemonName}${dropPokemonName ? `, dropped ${dropPokemonName}` : ''}`,
+      metadata: JSON.stringify({ teamId, pokemonName, dropPokemonName }),
+    }).run();
+
+    return { success: true };
   })
 
   // ─── Tier List ─────────────────────────────────────────────────────

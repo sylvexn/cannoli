@@ -50,6 +50,13 @@
       "when": 1775368831621,
       "tag": "0006_wide_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1775371241929,
+      "tag": "0007_yielding_rictor",
+      "breakpoints": true
     }
   ]
 }

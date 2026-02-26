@@ -87,6 +87,11 @@ export function clearSessionCookieString(): string {
   return parts.join('; ');
 }
 
+/** Check if a user has staff privileges (dev or admin — both have full override power) */
+export function isStaff(user: { role: string } | null | undefined): boolean {
+  return !!user && (user.role === 'dev' || user.role === 'admin');
+}
+
 export function parseSessionToken(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/);

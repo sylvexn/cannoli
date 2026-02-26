@@ -1,0 +1,1 @@
+ALTER TABLE `draft_state` ADD `timer_expired_for_team` text;

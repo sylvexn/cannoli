@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
-import { hashPassword } from '../lib/auth';
+import { hashPassword, isStaff } from '../lib/auth';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 
 export const adminRoutes = new Elysia()
@@ -9,7 +9,7 @@ export const adminRoutes = new Elysia()
   // ─── Users (admin read) ──────────────────────────────────────────────
 
   .get('/api/users', ({ user, set }) => {
-    if (!user || (user.role !== 'dev' && user.role !== 'admin')) {
+    if (!isStaff(user)) {
       set.status = 403;
       return { error: 'Forbidden' };
     }
@@ -29,7 +29,7 @@ export const adminRoutes = new Elysia()
   // ─── Activity Log ───────────────────────────────────────────────────
 
   .get('/api/activity-log', ({ user, set, query }) => {
-    if (!user || (user.role !== 'dev' && user.role !== 'admin')) {
+    if (!isStaff(user)) {
       set.status = 403;
       return { error: 'Forbidden' };
     }
@@ -85,7 +85,7 @@ export const adminRoutes = new Elysia()
   // ─── Users CRUD ─────────────────────────────────────────────────────
 
   .post('/api/users', ({ body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { username, role } = body as { username: string; role?: string };
     if (!username?.trim()) { set.status = 400; return { error: 'Username required' }; }
 
@@ -106,7 +106,7 @@ export const adminRoutes = new Elysia()
   })
 
   .put('/api/users/:id', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const userId = parseInt(params.id);
     const { role, active } = body as { role?: string; active?: boolean };
 
@@ -121,7 +121,7 @@ export const adminRoutes = new Elysia()
   })
 
   .post('/api/users/:id/reset-password', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const userId = parseInt(params.id);
     const settings = db.select().from(schema.siteSettings).get();
     const password = settings?.defaultUserPassword || 'password';
@@ -137,7 +137,7 @@ export const adminRoutes = new Elysia()
   // ─── Site Settings ──────────────────────────────────────────────────
 
   .put('/api/site-settings', ({ body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const s = body as Record<string, unknown>;
 
     db.update(schema.siteSettings).set({
@@ -160,7 +160,7 @@ export const adminRoutes = new Elysia()
   // ─── Tier List ──────────────────────────────────────────────────────
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { tier, status } = body as { tier?: number; status?: string };
 
     const updates: Record<string, unknown> = {};
@@ -176,7 +176,7 @@ export const adminRoutes = new Elysia()
   // ─── Move Categories CRUD ──────────────────────────────────────────
 
   .post('/api/move-categories', ({ body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name } = body as { name: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -188,21 +188,21 @@ export const adminRoutes = new Elysia()
   })
 
   .put('/api/move-categories/:id', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name } = body as { name: string };
     db.update(schema.moveCategories).set({ name }).where(eq(schema.moveCategories.id, params.id)).run();
     return { success: true };
   })
 
   .delete('/api/move-categories/:id', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.categoryId, params.id)).run();
     db.delete(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).run();
     return { success: true };
   })
 
   .post('/api/move-categories/:id/entries', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, isAbility } = body as { name: string; isAbility?: boolean };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -217,7 +217,7 @@ export const adminRoutes = new Elysia()
   })
 
   .delete('/api/move-category-entries/:id', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, parseInt(params.id))).run();
     return { success: true };
   })
@@ -225,7 +225,7 @@ export const adminRoutes = new Elysia()
   // ─── Leagues CRUD ───────────────────────────────────────────────────
 
   .post('/api/leagues', ({ body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color } = body as { name: string; color: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -238,7 +238,7 @@ export const adminRoutes = new Elysia()
   })
 
   .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color, pointCap, teraCaptainSlots, tradeDeadlineWeek, maxTeams, rosterSize } = body as Record<string, unknown>;
 
     const leagueUpdates: Record<string, unknown> = {};
@@ -263,7 +263,7 @@ export const adminRoutes = new Elysia()
   })
 
   .delete('/api/leagues/:leagueId', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
       .where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
 
@@ -284,7 +284,7 @@ export const adminRoutes = new Elysia()
   // ─── Season Management ──────────────────────────────────────────────
 
   .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { phase } = body as { phase: string };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -294,7 +294,7 @@ export const adminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -306,7 +306,7 @@ export const adminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
     db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
     return { success: true };
@@ -315,7 +315,7 @@ export const adminRoutes = new Elysia()
   // ─── Schedule Generation ────────────────────────────────────────────
 
   .post('/api/leagues/:leagueId/schedule/generate', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const result = generateLeagueSchedule(params.leagueId);
     if (!result.success) { set.status = 400; return { error: result.error }; }
     return { success: true, matchCount: result.matchCount };
