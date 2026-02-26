@@ -12,11 +12,10 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
-import { ChevronDown } from 'lucide-react';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy,
+  Trophy, ChevronDown, ChevronsUpDown, ChevronsDownUp,
 } from 'lucide-react';
 
 interface NavItem {
@@ -72,7 +71,10 @@ const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 export function AdminPage() {
   const [searchParams] = useSearchParams();
   const [activeId, setActiveId] = useState('users');
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // All collapsed except first
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(ALL_ITEMS.slice(1).map(i => i.id))
+  );
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const isScrollingRef = useRef(false);
 
@@ -172,6 +174,24 @@ export function AdminPage() {
             </div>
           </div>
         ))}
+
+        {/* Expand / Collapse all */}
+        <div className="flex items-center gap-1 px-2 pt-2 border-t border-border-subtle">
+          <button
+            onClick={() => setCollapsed(new Set())}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40 transition-colors"
+          >
+            <ChevronsUpDown size={12} />
+            Expand
+          </button>
+          <button
+            onClick={() => setCollapsed(new Set(ALL_ITEMS.map(i => i.id)))}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40 transition-colors"
+          >
+            <ChevronsDownUp size={12} />
+            Collapse
+          </button>
+        </div>
       </nav>
 
       {/* All sections — single scrollable column */}
