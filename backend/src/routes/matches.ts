@@ -1,6 +1,8 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
+import { generateLeagueSchedule } from '../lib/schedule-generator';
+import { isStaff } from '../lib/auth';
 
 export const matchRoutes = new Elysia()
 
@@ -38,7 +40,7 @@ export const matchRoutes = new Elysia()
   // ─── All matches (admin view — cross-league) ────────────────────────
 
   .get('/api/admin/matches', ({ user, set, query }) => {
-    if (!user || (user.role !== 'dev' && user.role !== 'admin')) {
+    if (!isStaff(user)) {
       set.status = 403;
       return { error: 'Forbidden' };
     }
@@ -79,12 +81,22 @@ export const matchRoutes = new Elysia()
   // ─── Record match result ─────────────────────────────────────────────
 
   .post('/api/matches/:matchId/result', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
       .get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    // State machine enforcement
+    if (match.status === 'completed' || match.status === 'disputed') {
+      set.status = 400;
+      return { error: `Match already ${match.status} — dismiss warnings or contact admin to re-record` };
+    }
+    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') {
+      set.status = 400;
+      return { error: 'Cannot record result for a match with TBD teams' };
+    }
 
     const { homeScore, awayScore, replayUrl, pokemonData, warnings } = body as {
       homeScore: number;
@@ -99,12 +111,14 @@ export const matchRoutes = new Elysia()
       return { error: 'homeScore and awayScore required' };
     }
 
+    const newStatus = (warnings?.length ?? 0) > 0 ? 'disputed' : 'completed';
+
     // Update match
     db.update(schema.matches).set({
       homeScore,
       awayScore,
       replayUrl: replayUrl || match.replayUrl,
-      status: (warnings?.length ?? 0) > 0 ? 'disputed' : 'completed',
+      status: newStatus,
       completedAt: new Date().toISOString(),
       warnings: warnings?.length ? JSON.stringify(warnings) : null,
     }).where(eq(schema.matches.id, params.matchId)).run();
@@ -137,13 +151,79 @@ export const matchRoutes = new Elysia()
       metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, warningCount: warnings?.length ?? 0 }),
     }).run();
 
+    // ─── Playoff auto-advancement ─────────────────────────────────
+    if (newStatus === 'completed' && match.phase === 'playoffs' && match.playoffRound) {
+      const winnerId = homeScore > awayScore ? match.homeTeamId : match.awayTeamId;
+      const winnerSeed = homeScore > awayScore ? match.homeSeed : match.awaySeed;
+
+      // Determine which next-round match + slot this winner fills
+      const round = match.playoffRound;
+      // Extract match number from ID: e.g. "sapphire-pqf1" → 1, "sapphire-pqf2" → 2
+      const matchNumStr = params.matchId.replace(/.*p(qf|sf|f)/, '');
+      const matchNum = parseInt(matchNumStr) || 0;
+
+      let nextRound: string | null = null;
+      let nextMatchOffset = 0; // which match within the next round (0-based)
+      let fillHome = false;
+
+      if (round === 'qf') {
+        nextRound = 'sf';
+        // QF match 1 winner → SF match 1 away; QF match 2 winner → SF match 2 away
+        // QF1 is matchNum from bracket gen: positions 1,2; SF are positions 3,4
+        nextMatchOffset = matchNum <= 1 ? 0 : 1;
+        fillHome = false; // QF winners fill away slot in SF (home is the bye seed)
+      } else if (round === 'sf') {
+        nextRound = 'f';
+        nextMatchOffset = 0; // only one finals match
+        // First SF winner fills home, second fills away
+        // Get all SF matches to determine ordering
+        const sfMatches = db.select().from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, match.leagueId),
+            eq(schema.matches.phase, 'playoffs'),
+            eq(schema.matches.playoffRound, 'sf'),
+          ))
+          .orderBy(asc(schema.matches.id))
+          .all();
+        const sfIndex = sfMatches.findIndex(m => m.id === params.matchId);
+        fillHome = sfIndex === 0;
+      }
+
+      if (nextRound) {
+        // Find the next round match with TBD
+        const nextMatches = db.select().from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, match.leagueId),
+            eq(schema.matches.phase, 'playoffs'),
+            eq(schema.matches.playoffRound, nextRound),
+          ))
+          .orderBy(asc(schema.matches.id))
+          .all();
+
+        const target = nextMatches[nextMatchOffset];
+        if (target) {
+          const updateData: Record<string, any> = {};
+          if (fillHome && target.homeTeamId === 'TBD') {
+            updateData.homeTeamId = winnerId;
+            updateData.homeSeed = winnerSeed;
+          } else if (!fillHome && target.awayTeamId === 'TBD') {
+            updateData.awayTeamId = winnerId;
+            updateData.awaySeed = winnerSeed;
+          }
+          if (Object.keys(updateData).length > 0) {
+            db.update(schema.matches).set(updateData).where(eq(schema.matches.id, target.id)).run();
+          }
+        }
+      }
+    }
+
     return { success: true };
   })
 
   // ─── Dismiss match warnings ──────────────────────────────────────────
 
   .post('/api/matches/:matchId/dismiss-warnings', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -167,10 +247,34 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
+  // ─── Schedule generation ─────────────────────────────────────────────
+
+  .post('/api/leagues/:leagueId/schedule/generate', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const result = generateLeagueSchedule(params.leagueId);
+    if (!result.success) {
+      set.status = 400;
+      return { error: result.error || 'Failed to generate schedule' };
+    }
+
+    // Activity log
+    db.insert(schema.activityLog).values({
+      type: 'schedule_generated',
+      category: 'match',
+      actor: user.username,
+      leagueId: params.leagueId,
+      description: `Generated round-robin schedule (${result.matchCount} matches)`,
+      metadata: JSON.stringify({ matchCount: result.matchCount }),
+    }).run();
+
+    return { success: true, matchCount: result.matchCount };
+  })
+
   // ─── Playoff bracket generation ──────────────────────────────────────
 
   .post('/api/leagues/:leagueId/playoffs/generate', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
 
     const { topN } = (body || {}) as { topN?: number };
     const seedCount = topN ?? 6;

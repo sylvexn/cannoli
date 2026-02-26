@@ -258,6 +258,8 @@ export const draftState = sqliteTable('draft_state', {
   timerStartedAt: text('timer_started_at'),
   startedAt: text('started_at'),
   completedAt: text('completed_at'),
+  /** Team ID whose timer expired (pause-at-1s behavior) — null when no expiry pending */
+  timerExpiredForTeam: text('timer_expired_for_team'),
 });
 
 // ─── Activity Log ───────────────────────────────────────────────────────────

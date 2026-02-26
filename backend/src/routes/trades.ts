@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, desc } from 'drizzle-orm';
+import { isStaff } from '../lib/auth';
 
 export const tradeRoutes = new Elysia()
 
@@ -42,7 +43,7 @@ export const tradeRoutes = new Elysia()
   // ─── Trade Approve/Reject (dev only) ──────────────────────────────
 
   .post('/api/trades/:id/approve', ({ params, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const tradeId = parseInt(params.id);
     const trade = db.select().from(schema.trades).where(eq(schema.trades.id, tradeId)).get();
     if (!trade) { set.status = 404; return { error: 'Trade not found' }; }
@@ -81,7 +82,7 @@ export const tradeRoutes = new Elysia()
   })
 
   .post('/api/trades/:id/reject', ({ params, body, user, set }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const tradeId = parseInt(params.id);
     const { reason } = (body || {}) as { reason?: string };
 
@@ -108,7 +109,7 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const teamId = (user.role === 'dev' && (body as any).teamId) ? (body as any).teamId : team?.id;
+    const teamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
     const { pokemonName, note } = body as { pokemonName: string; note?: string };
@@ -132,7 +133,7 @@ export const tradeRoutes = new Elysia()
       .get();
     if (!listing) { set.status = 404; return { error: 'Listing not found' }; }
 
-    if (user.role !== 'dev') {
+    if (!isStaff(user)) {
       const team = db.select().from(schema.teams)
         .where(and(eq(schema.teams.id, listing.teamId), eq(schema.teams.userId, parseInt(user.id))))
         .get();
@@ -152,7 +153,7 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const proposerId = (user.role === 'dev' && (body as any).proposerId) ? (body as any).proposerId : team?.id;
+    const proposerId = (isStaff(user) && (body as any).proposerId) ? (body as any).proposerId : team?.id;
     if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
     const { recipientId, offering, requesting } = body as {
@@ -166,6 +167,12 @@ export const tradeRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = season?.currentWeek || 0;
+
+    // Enforce trade deadline
+    if (season && season.tradeDeadlineWeek > 0 && week > season.tradeDeadlineWeek) {
+      set.status = 400;
+      return { error: `Trade deadline has passed (Week ${season.tradeDeadlineWeek})` };
+    }
 
     const result = db.insert(schema.trades).values({
       leagueId: params.leagueId,

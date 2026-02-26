@@ -29,6 +29,7 @@ export interface DraftStateSnapshot {
   currentPickIndex: number;
   timerDuration: number;
   timerExpiresAt: string | null; // ISO timestamp
+  timerExpiredForTeam: string | null; // teamId whose timer expired (pause-at-1s)
   picks: { teamId: string; pokemonName: string; tier: number; pickNumber: number }[];
   snakeOrder: SnakePick[];
   teamPoints: Record<string, number>; // teamId → points used
@@ -207,6 +208,7 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
     currentPickIndex: state.currentPickIndex,
     timerDuration: state.timerDuration,
     timerExpiresAt,
+    timerExpiredForTeam: state.timerExpiredForTeam ?? null,
     picks,
     snakeOrder,
     teamPoints,
@@ -348,6 +350,7 @@ export function startDraft(leagueId: string, timerDuration = 120): { success: bo
       timerStartedAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
       completedAt: null,
+      timerExpiredForTeam: null,
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
   } else {
     db.insert(schema.draftState).values({
@@ -363,12 +366,39 @@ export function startDraft(leagueId: string, timerDuration = 120): { success: bo
   return { success: true };
 }
 
-/** Handle timer expiration — auto-pick for the current team. */
-export function handleTimerExpiry(leagueId: string): ReturnType<typeof executePick> | null {
+/** Handle timer expiration — pause the draft and flag the team whose timer expired. */
+export function handleTimerExpiry(leagueId: string): { paused: true; teamId: string } | null {
   const state = db.select().from(schema.draftState)
     .where(eq(schema.draftState.leagueId, leagueId))
     .get();
   if (!state || state.status !== 'in_progress') return null;
+
+  const league = db.select().from(schema.leagues)
+    .where(eq(schema.leagues.id, leagueId))
+    .get();
+  if (!league) return null;
+
+  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+  const snakeOrder = generateSnakeOrder(teamOrder, 10);
+  const currentSlot = snakeOrder[state.currentPickIndex];
+  if (!currentSlot) return null;
+
+  // Pause the draft and record which team's timer expired
+  db.update(schema.draftState).set({
+    status: 'paused',
+    timerStartedAt: null,
+    timerExpiredForTeam: currentSlot.teamId,
+  }).where(eq(schema.draftState.leagueId, leagueId)).run();
+
+  return { paused: true, teamId: currentSlot.teamId };
+}
+
+/** Execute auto-pick for the team whose timer expired, then clear the flag and resume. */
+export function executeAutoPick(leagueId: string): ReturnType<typeof executePick> | null {
+  const state = db.select().from(schema.draftState)
+    .where(eq(schema.draftState.leagueId, leagueId))
+    .get();
+  if (!state || state.status !== 'paused' || !state.timerExpiredForTeam) return null;
 
   const league = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
@@ -380,13 +410,56 @@ export function handleTimerExpiry(leagueId: string): ReturnType<typeof executePi
     .get();
   if (!season) return null;
 
-  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const snakeOrder = generateSnakeOrder(teamOrder, 10);
-  const currentSlot = snakeOrder[state.currentPickIndex];
-  if (!currentSlot) return null;
+  // Resume draft so executePick works (it checks for 'in_progress')
+  db.update(schema.draftState).set({
+    status: 'in_progress',
+    timerExpiredForTeam: null,
+    timerStartedAt: new Date().toISOString(),
+  }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-  const autoPick = getAutoPick(currentSlot.teamId, leagueId, season.pointCap);
+  const autoPick = getAutoPick(state.timerExpiredForTeam, leagueId, season.pointCap);
   if (!autoPick) return null;
 
-  return executePick(leagueId, autoPick.name, currentSlot.teamId);
+  return executePick(leagueId, autoPick.name, state.timerExpiredForTeam);
+}
+
+/** Skip the current turn (no pick), advance to next pick, clear timer-expired flag. */
+export function skipPick(leagueId: string): { success: true } | { success: false; error: string } {
+  const state = db.select().from(schema.draftState)
+    .where(eq(schema.draftState.leagueId, leagueId))
+    .get();
+  if (!state || state.status !== 'paused' || !state.timerExpiredForTeam) {
+    return { success: false, error: 'No timer-expired pick to skip' };
+  }
+
+  const league = db.select().from(schema.leagues)
+    .where(eq(schema.leagues.id, leagueId))
+    .get();
+  if (!league) return { success: false, error: 'League not found' };
+
+  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+  const snakeOrder = generateSnakeOrder(teamOrder, 10);
+
+  const nextIndex = state.currentPickIndex + 1;
+  const isComplete = nextIndex >= snakeOrder.length;
+
+  db.update(schema.draftState).set({
+    currentPickIndex: nextIndex,
+    status: isComplete ? 'completed' : 'in_progress',
+    timerStartedAt: isComplete ? null : new Date().toISOString(),
+    timerExpiredForTeam: null,
+    completedAt: isComplete ? new Date().toISOString() : null,
+  }).where(eq(schema.draftState.leagueId, leagueId)).run();
+
+  if (isComplete) {
+    const season = db.select().from(schema.seasons)
+      .where(eq(schema.seasons.id, league.seasonId))
+      .get();
+    if (season) {
+      db.update(schema.seasons).set({ phase: 'regular' })
+        .where(eq(schema.seasons.id, season.id)).run();
+    }
+  }
+
+  return { success: true };
 }

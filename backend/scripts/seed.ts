@@ -328,6 +328,29 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     console.log(`  ${listings.length} trade block listings seeded`);
   }
 
+  // ─── Demo replay URLs on some completed matches ───────────────────────────
+
+  const completedMatches = sqlite.prepare(
+    `SELECT id FROM matches WHERE home_score IS NOT NULL AND phase = 'regular' ORDER BY week LIMIT 2`
+  ).all() as { id: string }[];
+
+  // Also mark matches with scores as completed
+  sqlite.prepare(`UPDATE matches SET status = 'completed' WHERE home_score IS NOT NULL`).run();
+
+  if (completedMatches.length >= 1) {
+    sqlite.prepare(`UPDATE matches SET replay_url = ? WHERE id = ?`).run(
+      '/replays/Gen9NatDexDraft-2026-03-29-roabio-hellofellorat.html',
+      completedMatches[0].id,
+    );
+  }
+  if (completedMatches.length >= 2) {
+    sqlite.prepare(`UPDATE matches SET replay_url = ? WHERE id = ?`).run(
+      '/replays/Gen9NatDexDraft-2026-04-03-simolili-gabrys24.html',
+      completedMatches[1].id,
+    );
+  }
+  console.log(`  ${Math.min(completedMatches.length, 2)} demo replay URLs seeded`);
+
   // ─── Activity log ─────────────────────────────────────────────────────────
 
   const logCount = (sqlite.prepare('SELECT COUNT(*) as c FROM activity_log').get() as any).c;

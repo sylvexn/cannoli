@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
 import { Octokit } from 'octokit';
+import { isStaff } from '../lib/auth';
 
 const ghToken = process.env.GITHUB_TOKEN;
 const ghRepo = process.env.GITHUB_REPO;
@@ -41,7 +42,7 @@ export const feedbackRoutes = new Elysia()
   })
 
   .get('/api/admin/issues', async ({ user, set, query }) => {
-    if (!user || user.role !== 'dev') { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     if (!octokit || !ghRepo) { set.status = 503; return { error: 'Feedback not configured' }; }
 
     const [owner, repo] = ghRepo.split('/');
