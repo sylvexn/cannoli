@@ -24,6 +24,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'dev' | 'admin' | 'user'>('all');
   const [sortBy, setSortBy] = useState<'username' | 'role' | 'status' | 'created'>('username');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [createOpen, setCreateOpen] = useState(false);
@@ -46,12 +47,15 @@ export function AdminUsers() {
 
   const filtered = useMemo(() => {
     let list = users;
+    if (roleFilter !== 'all') {
+      list = list.filter(u => u.role === roleFilter);
+    }
     if (search) {
       const q = search.toLowerCase();
-      list = list.filter(u => u.username.includes(q) || u.role.includes(q));
+      list = list.filter(u => u.username.includes(q));
     }
     const dir = sortDir === 'asc' ? 1 : -1;
-    return [...list].sort((a, b) => {
+    return [...list].sort((a: ApiAuthUser, b: ApiAuthUser) => {
       switch (sortBy) {
         case 'username': return dir * a.username.localeCompare(b.username);
         case 'role': return dir * a.role.localeCompare(b.role);
@@ -60,7 +64,7 @@ export function AdminUsers() {
         default: return 0;
       }
     });
-  }, [users, search, sortBy, sortDir]);
+  }, [users, search, roleFilter, sortBy, sortDir]);
 
   async function handleCreate() {
     if (!newUsername.trim()) return;
@@ -120,12 +124,23 @@ export function AdminUsers() {
 
   return (
     <div className="space-y-3">
-      {/* Header: stats + search + create */}
+      {/* Header: role filter + search + create */}
       <div className="flex items-center gap-3">
-        <div className="flex gap-3 text-xs text-text-muted">
-          <span>{users.length} total</span>
-          <span className="text-win">{activeCount} active</span>
-          <span className="text-neon">{adminCount} admin</span>
+        <div className="flex gap-0.5 rounded-md border border-border-subtle overflow-hidden">
+          {(['all', 'dev', 'admin', 'user'] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={cn(
+                'px-2 py-0.5 text-[10px] font-medium transition-colors',
+                roleFilter === r
+                  ? 'bg-surface-overlay text-text-primary'
+                  : 'text-text-muted hover:text-text-secondary',
+              )}
+            >
+              {r === 'all' ? `All (${users.length})` : r}
+            </button>
+          ))}
         </div>
         <div className="relative flex-1 max-w-[200px] ml-auto">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted" size={12} />
@@ -204,7 +219,7 @@ export function AdminUsers() {
               <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none">
                 <MoreHorizontal size={13} className="text-text-muted" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="min-w-[170px] w-auto">
                 <DropdownMenuItem onClick={() => handleResetPassword(user)}>
                   <KeyRound size={14} />
                   Reset Password
