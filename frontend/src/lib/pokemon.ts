@@ -131,6 +131,14 @@ export function toShowdownId(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+/** Play a Pokemon's cry audio at low volume */
+export function playCry(name: string, volume = 0.15): void {
+  const id = toSpriteId(name);
+  const audio = new Audio(`https://play.pokemonshowdown.com/audio/cries/${id}.mp3`);
+  audio.volume = volume;
+  audio.play().catch(() => {}); // Silently fail if autoplay is blocked
+}
+
 /** Get the tier point color class name */
 export function tierColor(points: number): string {
   if (points >= 20) return 'var(--color-tier-20)';

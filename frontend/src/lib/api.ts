@@ -422,4 +422,21 @@ export const api = {
     postJson<{ success: boolean; matchCount: number; seedings: { seed: number; teamId: string }[] }>(
       `/api/leagues/${leagueId}/playoffs/generate`, { topN }
     ),
+
+  // Tera captain management
+  saveTerraCaptains: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
+    putJson<{ success: boolean }>(`/api/teams/${teamId}/tera-captains`, { captains }),
+
+  // Free agents
+  getFreeAgents: (leagueId: string) =>
+    fetchJson<{ name: string; tier: number; type1: string; type2: string | null; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } }[]>(
+      `/api/leagues/${leagueId}/free-agents`
+    ),
+
+  freeAgentPickup: (leagueId: string, data: { teamId: string; pokemonName: string; dropPokemonName?: string }) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/free-agents/pickup`, data),
+
+  // Live matches (uses existing admin matches endpoint filtered)
+  getLiveMatches: () =>
+    fetchJson<ApiAdminMatch[]>('/api/admin/matches?status=in_progress'),
 };

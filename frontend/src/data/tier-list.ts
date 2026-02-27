@@ -93,11 +93,13 @@ export function getEffectiveCost(name: string, isTeraCaptain: boolean): number {
   return isTeraCaptain ? entry.teraCost : entry.tier;
 }
 
-/** Check if a Pokemon can be a tera captain */
+/** Check if a Pokemon can be a tera captain (tiers 1-9 only, not tera-banned) */
 export function canBeTeraCaptain(name: string): boolean {
   const entry = tierMap.get(name);
   if (!entry) return false;
-  return !entry.teraBanned;
+  if (entry.teraBanned) return false;
+  if (entry.tier > 9) return false;
+  return true;
 }
 
 /** Total Pokemon in tier list */
