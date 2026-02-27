@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { computeLeagueStats, type PokemonLeagueStat } from '@/lib/pokemon-stats';
 import { useLeagueData } from '@/lib/league-data-context';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
-import { PokemonSideCard } from '@/components/pokemon-side-card';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { TeamLogo } from '@/components/team-logo';
@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatsTableSkeleton } from '@/components/skeletons';
 import { StatsFilterBar, defaultFilters, type StatsFilters } from './stats-filter-bar';
 
 type SortKey = 'kills' | 'deaths' | 'differential' | 'gp' | 'kpg' | 'tier' | 'name' | 'record';
@@ -67,12 +69,7 @@ export function StatsPage() {
   const allStats = useMemo(() => computeLeagueStats(players), [players]);
   const [filters, setFilters] = useState<StatsFilters>(defaultFilters);
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
-  const [selectedPokemon, setSelectedPokemon] = useState<string | null>(null);
-
-  // Find stat + owner for side card
-  const selectedStat = selectedPokemon ? allStats.find(s => s.name === selectedPokemon) : undefined;
-  const selectedOwner = selectedStat ? playerMap.get(selectedStat.teamId) : undefined;
-  const closeSideCard = useCallback(() => setSelectedPokemon(null), []);
+  const { openSideCard } = usePokemonSideCard();
 
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
@@ -101,7 +98,27 @@ export function StatsPage() {
     setFilters(prev => ({ ...prev, ...partial }));
   }
 
-  if (loading) return <div className="text-text-muted text-sm">Loading stats...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-7 w-44 bg-surface-overlay/50 mb-2" />
+        <Skeleton className="h-4 w-56 bg-surface-overlay/50" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Card key={i} className="bg-surface-raised border-border-default overflow-hidden">
+            <CardContent className="p-3 pt-3.5 flex flex-col items-center text-center gap-1.5">
+              <Skeleton className="h-4 w-4 rounded bg-surface-overlay/50" />
+              <Skeleton className="h-12 w-12 rounded bg-surface-overlay/50" />
+              <Skeleton className="h-3.5 w-16 bg-surface-overlay/50" />
+              <Skeleton className="h-3 w-10 bg-surface-overlay/50" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <StatsTableSkeleton rows={10} />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -146,8 +163,8 @@ export function StatsPage() {
                 </div>
                 {/* Name */}
                 <button
-                  onClick={() => setSelectedPokemon(stat.name)}
-                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full text-left cursor-pointer"
+                  onClick={() => openSideCard(stat.name)}
+                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full text-center cursor-pointer"
                 >
                   {stat.name}
                 </button>
@@ -230,7 +247,7 @@ export function StatsPage() {
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
                             <button
-                              onClick={() => setSelectedPokemon(stat.name)}
+                              onClick={() => openSideCard(stat.name)}
                               className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block text-left cursor-pointer"
                             >
                               {stat.name}
@@ -301,13 +318,6 @@ export function StatsPage() {
         </CardContent>
       </Card>
 
-      <PokemonSideCard
-        name={selectedPokemon}
-        onClose={closeSideCard}
-        owner={selectedOwner}
-        seasonStats={selectedStat ? { kills: selectedStat.kills, deaths: selectedStat.deaths, gp: selectedStat.gp } : undefined}
-        teraCaptain={selectedStat?.isTeraCaptain ? { teraTypes: [] } : undefined}
-      />
     </div>
   );
 }

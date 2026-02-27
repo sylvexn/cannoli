@@ -15,7 +15,8 @@ const sideColors = {
     bg: 'bg-[#3b82f6]/5',
     border: 'border-[#3b82f6]/20',
     activeBorder: 'border-[#3b82f6]',
-    activeGlow: 'shadow-[0_0_8px_rgba(59,130,246,0.3)]',
+    activeGlow: 'shadow-[0_0_10px_rgba(59,130,246,0.35)]',
+    hoverGlow: 'hover:shadow-[0_0_12px_rgba(59,130,246,0.2)]',
     text: 'text-[#3b82f6]',
     label: 'My Team',
   },
@@ -23,7 +24,8 @@ const sideColors = {
     bg: 'bg-[#ef4444]/5',
     border: 'border-[#ef4444]/20',
     activeBorder: 'border-[#ef4444]',
-    activeGlow: 'shadow-[0_0_8px_rgba(239,68,68,0.3)]',
+    activeGlow: 'shadow-[0_0_10px_rgba(239,68,68,0.35)]',
+    hoverGlow: 'hover:shadow-[0_0_12px_rgba(239,68,68,0.2)]',
     text: 'text-[#ef4444]',
     label: 'Opponent',
   },
@@ -45,7 +47,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
 
   return (
     <div className={cn('flex-1 rounded-lg border p-2', colors.border, colors.bg)}>
-      <div className="flex items-center justify-between mb-1.5 px-1">
+      <div className="flex items-center justify-between mb-1 px-1">
         <span className={cn('text-xs font-medium', colors.text)}>
           {label || colors.label}
         </span>
@@ -54,7 +56,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
           {!hasSubTeam && ' · click to pick 6'}
         </span>
       </div>
-      <div className="flex gap-1 flex-wrap">
+      <div className="group/strip flex">
         {team.map(pokemon => {
           const isSelected = subTeam.has(pokemon.name);
           const isDimmed = hasSubTeam && !isSelected;
@@ -64,19 +66,25 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               key={pokemon.name}
               onClick={() => onToggle(pokemon.name)}
               className={cn(
-                'flex flex-col items-center gap-0.5 p-1 rounded-md border transition-all cursor-pointer',
-                'hover:bg-surface-overlay/60',
+                'group/mon flex-1 min-w-0 flex flex-col items-center gap-0.5 py-1.5 px-0.5 rounded-lg border cursor-pointer',
+                'transition-all duration-200 ease-out',
+                'hover:scale-110 hover:z-10 hover:bg-surface-overlay/60',
+                colors.hoverGlow,
                 isSelected
                   ? cn(colors.activeBorder, colors.activeGlow, 'bg-surface-overlay/40')
                   : 'border-transparent',
-                isDimmed && 'opacity-35',
+                isDimmed && 'opacity-35 hover:opacity-70',
               )}
               title={`${pokemon.name} · ${pokemon.types.join('/')} · ${pokemon.stats.spe} SPE`}
             >
-              <PokemonSprite name={pokemon.name} size="sm" />
+              <div className="w-10 h-10 flex items-center justify-center">
+                <PokemonSprite name={pokemon.name} size="md" className="!w-10 !h-10" />
+              </div>
               <span className={cn(
-                'text-[9px] leading-tight max-w-[52px] truncate',
-                isSelected ? 'text-text-primary font-medium' : 'text-text-muted',
+                'text-[10px] font-mono leading-tight w-full truncate text-center transition-colors duration-200',
+                isSelected
+                  ? 'text-text-primary font-semibold'
+                  : 'text-text-muted group-hover/mon:text-text-primary',
               )}>
                 {pokemon.name}
               </span>

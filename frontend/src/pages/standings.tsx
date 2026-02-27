@@ -14,9 +14,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { ChevronDown, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
 
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
@@ -51,7 +54,21 @@ export function StandingsPage() {
     preloadSprites(players.flatMap(p => p.roster.map(m => m.name)));
   }, [players]);
 
-  if (loading) return <div className="text-text-muted">Loading...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-7 w-40 bg-surface-overlay/50 mb-2" />
+        <Skeleton className="h-4 w-56 bg-surface-overlay/50" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <StandingsTableSkeleton rows={10} />
+        <div className="space-y-6">
+          <MatchListSkeleton count={5} />
+          <MatchListSkeleton count={5} />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -180,6 +197,7 @@ export function StandingsPage() {
 function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: number; leagueUrl: (p: string) => string }) {
   const [expanded, setExpanded] = useState(false);
   const { getTeamTrades } = useLeagueData();
+  const { openSideCard } = usePokemonSideCard();
   const isPlayoff = rank <= 8;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
@@ -261,7 +279,7 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
             {/* Roster table */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
               {player.roster.map(mon => (
-                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0">
+                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0 cursor-pointer hover:bg-surface-overlay/30 rounded px-1 -mx-1 transition-colors" onClick={() => openSideCard(mon.name)}>
                   <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
                   <TeraIndicator
                     name={mon.name}

@@ -22,10 +22,13 @@ import { Link } from 'react-router-dom';
 import type { PokemonType } from '@/lib/pokemon';
 import { CompactTradeCard } from './compact-trade-card';
 import { TradeProposeDialog } from './trade-propose-dialog';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { TradeBlockSkeleton } from '@/components/skeletons';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function TradeBlockPage() {
   const leagueUrl = useLeagueUrl();
-  const { players, transactions } = useLeagueData();
+  const { players, transactions, loading } = useLeagueData();
   const league = useLeague();
   const currentSeason = league.season;
   const playerMap = useMemo(() => new Map<string, Player>(players.map(p => [p.id, p])), [players]);
@@ -55,6 +58,7 @@ export function TradeBlockPage() {
       })),
     [transactions],
   );
+  const { openSideCard } = usePokemonSideCard();
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [proposeOpen, setProposeOpen] = useState<{ teamId: string } | null>(null);
 
@@ -96,6 +100,19 @@ export function TradeBlockPage() {
     ];
     preloadSprites(allNames);
   }, [trades]);
+
+  if (loading) return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <Skeleton className="h-7 w-40 bg-surface-overlay/50 mb-2" />
+          <Skeleton className="h-4 w-48 bg-surface-overlay/50" />
+        </div>
+        <Skeleton className="h-7 w-44 rounded-full bg-surface-overlay/50" />
+      </div>
+      <TradeBlockSkeleton />
+    </div>
+  );
 
   return (
     <div className="space-y-5">
@@ -155,10 +172,12 @@ export function TradeBlockPage() {
                     )}
                   >
                     <div className="flex items-start gap-2.5">
-                      <PokemonSprite name={mon.name} size="md" className="shrink-0 mt-0.5" />
+                      <div className="shrink-0 mt-0.5 cursor-pointer" onClick={() => openSideCard(mon.name)}>
+                        <PokemonSprite name={mon.name} size="md" />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-mono font-medium text-text-primary">{mon.name}</span>
+                          <button onClick={() => openSideCard(mon.name)} className="text-sm font-mono font-medium text-text-primary hover:text-neon transition-colors cursor-pointer">{mon.name}</button>
                           <TierBadge points={mon.tier} />
                         </div>
                         <div className="flex items-center gap-1.5 mt-1">

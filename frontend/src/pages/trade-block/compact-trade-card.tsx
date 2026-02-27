@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
@@ -18,6 +19,7 @@ const statusConfig: Record<Trade['status'], { label: string; className: string }
 /** Compact horizontal trade card for proposals */
 export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl: (path: string) => string }) {
   const { players } = useLeagueData();
+  const { openSideCard } = usePokemonSideCard();
   const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
   const proposer = playerMap.get(trade.proposer);
   const isFreeAgent = trade.recipient === 'pool';
@@ -63,9 +65,9 @@ export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl
           )}
           <div className="space-y-0.5">
             {trade.offering.map(name => (
-              <div key={name} className="flex items-center gap-1.5">
+              <div key={name} className="flex items-center gap-1.5 cursor-pointer hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors" onClick={() => openSideCard(name)}>
                 <PokemonSprite name={name} size="xs" />
-                <span className="text-xs font-mono text-text-primary truncate">{name}</span>
+                <span className="text-xs font-mono text-text-primary truncate hover:text-neon transition-colors">{name}</span>
                 {findTier(name, trade.proposer) > 0 && <TierBadge points={findTier(name, trade.proposer)} />}
               </div>
             ))}
@@ -94,9 +96,9 @@ export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl
           ) : null}
           <div className="space-y-0.5">
             {trade.requesting.map(name => (
-              <div key={name} className="flex items-center gap-1.5">
+              <div key={name} className="flex items-center gap-1.5 cursor-pointer hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors" onClick={() => openSideCard(name)}>
                 <PokemonSprite name={name} size="xs" />
-                <span className="text-xs font-mono text-text-primary truncate">{name}</span>
+                <span className="text-xs font-mono text-text-primary truncate hover:text-neon transition-colors">{name}</span>
                 {!isFreeAgent && findTier(name, trade.recipient) > 0 && (
                   <TierBadge points={findTier(name, trade.recipient)} />
                 )}
