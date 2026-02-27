@@ -31,7 +31,7 @@ const STATUS_CONFIG: Record<BanStatus, { label: string; color: string; bg: strin
 
 export function AdminTierList() {
   const [pool, setPool] = useState<PoolEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     api.getTierList()

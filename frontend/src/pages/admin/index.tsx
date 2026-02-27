@@ -12,10 +12,12 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
+import { AdminFreeAgents } from './admin-free-agents';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, ChevronDown, ChevronsUpDown, ChevronsDownUp,
+  UserPlus,
 } from 'lucide-react';
 
 interface NavItem {
@@ -47,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'season', label: 'Season', icon: CalendarCog, component: AdminSeason },
       { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches, maxH: 'max-h-[60vh]' },
       { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades, maxH: 'max-h-[50vh]' },
+      { id: 'free-agents', label: 'Free Agents', icon: UserPlus, component: AdminFreeAgents, maxH: 'max-h-[60vh]' },
     ],
   },
   {
@@ -75,7 +78,7 @@ export function AdminPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(ALL_ITEMS.slice(1).map(i => i.id))
   );
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const isScrollingRef = useRef(false);
 
   // Deep-link from URL ?tab=xxx on mount

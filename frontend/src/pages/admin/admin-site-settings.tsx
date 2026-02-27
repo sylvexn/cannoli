@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
   Save, Megaphone, Settings, Trophy, Swords, Users,
-  Timer, Zap, Shield, Loader2,
+  Zap, Shield, Loader2,
 } from 'lucide-react';
 
 interface AllSettings {
@@ -82,7 +82,7 @@ export function AdminSiteSettings() {
   async function handleSave() {
     setSaving(true);
     try {
-      await api.saveSiteSettings(settings);
+      await api.saveSiteSettings(settings as unknown as Record<string, unknown>);
       toast.success('Settings saved');
     } catch (err: any) {
       toast.error(err.message);

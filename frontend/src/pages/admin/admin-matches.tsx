@@ -16,9 +16,10 @@ import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { NumberInput } from '@/components/ui/number-input';
+import { POKEMON_TYPES } from '@/lib/pokemon';
 import {
   AlertTriangle, CheckCircle2, Clock, Swords, Shield,
-  ChevronDown, ChevronUp, X, Eye,
+  ChevronDown, ChevronUp, Plus, Trash2,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
@@ -44,6 +45,18 @@ export function AdminMatches() {
   const [awayScore, setAwayScore] = useState(0);
   const [replayUrl, setReplayUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showPokemonData, setShowPokemonData] = useState(false);
+
+  interface PokemonEntry {
+    name: string;
+    kills: number;
+    deaths: number;
+    teraUsed: boolean;
+    teraType: string;
+  }
+  const emptyEntry = (): PokemonEntry => ({ name: '', kills: 0, deaths: 0, teraUsed: false, teraType: '' });
+  const [homePokemon, setHomePokemon] = useState<PokemonEntry[]>([]);
+  const [awayPokemon, setAwayPokemon] = useState<PokemonEntry[]>([]);
 
   function fetchMatches() {
     setLoading(true);
@@ -79,6 +92,9 @@ export function AdminMatches() {
     setHomeScore(match.homeScore ?? 0);
     setAwayScore(match.awayScore ?? 0);
     setReplayUrl(match.replayUrl ?? '');
+    setShowPokemonData(false);
+    setHomePokemon([]);
+    setAwayPokemon([]);
     setResultOpen(true);
   }
 
@@ -86,7 +102,33 @@ export function AdminMatches() {
     if (!resultMatch) return;
     setSubmitting(true);
     try {
-      await api.recordMatchResult(resultMatch.id, { homeScore, awayScore, replayUrl: replayUrl || undefined });
+      const pokemonData = showPokemonData
+        ? [
+            ...homePokemon.filter(p => p.name.trim()).map(p => ({
+              teamId: resultMatch.homeTeamId,
+              pokemonName: p.name.trim(),
+              kills: p.kills,
+              deaths: p.deaths,
+              teraUsed: p.teraUsed,
+              teraType: p.teraType || undefined,
+            })),
+            ...awayPokemon.filter(p => p.name.trim()).map(p => ({
+              teamId: resultMatch.awayTeamId,
+              pokemonName: p.name.trim(),
+              kills: p.kills,
+              deaths: p.deaths,
+              teraUsed: p.teraUsed,
+              teraType: p.teraType || undefined,
+            })),
+          ]
+        : undefined;
+
+      await api.recordMatchResult(resultMatch.id, {
+        homeScore,
+        awayScore,
+        replayUrl: replayUrl || undefined,
+        pokemonData,
+      });
       toast.success('Result recorded');
       setResultOpen(false);
       fetchMatches();
@@ -137,7 +179,7 @@ export function AdminMatches() {
 
       {/* Filters */}
       <div className="flex items-center gap-3">
-        <Select value={leagueFilter} onValueChange={setLeagueFilter}>
+        <Select value={leagueFilter} onValueChange={(v) => setLeagueFilter(v ?? 'all')}>
           <SelectTrigger className="w-[160px] h-8 text-xs bg-surface-overlay">
             <SelectValue placeholder="All Leagues" />
           </SelectTrigger>
@@ -154,7 +196,7 @@ export function AdminMatches() {
           </SelectContent>
         </Select>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? 'all')}>
           <SelectTrigger className="w-[140px] h-8 text-xs bg-surface-overlay">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
@@ -340,7 +382,7 @@ export function AdminMatches() {
 
       {/* Result Entry Dialog */}
       <Dialog open={resultOpen} onOpenChange={setResultOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className={showPokemonData ? 'max-w-2xl' : 'max-w-sm'}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Swords size={16} className="text-neon" />
@@ -376,6 +418,39 @@ export function AdminMatches() {
                 className="h-8 text-xs bg-surface-overlay"
               />
             </div>
+
+            {/* Pokemon K/D toggle */}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-neon hover:text-neon/80 transition-colors"
+              onClick={() => {
+                const next = !showPokemonData;
+                setShowPokemonData(next);
+                if (next && homePokemon.length === 0) {
+                  setHomePokemon(Array.from({ length: 6 }, emptyEntry));
+                  setAwayPokemon(Array.from({ length: 6 }, emptyEntry));
+                }
+              }}
+            >
+              {showPokemonData ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {showPokemonData ? 'Hide' : 'Add'} per-Pokemon K/D data
+            </button>
+
+            {/* Pokemon K/D entry */}
+            {showPokemonData && resultMatch && (
+              <div className="grid grid-cols-2 gap-4">
+                <PokemonKDSection
+                  label={`${resultMatch.homeTeamId} (Home)`}
+                  entries={homePokemon}
+                  onChange={setHomePokemon}
+                />
+                <PokemonKDSection
+                  label={`${resultMatch.awayTeamId} (Away)`}
+                  entries={awayPokemon}
+                  onChange={setAwayPokemon}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -390,6 +465,90 @@ export function AdminMatches() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Per-Pokemon K/D entry section for one side of a match */
+function PokemonKDSection({ label, entries, onChange }: {
+  label: string;
+  entries: { name: string; kills: number; deaths: number; teraUsed: boolean; teraType: string }[];
+  onChange: (entries: { name: string; kills: number; deaths: number; teraUsed: boolean; teraType: string }[]) => void;
+}) {
+  function updateEntry(index: number, field: string, value: unknown) {
+    const next = entries.map((e, i) => i === index ? { ...e, [field]: value } : e);
+    onChange(next);
+  }
+
+  function addEntry() {
+    onChange([...entries, { name: '', kills: 0, deaths: 0, teraUsed: false, teraType: '' }]);
+  }
+
+  function removeEntry(index: number) {
+    onChange(entries.filter((_, i) => i !== index));
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">{label}</div>
+      <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+        {entries.map((entry, i) => (
+          <div key={i} className="rounded-md border border-border-subtle bg-surface-overlay/30 p-2 space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={entry.name}
+                onChange={e => updateEntry(i, 'name', e.target.value)}
+                placeholder="Pokemon name"
+                className="h-6 text-[11px] bg-surface-overlay flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => removeEntry(i)}
+                className="p-0.5 rounded hover:bg-loss/10 text-text-muted hover:text-loss transition-colors"
+              >
+                <Trash2 size={10} />
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-text-muted">K</span>
+                <NumberInput value={entry.kills} onChange={v => updateEntry(i, 'kills', v)} min={0} max={6} />
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] text-text-muted">D</span>
+                <NumberInput value={entry.deaths} onChange={v => updateEntry(i, 'deaths', v)} min={0} max={1} />
+              </div>
+              <label className="flex items-center gap-1.5 ml-auto cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={entry.teraUsed}
+                  onChange={e => updateEntry(i, 'teraUsed', e.target.checked)}
+                  className="h-3 w-3 rounded accent-neon"
+                />
+                <span className="text-[9px] text-text-muted">Tera</span>
+              </label>
+            </div>
+            {entry.teraUsed && (
+              <Select value={entry.teraType} onValueChange={v => updateEntry(i, 'teraType', v)}>
+                <SelectTrigger className="h-6 text-[10px] bg-surface-overlay">
+                  <SelectValue placeholder="Tera type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {POKEMON_TYPES.map(t => (
+                    <SelectItem key={t} value={t} className="text-[10px] capitalize">{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        ))}
+      </div>
+      {entries.length < 6 && (
+        <Button size="xs" variant="outline" onClick={addEntry} className="w-full text-[10px] h-6">
+          <Plus size={10} />
+          Add Pokemon
+        </Button>
+      )}
     </div>
   );
 }

@@ -30,6 +30,7 @@ const CATEGORY_COLORS: Record<EventCategory, string> = {
   trade: 'border-purple-400/30 text-purple-400 bg-purple-400/10',
   match: 'border-win/30 text-win bg-win/10',
   team: 'border-orange-400/30 text-orange-400 bg-orange-400/10',
+  scrim: 'border-neon/30 text-neon bg-neon/10',
 };
 
 const EVENT_ICONS: Record<string, typeof UserPlus> = {
@@ -224,7 +225,7 @@ function EventRow({ event }: { event: ApiActivityEvent }) {
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
 
-  const ts = new Date(event.timestamp);
+  const ts = new Date(event.timestamp ?? Date.now());
   const isToday = new Date().toDateString() === ts.toDateString();
   const timeStr = isToday
     ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -233,8 +234,8 @@ function EventRow({ event }: { event: ApiActivityEvent }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/50 transition-colors group">
       {/* Icon */}
-      <div className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${CATEGORY_COLORS[event.category].replace('border-', 'bg-').split(' ')[0]}10`}>
-        <Icon size={14} className={CATEGORY_COLORS[event.category].split(' ')[1]} />
+      <div className={`shrink-0 w-7 h-7 rounded-md flex items-center justify-center ${(CATEGORY_COLORS[event.category as EventCategory] ?? '').replace('border-', 'bg-').split(' ')[0]}10`}>
+        <Icon size={14} className={(CATEGORY_COLORS[event.category as EventCategory] ?? '').split(' ')[1]} />
       </div>
 
       {/* Description */}
@@ -269,8 +270,8 @@ function EventRow({ event }: { event: ApiActivityEvent }) {
       </div>
 
       {/* Category */}
-      <Badge variant="outline" className={`shrink-0 text-[10px] ${CATEGORY_COLORS[event.category]}`}>
-        {CATEGORY_LABELS[event.category]}
+      <Badge variant="outline" className={`shrink-0 text-[10px] ${CATEGORY_COLORS[event.category as EventCategory] ?? ''}`}>
+        {CATEGORY_LABELS[event.category] ?? event.category}
       </Badge>
 
       {/* Timestamp */}
