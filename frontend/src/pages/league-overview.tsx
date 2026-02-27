@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
@@ -253,7 +253,7 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
 
-  const ts = new Date(event.timestamp);
+  const ts = new Date(event.timestamp ?? Date.now());
   const now = new Date();
   const diffMs = now.getTime() - ts.getTime();
   const diffDays = Math.floor(diffMs / 86400000);

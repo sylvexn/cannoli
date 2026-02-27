@@ -27,7 +27,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
       <RosterTable team={teamA} side="a" />
 
       {/* Speed Tier Comparison */}
-      <div className="w-72 rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden">
+      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden shrink-0 w-fit min-w-[18rem]">
         <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-text-muted text-center border-b border-border-subtle bg-surface-overlay/30">
           Speed Tiers
         </div>
@@ -36,15 +36,15 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
             <div
               key={`${pokemon.name}-${pokemon.side}`}
               className={cn(
-                'flex items-center py-0.5 px-1.5',
+                'grid grid-cols-[1fr_auto_1fr] items-center py-0.5 px-1.5',
                 pokemon.side === 'a' ? 'bg-[#3b82f6]/10' : 'bg-[#ef4444]/10',
               )}
             >
-              <div className="flex-1 min-w-0">
+              <div>
                 {pokemon.side === 'a' && (
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <span className="text-[11px] font-mono text-text-primary truncate">{pokemon.name}</span>
-                    <PokemonSprite name={pokemon.name} size="xs" />
+                  <div className="flex items-center gap-1 justify-end whitespace-nowrap">
+                    <span className="text-[11px] font-mono text-text-primary">{pokemon.name}</span>
+                    <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
                   </div>
                 )}
               </div>
@@ -54,11 +54,11 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               )}>
                 {pokemon.stats.spe}
               </span>
-              <div className="flex-1 min-w-0">
+              <div>
                 {pokemon.side === 'b' && (
-                  <div className="flex items-center gap-1.5">
-                    <PokemonSprite name={pokemon.name} size="xs" />
-                    <span className="text-[11px] font-mono text-text-primary truncate">{pokemon.name}</span>
+                  <div className="flex items-center gap-1 whitespace-nowrap">
+                    <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
+                    <span className="text-[11px] font-mono text-text-primary">{pokemon.name}</span>
                   </div>
                 )}
               </div>

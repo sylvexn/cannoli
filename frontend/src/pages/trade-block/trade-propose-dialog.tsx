@@ -12,10 +12,9 @@ import { TeamLogo } from '@/components/team-logo';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { ArrowRightLeft, Check, Send, X } from 'lucide-react';
+import { ArrowRightLeft, Check, Send } from 'lucide-react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
-import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import type { Player } from '@/lib/types';
@@ -30,16 +29,7 @@ interface TradeProposeDialogProps {
 export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProposeDialogProps) {
   const league = useLeague();
   const { players } = useLeagueData();
-  const { user } = useAuth();
-
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
-
-  // Find user's team in this league
-  const userTeam = useMemo(() => {
-    if (!user) return null;
-    // Dev can pick any team; regular users matched by userId
-    return players.find(p => p.id === recipientTeamId ? false : true) ?? null;
-  }, [players, user, recipientTeamId]);
 
   const [proposerTeamId, setProposerTeamId] = useState<string | null>(null);
   const [recipientId, setRecipientId] = useState<string | null>(recipientTeamId ?? null);
@@ -66,8 +56,8 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
     }
   }, [open, recipientTeamId]);
 
-  const proposerTeam = proposerTeamId ? playerMap.get(proposerTeamId) : null;
-  const recipientTeam = recipientId ? playerMap.get(recipientId) : null;
+  const proposerTeam = (proposerTeamId ? playerMap.get(proposerTeamId) : null) ?? null;
+  const recipientTeam = (recipientId ? playerMap.get(recipientId) : null) ?? null;
 
   // Available teams (exclude the other selected team)
   const availableProposers = useMemo(

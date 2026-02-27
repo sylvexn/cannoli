@@ -15,22 +15,27 @@ import { RecordDisplay } from '@/components/record-display';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TYPE_COLORS } from '@/lib/constants';
-import { PointCapBar } from '@/components/point-cap-bar';
+import { PointCapBarLarge } from '@/components/point-cap-bar';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
   X, ArrowRightLeft,
-  Shield, Calendar, Zap,
+  Shield, Calendar, Zap, Save,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
 
+import { useAuth } from '@/lib/auth-context';
 import { TYPE_ABBR, computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RankBadge } from './rank-badge';
 import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
 import { SwapPicker } from './theorycraft-mode';
+import { TeraCaptainStrip } from './tera-captain-strip';
+import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
 export function TeamProfilePage() {
@@ -38,11 +43,7 @@ export function TeamProfilePage() {
   const { players, standings, loading } = useLeagueData();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-text-muted text-sm">Loading...</p>
-      </div>
-    );
+    return <TeamProfileSkeleton />;
   }
 
   const player = players.find(p => p.id === id);
@@ -65,6 +66,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const leagueUrl = useLeagueUrl();
   const { players, getTeamMatches } = useLeagueData();
   const league = useLeague();
+  const { isAdmin } = useAuth();
   const season = league.season;
   const config = DEFAULT_LEAGUE_CONFIG;
 
@@ -78,7 +80,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const [teraEdits, setTeraEdits] = useState<TeraEdit[]>([]);
   const [swappingIndex, setSwappingIndex] = useState<number | null>(null);
   const [teraEditingIndex, setTeraEditingIndex] = useState<number | null>(null);
-  const [draggingTeraFrom, setDraggingTeraFrom] = useState<number | null>(null);
   const [draggingPosFrom, setDraggingPosFrom] = useState<number | null>(null);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const spriteRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -166,7 +167,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     setRosterOrder(player.roster.map((_, i) => i));
     setSwappingIndex(null);
     setTeraEditingIndex(null);
-    setDraggingTeraFrom(null);
     setDraggingPosFrom(null);
   }
 
@@ -178,31 +178,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       order[toDisplayIdx] = temp;
       return order;
     });
-  }
-
-  function handleTeraDrop(targetIndex: number) {
-    if (draggingTeraFrom === null || draggingTeraFrom === targetIndex) return;
-    const targetMon = activeRoster[targetIndex];
-    if (!canBeTeraCaptain(targetMon.name)) return;
-
-    // Check point cap: removing captain from source, adding to target
-    const sourceMon = activeRoster[draggingTeraFrom];
-    const oldSourceCost = getEffectiveCost(sourceMon.name, true);
-    const newSourceCost = getEffectiveCost(sourceMon.name, false);
-    const oldTargetCost = getEffectiveCost(targetMon.name, false);
-    const newTargetCost = getEffectiveCost(targetMon.name, true);
-    const newTotal = pointsUsed - oldSourceCost + newSourceCost - oldTargetCost + newTargetCost;
-    if (newTotal > config.pointCap) return;
-
-    setTeraEdits(prev => {
-      const next = prev.filter(e => e.index !== draggingTeraFrom && e.index !== targetIndex);
-      // Remove captain from source
-      next.push({ index: draggingTeraFrom!, isTeraCaptain: false, teraTypes: [] });
-      // Add captain to target (start with no tera types — user can edit them)
-      next.push({ index: targetIndex, isTeraCaptain: true, teraTypes: targetMon.teraTypes ?? [] });
-      return next;
-    });
-    setDraggingTeraFrom(null);
   }
 
   function handleTeraTypeToggle(index: number, type: PokemonType) {
@@ -243,30 +218,17 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     }
   }
 
-  // Pointer-based drag system (tera badge + position reorder)
-  const isDragging = draggingTeraFrom !== null || draggingPosFrom !== null;
-  const dragSource = draggingTeraFrom ?? draggingPosFrom;
-  const dragType = draggingTeraFrom !== null ? 'tera' : draggingPosFrom !== null ? 'position' : null;
+  // Pointer-based drag system (position reorder)
+  const isDragging = draggingPosFrom !== null;
+  const dragSource = draggingPosFrom;
 
   // Use refs for values needed in event handlers to avoid stale closures
   const dragOverRef = useRef<number | null>(null);
-  const dragTypeRef = useRef<typeof dragType>(null);
   const dragSourceRef = useRef<typeof dragSource>(null);
-  const activeRosterRef = useRef(activeRoster);
   const draggingPosFromRef = useRef(draggingPosFrom);
   dragOverRef.current = dragOverIndex;
-  dragTypeRef.current = dragType;
   dragSourceRef.current = dragSource;
-  activeRosterRef.current = activeRoster;
   draggingPosFromRef.current = draggingPosFrom;
-
-  const handleTeraPointerDown = useCallback((index: number, e: React.PointerEvent) => {
-    if (!theorycraftMode) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setDraggingTeraFrom(index);
-    setDragPos({ x: e.clientX, y: e.clientY });
-  }, [theorycraftMode]);
 
   const handlePositionPointerDown = useCallback((index: number, e: React.PointerEvent) => {
     if (!theorycraftMode) return;
@@ -295,21 +257,10 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     function onUp() {
       const overIdx = dragOverRef.current;
       const src = dragSourceRef.current;
-      const type = dragTypeRef.current;
-      const roster = activeRosterRef.current;
 
-      if (overIdx !== null && overIdx !== src) {
-        if (type === 'tera') {
-          const targetMon = roster[overIdx];
-          if (targetMon && canBeTeraCaptain(targetMon.name)) {
-            handleTeraDrop(overIdx);
-          }
-          // Invalid target: do nothing, badge snaps back
-        } else if (type === 'position' && draggingPosFromRef.current !== null) {
-          handlePositionSwap(draggingPosFromRef.current, overIdx);
-        }
+      if (overIdx !== null && overIdx !== src && draggingPosFromRef.current !== null) {
+        handlePositionSwap(draggingPosFromRef.current, overIdx);
       }
-      setDraggingTeraFrom(null);
       setDraggingPosFrom(null);
       setDragPos(null);
       setDragOverIndex(null);
@@ -400,10 +351,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             const isSwapped = swaps.some(s => s.index === (rosterOrder[i] ?? i));
             const isSwapping = swappingIndex === i;
             const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
-            const isTeraOver = dragOverIndex === i && draggingTeraFrom !== null && draggingTeraFrom !== i;
             const isPosOver = dragOverIndex === i && draggingPosFrom !== null && draggingPosFrom !== i;
-            const teraCanDrop = isTeraOver && canBeTeraCaptain(mon.name);
-            const teraBlocked = isTeraOver && !canBeTeraCaptain(mon.name);
             const beingDragged = draggingPosFrom === i;
             return (
               <div
@@ -423,31 +371,22 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                         theorycraftMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
                       } ${isSwapped ? 'ring-1 ring-pink/40' : ''
                       } ${isSwapping ? 'ring-2 ring-neon/60 bg-neon/5' : ''
-                      } ${teraCanDrop ? 'ring-2 ring-pink/60 bg-pink/8 scale-105' : ''
-                      } ${teraBlocked ? 'ring-2 ring-loss/60 bg-loss/10' : ''
                       } ${isPosOver ? 'ring-2 ring-neon/50 bg-neon/8 scale-105' : ''
                       } ${beingDragged ? 'opacity-30 scale-95' : 'hover:bg-surface-overlay/60'
                       }`}
                     >
                       <PokemonSprite name={mon.name} size="xl" className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
-                      {/* Tera blocked overlay */}
-                      {teraBlocked && (
-                        <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-loss/10">
-                          <X size={28} className="text-loss/60" />
-                        </div>
-                      )}
                       {mon.isTeraCaptain && (
                         <svg
                           width="27"
                           height="27"
                           viewBox="0 0 18 18"
-                          onPointerDown={(e) => handleTeraPointerDown(i, e)}
                           onClick={(e) => {
                             if (!theorycraftMode) return;
                             e.stopPropagation();
                             setTeraEditingIndex(teraEditingIndex === i ? null : i);
                           }}
-                          className={`absolute top-0.5 right-0.5 select-none touch-none ${theorycraftMode ? 'cursor-grab active:cursor-grabbing hover:scale-110 transition-transform' : ''} ${draggingTeraFrom === i ? 'opacity-40' : ''}`}
+                          className={`absolute top-0.5 right-0.5 select-none ${theorycraftMode ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
                           style={{ filter: 'drop-shadow(0 0 5px rgba(232, 121, 249, 0.5))' }}
                         >
                           <circle cx="9" cy="9" r="8.5" fill="#e879f9" />
@@ -455,20 +394,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                           <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" opacity="0.9" />
                           <path d="M4.5 7.5 L13.5 7.5" stroke="white" strokeWidth="0.8" opacity="0.5" />
                           <path d="M9 3 L9 7.5" stroke="white" strokeWidth="0.6" opacity="0.35" />
-                        </svg>
-                      )}
-                      {/* Empty captain slot indicator in theorycraft mode */}
-                      {theorycraftMode && !mon.isTeraCaptain && canBeTeraCaptain(mon.name) && captainCount < config.teraCaptainSlots && (
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 18 18"
-                          onClick={(e) => { e.stopPropagation(); handleToggleCaptain(i); }}
-                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-all cursor-pointer select-none"
-                          style={{ filter: 'drop-shadow(0 0 2px rgba(232, 121, 249, 0.2))' }}
-                        >
-                          <circle cx="9" cy="9" r="8" fill="none" stroke="#e879f9" strokeWidth="1" strokeDasharray="3 2" opacity="0.5" />
-                          <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="#e879f9" strokeWidth="0.8" strokeLinejoin="round" opacity="0.4" />
                         </svg>
                       )}
                       <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
@@ -493,45 +418,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                   </TooltipContent>
                 </Tooltip>
 
-                {/* Tera type editor popover */}
-                {teraEditingIndex === i && mon.isTeraCaptain && theorycraftMode && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-40 w-52 rounded-lg bg-surface-raised border border-pink/20 shadow-glow-pink-sm p-2.5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-bold uppercase text-pink">Tera Types</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleToggleCaptain(i); }}
-                        className="text-[9px] text-loss/60 hover:text-loss transition-colors"
-                      >
-                        Remove captain
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {POKEMON_TYPES.map(type => {
-                        const isSelected = (mon.teraTypes ?? []).includes(type);
-                        return (
-                          <button
-                            key={type}
-                            onClick={(e) => { e.stopPropagation(); handleTeraTypeToggle(i, type); }}
-                            className={`text-[8px] font-bold uppercase rounded px-1.5 py-0.5 transition-all ${
-                              isSelected
-                                ? 'text-white ring-1 ring-white/30 scale-105'
-                                : 'text-white/50 opacity-40 hover:opacity-70'
-                            }`}
-                            style={{ backgroundColor: TYPE_COLORS[type] }}
-                          >
-                            {TYPE_ABBR[type]}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setTeraEditingIndex(null); }}
-                      className="mt-2 w-full text-[10px] text-text-muted hover:text-text-primary text-center py-0.5"
-                    >
-                      Done
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -550,12 +436,27 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           />
         )}
 
-        {/* Point cap bar — centered, wide */}
-        <div className="px-6 py-2.5 border-t border-border-subtle">
-          <div className="max-w-lg mx-auto flex items-center gap-3">
-            <div className="flex-1">
-              <PointCapBar used={pointsUsed} total={config.pointCap} />
-            </div>
+        {/* ─── TERA CAPTAINS STRIP ─── */}
+        <TeraCaptainStrip
+          activeRoster={activeRoster}
+          captainCount={captainCount}
+          config={config}
+          theorycraftMode={theorycraftMode}
+          canEdit={theorycraftMode || isAdmin}
+          teraEdits={teraEdits}
+          teraEditingIndex={teraEditingIndex}
+          pointsUsed={pointsUsed}
+          playerId={player.id}
+          onTeraEditingIndexChange={setTeraEditingIndex}
+          onToggleCaptain={handleToggleCaptain}
+          onTeraTypeToggle={handleTeraTypeToggle}
+          onTeraEditsClear={() => setTeraEdits([])}
+        />
+
+        {/* Point cap bar */}
+        <div className="px-6 py-3 border-t border-border-subtle">
+          <div className="max-w-xl mx-auto flex items-center gap-3">
+            <PointCapBarLarge used={pointsUsed} total={config.pointCap} className="flex-1" />
             {pointsDelta !== 0 && (
               <span className={`text-[10px] font-mono font-semibold shrink-0 ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
                 {pointsDelta > 0 ? '+' : ''}{pointsDelta}
@@ -671,22 +572,14 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       </div>
 
       {/* Floating drag cursor */}
-      {isDragging && dragPos && createPortal(
+      {isDragging && dragPos && draggingPosFrom !== null && createPortal(
         <div
           className="fixed z-[9999] pointer-events-none"
           style={{ left: dragPos.x - 16, top: dragPos.y - 16 }}
         >
-          {dragType === 'tera' ? (
-            <svg width="32" height="32" viewBox="0 0 18 18" style={{ filter: 'drop-shadow(0 0 8px rgba(232, 121, 249, 0.6))' }}>
-              <circle cx="9" cy="9" r="8.5" fill="#e879f9" />
-              <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" opacity="0.9" />
-              <path d="M4.5 7.5 L13.5 7.5" stroke="white" strokeWidth="0.8" opacity="0.5" />
-            </svg>
-          ) : dragType === 'position' && draggingPosFrom !== null ? (
-            <div className="w-10 h-10 rounded-lg bg-surface-overlay/90 border border-neon/30 flex items-center justify-center shadow-glow-sm">
-              <PokemonSprite name={activeRoster[draggingPosFrom].name} size="sm" />
-            </div>
-          ) : null}
+          <div className="w-10 h-10 rounded-lg bg-surface-overlay/90 border border-neon/30 flex items-center justify-center shadow-glow-sm">
+            <PokemonSprite name={activeRoster[draggingPosFrom].name} size="sm" />
+          </div>
         </div>,
         document.body,
       )}

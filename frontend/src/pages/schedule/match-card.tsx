@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { ChevronDown, ExternalLink, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 
 
 interface MatchCardProps {
@@ -225,6 +226,7 @@ function PokemonKDColumn({
   maxKills: number;
   alignRight?: boolean;
 }) {
+  const { openSideCard } = usePokemonSideCard();
   return (
     <div className={cn('divide-y divide-border-subtle/20', alignRight && 'border-l border-border-subtle/30')}>
       {entries.map(entry => {
@@ -233,9 +235,10 @@ function PokemonKDColumn({
           <div
             key={entry.name}
             className={cn(
-              'relative flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-surface-overlay/30',
+              'relative flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-surface-overlay/30 cursor-pointer',
               alignRight && 'flex-row-reverse',
             )}
+            onClick={() => openSideCard(entry.name)}
           >
             {/* Kill contribution bar (subtle background) */}
             {entry.kills > 0 && (
@@ -254,7 +257,7 @@ function PokemonKDColumn({
             <PokemonSprite name={entry.name} size="xs" className="shrink-0 relative" />
 
             <span className={cn(
-              'text-xs truncate relative flex-1',
+              'text-xs truncate relative flex-1 hover:text-neon transition-colors',
               won ? 'text-text-primary' : 'text-text-secondary',
               alignRight && 'text-right',
             )}>

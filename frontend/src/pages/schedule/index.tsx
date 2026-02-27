@@ -6,6 +6,8 @@ import { WeekSelector } from './week-selector';
 import { MatchCard } from './match-card';
 import { PlayoffBracket } from './playoff-bracket';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
+import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
 
 type ScheduleView = 'regular' | 'playoffs';
@@ -52,7 +54,20 @@ export function SchedulePage() {
   }, [weekMatches, playerMap]);
 
   if (loading || !season) {
-    return <div className="text-text-muted">Loading schedule...</div>;
+    return (
+      <div className="space-y-6">
+        <div>
+          <Skeleton className="h-7 w-52 bg-surface-overlay/50 mb-2" />
+          <Skeleton className="h-4 w-40 bg-surface-overlay/50" />
+        </div>
+        <Skeleton className="h-9 w-full bg-surface-overlay/50 rounded-lg" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <MatchCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const isCompleted = selectedWeek <= season.currentWeek;

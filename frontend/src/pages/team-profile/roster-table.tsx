@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
 import { TYPE_ABBR } from './utils';
 import type { SwapEntry } from './utils';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 
 type SortKey = 'tier' | 'kills' | 'deaths' | 'kpg' | 'spe';
 
@@ -40,6 +41,7 @@ export function RosterTable({
   onSort,
   onResetAll,
 }: RosterTableProps) {
+  const { openSideCard } = usePokemonSideCard();
   const pointsUsed = rosterPointsUsed(activeRoster);
   const captainCount = teraCaptainCount(activeRoster);
   const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
@@ -121,7 +123,7 @@ export function RosterTable({
                     <td className="px-3 py-2.5">
                       <Tooltip>
                         <TooltipTrigger>
-                          <div className="flex items-center gap-2 cursor-default">
+                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => openSideCard(mon.name)}>
                             <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
                             <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
                               {mon.name}
