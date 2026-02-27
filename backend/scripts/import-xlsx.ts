@@ -15,7 +15,7 @@ import { resolve } from 'path';
 import { hashSync } from 'bcryptjs';
 import * as schema from '../src/db/schema';
 
-export const IMPORTS_DIR = resolve(import.meta.dir, '../../plan/imports');
+export const IMPORTS_DIR = resolve(import.meta.dir, '../imports');
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 
 const DEFAULT_USER_PASSWORD = 'password';
