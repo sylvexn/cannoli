@@ -9,7 +9,7 @@ import XLSX from 'xlsx';
 import { Database } from 'bun:sqlite';
 import { resolve } from 'path';
 
-const IMPORTS_DIR = resolve(import.meta.dir, '../../plan/imports');
+const IMPORTS_DIR = resolve(import.meta.dir, '../imports');
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 
 interface LeagueConfig {

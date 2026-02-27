@@ -4,7 +4,12 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import { execSync } from 'child_process'
 
-const commitHash = execSync('git rev-parse --short HEAD').toString().trim()
+let commitHash = 'unknown'
+try {
+  commitHash = execSync('git rev-parse --short HEAD').toString().trim()
+} catch {
+  commitHash = process.env.COMMIT_HASH || 'unknown'
+}
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
