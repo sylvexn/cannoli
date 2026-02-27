@@ -90,12 +90,14 @@ function toLeague(a: ApiLeague): League {
     phase: a.season.phase,
     currentWeek: a.season.currentWeek,
     totalWeeks: a.season.totalWeeks,
+    tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
   } : {
     id: 'unknown',
     seasonNumber: 0,
     phase: 'offseason',
     currentWeek: 0,
     totalWeeks: 0,
+    tradeDeadlineWeek: 7,
   };
 
   return {

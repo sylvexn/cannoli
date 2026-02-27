@@ -11,7 +11,7 @@ import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
-import { Swords, Sparkles, X } from 'lucide-react';
+import { Swords, Sparkles, X, ExternalLink } from 'lucide-react';
 import { useLeagueOptional } from '@/lib/league-context';
 import { getTierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
@@ -213,6 +213,18 @@ export function PokemonSideCard({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Full Profile link */}
+            <div className="px-6 py-3 border-t border-border-subtle">
+              <Link
+                to={`/pokemon/${encodeURIComponent(name)}`}
+                onClick={onClose}
+                className="flex items-center justify-center gap-2 w-full py-2 rounded-md text-sm font-medium text-neon hover:bg-neon/10 border border-neon/30 transition-colors"
+              >
+                Full Profile
+                <ExternalLink size={14} />
+              </Link>
             </div>
           </>
         )}
