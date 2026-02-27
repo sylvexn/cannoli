@@ -151,6 +151,8 @@ function DraftFocusedPanel({
   onToggleAutoDraft,
   onDraftFromQueue,
   isUserTurn,
+  connectedTeamIds,
+  presence,
 }: {
   teamOrder: Player[];
   teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
@@ -439,6 +441,8 @@ function SeasonTeamList({
   onToggleCollapse,
   currentDrafterId,
   isLiveMode,
+  connectedTeamIds,
+  presence: _presence,
 }: {
   teamOrder: Player[];
   teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
