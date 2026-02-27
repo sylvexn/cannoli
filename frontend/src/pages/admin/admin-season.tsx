@@ -8,7 +8,7 @@ import type { ApiDraftState } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   ChevronRight, Play, Pause, SkipForward, AlertTriangle,
-  Sparkles, Plus, Pencil, Trash2, Zap, RotateCcw, Timer,
+  Sparkles, Plus, Pencil, Trash2, Zap,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -86,11 +86,22 @@ export function AdminSeason() {
 
   async function executeAdvance() {
     if (!advanceTarget) return;
-    const { leagueId, to } = advanceTarget;
+    const { leagueId, from, to } = advanceTarget;
     try {
       await api.advancePhase(leagueId, to);
       const name = leagueList.find(l => l.id === leagueId)?.name;
       toast.success(`${name} advanced to ${phaseConfig[to].label}`);
+
+      // Auto-generate schedule when transitioning from draft to regular
+      if (from === 'draft' && to === 'regular') {
+        try {
+          const result = await api.generateSchedule(leagueId);
+          toast.success(`Generated ${result.matchCount} matches for ${name}`);
+        } catch (schedErr: any) {
+          toast.error(`Phase advanced but schedule generation failed: ${schedErr.message}`);
+        }
+      }
+
       refreshLeagues?.();
     } catch (err: any) {
       toast.error(err.message);
@@ -462,7 +473,10 @@ export function AdminSeason() {
                   Advance <strong>{leagueList.find(l => l.id === advanceTarget.leagueId)?.name}</strong> from{' '}
                   <strong>{phaseConfig[advanceTarget.from].label}</strong> to{' '}
                   <strong>{phaseConfig[advanceTarget.to].label}</strong>?
-                  This action cannot be undone.
+                  {advanceTarget.from === 'draft' && advanceTarget.to === 'regular' && (
+                    <> A round-robin schedule will be generated automatically.</>
+                  )}
+                  {' '}This action cannot be undone.
                 </>
               )}
             </DialogDescription>

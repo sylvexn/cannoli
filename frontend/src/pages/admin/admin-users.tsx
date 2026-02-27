@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -15,7 +14,7 @@ import { api } from '@/lib/api';
 import type { ApiAuthUser } from '@/lib/api';
 import {
   UserPlus, MoreHorizontal, KeyRound, ShieldCheck, ShieldOff,
-  UserX, UserCheck, Copy, Eye, EyeOff, Search, ArrowUpDown,
+  UserX, UserCheck, Copy, Eye, EyeOff, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -115,9 +114,6 @@ export function AdminUsers() {
     setShowPassword(false);
   }
 
-  const activeCount = users.filter(u => u.active).length;
-  const adminCount = users.filter(u => (u.role === 'admin' || u.role === 'dev') && u.active).length;
-
   if (loading) {
     return <div className="text-sm text-text-muted py-8 text-center">Loading users...</div>;
   }
@@ -170,7 +166,7 @@ export function AdminUsers() {
 
       {/* Compact user list */}
       <div className="divide-y divide-border-subtle/30">
-        {filtered.map(user => (
+        {filtered.map((user: ApiAuthUser) => (
           <div
             key={user.id}
             className={cn(

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import type { ApiFeedbackIssue } from '@/lib/api';
 import {
-  ExternalLink, MessageSquare, CircleDot, CircleCheck, ChevronDown, ChevronUp, RefreshCw,
+  ExternalLink, CircleDot, CircleCheck, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
 
 type FilterState = 'open' | 'closed' | 'all';

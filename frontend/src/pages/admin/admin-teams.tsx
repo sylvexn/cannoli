@@ -139,6 +139,13 @@ function TeamLogoCard({ team, logo, onUpload }: {
         </div>
       </div>
 
+      {/* Photo upload */}
+      <label className="cursor-pointer text-[10px] text-text-muted hover:text-neon transition-colors flex items-center gap-1">
+        <Upload size={12} />
+        <span>Photo</span>
+        <input type="file" accept="image/*" className="hidden" onChange={() => toast.info('Team photo upload coming soon')} />
+      </label>
+
       {/* Status */}
       {logo ? (
         <ImageIcon size={14} className="text-win shrink-0" />

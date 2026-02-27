@@ -7,7 +7,7 @@ import {
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
-  Collapsible, CollapsibleContent, CollapsibleTrigger,
+  Collapsible, CollapsibleContent,
 } from '@/components/ui/collapsible';
 import {
   DEFAULT_MOVE_CATEGORIES,

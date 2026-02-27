@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
-import type { ApiTrade } from '@/lib/api';
+
 import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
