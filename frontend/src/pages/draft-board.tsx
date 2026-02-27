@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
-import { LayoutGrid, Table, Zap, History, Radio, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
@@ -17,6 +17,7 @@ import { DraftPickLog } from './draft-board/draft-pick-log';
 import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
 import { TIER_LIST } from '@/data/tier-list';
 import { getTierEntry } from '@/data/tier-list';
+import { playCry } from '@/lib/pokemon';
 
 /** Simple segmented toggle button group */
 function SegmentedToggle<T extends string>({
@@ -58,6 +59,15 @@ export function DraftBoardPage() {
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
     draftTimerEnabled, draftDemoVisible,
   } = useDraftState();
+
+  // Mobile viewport detection
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ name: string; rect: DOMRect } | null>(null);
@@ -113,6 +123,7 @@ export function DraftBoardPage() {
 
   const handleQueueRemove = useCallback((name: string) => {
     dispatch({ type: 'QUEUE_REMOVE', name });
+    toast.info(`${name} removed from queue`);
   }, [dispatch]);
 
   const handleDraftFromQueue = useCallback(() => {
@@ -122,6 +133,19 @@ export function DraftBoardPage() {
       handleUserPick(name);
     }
   }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
+
+  // Play Pokemon cry when a new pick is made (demo or live)
+  const prevPickCountRef = useRef(state.allPicks.length);
+  useEffect(() => {
+    const prev = prevPickCountRef.current;
+    prevPickCountRef.current = state.allPicks.length;
+    if (isLiveMode && state.allPicks.length > prev && state.allPicks.length > 0) {
+      const lastPick = state.allPicks[state.allPicks.length - 1];
+      if (lastPick.pokemonName && lastPick.playerId === state.userTeamId) {
+        playCry(lastPick.pokemonName);
+      }
+    }
+  }, [state.allPicks.length, isLiveMode, state.userTeamId]);
 
   // Toast when a queued Pokemon gets drafted by someone else
   const prevQueueRef = useRef<string[]>([]);
@@ -158,6 +182,19 @@ export function DraftBoardPage() {
         return undefined;
       })()
     : undefined;
+
+  // Mobile warning for active draft participants
+  if (isMobile && isLiveMode && state.userTeamId && !isDemoComplete) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
+        <Monitor size={40} className="text-text-muted" />
+        <h2 className="text-lg font-mono font-bold text-text-primary uppercase">Desktop Required</h2>
+        <p className="text-sm text-text-muted max-w-sm">
+          Draft participation requires a desktop browser. You can spectate from mobile.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">

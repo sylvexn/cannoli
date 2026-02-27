@@ -1,4 +1,5 @@
 import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { TIER_LIST, BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import { useLeagueData } from '@/lib/league-data-context';
@@ -337,7 +338,7 @@ export function useDraftState() {
   }, [seasonPicks, trades]);
 
   // ─── Demo mode: AI auto-pick effect ──────────────────────────────
-  const demoTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const demoTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   // Compute team points from current picks (for demo validation)
   const demoTeamPoints = useMemo(() => {
@@ -391,6 +392,15 @@ export function useDraftState() {
 
   const isUserTurn = (state.mode === 'demo' || state.mode === 'live') && currentSlot?.teamId === state.userTeamId;
   const isDemoComplete = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted && state.currentPickIndex >= state.snakeOrder.length;
+
+  // Toast when it becomes the user's turn
+  const prevIsUserTurn = useRef(false);
+  useEffect(() => {
+    if (isUserTurn && !prevIsUserTurn.current && state.demoStarted && !isDemoComplete) {
+      toast.warning("It's your turn to pick!", { duration: 8000 });
+    }
+    prevIsUserTurn.current = isUserTurn;
+  }, [isUserTurn, state.demoStarted, isDemoComplete]);
 
   useEffect(() => {
     if (state.mode !== 'demo' || !state.demoStarted || isDemoComplete) return;
@@ -477,6 +487,7 @@ export function useDraftState() {
     }, []),
     onError: useCallback((error: string) => {
       console.error('[Draft WS]', error);
+      toast.error('Draft connection lost');
     }, []),
   });
 

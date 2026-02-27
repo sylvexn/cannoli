@@ -40,7 +40,7 @@ export function DraftControlBar({
   isDemoComplete,
   draftOrder,
   presence,
-  wsConnected,
+  wsConnected: _wsConnected,
   timerEnabled = true,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();

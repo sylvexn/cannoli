@@ -35,7 +35,7 @@ export function useDraftWebSocket({
   onError,
 }: UseDraftWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [connected, setConnected] = useState(false);
   const pendingIdentifyRef = useRef<{ teamId: string | null; username: string; role: string } | null>(null);
 
