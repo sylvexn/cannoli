@@ -80,9 +80,21 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-xs text-text-muted">
-          Season 10
-        </p>
+        <div className="flex items-center justify-center gap-2">
+          <span className="inline-flex items-center rounded border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
+            S10
+          </span>
+          <span className="w-px h-3 bg-border-default" />
+          <a
+            href="https://github.com/sylvexn/cannoli"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group/alpha inline-flex items-center rounded border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-pointer"
+          >
+            <span className="group-hover/alpha:hidden">alpha</span>
+            <span className="hidden group-hover/alpha:inline">{__COMMIT_HASH__}</span>
+          </a>
+        </div>
       </div>
     </div>
   );
