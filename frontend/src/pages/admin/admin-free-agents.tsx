@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
-import { TeamLogo } from '@/components/team-logo';
+
 import { Button } from '@/components/ui/button';
 import { Search, ArrowDown, UserPlus } from 'lucide-react';
 import type { PokemonType } from '@/lib/pokemon';

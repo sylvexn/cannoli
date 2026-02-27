@@ -135,7 +135,7 @@ export function AppShell() {
         {liveMatches.length > 0 && (
           <div className="px-3 pt-2 pb-1">
             <Tooltip>
-              <TooltipTrigger asChild>
+              <TooltipTrigger>
                 <button
                   onClick={() => {
                     if (liveMatches.length === 1) {

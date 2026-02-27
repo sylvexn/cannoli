@@ -8,20 +8,18 @@ import { getEffectiveCost, canBeTeraCaptain } from '@/data/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
-import { POKEMON_TYPES } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
-import { TYPE_COLORS } from '@/lib/constants';
 import { PointCapBarLarge } from '@/components/point-cap-bar';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
-  X, ArrowRightLeft,
+  X, ArrowRightLeft, Plus, Minus,
   Shield, Calendar, Zap, Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,7 +31,7 @@ import type { SwapEntry, TeraEdit } from './utils';
 import { RankBadge } from './rank-badge';
 import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
-import { SwapPicker } from './theorycraft-mode';
+import { SwapPicker, AddPicker } from './theorycraft-mode';
 import { TeraCaptainStrip } from './tera-captain-strip';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
@@ -78,6 +76,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const [theorycraftMode, setTheorycraftMode] = useState(false);
   const [swaps, setSwaps] = useState<SwapEntry[]>([]);
   const [teraEdits, setTeraEdits] = useState<TeraEdit[]>([]);
+  const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());
+  const [additions, setAdditions] = useState<RosterPokemon[]>([]);
+  const [addingMode, setAddingMode] = useState(false);
   const [swappingIndex, setSwappingIndex] = useState<number | null>(null);
   const [teraEditingIndex, setTeraEditingIndex] = useState<number | null>(null);
   const [draggingPosFrom, setDraggingPosFrom] = useState<number | null>(null);
@@ -95,17 +96,20 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     setRosterOrder(player.roster.map((_, i) => i));
   }, [player.roster]);
 
-  // Apply swaps + tera edits + reorder
+  // Apply swaps + tera edits + removals + additions + reorder
   const activeRoster = useMemo(() => {
     const base = [...player.roster.map(mon => ({ ...mon }))];
     for (const swap of swaps) base[swap.index] = { ...swap.replacement };
     for (const edit of teraEdits) {
       base[edit.index] = { ...base[edit.index], isTeraCaptain: edit.isTeraCaptain, teraTypes: edit.teraTypes.length > 0 ? edit.teraTypes : undefined };
     }
-    // Apply position reorder
-    const order = rosterOrder.length === base.length ? rosterOrder : base.map((_, i) => i);
-    return order.map(idx => base[idx]);
-  }, [player.roster, swaps, teraEdits, rosterOrder]);
+    // Filter out removed, then append additions
+    const filtered = base.filter((_, i) => !removedIndices.has(i));
+    const combined = [...filtered, ...additions];
+    // Apply position reorder (only if length matches)
+    const order = rosterOrder.length === combined.length ? rosterOrder : combined.map((_, i) => i);
+    return order.map(idx => combined[idx]);
+  }, [player.roster, swaps, teraEdits, removedIndices, additions, rosterOrder]);
 
   const sortedRoster = useMemo(() => {
     const indexed = activeRoster.map((mon, i) => ({ mon, originalIndex: i }));
@@ -161,9 +165,45 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     setSwaps(prev => prev.filter(s => s.index !== index));
   }
 
+  function handleRemoveMon(displayIndex: number) {
+    // Map display index back: first N are from base roster (minus removed), rest are additions
+    const baseCount = player.roster.length - removedIndices.size;
+    if (displayIndex < baseCount) {
+      // Find which original index this display slot maps to
+      let count = 0;
+      for (let i = 0; i < player.roster.length; i++) {
+        if (removedIndices.has(i)) continue;
+        if (count === displayIndex) {
+          setRemovedIndices(prev => new Set([...prev, i]));
+          // Clean up swaps/tera edits for this index
+          setSwaps(prev => prev.filter(s => s.index !== i));
+          setTeraEdits(prev => prev.filter(e => e.index !== i));
+          break;
+        }
+        count++;
+      }
+    } else {
+      // It's an addition — remove from additions array
+      const addIdx = displayIndex - baseCount;
+      setAdditions(prev => prev.filter((_, i) => i !== addIdx));
+    }
+    // Reset roster order since length changed
+    setRosterOrder([]);
+  }
+
+  function handleAddMon(mon: RosterPokemon) {
+    setAdditions(prev => [...prev, mon]);
+    setAddingMode(false);
+    // Reset roster order since length changed
+    setRosterOrder([]);
+  }
+
   function handleResetAll() {
     setSwaps([]);
     setTeraEdits([]);
+    setRemovedIndices(new Set());
+    setAdditions([]);
+    setAddingMode(false);
     setRosterOrder(player.roster.map((_, i) => i));
     setSwappingIndex(null);
     setTeraEditingIndex(null);
@@ -417,14 +457,42 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
-
+                {/* Remove button — outside tooltip, on the outer relative div */}
+                {theorycraftMode && activeRoster.length > 10 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRemoveMon(i); }}
+                    className="absolute -top-1 -right-1 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-loss text-white shadow-md hover:scale-110 transition-transform cursor-pointer"
+                  >
+                    <X size={11} strokeWidth={3} />
+                  </button>
+                )}
               </div>
             );
           })}
+          {/* Add Pokemon button (theorycraft, max 12) */}
+          {theorycraftMode && activeRoster.length < 12 && (
+            <Tooltip>
+              <TooltipTrigger>
+                <button
+                  onClick={() => { setAddingMode(!addingMode); setSwappingIndex(null); }}
+                  className={`relative p-1.5 rounded-lg transition-all duration-200 w-[76px] h-[76px] flex items-center justify-center border-2 border-dashed ${
+                    addingMode
+                      ? 'border-neon/60 bg-neon/5 text-neon'
+                      : 'border-border-subtle hover:border-neon/40 text-text-muted hover:text-neon hover:bg-surface-overlay/40'
+                  }`}
+                >
+                  <Plus size={24} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-surface-overlay border-border-default text-xs">
+                Add Pokemon ({activeRoster.length}/12)
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
 
         {/* Swap picker */}
-        {swappingIndex !== null && theorycraftMode && (
+        {swappingIndex !== null && theorycraftMode && !addingMode && (
           <SwapPicker
             swappingIndex={swappingIndex}
             activeRoster={activeRoster}
@@ -433,6 +501,18 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             config={config}
             onSwap={handleSwap}
             onClose={() => { setSwappingIndex(null); }}
+          />
+        )}
+
+        {/* Add picker */}
+        {addingMode && theorycraftMode && (
+          <AddPicker
+            activeRoster={activeRoster}
+            pool={pool}
+            pointsUsed={pointsUsed}
+            config={config}
+            onAdd={handleAddMon}
+            onClose={() => setAddingMode(false)}
           />
         )}
 
