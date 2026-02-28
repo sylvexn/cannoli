@@ -289,8 +289,23 @@ export const adminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+    const previousPhase = season?.phase;
+
     db.update(schema.seasons).set({ phase: phase as any }).where(eq(schema.seasons.id, league.seasonId)).run();
-    return { success: true };
+
+    // Auto-generate schedule when advancing from draft → regular
+    let scheduleGenerated = false;
+    if (previousPhase === 'draft' && phase === 'regular') {
+      const result = generateLeagueSchedule(params.leagueId);
+      scheduleGenerated = result.success;
+      // Also set week to 1
+      if (season) {
+        db.update(schema.seasons).set({ currentWeek: 1 }).where(eq(schema.seasons.id, season.id)).run();
+      }
+    }
+
+    return { success: true, scheduleGenerated };
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, user, set }) => {
@@ -312,11 +327,4 @@ export const adminRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Schedule Generation ────────────────────────────────────────────
-
-  .post('/api/leagues/:leagueId/schedule/generate', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const result = generateLeagueSchedule(params.leagueId);
-    if (!result.success) { set.status = 400; return { error: result.error }; }
-    return { success: true, matchCount: result.matchCount };
-  });
+;
