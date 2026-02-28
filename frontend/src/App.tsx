@@ -21,6 +21,7 @@ import { AdminPage } from '@/pages/admin';
 import { ArchivePage } from '@/pages/archive';
 import { ReplaysPage } from '@/pages/replays';
 import { PokemonDetailPage } from '@/pages/pokemon-detail';
+import { ShowdownPage } from '@/pages/showdown';
 
 // Lazy-loaded heavy routes
 const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
@@ -57,6 +58,7 @@ export default function App() {
               </Route>
 
               <Route path="pokemon/:name" element={<PokemonDetailPage />} />
+              <Route path="showdown" element={<ShowdownPage />} />
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="archive" element={<ArchivePage />} />
 
