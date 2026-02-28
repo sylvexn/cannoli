@@ -45,10 +45,38 @@ export interface ScrimLobby {
   status: 'waiting' | 'ready' | 'in_progress';
 }
 
+export interface LiveMatchStats {
+  home: {
+    player: string;
+    pokemon: {
+      species: string;
+      kills: number;
+      fainted: boolean;
+      teraUsed: boolean;
+      teraType: string | null;
+      brought: boolean;
+    }[];
+  };
+  away: {
+    player: string;
+    pokemon: {
+      species: string;
+      kills: number;
+      fainted: boolean;
+      teraUsed: boolean;
+      teraType: string | null;
+      brought: boolean;
+    }[];
+  };
+  turn: number;
+  terasRemaining: { home: boolean; away: boolean };
+}
+
 export interface ArenaState {
   myMatch: ArenaMatch | null;
   liveMatches: LiveMatch[];
   scrimLobbies: ScrimLobby[];
+  liveStats: LiveMatchStats | null;
   connected: boolean;
 }
 
@@ -62,6 +90,7 @@ export function useArenaWebSocket() {
     myMatch: null,
     liveMatches: [],
     scrimLobbies: [],
+    liveStats: null,
     connected: false,
   });
 
@@ -144,6 +173,10 @@ export function useArenaWebSocket() {
                   : l,
               ),
             }));
+            break;
+
+          case 'arena_stats':
+            setState(s => ({ ...s, liveStats: msg.stats }));
             break;
 
           case 'match_error':

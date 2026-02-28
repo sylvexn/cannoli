@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useArenaWebSocket, type ArenaMatch, type LiveMatch, type ScrimLobby } from './use-arena-websocket';
+import { BattleHud } from './battle-hud';
 import { Swords, Users, Zap, Plus, LogIn, Loader2, Search } from 'lucide-react';
 import {
   Dialog,
@@ -45,10 +46,46 @@ export function ArenaTab() {
       .catch(() => {});
   }, []);
 
+  // Active battle view (null = lobby, set when viewing a live match)
+  const [viewingBattle, setViewingBattle] = useState<{
+    matchId: string;
+    psRoomId: string | null;
+    isOfficial: boolean;
+    label: string;
+  } | null>(null);
+
   // Prefer WS data over REST when available
   const myMatch = arena.myMatch ?? restMatch;
   const liveMatches = arena.liveMatches.length > 0 ? arena.liveMatches : restLive;
   const scrimLobbies = arena.scrimLobbies.length > 0 ? arena.scrimLobbies : restScrims;
+
+  // Auto-enter HUD when our match goes in_progress
+  useEffect(() => {
+    if (myMatch?.status === 'in_progress' && myMatch.psRoomId && !viewingBattle) {
+      const home = myMatch.homeTeam?.name ?? 'Home';
+      const away = myMatch.awayTeam?.name ?? 'Away';
+      setViewingBattle({
+        matchId: myMatch.matchId,
+        psRoomId: myMatch.psRoomId,
+        isOfficial: true,
+        label: `Week ${myMatch.week}: ${home} vs ${away}`,
+      });
+    }
+  }, [myMatch?.status, myMatch?.psRoomId]);
+
+  // Battle HUD mode
+  if (viewingBattle) {
+    return (
+      <BattleHud
+        matchId={viewingBattle.matchId}
+        psRoomId={viewingBattle.psRoomId}
+        isOfficial={viewingBattle.isOfficial}
+        label={viewingBattle.label}
+        liveStats={arena.liveStats}
+        onBackToLobby={() => setViewingBattle(null)}
+      />
+    );
+  }
 
   return (
     <div className="h-full flex flex-col gap-4 overflow-y-auto pr-1">
@@ -78,7 +115,20 @@ export function ArenaTab() {
       />
 
       {/* Live matches */}
-      <LiveMatchesSection matches={liveMatches} />
+      <LiveMatchesSection
+        matches={liveMatches}
+        onSpectate={(m) => {
+          const home = m.homeTeam?.name ?? 'Home';
+          const away = m.awayTeam?.name ?? 'Away';
+          setViewingBattle({
+            matchId: m.matchId,
+            psRoomId: m.psRoomId,
+            isOfficial: true,
+            label: `Week ${m.week}: ${home} vs ${away}`,
+          });
+          arena.subscribeMatch(m.matchId);
+        }}
+      />
     </div>
   );
 }
@@ -482,7 +532,10 @@ function CreateScrimDialog({
 
 // ─── Live Matches Section ─────────────────────────────────────────────────
 
-function LiveMatchesSection({ matches }: { matches: LiveMatch[] }) {
+function LiveMatchesSection({ matches, onSpectate }: {
+  matches: LiveMatch[];
+  onSpectate: (match: LiveMatch) => void;
+}) {
   return (
     <section className="rounded-lg border border-border-default bg-surface-raised p-5">
       <div className="flex items-center gap-2 mb-3">
@@ -508,7 +561,10 @@ function LiveMatchesSection({ matches }: { matches: LiveMatch[] }) {
                 </span>
                 <span className="text-xs text-text-muted capitalize">{m.leagueId}</span>
               </div>
-              <button className="px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors">
+              <button
+                onClick={() => onSpectate(m)}
+                className="px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors"
+              >
                 Spectate
               </button>
             </div>
