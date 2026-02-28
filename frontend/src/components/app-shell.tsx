@@ -24,6 +24,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
 import { FeedbackDialog } from './feedback-dialog';
 import { CommandPalette } from './command-palette';
+import { MatchBanner } from './match-banner';
 import { Search } from 'lucide-react';
 
 const phaseColors: Record<string, string> = {
@@ -407,6 +408,7 @@ export function AppShell() {
       </main>
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
+      <MatchBanner />
     </div>
   );
 }
