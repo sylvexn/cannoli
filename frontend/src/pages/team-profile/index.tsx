@@ -19,14 +19,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
-  X, ArrowRightLeft, Plus, Minus,
-  Shield, Calendar, Zap, Save,
+  X, ArrowRightLeft, Plus,
+  Shield, Calendar, Zap,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { api } from '@/lib/api';
 
 import { useAuth } from '@/lib/auth-context';
-import { TYPE_ABBR, computePool, getTeamDefensiveProfile } from './utils';
+import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RankBadge } from './rank-badge';
 import { RosterTable } from './roster-table';
@@ -457,16 +455,11 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
-                {/* Remove button — always visible in theorycraft, disabled at min 10 */}
+                {/* Remove button */}
                 {theorycraftMode && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); if (activeRoster.length > 10) handleRemoveMon(i); }}
-                    disabled={activeRoster.length <= 10}
-                    className={`absolute top-0 right-0 z-20 w-5 h-5 flex items-center justify-center rounded-full shadow-md transition-transform ${
-                      activeRoster.length > 10
-                        ? 'bg-loss text-white hover:scale-110 cursor-pointer'
-                        : 'bg-surface-overlay text-text-muted/30 cursor-not-allowed'
-                    }`}
+                    onClick={(e) => { e.stopPropagation(); handleRemoveMon(i); }}
+                    className="absolute top-0 right-0 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-loss text-white shadow-md hover:scale-110 transition-transform cursor-pointer"
                   >
                     <X size={11} strokeWidth={3} />
                   </button>
