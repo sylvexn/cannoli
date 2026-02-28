@@ -10,7 +10,6 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
-import type { AuthUser } from '../middleware/auth';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +83,7 @@ function getMatchWithTeams(matchId: string) {
   return { match, homeTeam, awayTeam };
 }
 
-function broadcastMatchState(matchId: string) {
+function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) => void }) {
   const data = getMatchWithTeams(matchId);
   if (!data || !broadcastWs) return;
 
@@ -100,8 +99,8 @@ function broadcastMatchState(matchId: string) {
   });
 
   broadcastWs.publish(`arena:match:${matchId}`, msg);
-  // Also notify global lobby (status change visible to everyone)
   broadcastWs.publish('arena:global', msg);
+  senderWs?.send(msg);
 }
 
 function broadcastLiveMatches() {
@@ -130,26 +129,42 @@ function broadcastLiveMatches() {
   }));
 }
 
-function broadcastScrimList() {
-  if (!broadcastWs) return;
-  const lobbies = Array.from(scrimLobbies.values()).map(l => ({
-    id: l.id,
-    format: l.format,
-    creator: l.creatorUsername,
-    invitee: l.invitee,
-    players: l.players,
-    ready: l.ready,
-    status: l.status,
-  }));
-  broadcastWs.publish('arena:global', JSON.stringify({
+function getScrimListPayload() {
+  return JSON.stringify({
     type: 'lobby_list',
-    lobbies,
-  }));
+    lobbies: Array.from(scrimLobbies.values()).map(l => ({
+      id: l.id, format: l.format, creator: l.creatorUsername,
+      invitee: l.invitee, players: l.players, ready: l.ready, status: l.status,
+    })),
+  });
+}
+
+/** Broadcast scrim list to all arena clients. Also sends directly to `senderWs` since publish excludes sender. */
+function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
+  const payload = getScrimListPayload();
+  broadcastWs?.publish('arena:global', payload);
+  // publish() excludes the sender — send directly so their UI updates too
+  senderWs?.send(payload);
 }
 
 // ─── Route ──────────────────────────────────────────────────────────────────
 
 export const arenaRoutes = new Elysia()
+
+  // Active players for scrim invite picker (public, lightweight)
+  .get('/api/arena/players', () => {
+    // Return all users with a team assignment (active league players)
+    const teamUsers = db.select({
+      username: schema.users.username,
+      teamName: schema.teams.teamName,
+      teamAbbrev: schema.teams.teamAbbrev,
+      leagueId: schema.teams.leagueId,
+    }).from(schema.teams)
+      .innerJoin(schema.users, eq(schema.teams.userId, schema.users.id))
+      .all();
+
+    return teamUsers;
+  })
 
   // REST endpoint for initial Arena data load (match, live matches, scrims)
   .get('/api/arena/state', ({ request, set }) => {
@@ -319,7 +334,7 @@ export const arenaRoutes = new Elysia()
               // TODO (Phase 5e): Instruct bot to create PS battle via /cannoli-battle
             }
 
-            broadcastMatchState(match.id);
+            broadcastMatchState(match.id, ws);
             break;
           }
 
@@ -343,7 +358,7 @@ export const arenaRoutes = new Elysia()
               event: 'unready',
             }).run();
 
-            broadcastMatchState(match.id);
+            broadcastMatchState(match.id, ws);
             break;
           }
 
@@ -366,7 +381,7 @@ export const arenaRoutes = new Elysia()
             scrimLobbies.set(lobbyId, lobby);
             ws.subscribe(`arena:scrim:${lobbyId}`);
 
-            broadcastScrimList();
+            broadcastScrimList(ws);
             ws.send(JSON.stringify({ type: 'scrim_joined', lobbyId }));
             break;
           }
@@ -389,7 +404,7 @@ export const arenaRoutes = new Elysia()
             lobby.ready.push(false);
             ws.subscribe(`arena:scrim:${msg.lobbyId}`);
 
-            broadcastScrimList();
+            broadcastScrimList(ws);
             if (broadcastWs) {
               broadcastWs.publish(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
                 type: 'scrim_state', lobbyId: msg.lobbyId,
@@ -417,7 +432,7 @@ export const arenaRoutes = new Elysia()
             }
 
             ws.unsubscribe(`arena:scrim:${msg.lobbyId}`);
-            broadcastScrimList();
+            broadcastScrimList(ws);
             break;
           }
 
@@ -445,7 +460,7 @@ export const arenaRoutes = new Elysia()
                 players: lobby.players, ready: lobby.ready, status: lobby.status,
               }));
             }
-            broadcastScrimList();
+            broadcastScrimList(ws);
             break;
           }
 
@@ -490,7 +505,7 @@ export const arenaRoutes = new Elysia()
               event: 'disconnect',
             }).run();
 
-            broadcastMatchState(match.id);
+            broadcastMatchState(match.id, ws);
           }
         }
 
@@ -505,7 +520,7 @@ export const arenaRoutes = new Elysia()
             }
           }
         }
-        broadcastScrimList();
+        broadcastScrimList(ws);
       }
 
       arenaClients.delete(ws);
