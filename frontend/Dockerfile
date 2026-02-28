@@ -1,11 +1,13 @@
 FROM oven/bun:1 AS build
 WORKDIR /app
 
-# Copy workspace root for lockfile resolution
+# Copy full workspace structure for dependency resolution
 COPY package.json bun.lock ./
 COPY frontend/package.json frontend/package.json
+COPY backend/package.json backend/package.json
 
-RUN cd frontend && bun install --frozen-lockfile
+# Install from workspace root so root-level deps (cinzel font) are available
+RUN bun install --frozen-lockfile
 
 COPY frontend/ frontend/
 
