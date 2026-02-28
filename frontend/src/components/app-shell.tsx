@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
-  Shield, LayoutDashboard, ChevronDown, Globe,
+  Shield, LayoutDashboard, ChevronDown, Globe, Gamepad2,
   Settings, LogOut, User, Archive, LogIn, Film,
 } from 'lucide-react';
 import {
@@ -42,7 +42,7 @@ const leaguePages = [
 ];
 
 // Routes that need full-width layout (no max-w constraint)
-const WIDE_ROUTES = ['/draft', '/matchup'];
+const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -277,6 +277,19 @@ export function AppShell() {
           >
             <Swords size={16} />
             Matchup Center
+          </NavLink>
+
+          <NavLink
+            to="/showdown"
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-orange-400/10 text-orange-400'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <Gamepad2 size={16} />
+            Showdown
           </NavLink>
 
           <NavLink
