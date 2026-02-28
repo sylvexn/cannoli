@@ -1,0 +1,487 @@
+/**
+ * Arena WebSocket endpoint — match ready-up, scrim lobbies, live match broadcasting.
+ *
+ * Topics:
+ *   arena:global          — lobby updates (live matches list, scrim lobby changes)
+ *   arena:match:{matchId} — match-specific ready state + live stats
+ *   arena:scrim:{lobbyId} — scrim lobby state
+ */
+import { Elysia } from 'elysia';
+import { db, schema } from '../db';
+import { eq, and } from 'drizzle-orm';
+import { parseSessionToken, validateSession } from '../lib/auth';
+import type { AuthUser } from '../middleware/auth';
+
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+interface ArenaClient {
+  userId: number;
+  username: string;
+  teamId: string | null; // null if admin/spectator with no team
+  leagueId: string | null;
+}
+
+interface ScrimLobby {
+  id: string;
+  format: string;
+  creatorUsername: string;
+  creatorTeamId: string | null;
+  invitee: string | null; // null = open lobby
+  players: string[]; // usernames
+  ready: boolean[];
+  status: 'waiting' | 'ready' | 'in_progress';
+  psRoomId: string | null;
+}
+
+// ─── State ──────────────────────────────────────────────────────────────────
+
+const arenaClients = new Map</* ws */ object, ArenaClient>();
+const scrimLobbies = new Map<string, ScrimLobby>();
+let nextScrimId = 1;
+
+// Reference for broadcasting from external code (e.g., bot result handler)
+let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
+
+export function getArenaBroadcaster() {
+  return broadcastWs;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function getUserTeam(userId: number): { teamId: string; leagueId: string } | null {
+  const team = db.select().from(schema.teams)
+    .where(eq(schema.teams.userId, userId))
+    .get();
+  return team ? { teamId: team.id, leagueId: team.leagueId } : null;
+}
+
+function getCurrentMatch(teamId: string, leagueId: string) {
+  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+  if (!league) return null;
+  const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+  if (!season || season.phase !== 'regular') return null;
+
+  // Find the match for this team in the current week
+  const match = db.select().from(schema.matches).where(
+    and(
+      eq(schema.matches.leagueId, leagueId),
+      eq(schema.matches.week, season.currentWeek),
+    ),
+  ).all().find(m =>
+    (m.homeTeamId === teamId || m.awayTeamId === teamId) &&
+    (m.status === 'scheduled' || m.status === 'ready' || m.status === 'in_progress'),
+  );
+  return match ?? null;
+}
+
+function getMatchWithTeams(matchId: string) {
+  const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  if (!match) return null;
+
+  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
+  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+
+  return { match, homeTeam, awayTeam };
+}
+
+function broadcastMatchState(matchId: string) {
+  const data = getMatchWithTeams(matchId);
+  if (!data || !broadcastWs) return;
+
+  const msg = JSON.stringify({
+    type: 'match_state',
+    matchId,
+    status: data.match.status,
+    readyHome: data.match.readyHome,
+    readyAway: data.match.readyAway,
+    homeTeam: data.homeTeam ? { id: data.homeTeam.id, name: data.homeTeam.teamName, abbrev: data.homeTeam.teamAbbrev, color: data.homeTeam.teamColor } : null,
+    awayTeam: data.awayTeam ? { id: data.awayTeam.id, name: data.awayTeam.teamName, abbrev: data.awayTeam.teamAbbrev, color: data.awayTeam.teamColor } : null,
+    psRoomId: data.match.psRoomId,
+  });
+
+  broadcastWs.publish(`arena:match:${matchId}`, msg);
+  // Also notify global lobby (status change visible to everyone)
+  broadcastWs.publish('arena:global', msg);
+}
+
+function broadcastLiveMatches() {
+  if (!broadcastWs) return;
+
+  // Get all in-progress matches
+  const liveMatches = db.select().from(schema.matches)
+    .where(eq(schema.matches.status, 'in_progress'))
+    .all()
+    .map(m => {
+      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
+      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
+      return {
+        matchId: m.id,
+        leagueId: m.leagueId,
+        week: m.week,
+        homeTeam: homeTeam ? { name: homeTeam.teamName, abbrev: homeTeam.teamAbbrev } : null,
+        awayTeam: awayTeam ? { name: awayTeam.teamName, abbrev: awayTeam.teamAbbrev } : null,
+        psRoomId: m.psRoomId,
+      };
+    });
+
+  broadcastWs.publish('arena:global', JSON.stringify({
+    type: 'live_matches',
+    matches: liveMatches,
+  }));
+}
+
+function broadcastScrimList() {
+  if (!broadcastWs) return;
+  const lobbies = Array.from(scrimLobbies.values()).map(l => ({
+    id: l.id,
+    format: l.format,
+    creator: l.creatorUsername,
+    invitee: l.invitee,
+    players: l.players,
+    ready: l.ready,
+    status: l.status,
+  }));
+  broadcastWs.publish('arena:global', JSON.stringify({
+    type: 'lobby_list',
+    lobbies,
+  }));
+}
+
+// ─── Route ──────────────────────────────────────────────────────────────────
+
+export const arenaRoutes = new Elysia()
+
+  // REST endpoint for initial Arena data load (match, live matches, scrims)
+  .get('/api/arena/state', ({ request, set }) => {
+    const cookieHeader = request.headers.get('cookie') ?? undefined;
+    const token = cookieHeader ? parseSessionToken(cookieHeader) : null;
+    const user = token ? validateSession(token) : null;
+
+    let myMatch = null;
+    if (user) {
+      const team = getUserTeam(parseInt(user.id));
+      if (team) {
+        const match = getCurrentMatch(team.teamId, team.leagueId);
+        if (match) {
+          const data = getMatchWithTeams(match.id);
+          if (data) {
+            myMatch = {
+              matchId: match.id,
+              leagueId: match.leagueId,
+              week: match.week,
+              status: match.status,
+              readyHome: match.readyHome,
+              readyAway: match.readyAway,
+              homeTeam: data.homeTeam ? { id: data.homeTeam.id, name: data.homeTeam.teamName, abbrev: data.homeTeam.teamAbbrev, color: data.homeTeam.teamColor } : null,
+              awayTeam: data.awayTeam ? { id: data.awayTeam.id, name: data.awayTeam.teamName, abbrev: data.awayTeam.teamAbbrev, color: data.awayTeam.teamColor } : null,
+              isHome: data.match.homeTeamId === team.teamId,
+              psRoomId: match.psRoomId,
+            };
+          }
+        }
+      }
+    }
+
+    const liveMatches = db.select().from(schema.matches)
+      .where(eq(schema.matches.status, 'in_progress'))
+      .all()
+      .map(m => {
+        const ht = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
+        const at = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
+        return {
+          matchId: m.id, leagueId: m.leagueId, week: m.week,
+          homeTeam: ht ? { name: ht.teamName, abbrev: ht.teamAbbrev } : null,
+          awayTeam: at ? { name: at.teamName, abbrev: at.teamAbbrev } : null,
+          psRoomId: m.psRoomId,
+        };
+      });
+
+    const lobbies = Array.from(scrimLobbies.values()).map(l => ({
+      id: l.id, format: l.format, creator: l.creatorUsername,
+      invitee: l.invitee, players: l.players, ready: l.ready, status: l.status,
+    }));
+
+    return { myMatch, liveMatches, scrimLobbies: lobbies };
+  })
+
+  // ─── Arena WebSocket ────────────────────────────────────────────────
+
+  .ws('/ws/arena', {
+    open(ws) {
+      broadcastWs = ws;
+      ws.subscribe('arena:global');
+    },
+
+    message(ws, message) {
+      try {
+        const msg = typeof message === 'string' ? JSON.parse(message) : message;
+
+        switch (msg.type) {
+          case 'identify': {
+            // Authenticate from session cookie or explicit token
+            const { token } = msg;
+            if (!token) return;
+            const user = validateSession(token);
+            if (!user) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Invalid session' }));
+              return;
+            }
+
+            const team = getUserTeam(parseInt(user.id));
+            const client: ArenaClient = {
+              userId: parseInt(user.id),
+              username: user.username,
+              teamId: team?.teamId ?? null,
+              leagueId: team?.leagueId ?? null,
+            };
+            arenaClients.set(ws, client);
+
+            // Subscribe to their match if they have one
+            if (team) {
+              const match = getCurrentMatch(team.teamId, team.leagueId);
+              if (match) {
+                ws.subscribe(`arena:match:${match.id}`);
+              }
+            }
+
+            ws.send(JSON.stringify({ type: 'identified', username: user.username, teamId: team?.teamId }));
+            break;
+          }
+
+          case 'match_ready': {
+            const client = arenaClients.get(ws);
+            if (!client?.teamId || !client.leagueId) {
+              ws.send(JSON.stringify({ type: 'error', message: 'No team assigned' }));
+              return;
+            }
+
+            const match = getCurrentMatch(client.teamId, client.leagueId);
+            if (!match) {
+              ws.send(JSON.stringify({ type: 'error', message: 'No match found' }));
+              return;
+            }
+
+            const isHome = match.homeTeamId === client.teamId;
+            const updateField = isHome ? { readyHome: true } : { readyAway: true };
+
+            db.update(schema.matches).set(updateField).where(eq(schema.matches.id, match.id)).run();
+
+            // Log ready event
+            db.insert(schema.matchReadyLog).values({
+              matchId: match.id,
+              teamId: client.teamId,
+              event: 'ready',
+            }).run();
+
+            // Check if both are now ready
+            const updated = db.select().from(schema.matches).where(eq(schema.matches.id, match.id)).get()!;
+            if (updated.readyHome && updated.readyAway) {
+              db.update(schema.matches)
+                .set({ status: 'ready', startedAt: new Date().toISOString() })
+                .where(eq(schema.matches.id, match.id)).run();
+
+              // Log to activity
+              db.insert(schema.activityLog).values({
+                type: 'match_ready',
+                category: 'match',
+                actor: 'system',
+                leagueId: client.leagueId,
+                description: `Both teams ready for ${match.id}`,
+                metadata: JSON.stringify({ matchId: match.id }),
+              }).run();
+
+              // TODO (Phase 5e): Instruct bot to create PS battle via /cannoli-battle
+            }
+
+            broadcastMatchState(match.id);
+            break;
+          }
+
+          case 'match_unready': {
+            const client = arenaClients.get(ws);
+            if (!client?.teamId || !client.leagueId) return;
+
+            const match = getCurrentMatch(client.teamId, client.leagueId);
+            if (!match || match.status === 'in_progress' || match.status === 'completed') return;
+
+            const isHome = match.homeTeamId === client.teamId;
+            const updateField = isHome ? { readyHome: false } : { readyAway: false };
+
+            db.update(schema.matches)
+              .set({ ...updateField, status: 'scheduled' })
+              .where(eq(schema.matches.id, match.id)).run();
+
+            db.insert(schema.matchReadyLog).values({
+              matchId: match.id,
+              teamId: client.teamId,
+              event: 'unready',
+            }).run();
+
+            broadcastMatchState(match.id);
+            break;
+          }
+
+          case 'scrim_create': {
+            const client = arenaClients.get(ws);
+            if (!client) return;
+
+            const lobbyId = `scrim-${nextScrimId++}`;
+            const lobby: ScrimLobby = {
+              id: lobbyId,
+              format: msg.format || 'gen9natdexdraft',
+              creatorUsername: client.username,
+              creatorTeamId: client.teamId,
+              invitee: msg.invitee || null,
+              players: [client.username],
+              ready: [false],
+              status: 'waiting',
+              psRoomId: null,
+            };
+            scrimLobbies.set(lobbyId, lobby);
+            ws.subscribe(`arena:scrim:${lobbyId}`);
+
+            broadcastScrimList();
+            ws.send(JSON.stringify({ type: 'scrim_joined', lobbyId }));
+            break;
+          }
+
+          case 'scrim_join': {
+            const client = arenaClients.get(ws);
+            if (!client) return;
+
+            const lobby = scrimLobbies.get(msg.lobbyId);
+            if (!lobby || lobby.players.length >= 2) {
+              ws.send(JSON.stringify({ type: 'error', message: 'Lobby full or not found' }));
+              return;
+            }
+            if (lobby.invitee && lobby.invitee !== client.username) {
+              ws.send(JSON.stringify({ type: 'error', message: 'This is a private lobby' }));
+              return;
+            }
+
+            lobby.players.push(client.username);
+            lobby.ready.push(false);
+            ws.subscribe(`arena:scrim:${msg.lobbyId}`);
+
+            broadcastScrimList();
+            if (broadcastWs) {
+              broadcastWs.publish(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
+                type: 'scrim_state', lobbyId: msg.lobbyId,
+                players: lobby.players, ready: lobby.ready, status: lobby.status,
+              }));
+            }
+            break;
+          }
+
+          case 'scrim_leave': {
+            const client = arenaClients.get(ws);
+            if (!client) return;
+
+            const lobby = scrimLobbies.get(msg.lobbyId);
+            if (!lobby) return;
+
+            const idx = lobby.players.indexOf(client.username);
+            if (idx === -1) return;
+
+            lobby.players.splice(idx, 1);
+            lobby.ready.splice(idx, 1);
+
+            if (lobby.players.length === 0) {
+              scrimLobbies.delete(msg.lobbyId);
+            }
+
+            ws.unsubscribe(`arena:scrim:${msg.lobbyId}`);
+            broadcastScrimList();
+            break;
+          }
+
+          case 'scrim_ready': {
+            const client = arenaClients.get(ws);
+            if (!client) return;
+
+            const lobby = scrimLobbies.get(msg.lobbyId);
+            if (!lobby) return;
+
+            const idx = lobby.players.indexOf(client.username);
+            if (idx === -1) return;
+
+            lobby.ready[idx] = true;
+
+            // Check if both ready
+            if (lobby.players.length === 2 && lobby.ready[0] && lobby.ready[1]) {
+              lobby.status = 'ready';
+              // TODO (Phase 5e): Instruct bot to create scrim battle
+            }
+
+            if (broadcastWs) {
+              broadcastWs.publish(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
+                type: 'scrim_state', lobbyId: msg.lobbyId,
+                players: lobby.players, ready: lobby.ready, status: lobby.status,
+              }));
+            }
+            broadcastScrimList();
+            break;
+          }
+
+          case 'arena_subscribe': {
+            // Subscribe to live stats for a specific match
+            if (msg.matchId) {
+              ws.subscribe(`arena:match:${msg.matchId}`);
+            }
+            break;
+          }
+
+          case 'arena_unsubscribe': {
+            if (msg.matchId) {
+              ws.unsubscribe(`arena:match:${msg.matchId}`);
+            }
+            break;
+          }
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    },
+
+    close(ws) {
+      const client = arenaClients.get(ws);
+      if (client?.teamId && client.leagueId) {
+        // Disconnect → unready for any pending match
+        const match = getCurrentMatch(client.teamId, client.leagueId);
+        if (match && (match.status === 'scheduled' || match.status === 'ready')) {
+          const isHome = match.homeTeamId === client.teamId;
+          const wasReady = isHome ? match.readyHome : match.readyAway;
+
+          if (wasReady) {
+            const updateField = isHome ? { readyHome: false } : { readyAway: false };
+            db.update(schema.matches)
+              .set({ ...updateField, status: 'scheduled' })
+              .where(eq(schema.matches.id, match.id)).run();
+
+            db.insert(schema.matchReadyLog).values({
+              matchId: match.id,
+              teamId: client.teamId,
+              event: 'disconnect',
+            }).run();
+
+            broadcastMatchState(match.id);
+          }
+        }
+
+        // Clean up scrim lobbies the player was in
+        for (const [lobbyId, lobby] of scrimLobbies) {
+          const idx = lobby.players.indexOf(client.username);
+          if (idx !== -1) {
+            lobby.players.splice(idx, 1);
+            lobby.ready.splice(idx, 1);
+            if (lobby.players.length === 0) {
+              scrimLobbies.delete(lobbyId);
+            }
+          }
+        }
+        broadcastScrimList();
+      }
+
+      arenaClients.delete(ws);
+    },
+  });
