@@ -210,6 +210,33 @@ export const arenaRoutes = new Elysia()
     open(ws) {
       broadcastWs = ws;
       ws.subscribe('arena:global');
+
+      // Auto-authenticate from cookie on the upgrade request
+      const request = (ws.data as any)?.request;
+      const cookieHeader = request?.headers?.get?.('cookie') ?? undefined;
+      const token = parseSessionToken(cookieHeader);
+      const user = token ? validateSession(token) : null;
+
+      if (user) {
+        const team = getUserTeam(parseInt(user.id));
+        const client: ArenaClient = {
+          userId: parseInt(user.id),
+          username: user.username,
+          teamId: team?.teamId ?? null,
+          leagueId: team?.leagueId ?? null,
+        };
+        arenaClients.set(ws, client);
+
+        // Subscribe to their match if they have one
+        if (team) {
+          const match = getCurrentMatch(team.teamId, team.leagueId);
+          if (match) {
+            ws.subscribe(`arena:match:${match.id}`);
+          }
+        }
+
+        ws.send(JSON.stringify({ type: 'identified', username: user.username, teamId: team?.teamId }));
+      }
     },
 
     message(ws, message) {
@@ -218,7 +245,7 @@ export const arenaRoutes = new Elysia()
 
         switch (msg.type) {
           case 'identify': {
-            // Authenticate from session cookie or explicit token
+            // Fallback: authenticate from explicit token if cookie auth didn't work
             const { token } = msg;
             if (!token) return;
             const user = validateSession(token);
@@ -236,7 +263,6 @@ export const arenaRoutes = new Elysia()
             };
             arenaClients.set(ws, client);
 
-            // Subscribe to their match if they have one
             if (team) {
               const match = getCurrentMatch(team.teamId, team.leagueId);
               if (match) {
