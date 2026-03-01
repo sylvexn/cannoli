@@ -6,10 +6,11 @@ import {
   createSession, deleteSession,
   sessionCookieString, clearSessionCookieString,
 } from '../lib/auth';
+import { createPsSession, psSidCookieString, clearPsSidCookieString } from '../lib/ps-login';
 
 export const authRoutes = new Elysia()
 
-  .post('/api/auth/login', async ({ body, set }) => {
+  .post('/api/auth/login', async ({ body, request, set }) => {
     const { username, password } = body as { username: string; password: string };
     if (!username || !password) {
       set.status = 400;
@@ -26,9 +27,17 @@ export const authRoutes = new Elysia()
     }
 
     const token = createSession(user.id);
-    set.headers['set-cookie'] = sessionCookieString(token);
 
-    return {
+    // SSO bridge: also create a PS session so sim.cannoli.live auto-authenticates
+    const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+    const { sidCookie } = createPsSession(user.username, ip);
+
+    const headers = new Headers();
+    headers.append('Content-Type', 'application/json');
+    headers.append('Set-Cookie', sessionCookieString(token));
+    headers.append('Set-Cookie', psSidCookieString(sidCookie));
+
+    return new Response(JSON.stringify({
       user: {
         id: String(user.id),
         username: user.username,
@@ -37,13 +46,18 @@ export const authRoutes = new Elysia()
         active: user.active,
         createdAt: user.createdAt,
       },
-    };
+    }), { headers });
   })
 
-  .post('/api/auth/logout', ({ set, sessionToken }) => {
+  .post('/api/auth/logout', ({ sessionToken }) => {
     if (sessionToken) deleteSession(sessionToken);
-    set.headers['set-cookie'] = clearSessionCookieString();
-    return { success: true };
+
+    const headers = new Headers();
+    headers.append('Content-Type', 'application/json');
+    headers.append('Set-Cookie', clearSessionCookieString());
+    headers.append('Set-Cookie', clearPsSidCookieString());
+
+    return new Response(JSON.stringify({ success: true }), { headers });
   })
 
   .get('/api/auth/me', ({ user, set }) => {
