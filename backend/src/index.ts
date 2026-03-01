@@ -11,6 +11,7 @@ import { tradeRoutes } from './routes/trades';
 import { matchRoutes } from './routes/matches';
 import { feedbackRoutes } from './routes/feedback';
 import { arenaRoutes } from './routes/arena';
+import { psLoginRoutes } from './routes/ps-login';
 
 const app = new Elysia()
   .use(cors({
@@ -19,6 +20,8 @@ const app = new Elysia()
       'http://localhost:5174',
       'https://cannoli.live',
       'https://mock.cannoli.live',
+      'https://sim.cannoli.live',
+      'http://sim.cannoli.localhost',
     ],
     credentials: true,
   }))
@@ -42,6 +45,7 @@ const app = new Elysia()
   .use(matchRoutes)
   .use(feedbackRoutes)
   .use(arenaRoutes)
+  .use(psLoginRoutes)
 
   .listen(3001);
 
