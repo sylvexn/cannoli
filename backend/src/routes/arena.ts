@@ -10,6 +10,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
+import { createBattle, isBotConnected } from '../lib/ps-bot';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -331,7 +332,21 @@ export const arenaRoutes = new Elysia()
                 metadata: JSON.stringify({ matchId: match.id }),
               }).run();
 
-              // TODO (Phase 5e): Instruct bot to create PS battle via /cannoli-battle
+              // Instruct bot to create the PS battle
+              if (isBotConnected()) {
+                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
+                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+                const p1Name = homeTeam?.showdownUsername || homeTeam?.coachName || match.homeTeamId;
+                const p2Name = awayTeam?.showdownUsername || awayTeam?.coachName || match.awayTeamId;
+                createBattle(p1Name, p2Name);
+              } else {
+                // Bot not connected — notify players
+                ws.send(JSON.stringify({
+                  type: 'match_error',
+                  matchId: match.id,
+                  message: 'Could not create battle — Showdown bot is not connected. Try again shortly.',
+                }));
+              }
             }
 
             broadcastMatchState(match.id, ws);
@@ -451,7 +466,10 @@ export const arenaRoutes = new Elysia()
             // Check if both ready
             if (lobby.players.length === 2 && lobby.ready[0] && lobby.ready[1]) {
               lobby.status = 'ready';
-              // TODO (Phase 5e): Instruct bot to create scrim battle
+              // Create scrim battle via bot
+              if (isBotConnected()) {
+                createBattle(lobby.players[0], lobby.players[1]);
+              }
             }
 
             if (broadcastWs) {

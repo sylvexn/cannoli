@@ -12,6 +12,7 @@ import { matchRoutes } from './routes/matches';
 import { feedbackRoutes } from './routes/feedback';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
+import { startBot } from './lib/ps-bot';
 
 const app = new Elysia()
   .use(cors({
@@ -50,5 +51,11 @@ const app = new Elysia()
   .listen(3001);
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
+
+// Start PS Monitor Bot if configured
+if (process.env.PS_SERVER_WS_URL) {
+  startBot();
+  console.log('PS Monitor Bot starting...');
+}
 
 export type App = typeof app;
