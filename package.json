@@ -3,9 +3,11 @@
   "private": true,
   "workspaces": ["frontend", "backend"],
   "scripts": {
-    "dev": "bun run --cwd backend dev & bun run --cwd frontend dev",
+    "dev": "bash scripts/dev-all.sh",
     "dev:frontend": "bun run --cwd frontend dev",
     "dev:backend": "bun run --cwd backend dev",
+    "dev:simple": "bun run --cwd backend dev & bun run --cwd frontend dev",
+    "setup:showdown": "bash scripts/setup-showdown.sh",
     "build": "bun run --cwd frontend build",
     "check": "bun run --cwd frontend check",
     "lint": "bun run --cwd frontend lint"
