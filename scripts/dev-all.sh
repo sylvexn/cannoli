@@ -53,7 +53,7 @@ if [ "$HAS_SHOWDOWN" = true ]; then
 
   # ─── PS Client ────────────────────────────────────────────────────────────
   echo "[ps-client] http://localhost:8080"
-  cd "$SHOWDOWN_DIR/client"
+  cd "$SHOWDOWN_DIR/client/play.pokemonshowdown.com"
   bunx http-server -p 8080 -s &
 fi
 
