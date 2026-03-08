@@ -102,7 +102,7 @@ PS_HOSTNAME=localhost
 PS_KEY_ID=4
 BOT_USERNAME=CannoliBot
 BOT_PASSWORD=cannolibot
-VITE_SHOWDOWN_URL=http://localhost:8080
+VITE_SHOWDOWN_URL=http://localhost:8080/testclient.html?~~localhost:8000
 ENVEOF
 
 echo ""
