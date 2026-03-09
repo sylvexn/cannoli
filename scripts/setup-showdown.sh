@@ -79,6 +79,12 @@ CONFIGEOF
 echo "Installing cannoli.ts chat plugin..."
 cp "$CANNOLI_DIR/ps/cannoli.ts" "$SHOWDOWN_DIR/server/server/chat-plugins/cannoli.ts"
 
+# ─── Build PS client ──────────────────────────────────────────────────────
+
+echo "Building PS client..."
+cd "$SHOWDOWN_DIR/client"
+node build
+
 # ─── Bot usergroup ───────────────────────────────────────────────────────────
 
 USERGROUPS="$SHOWDOWN_DIR/server/config/usergroups.csv"
