@@ -79,7 +79,38 @@ CONFIGEOF
 echo "Installing cannoli.ts chat plugin..."
 cp "$CANNOLI_DIR/ps/cannoli.ts" "$SHOWDOWN_DIR/server/server/chat-plugins/cannoli.ts"
 
-# ─── Build PS client ──────────────────────────────────────────────────────
+# ─── Configure PS client ──────────────────────────────────────────────────
+
+echo "Configuring PS client..."
+
+# Override client config to point at our local login server + game server
+cat > "$SHOWDOWN_DIR/client/config/config.js" << 'CLIENTCFG'
+var Config = Config || {};
+Config.version = "0.11.2";
+
+Config.defaultserver = {
+  id: 'localhost',
+  host: 'localhost',
+  port: 8000,
+  httpport: 8000,
+  registered: true
+};
+
+Config.routes = {
+  root: 'localhost',
+  client: 'localhost:8080',
+};
+
+// Point at our Elysia login endpoints
+Config.loginserver = 'http://localhost:3001/api/ps/';
+CLIENTCFG
+
+# testclient-key.js: disable testclient mode for relative action.php URLs,
+# which our ps-client-server.ts proxies to the Elysia backend.
+cat > "$SHOWDOWN_DIR/client/config/testclient-key.js" << 'KEYCFG'
+const POKEMON_SHOWDOWN_TESTCLIENT_KEY = '';
+Config.testclient = false;
+KEYCFG
 
 echo "Building PS client..."
 cd "$SHOWDOWN_DIR/client"
@@ -108,7 +139,7 @@ PS_HOSTNAME=localhost
 PS_KEY_ID=4
 BOT_USERNAME=CannoliBot
 BOT_PASSWORD=cannolibot
-VITE_SHOWDOWN_URL=http://localhost:8080/testclient.html?~~localhost:8000
+VITE_SHOWDOWN_URL=http://localhost:8080?~~localhost:8000
 ENVEOF
 
 echo ""
