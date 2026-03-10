@@ -6,7 +6,8 @@ import { join, extname } from 'path';
 
 const PORT = 8080;
 const BACKEND_URL = 'http://localhost:3001';
-const CLIENT_DIR = join(import.meta.dir, '..', 'showdown', 'client', 'play.pokemonshowdown.com');
+const CLIENT_ROOT = join(import.meta.dir, '..', 'showdown', 'client');
+const CLIENT_PLAY = join(CLIENT_ROOT, 'play.pokemonshowdown.com');
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
@@ -54,37 +55,35 @@ Bun.serve({
       });
     }
 
-    // Serve config files from parent config/ dir
-    if (path.startsWith('/config/')) {
-      const configDir = join(import.meta.dir, '..', 'showdown', 'client', 'config');
-      const filePath = join(configDir, path.replace('/config/', ''));
-      return serveFile(filePath);
+    // Root serves testclient.html from the play subdirectory
+    if (path === '/') {
+      return serveFile(join(CLIENT_PLAY, 'testclient.html'));
     }
 
-    // Serve static files
-    let filePath = join(CLIENT_DIR, path === '/' ? '/testclient.html' : path);
-
-    // If path doesn't exist, try adding .html
-    if (!existsSync(filePath)) {
-      const withHtml = filePath + '.html';
-      if (existsSync(withHtml)) filePath = withHtml;
+    // Try play subdirectory first (html, compiled js, css, images)
+    const playPath = join(CLIENT_PLAY, path);
+    if (existsSync(playPath) && !statSync(playPath).isDirectory()) {
+      return serveFile(playPath);
     }
 
-    return serveFile(filePath);
+    // Then try repo root (data/, js/server/, config/)
+    const rootPath = join(CLIENT_ROOT, path);
+    if (existsSync(rootPath) && !statSync(rootPath).isDirectory()) {
+      return serveFile(rootPath);
+    }
+
+    // Directory index fallback
+    for (const base of [playPath, rootPath]) {
+      const indexPath = join(base, 'index.html');
+      if (existsSync(indexPath)) return serveFile(indexPath);
+    }
+
+    return new Response('Not Found', { status: 404 });
   },
 });
 
 function serveFile(filePath: string): Response {
   if (!existsSync(filePath)) {
-    return new Response('Not Found', { status: 404 });
-  }
-
-  const stat = statSync(filePath);
-  if (stat.isDirectory()) {
-    const indexPath = join(filePath, 'index.html');
-    if (existsSync(indexPath)) {
-      return serveFile(indexPath);
-    }
     return new Response('Not Found', { status: 404 });
   }
 
@@ -96,4 +95,4 @@ function serveFile(filePath: string): Response {
   });
 }
 
-console.log(`[ps-client] http://localhost:${PORT} (serving ${CLIENT_DIR})`);
+console.log(`[ps-client] http://localhost:${PORT}`);
