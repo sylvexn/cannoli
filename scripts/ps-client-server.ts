@@ -1,9 +1,6 @@
-/**
- * Dev server for PS client — static files + action.php proxy to Elysia backend.
- *
- * Serves the PS client from showdown/client/play.pokemonshowdown.com/
- * and proxies /~~*/action.php requests to http://localhost:3001/api/ps/action.php
- */
+// Dev server for PS client: static files + action.php proxy to Elysia backend.
+// Serves PS client from showdown/client/play.pokemonshowdown.com/
+// Proxies action.php requests to http://localhost:3001/api/ps/action.php
 import { readFileSync, existsSync, statSync } from 'fs';
 import { join, extname } from 'path';
 
