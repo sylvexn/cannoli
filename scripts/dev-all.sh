@@ -51,10 +51,9 @@ if [ "$HAS_SHOWDOWN" = true ]; then
   cd "$SHOWDOWN_DIR/server"
   node pokemon-showdown start --no-security &
 
-  # ─── PS Client ────────────────────────────────────────────────────────────
-  echo "[ps-client] http://localhost:8080"
-  cd "$SHOWDOWN_DIR/client/play.pokemonshowdown.com"
-  bunx http-server -p 8080 -s &
+  # ─── PS Client (static server + action.php proxy) ─────────────────────────
+  cd "$CANNOLI_DIR"
+  bun run scripts/ps-client-server.ts &
 fi
 
 echo ""
