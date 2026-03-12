@@ -105,12 +105,18 @@ Config.routes = {
 Config.loginserver = 'http://localhost:3001/api/ps/';
 CLIENTCFG
 
-# testclient-key.js: disable testclient mode for relative action.php URLs,
-# which our ps-client-server.ts proxies to the Elysia backend.
+# testclient-key.js: point auth at our Elysia backend
 cat > "$SHOWDOWN_DIR/client/config/testclient-key.js" << 'KEYCFG'
 const POKEMON_SHOWDOWN_TESTCLIENT_KEY = '';
-Config.testclient = false;
+Config.routes = Config.routes || {};
+Config.routes.client = 'localhost:3001';
 KEYCFG
+
+# Patch client.js: use http:// instead of https:// for testclient action.php
+# (localhost doesn't have TLS in dev)
+echo "Patching client.js for http:// in dev..."
+sed -i "s|ret = 'https://' + Config.routes.client + ret;|ret = 'http://' + Config.routes.client + ret;|" \
+  "$SHOWDOWN_DIR/client/play.pokemonshowdown.com/js/client.js"
 
 echo "Building PS client..."
 cd "$SHOWDOWN_DIR/client"
