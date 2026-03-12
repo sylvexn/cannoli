@@ -161,80 +161,83 @@ export const psLoginRoutes = new Elysia()
   }))
 
   /**
-   * POST /api/ps/action.php — PS client compatibility endpoint.
+   * POST /~~:serverId/action.php — PS testclient auth endpoint.
+   * POST /api/ps/action.php — direct access variant.
    *
    * The PS client sends all auth requests to action.php with an `act` parameter.
-   * This endpoint dispatches to the appropriate handler.
+   * testclient builds: http://Config.routes.client/~~serverId/action.php
    */
-  .post('/api/ps/action.php', ({ body, request }) => {
-    const params = body as Record<string, string>;
-    const act = params.act;
+  .post('/api/ps/action.php', ({ body, request }) => handleActionPhp(body, request));
 
-    switch (act) {
-      case 'login': {
-        const user = authenticateUser(params.name, params.pass);
-        if (!user) {
-          return psResponse(psJson({ actionsuccess: false, assertion: false }));
-        }
-        const userid = toUserid(params.name);
-        const assertion = signAssertion(params.challstr, userid);
-        if (!assertion) {
-          return psResponse(psJson({ actionsuccess: false, assertion: false }));
-        }
-        const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
-        const { sidCookie } = createPsSession(params.name, ip);
-        return psResponse(
-          psJson({
-            actionsuccess: true,
-            assertion,
-            curuser: { loggedin: true, username: user.username, userid },
-          }),
-          psSidCookieString(sidCookie),
-        );
+function handleActionPhp(body: unknown, request: Request): Response {
+  const params = body as Record<string, string>;
+  const act = params.act;
+
+  switch (act) {
+    case 'login': {
+      const user = authenticateUser(params.name, params.pass);
+      if (!user) {
+        return psResponse(psJson({ actionsuccess: false, assertion: false }));
       }
-
-      case 'upkeep': {
-        const cookieHeader = request.headers.get('cookie') ?? undefined;
-        const sidValue = parsePsSid(cookieHeader);
-        if (!sidValue) {
-          return psResponse(psJson({ loggedin: false, username: '' }));
-        }
-        const userid = validatePsSid(sidValue);
-        if (!userid) {
-          return psResponse(psJson({ loggedin: false, username: '' }), clearPsSidCookieString());
-        }
-        let assertion: string | undefined;
-        if (params.challstr) {
-          const signed = signAssertion(params.challstr, userid);
-          if (signed) assertion = signed;
-        }
-        return psResponse(psJson({
-          loggedin: true,
-          username: userid,
-          ...(assertion ? { assertion } : {}),
-        }));
+      const userid = toUserid(params.name);
+      const assertion = signAssertion(params.challstr, userid);
+      if (!assertion) {
+        return psResponse(psJson({ actionsuccess: false, assertion: false }));
       }
-
-      case 'getassertion': {
-        const cookieHeader = request.headers.get('cookie') ?? undefined;
-        const sidValue = parsePsSid(cookieHeader);
-        if (!sidValue) return psResponse(';;Session cookie not found');
-        const sessionUserid = validatePsSid(sidValue);
-        if (!sessionUserid || sessionUserid !== toUserid(params.userid)) {
-          return psResponse(';;Session invalid');
-        }
-        const assertion = signAssertion(params.challstr, sessionUserid);
-        return psResponse(assertion || ';;Failed to sign assertion');
-      }
-
-      case 'logout': {
-        const cookieHeader = request.headers.get('cookie') ?? undefined;
-        const sidValue = parsePsSid(cookieHeader);
-        if (sidValue) destroyPsSession(sidValue);
-        return psResponse(psJson({ actionsuccess: true }), clearPsSidCookieString());
-      }
-
-      default:
-        return psResponse(psJson({ actionsuccess: false, error: `Unknown action: ${act}` }));
+      const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
+      const { sidCookie } = createPsSession(params.name, ip);
+      return psResponse(
+        psJson({
+          actionsuccess: true,
+          assertion,
+          curuser: { loggedin: true, username: user.username, userid },
+        }),
+        psSidCookieString(sidCookie),
+      );
     }
-  });
+
+    case 'upkeep': {
+      const cookieHeader = request.headers.get('cookie') ?? undefined;
+      const sidValue = parsePsSid(cookieHeader);
+      if (!sidValue) {
+        return psResponse(psJson({ loggedin: false, username: '' }));
+      }
+      const userid = validatePsSid(sidValue);
+      if (!userid) {
+        return psResponse(psJson({ loggedin: false, username: '' }), clearPsSidCookieString());
+      }
+      let assertion: string | undefined;
+      if (params.challstr) {
+        const signed = signAssertion(params.challstr, userid);
+        if (signed) assertion = signed;
+      }
+      return psResponse(psJson({
+        loggedin: true,
+        username: userid,
+        ...(assertion ? { assertion } : {}),
+      }));
+    }
+
+    case 'getassertion': {
+      const cookieHeader = request.headers.get('cookie') ?? undefined;
+      const sidValue = parsePsSid(cookieHeader);
+      if (!sidValue) return psResponse(';;Session cookie not found');
+      const sessionUserid = validatePsSid(sidValue);
+      if (!sessionUserid || sessionUserid !== toUserid(params.userid)) {
+        return psResponse(';;Session invalid');
+      }
+      const assertion = signAssertion(params.challstr, sessionUserid);
+      return psResponse(assertion || ';;Failed to sign assertion');
+    }
+
+    case 'logout': {
+      const cookieHeader = request.headers.get('cookie') ?? undefined;
+      const sidValue = parsePsSid(cookieHeader);
+      if (sidValue) destroyPsSession(sidValue);
+      return psResponse(psJson({ actionsuccess: true }), clearPsSidCookieString());
+    }
+
+    default:
+      return psResponse(psJson({ actionsuccess: false, error: `Unknown action: ${act}` }));
+  }
+}

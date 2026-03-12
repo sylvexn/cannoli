@@ -23,9 +23,21 @@ const app = new Elysia()
       'https://mock.cannoli.live',
       'https://sim.cannoli.live',
       'http://sim.cannoli.localhost',
+      'http://localhost:8080',
     ],
     credentials: true,
   }))
+
+  // Rewrite /~~*/action.php → /api/ps/action.php (PS testclient compat)
+  .onRequest(({ request, set }) => {
+    const url = new URL(request.url);
+    if (url.pathname.includes('/action.php')) {
+      // Rewrite to our PS login action handler
+      const newUrl = new URL(request.url);
+      newUrl.pathname = '/api/ps/action.php';
+      return fetch(new Request(newUrl.toString(), request));
+    }
+  })
 
   // Auth context — derived once, available to all routes
   .derive(({ request }) => {
