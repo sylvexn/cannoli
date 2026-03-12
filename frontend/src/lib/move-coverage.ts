@@ -1,6 +1,7 @@
 import type { RosterPokemon } from './types';
 import type { MoveCategory, MoveCategoryEntry } from '@/data/move-categories';
 import { POKEMON_LEARNSETS } from '@/data/pokemon-learnsets';
+import { normalizeAbility } from './type-effectiveness';
 
 export interface MoveCoverageResult {
   category: MoveCategory;
@@ -14,9 +15,7 @@ export interface MoveCoverageResult {
 /** Check if a Pokemon has access to a move category entry (move or ability) */
 function pokemonHasEntry(pokemon: RosterPokemon, entry: MoveCategoryEntry): boolean {
   if (entry.isAbility) {
-    return pokemon.abilities.some(a =>
-      a.toLowerCase().replace(/[^a-z0-9]/g, '') === entry.moveId
-    );
+    return pokemon.abilities.some(a => normalizeAbility(a) === entry.moveId);
   }
   const learnset = POKEMON_LEARNSETS.get(pokemon.name);
   return learnset?.has(entry.moveId) ?? false;

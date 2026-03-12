@@ -11,7 +11,6 @@ import { DraftTeamSidebar } from './draft-board/draft-team-sidebar';
 import { DraftPoolTable } from './draft-board/draft-pool-table';
 import { PokemonHoverCard } from './draft-board/pokemon-hover-card';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
-import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftControlBar } from './draft-board/draft-control-bar';
 import { DraftPickLog } from './draft-board/draft-pick-log';
 import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
@@ -71,6 +70,7 @@ export function DraftBoardPage() {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{ name: string; rect: DOMRect } | null>(null);
+  const [pickLogExpanded, setPickLogExpanded] = useState(false);
 
   // Quick-draft confirmation popover state
   const [confirmPopover, setConfirmPopover] = useState<{ name: string; rect: DOMRect } | null>(null);
@@ -117,9 +117,17 @@ export function DraftBoardPage() {
   }, []);
 
   const handleQueueAdd = useCallback((name: string) => {
+    // Prevent queueing Pokemon user can't afford
+    if (userBudgetRemaining != null) {
+      const entry = TIER_LIST.find(e => e.name === name);
+      if (entry && entry.tier > userBudgetRemaining) {
+        toast.error(`Can't queue ${name} — costs ${entry.tier}pt, only ${userBudgetRemaining}pt remaining`);
+        return;
+      }
+    }
     dispatch({ type: 'QUEUE_ADD', name });
     toast.info(`${name} added to queue`);
-  }, [dispatch]);
+  }, [dispatch, userBudgetRemaining]);
 
   const handleQueueRemove = useCallback((name: string) => {
     dispatch({ type: 'QUEUE_REMOVE', name });
@@ -196,33 +204,14 @@ export function DraftBoardPage() {
     );
   }
 
+  const showFooter = state.mode === 'demo' || state.mode === 'live';
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Draft mode: on-the-clock banner */}
-      {isLiveMode && currentPick && playerLookup.get(currentPick.playerId) && !isDemoComplete && (
-        <DraftOnTheClock
-          pick={currentPick}
-          player={playerLookup.get(currentPick.playerId)!}
-          timerSeconds={state.timerSeconds}
-          timerDuration={state.timerDuration}
-          isUserTurn={isUserTurn}
-          totalPicks={state.snakeOrder.length}
-          timerPaused={state.timerPaused}
-        />
-      )}
-
-      {/* Draft mode: recent picks log */}
-      {isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
-        <DraftPickLog
-          picks={state.allPicks}
-          playerLookup={playerLookup}
-        />
-      )}
-
-      {/* Page header */}
-      <div className="flex items-center justify-between gap-4 pb-3">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Top bar: title + mode + view toggle — always compact */}
+      <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
+          <h1 className="text-lg font-mono font-bold tracking-tight uppercase">
             <span className="text-draw">Draft</span>
             <span className="text-text-primary ml-1">Board</span>
           </h1>
@@ -260,56 +249,106 @@ export function DraftBoardPage() {
           )}
         </div>
 
-        <SegmentedToggle
-          value={state.viewMode}
-          onChange={mode => dispatch({ type: 'SET_VIEW_MODE', mode })}
-          options={[
-            { value: 'grid', label: 'Grid', icon: <LayoutGrid size={13} /> },
-            { value: 'table', label: 'Table', icon: <Table size={13} /> },
-          ]}
+        <div className="flex items-center gap-2">
+          {/* Recent picks toggle (inline badge) */}
+          {isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
+            <button
+              onClick={() => setPickLogExpanded(!pickLogExpanded)}
+              className={cn(
+                'text-[10px] font-mono px-2 py-0.5 rounded border transition-colors',
+                pickLogExpanded
+                  ? 'text-neon border-neon/30 bg-neon/5'
+                  : 'text-text-muted border-border-subtle hover:text-text-secondary',
+              )}
+            >
+              {state.allPicks.length} picks
+            </button>
+          )}
+          <SegmentedToggle
+            value={state.viewMode}
+            onChange={mode => dispatch({ type: 'SET_VIEW_MODE', mode })}
+            options={[
+              { value: 'grid', label: 'Grid', icon: <LayoutGrid size={13} /> },
+              { value: 'table', label: 'Table', icon: <Table size={13} /> },
+            ]}
+          />
+        </div>
+      </div>
+
+      {/* Pick log — collapsible, only when toggled */}
+      {pickLogExpanded && isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
+        <DraftPickLog
+          picks={state.allPicks}
+          playerLookup={playerLookup}
+        />
+      )}
+
+      {/* Filter bar */}
+      <div className="shrink-0">
+        <DraftFilterBar
+          filters={state.filters}
+          onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
+          totalCount={TIER_LIST.length}
+          filteredCount={filteredPool.length}
         />
       </div>
 
-      {/* Filter bar */}
-      <DraftFilterBar
-        filters={state.filters}
-        onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
-        totalCount={TIER_LIST.length}
-        filteredCount={filteredPool.length}
-      />
+      {/* Main content: pool + sidebar — fills remaining space */}
+      <div className="flex flex-1 mt-1.5 min-h-0 gap-0">
+        {/* Pool column: pool + footer stacked (footer doesn't extend under sidebar) */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          {/* Pool area — scrollable */}
+          <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
+            {state.viewMode === 'grid' ? (
+              <DraftPoolGrid
+                poolByTier={poolByTier}
+                ownershipMap={ownershipMap}
+                playerLookup={playerLookup}
+                rosterLookup={rosterLookup}
+                selectedTeamId={state.selectedTeamId}
+                isUserPickable={isUserTurn}
+                showTierBadges={isLiveMode}
+                userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+                draftQueue={isLiveMode ? state.draftQueue : undefined}
+                onCardClick={handleCardClick}
+                onCardHoverStart={handleCardHoverStart}
+                onCardHoverEnd={handleCardHoverEnd}
+              />
+            ) : (
+              <DraftPoolTable
+                pool={filteredPool}
+                ownershipMap={ownershipMap}
+                playerLookup={playerLookup}
+                rosterLookup={rosterLookup}
+                selectedTeamId={state.selectedTeamId}
+                showTierBadges={isLiveMode}
+                userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+                onRowClick={handleCardClick}
+              />
+            )}
+          </div>
 
-      {/* Main content: pool + sidebar */}
-      <div className="flex flex-1 mt-3 min-h-0 gap-0">
-        {/* Pool area */}
-        <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0">
-          {state.viewMode === 'grid' ? (
-            <DraftPoolGrid
-              poolByTier={poolByTier}
-              ownershipMap={ownershipMap}
-              playerLookup={playerLookup}
-              rosterLookup={rosterLookup}
-              selectedTeamId={state.selectedTeamId}
-              isUserPickable={isUserTurn}
-              showTierBadges={isLiveMode}
-              userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
-              draftQueue={isLiveMode ? state.draftQueue : undefined}
-              onCardClick={handleCardClick}
-              onCardHoverStart={handleCardHoverStart}
-              onCardHoverEnd={handleCardHoverEnd}
-            />
-          ) : (
-            <DraftPoolTable
-              pool={filteredPool}
-              ownershipMap={ownershipMap}
-              playerLookup={playerLookup}
-              rosterLookup={rosterLookup}
-              selectedTeamId={state.selectedTeamId}
-              onRowClick={handleCardClick}
-            />
+          {/* Control bar (OTC merged in) — only spans pool width */}
+          {showFooter && (
+            <div className="shrink-0 mt-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
+              <DraftControlBar
+                state={state}
+                dispatch={dispatch}
+                isDemoComplete={isDemoComplete}
+                draftOrder={draftOrder}
+                presence={presence}
+                wsConnected={wsConnected}
+                timerEnabled={draftTimerEnabled}
+                currentPick={isLiveMode && currentPick && !isDemoComplete ? currentPick : null}
+                currentPlayer={isLiveMode && currentPick ? playerLookup.get(currentPick.playerId) ?? null : null}
+                isUserTurn={isUserTurn}
+                totalPicks={state.snakeOrder.length}
+              />
+            </div>
           )}
         </div>
 
-        {/* Team sidebar */}
+        {/* Team sidebar — always visible, scrolls internally */}
         <DraftTeamSidebar
           teamOrder={draftOrder}
           teamRosters={teamRosters}
@@ -331,19 +370,6 @@ export function DraftBoardPage() {
           presence={presence}
         />
       </div>
-
-      {/* Draft mode: control bar */}
-      {(state.mode === 'demo' || state.mode === 'live') && (
-        <DraftControlBar
-          state={state}
-          dispatch={dispatch}
-          isDemoComplete={isDemoComplete}
-          draftOrder={draftOrder}
-          presence={presence}
-          wsConnected={wsConnected}
-          timerEnabled={draftTimerEnabled}
-        />
-      )}
 
       {/* Hover card (hide when confirm popover is showing) */}
       {hoverInfo && !confirmPopover && (

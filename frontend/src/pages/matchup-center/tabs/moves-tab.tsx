@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import type { RosterPokemon } from '@/lib/types';
 import { DEFAULT_MOVE_CATEGORIES } from '@/data/move-categories';
 import { getTeamMoveCoverage } from '@/lib/move-coverage';
 import { AbilityChip } from '@/components/ability-chip';
+import { api } from '@/lib/api';
 import { ChevronDown } from 'lucide-react';
 
 interface MovesTabProps {
@@ -14,10 +15,19 @@ interface MovesTabProps {
 
 export function MovesTab({ teamA, teamB }: MovesTabProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [apiCategories, setApiCategories] = useState(DEFAULT_MOVE_CATEGORIES);
+
+  useEffect(() => {
+    api.getMoveCategories().then(cats => {
+      if (cats.length > 0) setApiCategories(cats);
+    }).catch(() => {
+      // Fall back to defaults silently
+    });
+  }, []);
 
   const coverage = useMemo(
-    () => getTeamMoveCoverage(teamA, teamB, DEFAULT_MOVE_CATEGORIES),
-    [teamA, teamB],
+    () => getTeamMoveCoverage(teamA, teamB, apiCategories),
+    [teamA, teamB, apiCategories],
   );
 
   function toggleCategory(id: string) {
@@ -37,23 +47,38 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
     );
   }
 
+  const totalCols = teamA.length + teamB.length;
+
   return (
-    <div className="border border-border-default rounded-lg">
+    <div className="border border-border-default rounded-lg w-full">
       {/* Sticky sprite header */}
       <div className="sticky top-0 z-10 flex items-center border-b border-border-default bg-surface-raised rounded-t-lg">
-        <div className="w-36 shrink-0 px-3 py-2 text-[10px] text-text-muted font-medium">Move / Ability</div>
+        <div className="w-40 shrink-0 px-3 py-2 text-[10px] text-text-muted font-medium">Move / Ability</div>
         {/* Team A sprites */}
-        <div className="flex border-r border-border-default">
-          {teamA.map(p => (
-            <div key={`a-${p.name}`} className="w-11 flex justify-center py-1.5 bg-[#3b82f6]/5" title={p.name}>
+        <div className="flex flex-1">
+          {teamA.map((p, i) => (
+            <div
+              key={`a-${p.name}`}
+              className={cn(
+                'flex-1 flex justify-center py-1.5 bg-[#3b82f6]/5 min-w-[44px]',
+                i < teamA.length - 1 && 'border-r border-[#3b82f6]/10',
+              )}
+              title={p.name}
+            >
               <PokemonSprite name={p.name} size="sm" />
             </div>
           ))}
-        </div>
-        {/* Team B sprites */}
-        <div className="flex">
-          {teamB.map(p => (
-            <div key={`b-${p.name}`} className="w-11 flex justify-center py-1.5 bg-[#ef4444]/5" title={p.name}>
+          {/* Divider between teams */}
+          <div className="w-px bg-border-default shrink-0" />
+          {teamB.map((p, i) => (
+            <div
+              key={`b-${p.name}`}
+              className={cn(
+                'flex-1 flex justify-center py-1.5 bg-[#ef4444]/5 min-w-[44px]',
+                i < teamB.length - 1 && 'border-r border-[#ef4444]/10',
+              )}
+              title={p.name}
+            >
               <PokemonSprite name={p.name} size="sm" />
             </div>
           ))}
@@ -84,42 +109,59 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
               <span className="text-[10px] text-[#ef4444] font-mono">{bCount}/{entries.length}</span>
             </button>
 
-            {!isCollapsed && entries.map(({ entry, teamA: matchesA, teamB: matchesB }) => (
+            {!isCollapsed && entries.map(({ entry, teamA: matchesA, teamB: matchesB }, rowIdx) => (
               <div
                 key={entry.moveId}
-                className="flex items-center border-b border-border-subtle/20 hover:bg-surface-overlay/10"
+                className={cn(
+                  'flex items-center border-b border-border-subtle/30',
+                  rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-surface-overlay/5',
+                  'hover:bg-surface-overlay/15',
+                )}
               >
-                <div className="w-36 shrink-0 px-3 py-[3px]">
+                <div className="w-40 shrink-0 px-3 py-1">
                   {entry.isAbility ? (
                     <AbilityChip name={entry.name} />
                   ) : (
-                    <span className="text-[11px] text-text-secondary">{entry.name}</span>
+                    <span className="text-[11px] text-text-secondary" title={`Move: ${entry.name}`}>
+                      {entry.name}
+                    </span>
                   )}
                 </div>
-                {/* Team A indicators */}
-                <div className="flex border-r border-border-default/30">
-                  {teamA.map(p => {
+                {/* Team A + Team B indicators in a flex row */}
+                <div className="flex flex-1">
+                  {teamA.map((p, i) => {
                     const has = matchesA.includes(p.name);
                     return (
-                      <div key={`a-${p.name}`} className="w-11 flex justify-center py-[3px]">
+                      <div
+                        key={`a-${p.name}`}
+                        className={cn(
+                          'flex-1 flex justify-center py-1 min-w-[44px]',
+                          i < teamA.length - 1 && 'border-r border-border-subtle/15',
+                        )}
+                      >
                         {has && (
-                          <div className="w-4 h-4 rounded-full bg-[#3b82f6] flex items-center justify-center">
-                            <div className="w-2 h-2 rounded-full bg-[#60a5fa]" />
+                          <div className="w-5 h-5 rounded-full bg-[#3b82f6] flex items-center justify-center">
+                            <div className="w-3 h-3 rounded-full bg-[#60a5fa]" />
                           </div>
                         )}
                       </div>
                     );
                   })}
-                </div>
-                {/* Team B indicators */}
-                <div className="flex">
-                  {teamB.map(p => {
+                  {/* Team divider */}
+                  <div className="w-px bg-border-default/40 shrink-0" />
+                  {teamB.map((p, i) => {
                     const has = matchesB.includes(p.name);
                     return (
-                      <div key={`b-${p.name}`} className="w-11 flex justify-center py-[3px]">
+                      <div
+                        key={`b-${p.name}`}
+                        className={cn(
+                          'flex-1 flex justify-center py-1 min-w-[44px]',
+                          i < teamB.length - 1 && 'border-r border-border-subtle/15',
+                        )}
+                      >
                         {has && (
-                          <div className="w-4 h-4 rounded-full bg-[#ef4444] flex items-center justify-center">
-                            <div className="w-2 h-2 rounded-full bg-[#f87171]" />
+                          <div className="w-5 h-5 rounded-full bg-[#ef4444] flex items-center justify-center">
+                            <div className="w-3 h-3 rounded-full bg-[#f87171]" />
                           </div>
                         )}
                       </div>

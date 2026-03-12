@@ -22,13 +22,24 @@ interface SpeedTabProps {
 function calcSpeed(
   baseSpe: number, level: number, evs: number, ivs: number,
   nature: 'positive' | 'neutral' | 'negative', boosts: number,
+  scarf: boolean, stickyWeb: boolean,
 ): number {
   const raw = Math.floor((2 * baseSpe + ivs + Math.floor(evs / 4)) * level / 100 + 5);
   const natureMult = nature === 'positive' ? 1.1 : nature === 'negative' ? 0.9 : 1.0;
   const natured = Math.floor(raw * natureMult);
-  if (boosts === 0) return natured;
-  if (boosts > 0) return Math.floor(natured * (2 + boosts) / 2);
-  return Math.floor(natured * 2 / (2 - boosts));
+
+  // Apply sticky web as -1 speed stage
+  const effectiveBoosts = stickyWeb ? boosts - 1 : boosts;
+
+  let result: number;
+  if (effectiveBoosts === 0) result = natured;
+  else if (effectiveBoosts > 0) result = Math.floor(natured * (2 + effectiveBoosts) / 2);
+  else result = Math.floor(natured * 2 / (2 - effectiveBoosts));
+
+  // Choice Scarf: 1.5x
+  if (scarf) result = Math.floor(result * 1.5);
+
+  return result;
 }
 
 export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdateSlot }: SpeedTabProps) {
@@ -119,7 +130,7 @@ function SpeedCalcCard({
   const pokemon = allPokemon.find(p => p.name === slot.pokemonName);
   const baseSpe = pokemon?.stats.spe ?? 0;
   const computed = pokemon
-    ? calcSpeed(baseSpe, slot.level, slot.evs, slot.ivs, slot.nature, slot.boosts)
+    ? calcSpeed(baseSpe, slot.level, slot.evs, slot.ivs, slot.nature, slot.boosts, slot.scarf, slot.stickyWeb)
     : 0;
 
   return (
@@ -154,7 +165,7 @@ function SpeedCalcCard({
       {/* Compact stat grid */}
       <div className="grid grid-cols-2 gap-x-2 gap-y-1">
         <LabeledInput label="Lv" value={slot.level} onChange={v => onUpdate({ level: v || 100 })} min={1} max={100} />
-        <LabeledInput label="EVs" value={slot.evs} onChange={v => onUpdate({ evs: Math.min(252, Math.max(0, v)) })} min={0} max={252} />
+        <LabeledInput label="EVs" value={slot.evs} onChange={v => onUpdate({ evs: Math.min(252, Math.max(0, v)) })} min={0} max={252} step={4} />
         <LabeledInput label="IVs" value={slot.ivs} onChange={v => onUpdate({ ivs: Math.min(31, Math.max(0, v)) })} min={0} max={31} />
         <LabeledInput label="Boost" value={slot.boosts} onChange={v => onUpdate({ boosts: Math.min(6, Math.max(-6, v)) })} min={-6} max={6} />
       </div>
@@ -174,9 +185,35 @@ function SpeedCalcCard({
                 : 'border-transparent text-text-muted hover:text-text-secondary',
             )}
           >
-            {n === 'positive' ? '+10%' : n === 'negative' ? '-10%' : '—'}
+            {n === 'positive' ? '+Spe' : n === 'negative' ? '-Spe' : 'Neutral'}
           </button>
         ))}
+      </div>
+
+      {/* Item / Field toggles */}
+      <div className="flex gap-0.5">
+        <button
+          onClick={() => onUpdate({ scarf: !slot.scarf })}
+          className={cn(
+            'flex-1 px-1 py-0.5 rounded text-[9px] font-medium border transition-colors',
+            slot.scarf
+              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+              : 'border-transparent text-text-muted hover:text-text-secondary',
+          )}
+        >
+          Scarf
+        </button>
+        <button
+          onClick={() => onUpdate({ stickyWeb: !slot.stickyWeb })}
+          className={cn(
+            'flex-1 px-1 py-0.5 rounded text-[9px] font-medium border transition-colors',
+            slot.stickyWeb
+              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+              : 'border-transparent text-text-muted hover:text-text-secondary',
+          )}
+        >
+          Sticky Web
+        </button>
       </div>
 
       {pokemon && (
@@ -186,8 +223,8 @@ function SpeedCalcCard({
   );
 }
 
-function LabeledInput({ label, value, onChange, min, max }: {
-  label: string; value: number; onChange: (v: number) => void; min: number; max: number;
+function LabeledInput({ label, value, onChange, min, max, step }: {
+  label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number;
 }) {
   return (
     <div className="flex items-center gap-1">
@@ -196,6 +233,7 @@ function LabeledInput({ label, value, onChange, min, max }: {
         value={value}
         onChange={onChange}
         min={min} max={max}
+        step={step}
         className="h-5 text-[11px] [&_input]:px-1 [&_input]:h-5 [&_input]:text-[11px]"
       />
     </div>

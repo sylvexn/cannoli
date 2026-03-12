@@ -122,12 +122,14 @@ export const psLoginRoutes = new Elysia()
     const sidValue = parsePsSid(cookieHeader);
 
     if (!sidValue) {
-      return psResponse(';;Session cookie not found');
+      // `;` tells the PS client to prompt for password (login:authrequired)
+      // `;;message` would show as an error instead
+      return psResponse(';');
     }
 
     const sessionUserid = validatePsSid(sidValue);
     if (!sessionUserid || sessionUserid !== toUserid(userid)) {
-      return psResponse(';;Session invalid or userid mismatch');
+      return psResponse(';');
     }
 
     const assertion = signAssertion(challstr, sessionUserid);
@@ -167,14 +169,20 @@ export const psLoginRoutes = new Elysia()
    * The PS client sends all auth requests to action.php with an `act` parameter.
    * testclient builds: http://Config.routes.client/~~serverId/action.php
    */
-  .post('/api/ps/action.php', ({ body, request }) => handleActionPhp(body, request));
+  .all('/api/ps/action.php', async ({ request }) => {
+    // Parse form body manually — Elysia doesn't parse form data when jQuery
+    // sends "application/x-www-form-urlencoded; charset=UTF-8" (charset suffix).
+    const text = await request.text();
+    const params = Object.fromEntries(new URLSearchParams(text));
+    return handleActionPhp(params, request);
+  });
 
-function handleActionPhp(body: unknown, request: Request): Response {
-  const params = body as Record<string, string>;
+function handleActionPhp(params: Record<string, string>, request: Request): Response {
   const act = params.act;
 
   switch (act) {
     case 'login': {
+      console.log('[PS login]', JSON.stringify({ name: params.name, challstrLen: params.challstr?.length, challstrStart: params.challstr?.slice(0, 20), challstrEnd: params.challstr?.slice(-20) }));
       const user = authenticateUser(params.name, params.pass);
       if (!user) {
         return psResponse(psJson({ actionsuccess: false, assertion: false }));
@@ -221,10 +229,10 @@ function handleActionPhp(body: unknown, request: Request): Response {
     case 'getassertion': {
       const cookieHeader = request.headers.get('cookie') ?? undefined;
       const sidValue = parsePsSid(cookieHeader);
-      if (!sidValue) return psResponse(';;Session cookie not found');
+      if (!sidValue) return psResponse(';');
       const sessionUserid = validatePsSid(sidValue);
       if (!sessionUserid || sessionUserid !== toUserid(params.userid)) {
-        return psResponse(';;Session invalid');
+        return psResponse(';');
       }
       const assertion = signAssertion(params.challstr, sessionUserid);
       return psResponse(assertion || ';;Failed to sign assertion');

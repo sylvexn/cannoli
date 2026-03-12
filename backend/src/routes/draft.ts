@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
-import { getDraftSnapshot, startDraft, executePick, handleTimerExpiry, executeAutoPick, skipPick } from '../lib/draft-engine';
+import { getDraftSnapshot, startDraft, executePick, executeAutoPick, skipPick } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
 
 // ─── Presence tracking per league ──────────────────────────────────────────
@@ -62,7 +62,7 @@ export const draftRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const teamId = (user.role === 'dev' && (body as any).teamId) ? (body as any).teamId : team?.id;
+    const teamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
     const result = executePick(params.leagueId, pokemonName, teamId);

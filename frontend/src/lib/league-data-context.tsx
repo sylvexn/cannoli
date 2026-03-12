@@ -56,6 +56,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
           stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
           abilities: r.abilities,
           seasonStats: r.seasonStats,
+          isShiny: r.isShiny,
         })),
       }));
 

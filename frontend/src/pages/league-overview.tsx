@@ -8,17 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
+import { PHASE_COLORS } from '@/lib/constants';
 import {
   Megaphone, Users, Swords, ArrowLeftRight, Trophy,
   ScrollText, Settings, Play, Check, Star, X,
 } from 'lucide-react';
-
-const phaseColors: Record<string, string> = {
-  draft: 'text-draw bg-draw/10',
-  regular: 'text-neon bg-neon/10',
-  playoffs: 'text-pink bg-pink/10',
-  offseason: 'text-text-muted bg-surface-overlay',
-};
 
 const EVENT_ICONS: Record<string, typeof Users> = {
   draft_started: Play, draft_pick: Trophy, draft_completed: Check,
@@ -129,7 +123,7 @@ export function LeagueOverviewPage() {
                         {league.name}
                       </CardTitle>
                     </Link>
-                    <Badge variant="outline" className={cn('text-[10px]', phaseColors[league.season.phase])}>
+                    <Badge variant="outline" className={cn('text-[10px]', PHASE_COLORS[league.season.phase])}>
                       {league.season.phase}
                     </Badge>
                   </div>

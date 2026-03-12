@@ -31,79 +31,66 @@ export function DraftOnTheClock({
   return (
     <div
       className={cn(
-        'relative rounded-lg border mb-3 px-4 py-3 overflow-hidden',
-        'transition-all duration-300',
-        urgency === 'calm' && 'border-border-default',
-        urgency === 'warning' && 'border-draw/40',
-        urgency === 'critical' && 'border-loss/40',
-        isUserTurn && 'border-neon/50 shadow-glow-sm',
+        'relative px-3 py-1.5 overflow-hidden border-b border-border-subtle',
+        isUserTurn && urgency === 'calm' && 'bg-neon/[0.04]',
+        isUserTurn && urgency === 'warning' && 'bg-draw/[0.04]',
+        isUserTurn && urgency === 'critical' && 'bg-loss/[0.06]',
+        !isUserTurn && 'bg-surface-overlay/20',
       )}
     >
-      {/* Team color gradient background */}
-      <div
-        className="absolute inset-0 opacity-[0.08]"
-        style={{ background: `linear-gradient(135deg, ${player.teamColor}, transparent 60%)` }}
-      />
-
-      <div className="relative flex items-center gap-4">
-        {/* Team info */}
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-heading font-bold text-text-primary truncate">
-              {player.name}'s {player.teamName}
-            </span>
-            {isUserTurn && (
-              <Badge className="bg-neon/20 text-neon border-neon/30 text-[10px] font-bold animate-pulse">
-                <Zap size={10} className="mr-0.5" />
-                YOUR PICK
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[11px] text-text-muted font-mono">
-              Round {pick.round}, Pick {pick.pick}
-            </span>
-            <span className="text-[11px] text-text-muted">·</span>
-            <span className="text-[11px] text-text-muted font-mono">
-              Overall #{pick.overallPick} of {totalPicks}
-            </span>
-          </div>
-        </div>
-
-        {/* Timer */}
-        <div className={cn(
-          'flex items-center gap-2 px-3 py-1.5 rounded-md',
-          'border font-mono tabular-nums text-lg font-bold',
-          timerPaused
-            ? 'border-draw/30 text-draw bg-draw/5'
-            : urgency === 'calm' ? 'border-border-subtle text-neon'
-            : urgency === 'warning' ? 'border-draw/30 text-draw bg-draw/5'
-            : 'border-loss/30 text-loss bg-loss/5 animate-pulse',
-        )}>
-          {timerPaused ? (
-            <Pause size={16} />
-          ) : (
-            <Timer size={16} />
-          )}
-          <span className={timerPaused ? 'animate-pulse' : ''}>
-            {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
-          </span>
-        </div>
-      </div>
-
-      {/* Timer progress bar — uses max(timerSeconds, timerDuration) as denominator
-           so adding time scales proportionally instead of clipping at 100% */}
-      <div className="mt-2 h-1 w-full rounded-full bg-surface-overlay overflow-hidden">
+      {/* Timer progress bar — thin line at top */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-surface-overlay/30">
         <div
           className={cn(
-            'h-full rounded-full transition-all duration-1000 ease-linear',
+            'h-full transition-all duration-1000 ease-linear',
             urgency === 'calm' && 'bg-neon',
             urgency === 'warning' && 'bg-draw',
             urgency === 'critical' && 'bg-loss',
           )}
           style={{ width: `${(timerSeconds / Math.max(timerSeconds, timerDuration)) * 100}%` }}
         />
+      </div>
+
+      <div className="flex items-center gap-3">
+        {/* Team info — compact */}
+        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+        <span className="text-xs font-medium text-text-primary truncate">
+          {player.teamAbbrev}
+        </span>
+
+        {isUserTurn && (
+          <Badge className="bg-neon/20 text-neon border-neon/30 text-[9px] font-bold px-1.5 py-0 h-4 animate-pulse">
+            <Zap size={8} className="mr-0.5" />
+            YOUR PICK
+          </Badge>
+        )}
+
+        <span className="text-[10px] text-text-muted font-mono">
+          R{pick.round} P{pick.pick} · #{pick.overallPick}/{totalPicks}
+        </span>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Timer — right aligned, prominent */}
+        <div className={cn(
+          'flex items-center gap-1.5 px-2 py-0.5 rounded',
+          'font-mono tabular-nums text-sm font-bold',
+          timerPaused
+            ? 'text-draw'
+            : urgency === 'calm' ? 'text-neon'
+            : urgency === 'warning' ? 'text-draw'
+            : 'text-loss animate-pulse',
+        )}>
+          {timerPaused ? (
+            <Pause size={12} />
+          ) : (
+            <Timer size={12} />
+          )}
+          <span className={timerPaused ? 'animate-pulse' : ''}>
+            {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
+          </span>
+        </div>
       </div>
     </div>
   );

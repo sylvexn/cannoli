@@ -19,6 +19,7 @@ export const leagueRoutes = new Elysia()
       id: l.id,
       name: l.name,
       color: l.color,
+      draftDate: l.draftDate,
       season: season ? {
         id: `s${season.seasonNumber}`,
         seasonNumber: season.seasonNumber,
@@ -26,6 +27,7 @@ export const leagueRoutes = new Elysia()
         currentWeek: season.currentWeek,
         totalWeeks: season.totalWeeks,
         tradeDeadlineWeek: season.tradeDeadlineWeek,
+        weekDates: season.weekDates ? JSON.parse(season.weekDates) : null,
       } : null,
     }));
   })
@@ -158,6 +160,56 @@ export const leagueRoutes = new Elysia()
       }));
   })
 
+  // ─── Player Availability ─────────────────────────────────────────────
+
+  .get('/api/leagues/:leagueId/availability', ({ params }) => {
+    return db.select().from(schema.playerAvailability)
+      .where(eq(schema.playerAvailability.leagueId, params.leagueId))
+      .all();
+  })
+
+  .put('/api/leagues/:leagueId/availability', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const { teamId, week, day, status, note } = body as {
+      teamId: string; week: number; day: string;
+      status: 'available' | 'unavailable' | 'maybe'; note?: string;
+    };
+
+    if (!teamId || !week || !day || !status) {
+      set.status = 400;
+      return { error: 'teamId, week, day, and status required' };
+    }
+
+    // Verify team ownership or staff
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    if (!isStaff(user) && team.userId !== parseInt(user.id)) {
+      set.status = 403;
+      return { error: 'Not your team' };
+    }
+
+    // Upsert: delete existing entry for this team/week/day, then insert
+    db.delete(schema.playerAvailability)
+      .where(and(
+        eq(schema.playerAvailability.teamId, teamId),
+        eq(schema.playerAvailability.leagueId, params.leagueId),
+        eq(schema.playerAvailability.week, week),
+        eq(schema.playerAvailability.day, day),
+      )).run();
+
+    db.insert(schema.playerAvailability).values({
+      teamId,
+      leagueId: params.leagueId,
+      week,
+      day,
+      status,
+      note: note ?? null,
+    }).run();
+
+    return { success: true };
+  })
+
   // ─── Transactions ────────────────────────────────────────────────────
 
   .get('/api/leagues/:leagueId/transactions', ({ params }) => {
@@ -242,10 +294,13 @@ export const leagueRoutes = new Elysia()
   .get('/api/pokemon', ({ query }) => {
     const limit = parseInt(query.limit as string) || 100;
     const offset = parseInt(query.offset as string) || 0;
-    return db.select().from(schema.pokemon)
-      .limit(limit)
-      .offset(offset)
-      .all();
+    const search = (query.search as string || '').trim();
+    let q = db.select().from(schema.pokemon);
+    if (search) {
+      const rows = q.all().filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+      return rows.slice(offset, offset + limit);
+    }
+    return q.limit(limit).offset(offset).all();
   })
 
   .get('/api/pokemon/:name', ({ params }) => {
@@ -432,6 +487,7 @@ export const leagueRoutes = new Elysia()
         id: cat.id,
         name: cat.name,
         entries: entries.map(e => ({
+          id: e.id,
           name: e.name,
           moveId: e.moveId,
           isAbility: e.isAbility,
@@ -535,6 +591,37 @@ export const leagueRoutes = new Elysia()
         metadata: JSON.stringify({ teamId: params.teamId, captains }),
       }).run();
     }
+
+    return { success: true };
+  })
+
+  // ─── Shiny Toggle ─────────────────────────────────────────────────
+
+  .put('/api/teams/:teamId/shiny', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    if (!isStaff(user) && team.userId !== parseInt(user.id)) {
+      set.status = 403;
+      return { error: 'Not your team' };
+    }
+
+    const { pokemonName, isShiny } = body as { pokemonName: string; isShiny: boolean };
+    if (!pokemonName || typeof isShiny !== 'boolean') {
+      set.status = 400;
+      return { error: 'pokemonName and isShiny required' };
+    }
+
+    const roster = db.select().from(schema.rosters)
+      .where(and(eq(schema.rosters.teamId, params.teamId), eq(schema.rosters.pokemonName, pokemonName)))
+      .get();
+    if (!roster) { set.status = 404; return { error: 'Pokemon not on roster' }; }
+
+    db.update(schema.rosters).set({ isShiny })
+      .where(and(eq(schema.rosters.teamId, params.teamId), eq(schema.rosters.pokemonName, pokemonName)))
+      .run();
 
     return { success: true };
   })

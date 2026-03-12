@@ -34,6 +34,8 @@ export const seasons = sqliteTable('seasons', {
   teraCaptainSlots: integer('tera_captain_slots').notNull().default(2),
   tradeDeadlineWeek: integer('trade_deadline_week').notNull().default(7),
   scheduleType: text('schedule_type', { enum: ['round_robin', 'manual'] }).default('round_robin'),
+  /** JSON object mapping week number to ISO date string, e.g. {"1":"2026-04-14","2":"2026-04-21"} */
+  weekDates: text('week_dates'),
 });
 
 // ─── Leagues ─────────────────────────────────────────────────────────────────
@@ -45,6 +47,8 @@ export const leagues = sqliteTable('leagues', {
   seasonId: integer('season_id').notNull().references(() => seasons.id),
   /** JSON array of team IDs in draft order */
   draftOrder: text('draft_order'),
+  /** ISO datetime for the league's draft date/time */
+  draftDate: text('draft_date'),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -299,6 +303,32 @@ export const scrims = sqliteTable('scrims', {
   replayUrl: text('replay_url'),
   psRoomId: text('ps_room_id'),
   playedAt: text('played_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Feedback Submissions (tracks who submitted which GitHub issues) ───────
+
+export const feedbackSubmissions = sqliteTable('feedback_submissions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  issueNumber: integer('issue_number').notNull(),
+  issueUrl: text('issue_url').notNull(),
+  title: text('title').notNull(),
+  /** ISO timestamp when user acknowledged the resolution notification */
+  acknowledgedAt: text('acknowledged_at'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Player Availability ───────────────────────────────────────────────────
+
+export const playerAvailability = sqliteTable('player_availability', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  leagueId: text('league_id').notNull().references(() => leagues.id),
+  week: integer('week').notNull(),
+  /** ISO date string (YYYY-MM-DD) */
+  day: text('day').notNull(),
+  status: text('status', { enum: ['available', 'unavailable', 'maybe'] }).notNull().default('available'),
+  note: text('note'),
 });
 
 // ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──

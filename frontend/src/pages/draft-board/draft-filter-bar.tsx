@@ -23,7 +23,7 @@ interface DraftFilterBarProps {
 }
 
 export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }: DraftFilterBarProps) {
-  const hasActiveFilters = filters.search || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20;
+  const hasActiveFilters = filters.search || filters.abilitySearch || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20;
 
   return (
     <div className="space-y-2">
@@ -41,6 +41,24 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
           {filters.search && (
             <button
               onClick={() => onUpdate({ search: '' })}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+            >
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Ability search */}
+        <div className="relative min-w-[140px] max-w-[180px]">
+          <Input
+            value={filters.abilitySearch}
+            onChange={e => onUpdate({ abilitySearch: e.target.value })}
+            placeholder="Ability..."
+            className="h-8 text-sm bg-surface-raised border-border-default pl-2.5"
+          />
+          {filters.abilitySearch && (
+            <button
+              onClick={() => onUpdate({ abilitySearch: '' })}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
             >
               <X size={12} />
@@ -110,7 +128,7 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
               variant="ghost"
               size="sm"
               onClick={() => onUpdate({
-                search: '', tierMin: 1, tierMax: 20, types: [], ownership: 'all',
+                search: '', abilitySearch: '', tierMin: 1, tierMax: 20, types: [], typeMode: 'or', ownership: 'all',
               })}
               className="h-7 text-xs text-text-muted hover:text-neon"
             >
@@ -150,6 +168,19 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
             </button>
           );
         })}
+        {filters.types.length >= 2 && (
+          <button
+            onClick={() => onUpdate({ typeMode: filters.typeMode === 'or' ? 'and' : 'or' })}
+            className={cn(
+              'px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors',
+              filters.typeMode === 'and'
+                ? 'text-neon border-neon/30 bg-neon/10'
+                : 'text-text-muted border-border-subtle hover:text-text-secondary',
+            )}
+          >
+            {filters.typeMode === 'and' ? 'Both' : 'Either'}
+          </button>
+        )}
         {filters.types.length > 0 && (
           <button
             onClick={() => onUpdate({ types: [] })}

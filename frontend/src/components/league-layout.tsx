@@ -59,8 +59,9 @@ export function LeagueLayout() {
             )}
           </nav>
 
-          {/* Page content — flex-1 so draft board can fill height */}
-          <div className="flex-1 min-h-0">
+          {/* Page content — flex-1 so draft board can fill height.
+              overflow-hidden ensures the child sees this as its containing block. */}
+          <div className="flex-1 min-h-0 overflow-hidden">
             <Outlet />
           </div>
         </div>

@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
+import { PHASE_COLORS } from '@/lib/constants';
 import { api } from '@/lib/api';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
@@ -26,13 +27,7 @@ import { FeedbackDialog } from './feedback-dialog';
 import { CommandPalette } from './command-palette';
 import { MatchBanner } from './match-banner';
 import { Search } from 'lucide-react';
-
-const phaseColors: Record<string, string> = {
-  draft: 'text-draw bg-draw/10',
-  regular: 'text-neon bg-neon/10',
-  playoffs: 'text-pink bg-pink/10',
-  offseason: 'text-text-muted bg-surface-overlay',
-};
+import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
 
 const leaguePages = [
   { path: '', label: 'Standings', icon: Trophy },
@@ -51,6 +46,9 @@ export function AppShell() {
   const { user, isAdmin, logout } = useAuth();
   const { leagues } = useAppData();
   const isWide = WIDE_ROUTES.some(r => pathname.includes(r));
+
+  // Check for resolved feedback notifications
+  useFeedbackNotifications();
 
   // Command palette
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -211,7 +209,7 @@ export function AppShell() {
                   </div>
                   <span className={cn(
                     'text-[9px] px-1 py-0.5 rounded font-bold uppercase shrink-0',
-                    phaseColors[league.season.phase],
+                    PHASE_COLORS[league.season.phase],
                   )}>
                     {league.season.phase === 'regular'
                       ? `W${league.season.currentWeek}`

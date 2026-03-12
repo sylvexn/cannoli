@@ -43,6 +43,7 @@ export interface ApiLeague {
   id: string;
   name: string;
   color: string;
+  draftDate?: string | null;
   season: {
     id: string;
     seasonNumber: number;
@@ -50,6 +51,7 @@ export interface ApiLeague {
     currentWeek: number;
     totalWeeks: number;
     tradeDeadlineWeek: number;
+    weekDates?: Record<string, string> | null;
   } | null;
 }
 
@@ -159,18 +161,6 @@ export interface ApiDraftState {
   teamPoints: Record<string, number>;
 }
 
-export interface ApiPokemonStat {
-  pokemonName: string;
-  teamId: string;
-  kills: number;
-  deaths: number;
-  gp: number;
-  differential: number;
-  kpg: number;
-  types: string[];
-  tier: number;
-}
-
 // ─── API functions ───────────────────────────────────────────────────────────
 
 // ─── Auth response types ────────────────────────────────────────────────────
@@ -211,10 +201,17 @@ export interface ApiSiteSettings {
   draftDemoVisible: boolean;
 }
 
+export interface ApiMoveCategoryEntry {
+  id: number;
+  name: string;
+  moveId: string;
+  isAbility: boolean;
+}
+
 export interface ApiMoveCategory {
   id: string;
   name: string;
-  entries: { name: string; moveId: string; isAbility: boolean }[];
+  entries: ApiMoveCategoryEntry[];
 }
 
 export interface ApiTrade {
@@ -280,8 +277,6 @@ export const api = {
   getTransactions: (leagueId: string) => fetchJson<ApiTransaction[]>(`/api/leagues/${leagueId}/transactions`),
 
   getDraftPicks: (leagueId: string) => fetchJson<ApiDraftPick[]>(`/api/leagues/${leagueId}/draft`),
-
-  getStats: (leagueId: string) => fetchJson<ApiPokemonStat[]>(`/api/leagues/${leagueId}/stats`),
 
   // Admin read
   getUsers: () => fetchJson<ApiAuthUser[]>('/api/users'),
@@ -361,17 +356,11 @@ export const api = {
   startDraft: (leagueId: string, timerDuration?: number) =>
     postJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/start`, { timerDuration }),
 
-  draftPick: (leagueId: string, pokemonName: string, teamId?: string) =>
-    postJson<{ success: boolean; pick: ApiDraftPick }>(`/api/leagues/${leagueId}/draft/pick`, { pokemonName, teamId }),
-
   pauseDraft: (leagueId: string) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/pause`),
 
   resumeDraft: (leagueId: string) =>
     postJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/resume`),
-
-  autoPick: (leagueId: string) =>
-    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/auto-pick`),
 
   generateSchedule: (leagueId: string) =>
     postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`),
@@ -383,12 +372,6 @@ export const api = {
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/reject`, { reason }),
 
   // User write (own team)
-  addTradeBlockListing: (leagueId: string, data: { pokemonName: string; note?: string; teamId?: string }) =>
-    postJson<{ id: number }>(`/api/leagues/${leagueId}/trade-block`, data),
-
-  removeTradeBlockListing: (id: number) =>
-    deleteJson<{ success: boolean }>(`/api/trade-block-listings/${id}`),
-
   proposeTrade: (leagueId: string, data: { recipientId: string; offering: string[]; requesting: string[]; proposerId?: string }) =>
     postJson<{ id: string }>(`/api/leagues/${leagueId}/trades/propose`, data),
 
@@ -398,6 +381,12 @@ export const api = {
 
   getFeedbackIssues: (state?: 'open' | 'closed' | 'all') =>
     fetchJson<ApiFeedbackIssue[]>(`/api/admin/issues${state ? `?state=${state}` : ''}`),
+
+  getFeedbackNotifications: () =>
+    fetchJson<{ issueNumber: number; title: string; issueUrl: string }[]>('/api/feedback/notifications'),
+
+  acknowledgeFeedback: (issueNumber: number) =>
+    postJson<{ success: boolean }>(`/api/feedback/${issueNumber}/acknowledge`),
 
   // Match management
   getAdminMatches: (params?: { leagueId?: string; status?: string }) => {
@@ -418,14 +407,12 @@ export const api = {
   dismissMatchWarnings: (matchId: string) =>
     postJson<{ success: boolean }>(`/api/matches/${matchId}/dismiss-warnings`),
 
-  generatePlayoffs: (leagueId: string, topN?: number) =>
-    postJson<{ success: boolean; matchCount: number; seedings: { seed: number; teamId: string }[] }>(
-      `/api/leagues/${leagueId}/playoffs/generate`, { topN }
-    ),
-
   // Tera captain management
   saveTerraCaptains: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
     putJson<{ success: boolean }>(`/api/teams/${teamId}/tera-captains`, { captains }),
+
+  toggleShiny: (teamId: string, pokemonName: string, isShiny: boolean) =>
+    putJson<{ success: boolean }>(`/api/teams/${teamId}/shiny`, { pokemonName, isShiny }),
 
   // Free agents
   getFreeAgents: (leagueId: string) =>
@@ -436,7 +423,29 @@ export const api = {
   freeAgentPickup: (leagueId: string, data: { teamId: string; pokemonName: string; dropPokemonName?: string }) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/free-agents/pickup`, data),
 
-  // Live matches (uses existing admin matches endpoint filtered)
-  getLiveMatches: () =>
-    fetchJson<ApiAdminMatch[]>('/api/admin/matches?status=in_progress'),
+  // Player availability
+  getAvailability: (leagueId: string) =>
+    fetchJson<{ id: number; teamId: string; leagueId: string; week: number; day: string; status: string; note: string | null }[]>(
+      `/api/leagues/${leagueId}/availability`
+    ),
+
+  setAvailability: (leagueId: string, data: { teamId: string; week: number; day: string; status: string; note?: string }) =>
+    putJson<{ success: boolean }>(`/api/leagues/${leagueId}/availability`, data),
+
+  // Pokemon lookup
+  getPokemonByName: (name: string) =>
+    fetchJson<{ name: string; type1: string; type2: string | null; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null; tier: number } | null>(
+      `/api/pokemon/${encodeURIComponent(name)}`
+    ),
+
+  // Bulk pokemon search (paginated)
+  getPokemonList: (params?: { search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    return fetchJson<{ name: string; type1: string; type2: string | null; tier: number; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null }[]>(
+      `/api/pokemon?${q}`
+    );
+  },
 };

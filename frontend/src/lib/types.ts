@@ -47,6 +47,7 @@ export interface RosterPokemon {
   seasonStats: {
     kills: number; deaths: number; gp: number;
   };
+  isShiny?: boolean;
 }
 
 export interface MatchPokemonEntry {
@@ -91,14 +92,7 @@ export interface LeagueSeason {
   currentWeek: number;
   totalWeeks: number;
   tradeDeadlineWeek: number;
-}
-
-export interface TierPokemon {
-  name: string;
-  tier: number;
-  types: PokemonType[];
-  drafted: boolean;
-  draftedBy?: string;
+  weekDates?: Record<string, string> | null;
 }
 
 export interface Trade {
@@ -123,6 +117,7 @@ export interface League {
   id: string;
   name: string;
   color: string;
+  draftDate?: string | null;
   season: LeagueSeason;
   players: Player[];
   hasData: boolean;
