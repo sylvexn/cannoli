@@ -35,4 +35,6 @@ bun.lockb
 showdown/*
 !showdown/Dockerfile.*
 !showdown/nginx.conf
+!showdown/ps-client-config.js
+!showdown/ps-testclient-key.js
 *.pem
