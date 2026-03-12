@@ -1,0 +1,23 @@
+FROM node:20-slim
+WORKDIR /ps
+
+# Clone official Pokemon Showdown (shallow)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/smogon/pokemon-showdown.git .
+
+# Install deps
+RUN npm install --omit=dev
+
+# Copy Cannoli config + chat plugin
+COPY ps/config-example.js config/config.js
+COPY ps/cannoli.ts server/chat-plugins/cannoli.ts
+
+# CannoliBot global voice
+RUN echo "cannolibot,+" >> config/usergroups.csv
+
+# Replay storage volume
+RUN mkdir -p logs
+
+EXPOSE 8000
+
+CMD ["node", "pokemon-showdown", "start", "--no-security"]

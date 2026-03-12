@@ -32,5 +32,7 @@ bun.lockb
 *.db-wal
 
 # Showdown (cloned repos + keys, managed by setup:showdown)
-showdown/
+showdown/*
+!showdown/Dockerfile.*
+!showdown/nginx.conf
 *.pem

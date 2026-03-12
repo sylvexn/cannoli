@@ -1,0 +1,52 @@
+FROM node:20-slim AS build
+WORKDIR /client
+
+# Clone official Pokemon Showdown client (shallow)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 https://github.com/smogon/pokemon-showdown-client.git .
+
+# Configure client for Cannoli
+# Config: point at sim.cannoli.live game server and cannoli.live login
+RUN cat > config/config.js << 'EOF'
+var Config = Config || {};
+Config.version = "0.11.2";
+
+Config.defaultserver = {
+  id: 'sim-cannoli-live',
+  host: 'sim.cannoli.live',
+  port: 443,
+  httpport: 443,
+  registered: true
+};
+
+Config.routes = {
+  root: 'sim.cannoli.live',
+  client: 'sim.cannoli.live',
+};
+
+// Login server is the Cannoli backend
+Config.loginserver = 'https://cannoli.live/api/ps/';
+EOF
+
+# testclient-key: bypass ProxyPopup, use same-origin action.php
+RUN cat > config/testclient-key.js << 'EOF'
+const POKEMON_SHOWDOWN_TESTCLIENT_KEY = 'cannoli';
+Config.routes = Config.routes || {};
+Config.routes.client = 'sim.cannoli.live';
+EOF
+
+# Build the client (generates data files, compiled JS)
+RUN node build full
+
+FROM nginx:alpine
+
+# Copy built client files
+COPY --from=build /client/play.pokemonshowdown.com /usr/share/nginx/html
+
+# Also copy data dirs that live outside play/
+COPY --from=build /client/replay.pokemonshowdown.com /usr/share/nginx/html/replay
+
+# Nginx config template (envsubst for PS_SERVER_HOST)
+COPY showdown/nginx.conf /etc/nginx/templates/default.conf.template
+
+EXPOSE 80
