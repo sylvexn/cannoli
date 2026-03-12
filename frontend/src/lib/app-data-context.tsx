@@ -19,6 +19,7 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       currentWeek: a.season.currentWeek,
       totalWeeks: a.season.totalWeeks,
       tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
+      weekDates: a.season.weekDates,
     } : {
       id: 'unknown',
       seasonNumber: 0,
@@ -31,6 +32,7 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       id: a.id,
       name: a.name,
       color: a.color,
+      draftDate: a.draftDate,
       season,
       players: [],
       hasData: true,

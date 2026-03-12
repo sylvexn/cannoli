@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
@@ -6,7 +7,7 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered, Circle, Eye } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ChevronDown, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered, Circle, Eye } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
@@ -180,6 +181,7 @@ function DraftFocusedPanel({
   const picksLeft = Math.max(0, ROSTER_SIZE - userRoster.length);
   const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
   const otherTeams = teamOrder.filter(p => p.id !== userTeamId);
+  const [teamsCollapsed, setTeamsCollapsed] = useState(false);
 
   return (
     <div className="w-[280px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
@@ -364,9 +366,16 @@ function DraftFocusedPanel({
           </div>
         )}
 
-        {/* Other teams — compact view */}
+        {/* Other teams — compact collapsible */}
         <div className="p-2">
-          <div className="flex items-center gap-2 mb-1.5 px-1">
+          <button
+            onClick={() => setTeamsCollapsed(c => !c)}
+            className="flex items-center gap-1.5 mb-1.5 px-1 w-full group/th"
+          >
+            <ChevronDown size={10} className={cn(
+              'text-text-muted transition-transform',
+              teamsCollapsed && '-rotate-90',
+            )} />
             <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
               All Teams
             </span>
@@ -376,54 +385,73 @@ function DraftFocusedPanel({
                 {presence.spectators.length}
               </span>
             )}
-          </div>
-          <div className="space-y-0.5">
-            {otherTeams.map(p => {
-              const points = teamPoints.get(p.id) ?? 0;
-              const roster = teamRosters.get(p.id) ?? [];
-              const isDrafter = currentDrafterId === p.id;
-              const isSelected = selectedTeamId === p.id;
-              const isOnline = connectedTeamIds?.has(p.id);
+          </button>
 
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => onSelectTeam(p.id)}
-                  className={cn(
-                    'w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-all duration-150',
-                    isDrafter
-                      ? 'bg-pink/5 border border-pink/30'
-                      : isSelected
-                      ? 'bg-surface-overlay/40 border border-border-default'
-                      : 'border border-transparent hover:bg-surface-overlay/20 hover:border-border-subtle',
-                  )}
-                >
-                  {connectedTeamIds && connectedTeamIds.size > 0 && (
-                    <Circle size={5} className={cn(
-                      'shrink-0',
-                      isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
-                    )} />
-                  )}
-                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                  <span className="text-[11px] font-medium text-text-primary flex-1 text-left truncate">
-                    {p.teamAbbrev}
-                  </span>
-                  {isDrafter && (
-                    <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] px-1 py-0 h-3.5">
-                      <Zap size={8} className="mr-0.5" />
-                      OTC
-                    </Badge>
-                  )}
-                  <span className="text-[9px] font-mono tabular-nums text-text-muted">
-                    {roster.length}pk
-                  </span>
-                  <span className="text-[9px] font-mono tabular-nums text-text-muted">
-                    {points}/{pointCap}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {teamsCollapsed ? (
+            /* Collapsed: row of team logo dots */
+            <div className="flex flex-wrap gap-1 px-1">
+              {otherTeams.map(p => {
+                const isDrafter = currentDrafterId === p.id;
+                const isSelected = selectedTeamId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => onSelectTeam(p.id)}
+                    className={cn(
+                      'transition-all duration-150 relative',
+                      isSelected && 'ring-1 ring-neon rounded-full',
+                      isDrafter && 'ring-1 ring-pink rounded-full animate-pulse',
+                    )}
+                  >
+                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Expanded: 2-column compact grid */
+            <div className="grid grid-cols-2 gap-0.5">
+              {otherTeams.map(p => {
+                const points = teamPoints.get(p.id) ?? 0;
+                const roster = teamRosters.get(p.id) ?? [];
+                const isDrafter = currentDrafterId === p.id;
+                const isSelected = selectedTeamId === p.id;
+                const isOnline = connectedTeamIds?.has(p.id);
+
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => onSelectTeam(p.id)}
+                    className={cn(
+                      'flex items-center gap-1.5 px-1.5 py-1 rounded transition-all duration-150',
+                      isDrafter
+                        ? 'bg-pink/5 border border-pink/30'
+                        : isSelected
+                        ? 'bg-surface-overlay/40 border border-border-default'
+                        : 'border border-transparent hover:bg-surface-overlay/20 hover:border-border-subtle',
+                    )}
+                  >
+                    {connectedTeamIds && connectedTeamIds.size > 0 && (
+                      <Circle size={4} className={cn(
+                        'shrink-0',
+                        isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
+                      )} />
+                    )}
+                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                    <span className="text-[10px] font-medium text-text-primary truncate">
+                      {p.teamAbbrev}
+                    </span>
+                    {isDrafter && (
+                      <Zap size={8} className="text-pink shrink-0" />
+                    )}
+                    <span className="text-[9px] font-mono tabular-nums text-text-muted ml-auto">
+                      {roster.length}pk
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </ScrollArea>
     </div>

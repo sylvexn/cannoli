@@ -32,22 +32,39 @@ Bun.serve({
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Proxy action.php to our Elysia backend
+    // Proxy action.php to our Elysia backend (same-origin cookie relay)
     if (path.includes('/action.php')) {
+      const rawBody = req.method !== 'GET' ? await req.clone().text() : '';
+      console.log(`[proxy] ${req.method} action.php | body(${rawBody.length}): ${rawBody.slice(0, 200)}`);
       const backendUrl = `${BACKEND_URL}/api/ps/action.php${url.search}`;
-      const headers = new Headers(req.headers);
-      headers.set('host', 'localhost:3001');
+
+      // Forward essential headers: cookies, content-type, body
+      const proxyHeaders: Record<string, string> = {
+        'host': 'localhost:3001',
+      };
+      const cookie = req.headers.get('cookie');
+      if (cookie) proxyHeaders['cookie'] = cookie;
+      const contentType = req.headers.get('content-type');
+      if (contentType) {
+        // Strip "; charset=UTF-8" — Elysia doesn't parse form bodies with charset suffix
+        proxyHeaders['content-type'] = contentType.split(';')[0].trim();
+      }
 
       const resp = await fetch(backendUrl, {
         method: req.method,
-        headers,
-        body: req.method !== 'GET' ? await req.text() : undefined,
+        headers: proxyHeaders,
+        body: req.method !== 'GET' ? await req.arrayBuffer() : undefined,
       });
 
-      // Forward response with CORS headers for cross-origin cookies
-      const respHeaders = new Headers(resp.headers);
-      respHeaders.set('Access-Control-Allow-Origin', `http://localhost:${PORT}`);
-      respHeaders.set('Access-Control-Allow-Credentials', 'true');
+      // Relay response headers — especially Set-Cookie from backend
+      const respHeaders = new Headers();
+      respHeaders.set('Content-Type', resp.headers.get('Content-Type') || 'text/plain');
+      // Forward all Set-Cookie headers so sid cookie lands on localhost:8080
+      resp.headers.forEach((value, key) => {
+        if (key.toLowerCase() === 'set-cookie') {
+          respHeaders.append('Set-Cookie', value);
+        }
+      });
 
       return new Response(resp.body, {
         status: resp.status,

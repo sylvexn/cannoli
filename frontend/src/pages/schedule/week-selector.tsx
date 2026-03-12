@@ -5,22 +5,29 @@ interface WeekSelectorProps {
   currentWeek: number;
   selectedWeek: number;
   onSelectWeek: (week: number) => void;
+  weekDates?: Record<string, string> | null;
 }
 
-export function WeekSelector({ totalWeeks, currentWeek, selectedWeek, onSelectWeek }: WeekSelectorProps) {
+function formatWeekDate(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function WeekSelector({ totalWeeks, currentWeek, selectedWeek, onSelectWeek, weekDates }: WeekSelectorProps) {
   return (
     <div className="flex gap-1 flex-wrap">
       {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
         const isSelected = week === selectedWeek;
         const isCurrent = week === currentWeek;
         const isCompleted = week <= currentWeek;
+        const dateStr = weekDates?.[String(week)];
 
         return (
           <button
             key={week}
             onClick={() => onSelectWeek(week)}
             className={cn(
-              'relative px-3 py-1.5 rounded-md text-sm font-medium tabular-nums transition-all duration-150',
+              'relative px-3 py-1.5 rounded-md font-medium tabular-nums transition-all duration-150 flex flex-col items-center gap-0.5',
               isSelected
                 ? 'bg-neon/15 text-neon border border-neon/30 shadow-glow-sm'
                 : isCompleted
@@ -28,7 +35,15 @@ export function WeekSelector({ totalWeeks, currentWeek, selectedWeek, onSelectWe
                   : 'text-text-muted hover:bg-surface-overlay/50 hover:text-text-secondary',
             )}
           >
-            {week}
+            <span className="text-sm">{week}</span>
+            {dateStr && (
+              <span className={cn(
+                'text-[9px] leading-none',
+                isSelected ? 'text-neon/70' : 'text-text-muted/60',
+              )}>
+                {formatWeekDate(dateStr)}
+              </span>
+            )}
             {isCurrent && !isSelected && (
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-neon" />
             )}

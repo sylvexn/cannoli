@@ -1,6 +1,8 @@
 import { Elysia } from 'elysia';
 import { Octokit } from 'octokit';
 import { isStaff } from '../lib/auth';
+import { db, schema } from '../db';
+import { eq, and, isNull } from 'drizzle-orm';
 
 const ghToken = process.env.GITHUB_TOKEN;
 const ghRepo = process.env.GITHUB_REPO;
@@ -33,12 +35,68 @@ export const feedbackRoutes = new Elysia()
         body: issueBody,
         labels: ['feedback'],
       });
+
+      // Track submission locally for notifications
+      db.insert(schema.feedbackSubmissions).values({
+        userId: parseInt(user.id),
+        issueNumber: data.number,
+        issueUrl: data.html_url,
+        title: title.trim(),
+      }).run();
+
       return { success: true, issueNumber: data.number, issueUrl: data.html_url };
     } catch (e: any) {
       console.error('GitHub issue creation failed:', e.message);
       set.status = 502;
       return { error: 'Failed to create issue' };
     }
+  })
+
+  // Notifications: resolved issues the user hasn't acknowledged yet
+  .get('/api/feedback/notifications', async ({ user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    if (!octokit || !ghRepo) return [];
+
+    // Get unacknowledged submissions for this user
+    const submissions = db.select().from(schema.feedbackSubmissions)
+      .where(and(
+        eq(schema.feedbackSubmissions.userId, parseInt(user.id)),
+        isNull(schema.feedbackSubmissions.acknowledgedAt),
+      ))
+      .all();
+
+    if (submissions.length === 0) return [];
+
+    // Check GitHub for which are closed
+    const [owner, repo] = ghRepo.split('/');
+    const resolved: { issueNumber: number; title: string; issueUrl: string }[] = [];
+
+    for (const sub of submissions) {
+      try {
+        const { data } = await octokit.rest.issues.get({ owner, repo, issue_number: sub.issueNumber });
+        if (data.state === 'closed') {
+          resolved.push({ issueNumber: sub.issueNumber, title: sub.title, issueUrl: sub.issueUrl });
+        }
+      } catch {
+        // Issue may have been deleted; skip
+      }
+    }
+
+    return resolved;
+  })
+
+  .post('/api/feedback/:issueNumber/acknowledge', ({ params, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    db.update(schema.feedbackSubmissions)
+      .set({ acknowledgedAt: new Date().toISOString() })
+      .where(and(
+        eq(schema.feedbackSubmissions.userId, parseInt(user.id)),
+        eq(schema.feedbackSubmissions.issueNumber, parseInt(params.issueNumber)),
+      ))
+      .run();
+
+    return { success: true };
   })
 
   .get('/api/admin/issues', async ({ user, set, query }) => {

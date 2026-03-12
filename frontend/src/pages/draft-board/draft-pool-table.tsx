@@ -24,6 +24,10 @@ interface DraftPoolTableProps {
   playerLookup: Map<string, Player>;
   rosterLookup: Map<string, RosterPokemon>;
   selectedTeamId: string | null;
+  /** Show tier cost badges (draft mode) */
+  showTierBadges?: boolean;
+  /** User's remaining budget — rows above this are unaffordable */
+  userBudgetRemaining?: number;
   onRowClick: (name: string) => void;
 }
 
@@ -33,6 +37,8 @@ export function DraftPoolTable({
   playerLookup,
   rosterLookup,
   selectedTeamId,
+  showTierBadges,
+  userBudgetRemaining,
   onRowClick,
 }: DraftPoolTableProps) {
   return (
@@ -59,6 +65,7 @@ export function DraftPoolTable({
           const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
           const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
           const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
+          const unaffordable = showTierBadges && !ownership && userBudgetRemaining != null && entry.tier > userBudgetRemaining;
           const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
           return (
@@ -70,6 +77,7 @@ export function DraftPoolTable({
                 'hover:bg-surface-overlay/60',
                 isHighlighted && 'bg-surface-overlay/40 hover:bg-surface-overlay/60',
                 dimmed && 'opacity-30',
+                unaffordable && 'opacity-30 line-through decoration-loss/40',
               )}
               style={{
                 borderLeftWidth: owner ? '2px' : undefined,

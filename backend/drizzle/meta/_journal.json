@@ -57,6 +57,27 @@
       "when": 1775371241929,
       "tag": "0007_yielding_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1775691743915,
+      "tag": "0008_useful_cardiac",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1775691927027,
+      "tag": "0009_spooky_talkback",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1775692058610,
+      "tag": "0010_romantic_electro",
+      "breakpoints": true
     }
   ]
 }

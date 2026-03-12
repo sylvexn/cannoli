@@ -54,6 +54,10 @@ export interface DraftFilters {
   tierMin: number;
   tierMax: number;
   types: PokemonType[];
+  /** When multiple types selected: 'or' = has either type, 'and' = has both types */
+  typeMode: 'or' | 'and';
+  /** Filter by ability name (case-insensitive substring match) */
+  abilitySearch: string;
   ownership: 'all' | 'owned' | 'free-agent';
   sortBy: 'tier-desc' | 'tier-asc' | 'name-asc' | 'name-desc';
 }
@@ -63,6 +67,8 @@ export const DEFAULT_FILTERS: DraftFilters = {
   tierMin: 5,
   tierMax: 20,
   types: [],
+  typeMode: 'or',
+  abilitySearch: '',
   ownership: 'all',
   sortBy: 'tier-desc',
 };

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
+import { AvailabilityPanel } from './availability-panel';
 
 type ScheduleView = 'regular' | 'playoffs';
 
@@ -83,7 +84,17 @@ export function SchedulePage() {
           <p className="text-sm text-text-muted">
             Season {season.seasonNumber} &middot; {season.totalWeeks} weeks
             {view === 'regular' && isCompleted && selectedWeek === season.currentWeek && ' — most recent'}
+            {view === 'regular' && season.weekDates?.[String(selectedWeek)] && (
+              <span className="ml-1">&middot; Week of {new Date(season.weekDates[String(selectedWeek)] + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</span>
+            )}
           </p>
+          {league.draftDate && season.phase === 'draft' && (
+            <p className="text-xs text-pink font-medium mt-0.5">
+              Draft: {new Date(league.draftDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {' at '}
+              {new Date(league.draftDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            </p>
+          )}
         </div>
 
         {/* View toggle */}
@@ -124,6 +135,7 @@ export function SchedulePage() {
             currentWeek={season.currentWeek}
             selectedWeek={selectedWeek}
             onSelectWeek={setSelectedWeek}
+            weekDates={season.weekDates}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -134,6 +146,8 @@ export function SchedulePage() {
               return <MatchCard key={match.id} match={match} homePlayer={home} awayPlayer={away} />;
             })}
           </div>
+
+          <AvailabilityPanel selectedWeek={selectedWeek} />
         </>
       ) : (
         <PlayoffBracket />

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,14 +9,10 @@ import {
 import {
   Collapsible, CollapsibleContent,
 } from '@/components/ui/collapsible';
-import {
-  DEFAULT_MOVE_CATEGORIES,
-  type MoveCategory,
-  type MoveCategoryEntry,
-} from '@/data/move-categories';
+import { api, type ApiMoveCategory, type ApiMoveCategoryEntry } from '@/lib/api';
 import {
   Plus, MoreHorizontal, ChevronRight, Pencil, Trash2,
-  Zap, Dna, RotateCcw, X,
+  Zap, Dna, X, Loader2, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { CategoryEditDialog } from './move-categories/category-edit-dialog';
@@ -24,10 +20,10 @@ import { EntryEditDialog } from './move-categories/entry-edit-dialog';
 import { DeleteDialog } from './move-categories/delete-dialog';
 
 export function AdminMoveCategories() {
-  const [categories, setCategories] = useState<MoveCategory[]>(
-    () => DEFAULT_MOVE_CATEGORIES.map(c => ({ ...c, entries: [...c.entries] }))
-  );
+  const [categories, setCategories] = useState<ApiMoveCategory[]>([]);
+  const [loading, setLoading] = useState(true);
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [entrySearch, setEntrySearch] = useState('');
 
   // Category edit dialog
   const [editCatOpen, setEditCatOpen] = useState(false);
@@ -38,12 +34,26 @@ export function AdminMoveCategories() {
   const [editEntryOpen, setEditEntryOpen] = useState(false);
   const [editEntryCatId, setEditEntryCatId] = useState<string | null>(null);
   const [editEntryIdx, setEditEntryIdx] = useState<number | null>(null);
+  const [editEntryId, setEditEntryId] = useState<number | null>(null);
   const [entryName, setEntryName] = useState('');
   const [entryIsAbility, setEntryIsAbility] = useState(false);
 
   // Delete confirmation
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ catId: string; entryIdx?: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ catId: string; entryId?: number; entryIdx?: number } | null>(null);
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const data = await api.getMoveCategories();
+      setCategories(data);
+    } catch (err) {
+      toast.error('Failed to load move categories');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchCategories(); }, [fetchCategories]);
 
   function toggleOpen(id: string) {
     setOpenIds(prev => {
@@ -60,30 +70,31 @@ export function AdminMoveCategories() {
     setEditCatOpen(true);
   }
 
-  function openEditCategory(cat: MoveCategory) {
+  function openEditCategory(cat: ApiMoveCategory) {
     setEditCatId(cat.id);
     setEditCatName(cat.name);
     setEditCatOpen(true);
   }
 
-  function saveCategory() {
+  async function saveCategory() {
     const name = editCatName.trim();
     if (!name) return;
 
-    if (editCatId) {
-      setCategories(prev => prev.map(c =>
-        c.id === editCatId ? { ...c, name } : c
-      ));
-      toast.success(`Renamed category to "${name}"`);
-    } else {
-      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (categories.some(c => c.id === id)) {
-        toast.error('A category with this name already exists');
-        return;
+    try {
+      if (editCatId) {
+        await api.updateMoveCategory(editCatId, name);
+        setCategories(prev => prev.map(c =>
+          c.id === editCatId ? { ...c, name } : c
+        ));
+        toast.success(`Renamed category to "${name}"`);
+      } else {
+        const result = await api.createMoveCategory(name);
+        setCategories(prev => [...prev, { id: result.id, name: result.name, entries: [] }]);
+        setOpenIds(prev => new Set(prev).add(result.id));
+        toast.success(`Created category "${name}"`);
       }
-      setCategories(prev => [...prev, { id, name, entries: [] }]);
-      setOpenIds(prev => new Set(prev).add(id));
-      toast.success(`Created category "${name}"`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save category');
     }
     setEditCatOpen(false);
   }
@@ -93,27 +104,35 @@ export function AdminMoveCategories() {
     setDeleteOpen(true);
   }
 
-  function confirmDeleteEntry(catId: string, entryIdx: number) {
-    setDeleteTarget({ catId, entryIdx });
+  function confirmDeleteEntry(catId: string, entryId: number, entryIdx: number) {
+    setDeleteTarget({ catId, entryId, entryIdx });
     setDeleteOpen(true);
   }
 
-  function executeDelete() {
+  async function executeDelete() {
     if (!deleteTarget) return;
-    const { catId, entryIdx } = deleteTarget;
+    const { catId, entryId, entryIdx } = deleteTarget;
 
-    if (entryIdx === undefined) {
-      const cat = categories.find(c => c.id === catId);
-      setCategories(prev => prev.filter(c => c.id !== catId));
-      toast.success(`Deleted category "${cat?.name}"`);
-    } else {
-      setCategories(prev => prev.map(c => {
-        if (c.id !== catId) return c;
-        const entries = [...c.entries];
-        const removed = entries.splice(entryIdx, 1)[0];
-        toast.success(`Removed "${removed.name}" from ${c.name}`);
-        return { ...c, entries };
-      }));
+    try {
+      if (entryId === undefined) {
+        // Delete whole category
+        await api.deleteMoveCategory(catId);
+        const cat = categories.find(c => c.id === catId);
+        setCategories(prev => prev.filter(c => c.id !== catId));
+        toast.success(`Deleted category "${cat?.name}"`);
+      } else {
+        // Delete entry
+        await api.deleteMoveCategoryEntry(entryId);
+        setCategories(prev => prev.map(c => {
+          if (c.id !== catId) return c;
+          const entries = c.entries.filter(e => e.id !== entryId);
+          const removed = c.entries.find(e => e.id === entryId);
+          toast.success(`Removed "${removed?.name}" from ${c.name}`);
+          return { ...c, entries };
+        }));
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete');
     }
     setDeleteOpen(false);
     setDeleteTarget(null);
@@ -123,59 +142,56 @@ export function AdminMoveCategories() {
   function openNewEntry(catId: string) {
     setEditEntryCatId(catId);
     setEditEntryIdx(null);
+    setEditEntryId(null);
     setEntryName('');
     setEntryIsAbility(false);
     setEditEntryOpen(true);
   }
 
-  function openEditEntry(catId: string, idx: number, entry: MoveCategoryEntry) {
+  function openEditEntry(catId: string, idx: number, entry: ApiMoveCategoryEntry) {
     setEditEntryCatId(catId);
     setEditEntryIdx(idx);
+    setEditEntryId(entry.id);
     setEntryName(entry.name);
     setEntryIsAbility(entry.isAbility ?? false);
     setEditEntryOpen(true);
   }
 
-  function saveEntry() {
+  async function saveEntry() {
     const name = entryName.trim();
     if (!name || !editEntryCatId) return;
 
-    const moveId = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const entry: MoveCategoryEntry = {
-      name,
-      moveId,
-      ...(entryIsAbility ? { isAbility: true } : {}),
-    };
-
-    setCategories(prev => prev.map(c => {
-      if (c.id !== editEntryCatId) return c;
-      const entries = [...c.entries];
-      if (editEntryIdx !== null) {
-        entries[editEntryIdx] = entry;
+    try {
+      if (editEntryIdx !== null && editEntryId !== null) {
+        // Edit = delete old + add new (no update endpoint)
+        await api.deleteMoveCategoryEntry(editEntryId);
+        await api.addMoveCategoryEntry(editEntryCatId, name, entryIsAbility || undefined);
         toast.success(`Updated "${name}"`);
       } else {
-        if (entries.some(e => e.moveId === moveId)) {
-          toast.error(`"${name}" already exists in this category`);
-          return c;
-        }
-        entries.push(entry);
-        toast.success(`Added "${name}" to ${c.name}`);
+        await api.addMoveCategoryEntry(editEntryCatId, name, entryIsAbility || undefined);
+        toast.success(`Added "${name}"`);
       }
-      return { ...c, entries };
-    }));
+      // Refetch to get new entry IDs
+      await fetchCategories();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save entry');
+    }
     setEditEntryOpen(false);
-  }
-
-  function resetToDefaults() {
-    setCategories(DEFAULT_MOVE_CATEGORIES.map(c => ({ ...c, entries: [...c.entries] })));
-    setOpenIds(new Set());
-    toast.success('Reset to default categories');
   }
 
   const totalEntries = categories.reduce((sum, c) => sum + c.entries.length, 0);
   const abilityCount = categories.reduce(
     (sum, c) => sum + c.entries.filter(e => e.isAbility).length, 0
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-text-muted gap-2">
+        <Loader2 size={16} className="animate-spin" />
+        Loading move categories...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -193,11 +209,24 @@ export function AdminMoveCategories() {
           <span className="text-text-muted">Abilities:</span>
           <span className="text-purple-400 font-medium font-mono">{abilityCount}</span>
         </div>
+        <div className="relative ml-2 w-[200px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+          <input
+            value={entrySearch}
+            onChange={e => setEntrySearch(e.target.value)}
+            placeholder="Search moves/abilities..."
+            className="w-full pl-8 pr-8 py-1.5 rounded-md bg-surface text-xs border border-border-subtle focus:border-neon/40 focus:outline-none"
+          />
+          {entrySearch && (
+            <button
+              onClick={() => setEntrySearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+            >
+              <X size={10} />
+            </button>
+          )}
+        </div>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={resetToDefaults} className="text-text-muted">
-            <RotateCcw size={12} />
-            Reset Defaults
-          </Button>
           <Button size="sm" onClick={openNewCategory} className="bg-neon text-surface-base hover:bg-neon/90">
             <Plus size={14} />
             New Category
@@ -208,7 +237,13 @@ export function AdminMoveCategories() {
       {/* Category list */}
       <div className="space-y-2">
         {categories.map(cat => {
-          const isOpen = openIds.has(cat.id);
+          const searchQ = entrySearch.toLowerCase();
+          const matchingEntries = searchQ
+            ? cat.entries.filter(e => e.name.toLowerCase().includes(searchQ))
+            : cat.entries;
+          // Hide categories with no matching entries when searching
+          if (searchQ && matchingEntries.length === 0) return null;
+          const isOpen = searchQ ? true : openIds.has(cat.id);
           const moveCount = cat.entries.filter(e => !e.isAbility).length;
           const abCount = cat.entries.filter(e => e.isAbility).length;
 
@@ -265,13 +300,17 @@ export function AdminMoveCategories() {
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1.5 pl-7">
-                        {cat.entries.map((entry, idx) => (
+                        {cat.entries.map((entry, idx) => {
+                          const isMatch = !searchQ || entry.name.toLowerCase().includes(searchQ);
+                          return (
                           <button
-                            key={`${entry.moveId}-${idx}`}
+                            key={`${entry.id}`}
                             onClick={() => openEditEntry(cat.id, idx, entry)}
-                            className="group/entry flex items-center gap-1 px-2 py-1 rounded-md text-xs
+                            className={`group/entry flex items-center gap-1 px-2 py-1 rounded-md text-xs
                               bg-surface-overlay/50 hover:bg-surface-overlay transition-colors
-                              border border-transparent hover:border-border"
+                              border border-transparent hover:border-border
+                              ${searchQ && !isMatch ? 'opacity-20' : ''}
+                              ${searchQ && isMatch ? 'ring-1 ring-neon/30' : ''}`}
                           >
                             {entry.isAbility ? (
                               <Dna size={10} className="text-purple-400 shrink-0" />
@@ -284,10 +323,11 @@ export function AdminMoveCategories() {
                             <X
                               size={10}
                               className="text-text-muted opacity-0 group-hover/entry:opacity-100 transition-opacity ml-0.5 hover:text-loss"
-                              onClick={e => { e.stopPropagation(); confirmDeleteEntry(cat.id, idx); }}
+                              onClick={e => { e.stopPropagation(); confirmDeleteEntry(cat.id, entry.id, idx); }}
                             />
                           </button>
-                        ))}
+                          );
+                        })}
                         <button
                           onClick={() => openNewEntry(cat.id)}
                           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs
@@ -330,7 +370,7 @@ export function AdminMoveCategories() {
       <DeleteDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-        isEntryDelete={deleteTarget?.entryIdx !== undefined}
+        isEntryDelete={deleteTarget?.entryId !== undefined}
         onConfirm={executeDelete}
       />
     </div>

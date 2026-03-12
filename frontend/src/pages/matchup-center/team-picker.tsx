@@ -5,6 +5,7 @@ import type { ApiTeam } from '@/lib/api';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
+import { CustomTeamBuilder } from './custom-team-builder';
 
 interface TeamPickerProps {
   source: TeamSource | null;
@@ -15,6 +16,7 @@ interface TeamPickerProps {
 export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   const { leagues } = useAppData();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
+  const [showCustom, setShowCustom] = useState(false);
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -25,13 +27,33 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
     });
   }, [leagues]);
 
+  const selectValue = source?.type === 'custom' ? '__custom__'
+    : source ? `${source.leagueId}:${source.teamId}` : '';
+
+  if (showCustom) {
+    return (
+      <CustomTeamBuilder
+        side={side}
+        onImport={(roster, src) => {
+          onSelect(roster, src);
+          setShowCustom(false);
+        }}
+        onClose={() => setShowCustom(false)}
+      />
+    );
+  }
+
   return (
     <div className="relative">
       <select
-        value={source ? `${source.leagueId}:${source.teamId}` : ''}
+        value={selectValue}
         onChange={e => {
           const val = e.target.value;
           if (!val) return;
+          if (val === '__custom__') {
+            setShowCustom(true);
+            return;
+          }
           const [leagueId, teamId] = val.split(':');
           const league = leagues.find(l => l.id === leagueId);
           const teams = teamsPerLeague[leagueId] || [];
@@ -62,6 +84,9 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
       >
         <option value="" disabled>
           {side === 'a' ? 'Select your team...' : 'Select opponent...'}
+        </option>
+        <option value="__custom__">
+          Custom Team...
         </option>
         {leagues.map(league => {
           const teams = teamsPerLeague[league.id] || [];

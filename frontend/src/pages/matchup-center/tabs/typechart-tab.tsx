@@ -15,8 +15,12 @@ function multLabel(m: number): string {
   if (m === 0) return '0';
   if (m === 0.25) return '¼';
   if (m === 0.5) return '½';
+  if (m > 0 && m < 0.5) return '¼';
+  if (m > 0.5 && m < 1) return '¾';
   if (m === 1) return '';
+  if (m > 1 && m < 2) return '1½';
   if (m === 2) return '2';
+  if (m > 2 && m < 4) return '3';
   if (m >= 4) return '4';
   return String(m);
 }
@@ -24,8 +28,9 @@ function multLabel(m: number): string {
 function multColor(m: number): string {
   if (m === 0) return 'bg-[#1a1a2e] text-[#555]';
   if (m <= 0.25) return 'bg-[#0d3320] text-[#4ade80]';
-  if (m === 0.5) return 'bg-[#0d2e1a]/70 text-[#4ade80]/80';
+  if (m > 0 && m < 1) return 'bg-[#0d2e1a]/70 text-[#4ade80]/80';
   if (m === 1) return '';
+  if (m > 1 && m < 2) return 'bg-[#2e1515] text-[#fca5a5]/80';
   if (m === 2) return 'bg-[#3b1515] text-[#f87171]';
   if (m >= 4) return 'bg-[#5c1a1a] text-[#fca5a5]';
   return '';
@@ -35,7 +40,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   const chartA = useMemo(() =>
     teamA.map(p => ({
       name: p.name,
-      matchups: getDefensiveMatchups(p.types as PokemonType[]),
+      matchups: getDefensiveMatchups(p.types as PokemonType[], p.abilities?.[0]),
     })),
     [teamA],
   );
@@ -43,7 +48,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   const chartB = useMemo(() =>
     teamB.map(p => ({
       name: p.name,
-      matchups: getDefensiveMatchups(p.types as PokemonType[]),
+      matchups: getDefensiveMatchups(p.types as PokemonType[], p.abilities?.[0]),
     })),
     [teamB],
   );

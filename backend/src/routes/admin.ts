@@ -239,11 +239,12 @@ export const adminRoutes = new Elysia()
 
   .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { name, color, pointCap, teraCaptainSlots, tradeDeadlineWeek, maxTeams, rosterSize } = body as Record<string, unknown>;
+    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams, rosterSize } = body as Record<string, unknown>;
 
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
     if (color) leagueUpdates.color = color;
+    if (draftDate !== undefined) leagueUpdates.draftDate = draftDate;
     if (Object.keys(leagueUpdates).length > 0) {
       db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
     }
@@ -254,6 +255,7 @@ export const adminRoutes = new Elysia()
       if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
       if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
       if (tradeDeadlineWeek !== undefined) seasonUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
+      if (weekDates !== undefined) seasonUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
       if (Object.keys(seasonUpdates).length > 0) {
         db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
       }

@@ -127,26 +127,30 @@ export function destroyPsSession(sidCookieValue: string) {
  * Build the Set-Cookie header for the PS sid.
  */
 export function psSidCookieString(sidCookie: string): string {
+  const isProd = process.env.NODE_ENV === 'production';
   const parts = [
     `sid=${sidCookie}`,
     'Path=/',
     `Max-Age=${PS_SESSION_TTL}`,
-    'SameSite=None',
+    // Prod: SameSite=None + Secure (cross-subdomain .cannoli.live via HTTPS)
+    // Dev: SameSite=Lax (same-origin via ps-client-server proxy, no HTTPS)
+    isProd ? 'SameSite=None' : 'SameSite=Lax',
   ];
   if (PS_COOKIE_DOMAIN) parts.push(`Domain=${PS_COOKIE_DOMAIN}`);
-  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  if (isProd) parts.push('Secure');
   return parts.join('; ');
 }
 
 export function clearPsSidCookieString(): string {
+  const isProd = process.env.NODE_ENV === 'production';
   const parts = [
     'sid=',
     'Path=/',
     'Max-Age=0',
-    'SameSite=None',
+    isProd ? 'SameSite=None' : 'SameSite=Lax',
   ];
   if (PS_COOKIE_DOMAIN) parts.push(`Domain=${PS_COOKIE_DOMAIN}`);
-  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  if (isProd) parts.push('Secure');
   return parts.join('; ');
 }
 
@@ -163,8 +167,14 @@ export function signAssertion(challstr: string, userid: string, userType: string
   const privateKey = getPrivateKey();
   if (!privateKey) return null;
 
+  // challstr from PS client is "keyid|challenge" (e.g. "4|abc123hex...")
+  // The game server stores only the challenge part (no keyid prefix).
+  // The assertion must use the raw challenge, not the full challstr.
+  const pipeIndex = challstr.indexOf('|');
+  const challenge = pipeIndex >= 0 ? challstr.slice(pipeIndex + 1) : challstr;
+
   const timestamp = Math.floor(Date.now() / 1000);
-  const tokenData = `${challstr},${userid},${userType},${timestamp},${PS_HOSTNAME}`;
+  const tokenData = `${challenge},${userid},${userType},${timestamp},${PS_HOSTNAME}`;
 
   try {
     const sign = createSign('RSA-SHA1');

@@ -21,8 +21,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
-import type { DraftState, DraftAction } from './types';
+import type { DraftState, DraftAction, DraftPickEntry } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
+import type { Player } from '@/lib/types';
 
 interface DraftControlBarProps {
   state: DraftState;
@@ -32,6 +33,11 @@ interface DraftControlBarProps {
   presence?: DraftPresenceData;
   wsConnected?: boolean;
   timerEnabled?: boolean;
+  /** On-the-clock info (merged into bar) */
+  currentPick?: DraftPickEntry | null;
+  currentPlayer?: Player | null;
+  isUserTurn?: boolean;
+  totalPicks?: number;
 }
 
 export function DraftControlBar({
@@ -42,6 +48,10 @@ export function DraftControlBar({
   presence,
   wsConnected: _wsConnected,
   timerEnabled = true,
+  currentPick,
+  currentPlayer,
+  isUserTurn: isUserTurnProp,
+  totalPicks = 0,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();
   const [shiftHeld, setShiftHeld] = useState(false);
@@ -107,7 +117,7 @@ export function DraftControlBar({
   if (!state.demoStarted) {
     return (
       <>
-        <div className="mt-3 rounded-lg border border-border-default bg-surface-raised px-4 py-2.5">
+        <div className="px-4 py-2.5">
           <div className="flex items-center gap-3">
             {/* Your team selector */}
             <div className="flex items-center gap-2">
@@ -322,9 +332,39 @@ export function DraftControlBar({
     ? (state.currentPickIndex / state.snakeOrder.length) * 100
     : 0;
 
+  // OTC urgency (merged into this bar)
+  const urgency = currentPick && !isDemoComplete
+    ? (state.timerSeconds > state.timerDuration * 0.6 ? 'calm'
+      : state.timerSeconds > state.timerDuration * 0.3 ? 'warning'
+      : 'critical')
+    : null;
+
   return (
-    <div className="mt-2 rounded-lg border border-border-default bg-surface-raised px-3 py-2">
-      {/* Progress bar */}
+    <div
+      className={cn(
+        'relative px-3 py-1.5 overflow-hidden',
+        urgency && isUserTurnProp && urgency === 'calm' && 'bg-neon/[0.04]',
+        urgency && isUserTurnProp && urgency === 'warning' && 'bg-draw/[0.04]',
+        urgency && isUserTurnProp && urgency === 'critical' && 'bg-loss/[0.06]',
+        urgency && !isUserTurnProp && 'bg-surface-overlay/20',
+      )}
+    >
+      {/* Timer progress bar — thin line at top (only during active draft) */}
+      {urgency && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-surface-overlay/30">
+          <div
+            className={cn(
+              'h-full transition-all duration-1000 ease-linear',
+              urgency === 'calm' && 'bg-neon',
+              urgency === 'warning' && 'bg-draw',
+              urgency === 'critical' && 'bg-loss',
+            )}
+            style={{ width: `${(state.timerSeconds / Math.max(state.timerSeconds, state.timerDuration)) * 100}%` }}
+          />
+        </div>
+      )}
+
+      {/* Draft progress bar (below timer line) */}
       <div className="h-0.5 w-full rounded-full bg-surface-overlay overflow-hidden mb-2">
         <div
           className="h-full rounded-full bg-pink transition-all duration-300"
@@ -333,20 +373,37 @@ export function DraftControlBar({
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Your team */}
-        <div className="flex items-center gap-1.5">
-          {state.userTeamId && (() => {
-            const p = draftOrder.find(t => t.id === state.userTeamId);
-            return p ? (
-              <span className="flex items-center gap-1 text-xs">
-                <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                <span className="text-text-primary font-medium">{p.teamAbbrev}</span>
-              </span>
-            ) : null;
-          })()}
-        </div>
-
-        <div className="w-px h-5 bg-border-subtle" />
+        {/* On-the-clock drafter info */}
+        {currentPick && currentPlayer && !isDemoComplete ? (
+          <>
+            <TeamLogo abbrev={currentPlayer.teamAbbrev} color={currentPlayer.teamColor} size="sm" />
+            <span className="text-xs font-medium text-text-primary">{currentPlayer.teamAbbrev}</span>
+            {isUserTurnProp && (
+              <Badge className="bg-neon/20 text-neon border-neon/30 text-[9px] font-bold px-1.5 py-0 h-4 animate-pulse">
+                <Zap size={8} className="mr-0.5" />
+                YOUR PICK
+              </Badge>
+            )}
+            <span className="text-[10px] text-text-muted font-mono">
+              R{currentPick.round} P{currentPick.pick} · #{currentPick.overallPick}/{totalPicks}
+            </span>
+            <div className="w-px h-5 bg-border-subtle" />
+          </>
+        ) : (
+          <>
+            {/* Your team (when no active pick / complete) */}
+            {state.userTeamId && (() => {
+              const p = draftOrder.find(t => t.id === state.userTeamId);
+              return p ? (
+                <span className="flex items-center gap-1 text-xs">
+                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                  <span className="text-text-primary font-medium">{p.teamAbbrev}</span>
+                </span>
+              ) : null;
+            })()}
+            <div className="w-px h-5 bg-border-subtle" />
+          </>
+        )}
 
         {/* Pick counter */}
         <span className="text-[11px] text-text-muted font-mono tabular-nums">
@@ -380,11 +437,30 @@ export function DraftControlBar({
           </>
         )}
 
+        {/* Timer display (merged from OTC) */}
+        {currentPick && !isDemoComplete && timerEnabled && (
+          <>
+            <div className="w-px h-5 bg-border-subtle" />
+            <div className={cn(
+              'flex items-center gap-1 px-1.5 py-0.5 rounded',
+              'font-mono tabular-nums text-sm font-bold',
+              state.timerPaused
+                ? 'text-draw'
+                : urgency === 'calm' ? 'text-neon'
+                : urgency === 'warning' ? 'text-draw'
+                : 'text-loss animate-pulse',
+            )}>
+              {state.timerPaused ? <Pause size={12} /> : <Timer size={12} />}
+              <span className={state.timerPaused ? 'animate-pulse' : ''}>
+                {Math.floor(state.timerSeconds / 60)}:{String(state.timerSeconds % 60).padStart(2, '0')}
+              </span>
+            </div>
+          </>
+        )}
+
         {/* Admin timer controls — hidden when timer disabled */}
         {isAdmin && !isDemoComplete && timerEnabled && (
           <>
-            <div className="w-px h-5 bg-border-subtle" />
-
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
               className={cn(

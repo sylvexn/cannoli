@@ -71,7 +71,7 @@ export function PokemonCompactCard({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={onHoverEnd}
       className={cn(
-        'group relative flex flex-col items-center gap-0.5 rounded-md p-1.5 w-[76px] h-[82px]',
+        'group relative flex flex-col items-center gap-0.5 rounded-md p-1 w-[72px] h-[76px]',
         'border cursor-pointer',
         'transition-[box-shadow,border-color,transform,opacity] duration-200 ease-out',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',

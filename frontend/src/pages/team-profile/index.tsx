@@ -20,10 +20,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
   X, ArrowRightLeft, Plus,
-  Shield, Calendar, Zap,
+  Shield, Calendar, Zap, Sparkles,
 } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RankBadge } from './rank-badge';
@@ -84,6 +85,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const spriteRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [rosterOrder, setRosterOrder] = useState<number[]>([]);
+  const [shinyOverrides, setShinyOverrides] = useState<Map<string, boolean>>(new Map());
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
@@ -98,12 +100,16 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const activeRoster = useMemo(() => {
     const base = [...player.roster.map(mon => ({ ...mon }))];
     for (const swap of swaps) base[swap.index] = { ...swap.replacement };
-    for (const edit of teraEdits) {
-      base[edit.index] = { ...base[edit.index], isTeraCaptain: edit.isTeraCaptain, teraTypes: edit.teraTypes.length > 0 ? edit.teraTypes : undefined };
-    }
     // Filter out removed, then append additions
     const filtered = base.filter((_, i) => !removedIndices.has(i));
     const combined = [...filtered, ...additions];
+    // Apply tera edits by name (works across removals/additions)
+    for (const edit of teraEdits) {
+      const idx = combined.findIndex(m => m.name === edit.name);
+      if (idx >= 0) {
+        combined[idx] = { ...combined[idx], isTeraCaptain: edit.isTeraCaptain, teraTypes: edit.teraTypes.length > 0 ? edit.teraTypes : undefined };
+      }
+    }
     // Apply position reorder (only if length matches)
     const order = rosterOrder.length === combined.length ? rosterOrder : combined.map((_, i) => i);
     return order.map(idx => combined[idx]);
@@ -145,6 +151,25 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     else { setSortKey(key); setSortDir('desc'); }
   }
 
+  function isMonShiny(mon: RosterPokemon) {
+    return shinyOverrides.has(mon.name) ? shinyOverrides.get(mon.name)! : !!mon.isShiny;
+  }
+
+  async function handleToggleShiny(mon: RosterPokemon) {
+    const newShiny = !isMonShiny(mon);
+    setShinyOverrides(prev => new Map(prev).set(mon.name, newShiny));
+    try {
+      await api.toggleShiny(player.id, mon.name, newShiny);
+    } catch {
+      // Revert on failure
+      setShinyOverrides(prev => {
+        const next = new Map(prev);
+        next.delete(mon.name);
+        return next;
+      });
+    }
+  }
+
   function handleSwap(index: number, replacement: RosterPokemon) {
     setSwaps(prev => {
       const existing = prev.findIndex(s => s.index === index);
@@ -164,26 +189,20 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   }
 
   function handleRemoveMon(displayIndex: number) {
-    // Map display index back: first N are from base roster (minus removed), rest are additions
-    const baseCount = player.roster.length - removedIndices.size;
-    if (displayIndex < baseCount) {
-      // Find which original index this display slot maps to
-      let count = 0;
-      for (let i = 0; i < player.roster.length; i++) {
-        if (removedIndices.has(i)) continue;
-        if (count === displayIndex) {
-          setRemovedIndices(prev => new Set([...prev, i]));
-          // Clean up swaps/tera edits for this index
-          setSwaps(prev => prev.filter(s => s.index !== i));
-          setTeraEdits(prev => prev.filter(e => e.index !== i));
-          break;
-        }
-        count++;
-      }
+    const mon = activeRoster[displayIndex];
+    if (!mon) return;
+
+    // Clean up tera edits for this Pokemon
+    setTeraEdits(prev => prev.filter(e => e.name !== mon.name));
+
+    // Check if it's from the original roster
+    const originalIdx = player.roster.findIndex(m => m.name === mon.name);
+    if (originalIdx >= 0 && !removedIndices.has(originalIdx)) {
+      setRemovedIndices(prev => new Set([...prev, originalIdx]));
+      setSwaps(prev => prev.filter(s => s.index !== originalIdx));
     } else {
-      // It's an addition — remove from additions array
-      const addIdx = displayIndex - baseCount;
-      setAdditions(prev => prev.filter((_, i) => i !== addIdx));
+      // It's an addition
+      setAdditions(prev => prev.filter(m => m.name !== mon.name));
     }
     // Reset roster order since length changed
     setRosterOrder([]);
@@ -219,14 +238,15 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   }
 
   function handleTeraTypeToggle(index: number, type: PokemonType) {
+    const mon = activeRoster[index];
     setTeraEdits(prev => {
-      const existing = prev.find(e => e.index === index);
-      const currentTypes = existing?.teraTypes ?? activeRoster[index].teraTypes ?? [];
+      const existing = prev.find(e => e.name === mon.name);
+      const currentTypes = existing?.teraTypes ?? mon.teraTypes ?? [];
       const newTypes = currentTypes.includes(type)
         ? currentTypes.filter(t => t !== type)
         : [...currentTypes, type];
-      const next = prev.filter(e => e.index !== index);
-      next.push({ index, isTeraCaptain: true, teraTypes: newTypes });
+      const next = prev.filter(e => e.name !== mon.name);
+      next.push({ name: mon.name, isTeraCaptain: true, teraTypes: newTypes });
       return next;
     });
   }
@@ -236,8 +256,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     if (mon.isTeraCaptain) {
       // Remove captain
       setTeraEdits(prev => {
-        const next = prev.filter(e => e.index !== index);
-        next.push({ index, isTeraCaptain: false, teraTypes: [] });
+        const next = prev.filter(e => e.name !== mon.name);
+        next.push({ name: mon.name, isTeraCaptain: false, teraTypes: [] });
         return next;
       });
       setTeraEditingIndex(null);
@@ -249,8 +269,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       if (pointsUsed - oldCost + newCost > config.pointCap) return;
       if (captainCount >= config.teraCaptainSlots) return;
       setTeraEdits(prev => {
-        const next = prev.filter(e => e.index !== index);
-        next.push({ index, isTeraCaptain: true, teraTypes: mon.teraTypes ?? [] });
+        const next = prev.filter(e => e.name !== mon.name);
+        next.push({ name: mon.name, isTeraCaptain: true, teraTypes: mon.teraTypes ?? [] });
         return next;
       });
     }
@@ -413,7 +433,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                       } ${beingDragged ? 'opacity-30 scale-95' : 'hover:bg-surface-overlay/60'
                       }`}
                     >
-                      <PokemonSprite name={mon.name} size="xl" className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
+                      <PokemonSprite name={mon.name} size="xl" shiny={isMonShiny(mon)} className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
                       {mon.isTeraCaptain && (
                         <svg
                           width="27"
@@ -455,6 +475,19 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
+                {/* Shiny toggle button */}
+                {isAdmin && !theorycraftMode && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleToggleShiny(mon); }}
+                    className={`absolute bottom-7 left-1 z-10 opacity-0 group-hover:opacity-100 transition-all p-1 rounded-md ${
+                      isMonShiny(mon)
+                        ? 'opacity-100 bg-yellow-500/20 text-yellow-400'
+                        : 'bg-surface/80 text-text-muted hover:text-yellow-400 hover:bg-yellow-500/10'
+                    }`}
+                  >
+                    <Sparkles size={13} />
+                  </button>
+                )}
                 {/* Remove button */}
                 {theorycraftMode && (
                   <button

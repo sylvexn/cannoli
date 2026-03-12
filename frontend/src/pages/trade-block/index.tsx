@@ -50,7 +50,8 @@ export function TradeBlockPage() {
         week: t.week,
         status: 'accepted' as const,
         proposer: t.teamId,
-        recipient: t.otherTeamId || 'pool',
+        // FA pickups: recipient is 'pool' regardless of otherTeamId
+        recipient: t.type === 'fa' ? 'pool' : (t.otherTeamId || 'pool'),
         offering: t.pokemonOut ? [t.pokemonOut] : [],
         requesting: t.pokemonIn ? [t.pokemonIn] : [],
         proposedAt: '',

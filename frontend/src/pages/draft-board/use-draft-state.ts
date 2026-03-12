@@ -607,9 +607,24 @@ export function useDraftState() {
         const pokeData = getPokemonData(entry.name);
         const types = rosterMon?.types ?? pokeData?.types;
         if (types) {
-          const hasType = state.filters.types.some(t => types.includes(t));
-          if (!hasType) return false;
+          if (state.filters.typeMode === 'and') {
+            // AND: Pokemon must have ALL selected types
+            const hasAll = state.filters.types.every(t => types.includes(t));
+            if (!hasAll) return false;
+          } else {
+            // OR: Pokemon must have at least one selected type
+            const hasType = state.filters.types.some(t => types.includes(t));
+            if (!hasType) return false;
+          }
         }
+      }
+      if (state.filters.abilitySearch) {
+        const q = state.filters.abilitySearch.toLowerCase();
+        const rosterMon = rosterLookup.get(entry.name);
+        const pokeData = getPokemonData(entry.name);
+        const abilities = rosterMon?.abilities ?? pokeData?.abilities ?? [];
+        const hasAbility = abilities.some(a => a.toLowerCase().includes(q));
+        if (!hasAbility) return false;
       }
       return true;
     });

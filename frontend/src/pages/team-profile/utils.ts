@@ -31,7 +31,7 @@ export interface SwapEntry {
 }
 
 export interface TeraEdit {
-  index: number;
+  name: string;
   isTeraCaptain: boolean;
   teraTypes: PokemonType[];
 }

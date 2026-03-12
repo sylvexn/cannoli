@@ -105,11 +105,14 @@ Config.routes = {
 Config.loginserver = 'http://localhost:3001/api/ps/';
 CLIENTCFG
 
-# testclient-key.js: point auth at our Elysia backend
+# testclient-key.js: point auth at ps-client-server (same-origin proxy)
+# POKEMON_SHOWDOWN_TESTCLIENT_KEY must be non-empty to bypass ProxyPopup.
+# The value is sent as a `sid` query param on $.post — our backend ignores it
+# and uses cookies instead, so any truthy string works.
 cat > "$SHOWDOWN_DIR/client/config/testclient-key.js" << 'KEYCFG'
-const POKEMON_SHOWDOWN_TESTCLIENT_KEY = '';
+const POKEMON_SHOWDOWN_TESTCLIENT_KEY = 'cannoli';
 Config.routes = Config.routes || {};
-Config.routes.client = 'localhost:3001';
+Config.routes.client = 'localhost:8080';
 KEYCFG
 
 # Patch client.js: use http:// instead of https:// for testclient action.php
@@ -118,9 +121,9 @@ echo "Patching client.js for http:// in dev..."
 sed -i "s|ret = 'https://' + Config.routes.client + ret;|ret = 'http://' + Config.routes.client + ret;|" \
   "$SHOWDOWN_DIR/client/play.pokemonshowdown.com/js/client.js"
 
-echo "Building PS client..."
+echo "Building PS client (full — generates data files)..."
 cd "$SHOWDOWN_DIR/client"
-node build
+node build full
 
 # ─── Bot usergroup ───────────────────────────────────────────────────────────
 

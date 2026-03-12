@@ -18,7 +18,7 @@ interface TeraCaptainStripProps {
   theorycraftMode: boolean;
   /** Whether the user can edit tera captains (theorycraft mode OR admin) */
   canEdit: boolean;
-  teraEdits: { index: number; isTeraCaptain: boolean; teraTypes: PokemonType[] }[];
+  teraEdits: { name: string; isTeraCaptain: boolean; teraTypes: PokemonType[] }[];
   teraEditingIndex: number | null;
   pointsUsed: number;
   playerId: string;
@@ -32,6 +32,7 @@ export function TeraCaptainStrip({
   activeRoster,
   captainCount,
   config,
+  theorycraftMode,
   canEdit,
   teraEdits,
   teraEditingIndex,
@@ -97,7 +98,7 @@ export function TeraCaptainStrip({
             {captainCount}/{config.teraCaptainSlots}
           </span>
         </div>
-        {canEdit && teraEdits.length > 0 && (
+        {canEdit && !theorycraftMode && teraEdits.length > 0 && (
           <button
             onClick={handleSave}
             className="flex items-center gap-1 text-[10px] font-semibold text-neon hover:text-neon/80 transition-colors px-2 py-0.5 rounded bg-neon/5 border border-neon/20"

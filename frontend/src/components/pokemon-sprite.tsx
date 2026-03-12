@@ -7,6 +7,7 @@ interface PokemonSpriteProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   animated?: boolean;
+  shiny?: boolean;
 }
 
 const sizeMap = {
@@ -82,8 +83,8 @@ export function useSpriteState(name: string, animated = false): CacheState {
   return state;
 }
 
-export function PokemonSprite({ name, size = 'md', className, animated = false }: PokemonSpriteProps) {
-  const type = animated ? 'ani' : 'gen5';
+export function PokemonSprite({ name, size = 'md', className, animated = false, shiny = false }: PokemonSpriteProps) {
+  const type = animated ? (shiny ? 'ani-shiny' : 'ani') : (shiny ? 'gen5-shiny' : 'gen5');
   const url = spriteUrl(name, type);
   const cached = getCacheState(url);
   const [state, setState] = useState<CacheState>(cached);

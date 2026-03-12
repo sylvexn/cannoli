@@ -29,10 +29,11 @@ const app = new Elysia()
   }))
 
   // Rewrite /~~*/action.php → /api/ps/action.php (PS testclient compat)
+  // Only rewrites non-canonical paths (e.g. /~~serverId/action.php from direct PS client hits).
+  // The ps-client-server proxy already sends to /api/ps/action.php, so skip those.
   .onRequest(({ request, set }) => {
     const url = new URL(request.url);
-    if (url.pathname.includes('/action.php')) {
-      // Rewrite to our PS login action handler
+    if (url.pathname.includes('/action.php') && url.pathname !== '/api/ps/action.php') {
       const newUrl = new URL(request.url);
       newUrl.pathname = '/api/ps/action.php';
       return fetch(new Request(newUrl.toString(), request));

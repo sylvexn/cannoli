@@ -16,6 +16,8 @@ export interface SpeedCalcSlot {
   ivs: number;
   nature: 'positive' | 'neutral' | 'negative';
   boosts: number;
+  scarf: boolean;
+  stickyWeb: boolean;
 }
 
 export type MatchupTab = 'overview' | 'typechart' | 'stats' | 'speed' | 'moves';
@@ -93,9 +95,9 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
       const pickA = action.teamA.length > 0 ? action.teamA[Math.floor(Math.random() * action.teamA.length)] : null;
       const pickB = action.teamB.length > 0 ? action.teamB[Math.floor(Math.random() * action.teamB.length)] : null;
       const slots: SpeedCalcSlot[] = [];
-      if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
-      if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
-      if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+      if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
+      if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
+      if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
       return { ...state, speedCalcSlots: slots };
     }
     default:
@@ -107,9 +109,9 @@ function makeInitialSpeedSlots(teamA: RosterPokemon[], teamB: RosterPokemon[]): 
   const pickA = teamA.length > 0 ? teamA[Math.floor(Math.random() * teamA.length)] : null;
   const pickB = teamB.length > 0 ? teamB[Math.floor(Math.random() * teamB.length)] : null;
   const slots: SpeedCalcSlot[] = [];
-  if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
-  if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
-  if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0 });
+  if (pickA) slots.push({ id: '1', pokemonName: pickA.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
+  if (pickB) slots.push({ id: '2', pokemonName: pickB.name, level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
+  if (slots.length === 0) slots.push({ id: '1', pokemonName: '', level: 100, evs: 252, ivs: 31, nature: 'positive', boosts: 0, scarf: false, stickyWeb: false });
   return slots;
 }
 
