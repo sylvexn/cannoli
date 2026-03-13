@@ -5,6 +5,8 @@
 
 import { db, schema } from '../db';
 import { eq, and, asc } from 'drizzle-orm';
+import { tx } from './tx';
+import { getBaseFormName } from './pokedex';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -89,7 +91,7 @@ export function validatePick(
 
   if (existingPick) return { valid: false, error: `${pokemonName} is already drafted` };
 
-  // 3. Point cap check
+  // 3. Same-species + Mega cap checks
   const teamPicks = db.select().from(schema.draftPicks)
     .where(and(
       eq(schema.draftPicks.leagueId, leagueId),
@@ -97,6 +99,26 @@ export function validatePick(
     ))
     .all();
 
+  const incomingBase = getBaseFormName(pokemonName);
+  const incomingIsMega = poke.formCategory === 'mega';
+  let megaCount = 0;
+
+  for (const p of teamPicks) {
+    const otherPoke = db.select().from(schema.pokemon)
+      .where(eq(schema.pokemon.name, p.pokemonName))
+      .get();
+    const otherBase = getBaseFormName(p.pokemonName);
+    if (otherBase === incomingBase) {
+      return { valid: false, error: `Your team already has ${p.pokemonName} (same species as ${pokemonName})` };
+    }
+    if (otherPoke?.formCategory === 'mega') megaCount++;
+  }
+
+  if (incomingIsMega && megaCount >= 1) {
+    return { valid: false, error: `Max 1 Mega per team — already have one` };
+  }
+
+  // 4. Point cap check
   const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
   if (usedPoints + poke.tier > pointCap) {
     return { valid: false, error: `Would exceed point cap (${usedPoints} + ${poke.tier} > ${pointCap})` };
@@ -117,7 +139,7 @@ export function getAutoPick(
   leagueId: string,
   pointCap: number,
 ): { name: string; tier: number } | null {
-  // Get points already used
+  // Get points already used + same-species set for this team
   const teamPicks = db.select().from(schema.draftPicks)
     .where(and(
       eq(schema.draftPicks.leagueId, leagueId),
@@ -126,6 +148,13 @@ export function getAutoPick(
     .all();
   const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
   const remaining = pointCap - usedPoints;
+
+  const teamSpecies = new Set(teamPicks.map(p => getBaseFormName(p.pokemonName)));
+  let teamHasMega = false;
+  for (const p of teamPicks) {
+    const op = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, p.pokemonName)).get();
+    if (op?.formCategory === 'mega') { teamHasMega = true; break; }
+  }
 
   // Get all already-drafted pokemon names in this league
   const allPicks = db.select({ name: schema.draftPicks.pokemonName })
@@ -139,7 +168,13 @@ export function getAutoPick(
     .from(schema.pokemon)
     .where(eq(schema.pokemon.banned, false))
     .all()
-    .filter(p => !drafted.has(p.name) && p.tier > 0 && p.tier <= remaining);
+    .filter(p => {
+      if (drafted.has(p.name)) return false;
+      if (p.tier <= 0 || p.tier > remaining) return false;
+      if (teamSpecies.has(getBaseFormName(p.name))) return false;
+      if (teamHasMega && p.formCategory === 'mega') return false;
+      return true;
+    });
 
   if (available.length === 0) return null;
 
@@ -220,91 +255,114 @@ export function executePick(
   leagueId: string,
   pokemonName: string,
   teamId: string,
+  actor?: string,
 ): { success: true; pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number } } | { success: false; error: string } {
-  const state = db.select().from(schema.draftState)
-    .where(eq(schema.draftState.leagueId, leagueId))
-    .get();
+  return tx(() => {
+    const state = db.select().from(schema.draftState)
+      .where(eq(schema.draftState.leagueId, leagueId))
+      .get();
 
-  if (!state || state.status !== 'in_progress') {
-    return { success: false, error: 'Draft is not in progress' };
-  }
+    if (!state || state.status !== 'in_progress') {
+      return { success: false as const, error: 'Draft is not in progress' };
+    }
 
-  const league = db.select().from(schema.leagues)
-    .where(eq(schema.leagues.id, leagueId))
-    .get();
-  if (!league) return { success: false, error: 'League not found' };
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, leagueId))
+      .get();
+    if (!league) return { success: false as const, error: 'League not found' };
 
-  const season = db.select().from(schema.seasons)
-    .where(eq(schema.seasons.id, league.seasonId))
-    .get();
-  if (!season) return { success: false, error: 'Season not found' };
+    const season = db.select().from(schema.seasons)
+      .where(eq(schema.seasons.id, league.seasonId))
+      .get();
+    if (!season) return { success: false as const, error: 'Season not found' };
 
-  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+    const snakeOrder = generateSnakeOrder(teamOrder, 10);
 
-  // Check it's the right team's turn
-  const currentSlot = snakeOrder[state.currentPickIndex];
-  if (!currentSlot) {
-    return { success: false, error: 'Draft is already complete' };
-  }
-  if (currentSlot.teamId !== teamId) {
-    return { success: false, error: 'Not your turn' };
-  }
+    // Check it's the right team's turn
+    const currentSlot = snakeOrder[state.currentPickIndex];
+    if (!currentSlot) {
+      return { success: false as const, error: 'Draft is already complete' };
+    }
+    if (currentSlot.teamId !== teamId) {
+      return { success: false as const, error: 'Not your turn' };
+    }
 
-  // Validate the pick
-  const validation = validatePick(pokemonName, teamId, leagueId, season.pointCap);
-  if (!validation.valid) {
-    return { success: false, error: validation.error! };
-  }
+    // Validate the pick
+    const validation = validatePick(pokemonName, teamId, leagueId, season.pointCap);
+    if (!validation.valid) {
+      return { success: false as const, error: validation.error! };
+    }
 
-  // Get pokemon tier
-  const poke = db.select().from(schema.pokemon)
-    .where(eq(schema.pokemon.name, pokemonName))
-    .get()!;
+    // Get pokemon tier
+    const poke = db.select().from(schema.pokemon)
+      .where(eq(schema.pokemon.name, pokemonName))
+      .get()!;
 
-  // Insert the draft pick
-  const pickNumber = state.currentPickIndex + 1;
-  db.insert(schema.draftPicks).values({
-    leagueId,
-    teamId,
-    pickNumber,
-    pokemonName,
-    tier: poke.tier,
-  }).run();
+    // Insert the draft pick
+    const pickNumber = state.currentPickIndex + 1;
+    db.insert(schema.draftPicks).values({
+      leagueId,
+      teamId,
+      pickNumber,
+      pokemonName,
+      tier: poke.tier,
+    }).run();
 
-  // Also add to roster
-  db.insert(schema.rosters).values({
-    teamId,
-    pokemonName,
-    tier: poke.tier,
-    acquiredVia: 'draft',
-  }).run();
+    // Also add to roster
+    db.insert(schema.rosters).values({
+      teamId,
+      pokemonName,
+      tier: poke.tier,
+      acquiredVia: 'draft',
+    }).run();
 
-  // Advance draft state
-  const nextIndex = state.currentPickIndex + 1;
-  const isComplete = nextIndex >= snakeOrder.length;
+    // Advance draft state
+    const nextIndex = state.currentPickIndex + 1;
+    const isComplete = nextIndex >= snakeOrder.length;
 
-  db.update(schema.draftState).set({
-    currentPickIndex: nextIndex,
-    timerStartedAt: isComplete ? null : new Date().toISOString(),
-    status: isComplete ? 'completed' : 'in_progress',
-    completedAt: isComplete ? new Date().toISOString() : null,
-  }).where(eq(schema.draftState.leagueId, leagueId)).run();
+    db.update(schema.draftState).set({
+      currentPickIndex: nextIndex,
+      timerStartedAt: isComplete ? null : new Date().toISOString(),
+      status: isComplete ? 'completed' : 'in_progress',
+      completedAt: isComplete ? new Date().toISOString() : null,
+    }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-  // If complete, update season phase
-  if (isComplete) {
-    db.update(schema.seasons).set({ phase: 'regular' })
-      .where(eq(schema.seasons.id, league.seasonId)).run();
-  }
+    // If complete, update season phase
+    if (isComplete) {
+      db.update(schema.seasons).set({ phase: 'regular', currentWeek: 1 })
+        .where(eq(schema.seasons.id, league.seasonId)).run();
+    }
 
-  return {
-    success: true,
-    pick: { teamId, pokemonName, tier: poke.tier, pickNumber },
-  };
+    db.insert(schema.activityLog).values({
+      type: 'draft_pick',
+      category: 'draft',
+      actor: actor || teamId,
+      leagueId,
+      description: `${teamId} picked ${pokemonName} (tier ${poke.tier})`,
+      metadata: JSON.stringify({ pickNumber, teamId, pokemonName, tier: poke.tier }),
+    }).run();
+
+    if (isComplete) {
+      db.insert(schema.activityLog).values({
+        type: 'draft_completed',
+        category: 'draft',
+        actor: actor || 'system',
+        leagueId,
+        description: `Draft completed`,
+        metadata: JSON.stringify({ totalPicks: snakeOrder.length }),
+      }).run();
+    }
+
+    return {
+      success: true as const,
+      pick: { teamId, pokemonName, tier: poke.tier, pickNumber },
+    };
+  });
 }
 
 /** Start a draft for a league. Validates preconditions. */
-export function startDraft(leagueId: string, timerDuration = 120): { success: boolean; error?: string } {
+export function startDraft(leagueId: string, timerDuration = 120, actor?: string): { success: boolean; error?: string } {
   const league = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
     .get();
@@ -327,43 +385,54 @@ export function startDraft(leagueId: string, timerDuration = 120): { success: bo
     return { success: false, error: 'Draft is already in progress' };
   }
 
-  // Clear any previous draft picks for this league (fresh start)
-  db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, leagueId)).run();
+  return tx(() => {
+    // Clear any previous draft picks for this league (fresh start)
+    db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, leagueId)).run();
 
-  // Clear rosters acquired via draft for teams in this league
-  const teams = db.select().from(schema.teams)
-    .where(eq(schema.teams.leagueId, leagueId))
-    .all();
-  for (const t of teams) {
-    db.delete(schema.rosters).where(and(
-      eq(schema.rosters.teamId, t.id),
-      eq(schema.rosters.acquiredVia, 'draft'),
-    )).run();
-  }
+    // Clear rosters acquired via draft for teams in this league
+    const teams = db.select().from(schema.teams)
+      .where(eq(schema.teams.leagueId, leagueId))
+      .all();
+    for (const t of teams) {
+      db.delete(schema.rosters).where(and(
+        eq(schema.rosters.teamId, t.id),
+        eq(schema.rosters.acquiredVia, 'draft'),
+      )).run();
+    }
 
-  // Upsert draft state
-  if (existing) {
-    db.update(schema.draftState).set({
-      status: 'in_progress',
-      currentPickIndex: 0,
-      timerDuration,
-      timerStartedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString(),
-      completedAt: null,
-      timerExpiredForTeam: null,
-    }).where(eq(schema.draftState.leagueId, leagueId)).run();
-  } else {
-    db.insert(schema.draftState).values({
+    // Upsert draft state
+    if (existing) {
+      db.update(schema.draftState).set({
+        status: 'in_progress',
+        currentPickIndex: 0,
+        timerDuration,
+        timerStartedAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+        timerExpiredForTeam: null,
+      }).where(eq(schema.draftState.leagueId, leagueId)).run();
+    } else {
+      db.insert(schema.draftState).values({
+        leagueId,
+        status: 'in_progress',
+        currentPickIndex: 0,
+        timerDuration,
+        timerStartedAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+      }).run();
+    }
+
+    db.insert(schema.activityLog).values({
+      type: 'draft_started',
+      category: 'draft',
+      actor: actor || 'system',
       leagueId,
-      status: 'in_progress',
-      currentPickIndex: 0,
-      timerDuration,
-      timerStartedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString(),
+      description: `Draft started for ${league.name}`,
+      metadata: JSON.stringify({ teamOrder, timerDuration }),
     }).run();
-  }
 
-  return { success: true };
+    return { success: true };
+  });
 }
 
 /** Handle timer expiration — pause the draft and flag the team whose timer expired. */
@@ -394,7 +463,7 @@ export function handleTimerExpiry(leagueId: string): { paused: true; teamId: str
 }
 
 /** Execute auto-pick for the team whose timer expired, then clear the flag and resume. */
-export function executeAutoPick(leagueId: string): ReturnType<typeof executePick> | null {
+export function executeAutoPick(leagueId: string, actor?: string): ReturnType<typeof executePick> | null {
   const state = db.select().from(schema.draftState)
     .where(eq(schema.draftState.leagueId, leagueId))
     .get();
@@ -410,56 +479,72 @@ export function executeAutoPick(leagueId: string): ReturnType<typeof executePick
     .get();
   if (!season) return null;
 
-  // Resume draft so executePick works (it checks for 'in_progress')
-  db.update(schema.draftState).set({
-    status: 'in_progress',
-    timerExpiredForTeam: null,
-    timerStartedAt: new Date().toISOString(),
-  }).where(eq(schema.draftState.leagueId, leagueId)).run();
+  return tx(() => {
+    // Resume draft so executePick works (it checks for 'in_progress')
+    db.update(schema.draftState).set({
+      status: 'in_progress',
+      timerExpiredForTeam: null,
+      timerStartedAt: new Date().toISOString(),
+    }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-  const autoPick = getAutoPick(state.timerExpiredForTeam, leagueId, season.pointCap);
-  if (!autoPick) return null;
+    const autoPick = getAutoPick(state.timerExpiredForTeam!, leagueId, season.pointCap);
+    if (!autoPick) {
+      throw new Error('No valid auto-pick available');
+    }
 
-  return executePick(leagueId, autoPick.name, state.timerExpiredForTeam);
+    return executePick(leagueId, autoPick.name, state.timerExpiredForTeam!, actor || 'auto-pick');
+  });
 }
 
 /** Skip the current turn (no pick), advance to next pick, clear timer-expired flag. */
-export function skipPick(leagueId: string): { success: true } | { success: false; error: string } {
-  const state = db.select().from(schema.draftState)
-    .where(eq(schema.draftState.leagueId, leagueId))
-    .get();
-  if (!state || state.status !== 'paused' || !state.timerExpiredForTeam) {
-    return { success: false, error: 'No timer-expired pick to skip' };
-  }
-
-  const league = db.select().from(schema.leagues)
-    .where(eq(schema.leagues.id, leagueId))
-    .get();
-  if (!league) return { success: false, error: 'League not found' };
-
-  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const snakeOrder = generateSnakeOrder(teamOrder, 10);
-
-  const nextIndex = state.currentPickIndex + 1;
-  const isComplete = nextIndex >= snakeOrder.length;
-
-  db.update(schema.draftState).set({
-    currentPickIndex: nextIndex,
-    status: isComplete ? 'completed' : 'in_progress',
-    timerStartedAt: isComplete ? null : new Date().toISOString(),
-    timerExpiredForTeam: null,
-    completedAt: isComplete ? new Date().toISOString() : null,
-  }).where(eq(schema.draftState.leagueId, leagueId)).run();
-
-  if (isComplete) {
-    const season = db.select().from(schema.seasons)
-      .where(eq(schema.seasons.id, league.seasonId))
+export function skipPick(leagueId: string, actor?: string): { success: true } | { success: false; error: string } {
+  return tx(() => {
+    const state = db.select().from(schema.draftState)
+      .where(eq(schema.draftState.leagueId, leagueId))
       .get();
-    if (season) {
-      db.update(schema.seasons).set({ phase: 'regular' })
-        .where(eq(schema.seasons.id, season.id)).run();
+    if (!state || state.status !== 'paused' || !state.timerExpiredForTeam) {
+      return { success: false as const, error: 'No timer-expired pick to skip' };
     }
-  }
 
-  return { success: true };
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, leagueId))
+      .get();
+    if (!league) return { success: false as const, error: 'League not found' };
+
+    const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+
+    const skippedTeam = state.timerExpiredForTeam;
+    const nextIndex = state.currentPickIndex + 1;
+    const isComplete = nextIndex >= snakeOrder.length;
+
+    db.update(schema.draftState).set({
+      currentPickIndex: nextIndex,
+      status: isComplete ? 'completed' : 'in_progress',
+      timerStartedAt: isComplete ? null : new Date().toISOString(),
+      timerExpiredForTeam: null,
+      completedAt: isComplete ? new Date().toISOString() : null,
+    }).where(eq(schema.draftState.leagueId, leagueId)).run();
+
+    if (isComplete) {
+      const season = db.select().from(schema.seasons)
+        .where(eq(schema.seasons.id, league.seasonId))
+        .get();
+      if (season) {
+        db.update(schema.seasons).set({ phase: 'regular', currentWeek: 1 })
+          .where(eq(schema.seasons.id, season.id)).run();
+      }
+    }
+
+    db.insert(schema.activityLog).values({
+      type: 'draft_pick_skipped',
+      category: 'draft',
+      actor: actor || 'system',
+      leagueId,
+      description: `Skipped pick for ${skippedTeam}`,
+      metadata: JSON.stringify({ teamId: skippedTeam, pickIndex: state.currentPickIndex }),
+    }).run();
+
+    return { success: true as const };
+  });
 }

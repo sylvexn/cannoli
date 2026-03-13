@@ -6,6 +6,7 @@
 
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
+import { tx } from './tx';
 
 interface MatchFixture {
   week: number;
@@ -70,38 +71,45 @@ export function generateLeagueSchedule(leagueId: string): { success: boolean; ma
   const teamIds = teams.map(t => t.id);
   const fixtures = generateRoundRobin(teamIds);
 
-  // Clear existing regular-season matches for this league
-  db.delete(schema.matches)
-    .where(eq(schema.matches.leagueId, leagueId))
-    .run();
-
-  // Insert new matches
-  const matchCountPerWeek = new Map<number, number>();
-  for (const f of fixtures) {
-    const matchNum = (matchCountPerWeek.get(f.week) ?? 0) + 1;
-    matchCountPerWeek.set(f.week, matchNum);
-    const matchId = `${leagueId}-w${f.week}m${matchNum}`;
-    db.insert(schema.matches).values({
-      id: matchId,
-      leagueId,
-      week: f.week,
-      homeTeamId: f.homeTeamId,
-      awayTeamId: f.awayTeamId,
-      phase: 'regular',
-    }).run();
-  }
-
-  // Update season total weeks to match schedule length
-  const season = db.select().from(schema.seasons)
-    .where(eq(schema.seasons.id, league.seasonId))
-    .get();
-  if (season) {
-    const totalWeeks = Math.max(...fixtures.map(f => f.week));
-    db.update(schema.seasons)
-      .set({ totalWeeks })
-      .where(eq(schema.seasons.id, season.id))
+  return tx(() => {
+    // Clear existing regular-season matches for this league
+    db.delete(schema.matches)
+      .where(eq(schema.matches.leagueId, leagueId))
       .run();
-  }
 
-  return { success: true, matchCount: fixtures.length };
+    // Insert new matches; populate deadline from season weekDates if available
+    const season = db.select().from(schema.seasons)
+      .where(eq(schema.seasons.id, league.seasonId))
+      .get();
+    const weekDates: Record<string, string> = season?.weekDates ? JSON.parse(season.weekDates) : {};
+
+    const matchCountPerWeek = new Map<number, number>();
+    for (const f of fixtures) {
+      const matchNum = (matchCountPerWeek.get(f.week) ?? 0) + 1;
+      matchCountPerWeek.set(f.week, matchNum);
+      const matchId = `${leagueId}-w${f.week}m${matchNum}`;
+      const deadlineDate = weekDates[String(f.week)];
+      const deadline = deadlineDate ? new Date(deadlineDate + 'T23:59:59Z').toISOString() : null;
+      db.insert(schema.matches).values({
+        id: matchId,
+        leagueId,
+        week: f.week,
+        homeTeamId: f.homeTeamId,
+        awayTeamId: f.awayTeamId,
+        phase: 'regular',
+        deadline,
+      }).run();
+    }
+
+    // Update season total weeks to match schedule length
+    if (season) {
+      const totalWeeks = Math.max(...fixtures.map(f => f.week));
+      db.update(schema.seasons)
+        .set({ totalWeeks })
+        .where(eq(schema.seasons.id, season.id))
+        .run();
+    }
+
+    return { success: true, matchCount: fixtures.length };
+  });
 }

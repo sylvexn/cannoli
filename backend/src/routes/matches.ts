@@ -3,6 +3,7 @@ import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
+import { tx } from '../lib/tx';
 
 export const matchRoutes = new Elysia()
 
@@ -113,6 +114,7 @@ export const matchRoutes = new Elysia()
 
     const newStatus = (warnings?.length ?? 0) > 0 ? 'disputed' : 'completed';
 
+    return tx(() => {
     // Update match
     db.update(schema.matches).set({
       homeScore,
@@ -218,6 +220,7 @@ export const matchRoutes = new Elysia()
     }
 
     return { success: true };
+    });
   })
 
   // ─── Dismiss match warnings ──────────────────────────────────────────
@@ -325,6 +328,7 @@ export const matchRoutes = new Elysia()
     teamRecords.sort((a, b) => b.wins - a.wins || b.differential - a.differential);
     const seeded = teamRecords.slice(0, seedCount);
 
+    return tx(() => {
     // Clear existing playoff matches
     db.delete(schema.matches)
       .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'playoffs')))
@@ -393,6 +397,7 @@ export const matchRoutes = new Elysia()
     }).run();
 
     return { success: true, matchCount: matchups.length, seedings: seeded.map((s, i) => ({ seed: i + 1, teamId: s.id })) };
+    });
   })
 
   // ─── Scrims ──────────────────────────────────────────────────────────
