@@ -63,7 +63,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const leagueUrl = useLeagueUrl();
   const { players, getTeamMatches } = useLeagueData();
   const league = useLeague();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const season = league.season;
   const config = DEFAULT_LEAGUE_CONFIG;
 
