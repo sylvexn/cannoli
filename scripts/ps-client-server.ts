@@ -34,8 +34,6 @@ Bun.serve({
 
     // Proxy action.php to our Elysia backend (same-origin cookie relay)
     if (path.includes('/action.php')) {
-      const rawBody = req.method !== 'GET' ? await req.clone().text() : '';
-      console.log(`[proxy] ${req.method} action.php | body(${rawBody.length}): ${rawBody.slice(0, 200)}`);
       const backendUrl = `${BACKEND_URL}/api/ps/action.php${url.search}`;
 
       // Forward essential headers: cookies, content-type, body
@@ -108,7 +106,10 @@ function serveFile(filePath: string): Response {
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   return new Response(readFileSync(filePath), {
-    headers: { 'Content-Type': contentType },
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'no-store, must-revalidate',
+    },
   });
 }
 

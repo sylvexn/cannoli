@@ -182,7 +182,6 @@ function handleActionPhp(params: Record<string, string>, request: Request): Resp
 
   switch (act) {
     case 'login': {
-      console.log('[PS login]', JSON.stringify({ name: params.name, challstrLen: params.challstr?.length, challstrStart: params.challstr?.slice(0, 20), challstrEnd: params.challstr?.slice(-20) }));
       const user = authenticateUser(params.name, params.pass);
       if (!user) {
         return psResponse(psJson({ actionsuccess: false, assertion: false }));

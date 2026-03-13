@@ -5,6 +5,19 @@ WORKDIR /client
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 https://github.com/smogon/pokemon-showdown-client.git .
 
+# Replace upstream jQuery with clean stock version. Smogon's distributed
+# jquery-2.2.4.min.js has injected code that mutates `challstr` field on
+# $.post/$.get to append a browser fingerprint (timezone, screen size, canvas
+# hash) before sending to the login server. Their official login server strips
+# this; ours doesn't, so the appended bytes break RSA assertion verification
+# (yields `|nametaken| Your verification signature doesn't match`). Drop in
+# the upstream-clean jQuery from code.jquery.com instead.
+RUN apt-get update && apt-get install -y curl ca-certificates && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL https://code.jquery.com/jquery-2.2.4.min.js \
+       -o play.pokemonshowdown.com/js/lib/jquery-2.2.4.min.js \
+    && echo "05b85d96f41fff14d8f608dad03ab71e2c1017c2da0914d7c59291bad7a54f8e  play.pokemonshowdown.com/js/lib/jquery-2.2.4.min.js" \
+       | sha256sum -c -
+
 # Copy Cannoli config files
 COPY showdown/ps-client-config.js config/config.js
 COPY showdown/ps-testclient-key.js config/testclient-key.js
