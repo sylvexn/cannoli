@@ -49,7 +49,7 @@ if [ "$HAS_SHOWDOWN" = true ]; then
   # ─── PS Game Server ───────────────────────────────────────────────────────
   echo "[ps-server] ws://localhost:8000"
   cd "$SHOWDOWN_DIR/server"
-  node pokemon-showdown start --no-security &
+  node pokemon-showdown start --no-security < /dev/null &
 
   # ─── PS Client (static server + action.php proxy) ─────────────────────────
   cd "$CANNOLI_DIR"

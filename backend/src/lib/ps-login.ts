@@ -125,11 +125,18 @@ export function destroyPsSession(sidCookieValue: string) {
 
 /**
  * Build the Set-Cookie header for the PS sid.
+ *
+ * The sid value contains commas (`username,sessionId,sidRandom`), which are
+ * not valid cookie-octets per RFC 6265. Modern Chrome silently drops cookies
+ * whose value contains a raw comma. URL-encode commas (%2C) so the cookie
+ * survives — matching the official PS client's expectation (it decodes %2C
+ * back to comma before parsing).
  */
 export function psSidCookieString(sidCookie: string): string {
   const isProd = process.env.NODE_ENV === 'production';
+  const encoded = sidCookie.replace(/,/g, '%2C');
   const parts = [
-    `sid=${sidCookie}`,
+    `sid=${encoded}`,
     'Path=/',
     `Max-Age=${PS_SESSION_TTL}`,
     // Prod: SameSite=None + Secure (cross-subdomain .cannoli.live via HTTPS)
@@ -225,5 +232,7 @@ export function authenticateUser(name: string, password: string) {
 export function parsePsSid(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/(?:^|;\s*)sid=([^;]+)/);
-  return match ? match[1] : null;
+  if (!match) return null;
+  // Cookie value was URL-encoded (commas → %2C) when set; decode for parsing.
+  return decodeURIComponent(match[1]);
 }
