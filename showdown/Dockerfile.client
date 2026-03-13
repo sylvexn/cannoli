@@ -18,12 +18,28 @@ RUN apt-get update && apt-get install -y curl ca-certificates && rm -rf /var/lib
     && echo "05b85d96f41fff14d8f608dad03ab71e2c1017c2da0914d7c59291bad7a54f8e  play.pokemonshowdown.com/js/lib/jquery-2.2.4.min.js" \
        | sha256sum -c -
 
-# Copy Cannoli config files
+# Copy Cannoli config files. The smogon source tree expects them at /config/
+# (one level up from /play.pokemonshowdown.com/), but nginx will only serve the
+# play.pokemonshowdown.com subdirectory — anything outside is unreachable. So
+# put our configs both at /config/ (used by `node build`) AND inside the served
+# tree at play.pokemonshowdown.com/config/ (used at runtime by patched HTML).
 COPY showdown/ps-client-config.js config/config.js
 COPY showdown/ps-testclient-key.js config/testclient-key.js
+COPY showdown/ps-client-config.js play.pokemonshowdown.com/config/config.js
+COPY showdown/ps-testclient-key.js play.pokemonshowdown.com/config/testclient-key.js
 
 # Build the client (generates data files, compiled JS)
 RUN node build full
+
+# Patch testclient.html and index.html so they load our local config instead of
+# Smogon's CDN (which would otherwise hard-code Config.server to sim3.psim.us
+# and Config.loginserver to play.pokemonshowdown.com — connecting users to the
+# official Smogon server instead of our private one).
+RUN sed -i \
+        -e 's|https://play.pokemonshowdown.com/config/config.js|config/config.js|g' \
+        -e 's|//play.pokemonshowdown.com/config/config.js[^"]*|config/config.js|g' \
+        -e 's|\.\./config/testclient-key.js|config/testclient-key.js|g' \
+        play.pokemonshowdown.com/testclient.html play.pokemonshowdown.com/index.html
 
 FROM nginx:alpine
 
