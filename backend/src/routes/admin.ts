@@ -3,6 +3,7 @@ import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { hashPassword, isStaff } from '../lib/auth';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
+import { tx } from '../lib/tx';
 
 export const adminRoutes = new Elysia()
 
@@ -117,6 +118,14 @@ export const adminRoutes = new Elysia()
     if (Object.keys(updates).length === 0) { set.status = 400; return { error: 'No updates' }; }
 
     db.update(schema.users).set(updates).where(eq(schema.users.id, userId)).run();
+    db.insert(schema.activityLog).values({
+      type: 'user_updated',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Updated user #${userId}: ${Object.keys(updates).join(', ')}`,
+      metadata: JSON.stringify({ userId, updates }),
+    }).run();
     return { success: true };
   })
 
@@ -239,47 +248,91 @@ export const adminRoutes = new Elysia()
 
   .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams, rosterSize } = body as Record<string, unknown>;
+    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize: _rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
 
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
     if (color) leagueUpdates.color = color;
     if (draftDate !== undefined) leagueUpdates.draftDate = draftDate;
-    if (Object.keys(leagueUpdates).length > 0) {
-      db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
-    }
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
-    if (league) {
-      const seasonUpdates: Record<string, unknown> = {};
-      if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
-      if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
-      if (tradeDeadlineWeek !== undefined) seasonUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
-      if (weekDates !== undefined) seasonUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+
+    // Phase-aware locks
+    const draftStarted = !!db.select().from(schema.draftState)
+      .where(and(eq(schema.draftState.leagueId, params.leagueId), sql`current_pick_index > 0`)).get();
+    if (pointCap !== undefined && draftStarted) {
+      set.status = 400; return { error: 'Cannot change point cap once draft has begun' };
+    }
+    if (teraCaptainSlots !== undefined && season && season.phase !== 'predraft' && season.phase !== 'draft') {
+      set.status = 400; return { error: `Cannot change tera captain slots in ${season.phase} phase` };
+    }
+
+    const seasonUpdates: Record<string, unknown> = {};
+    if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
+    if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
+    if (tradeDeadlineWeek !== undefined) seasonUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
+    if (weekDates !== undefined) seasonUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
+    if (paused !== undefined) seasonUpdates.paused = !!paused;
+    if (forfeitPolicy !== undefined) seasonUpdates.forfeitPolicy = forfeitPolicy;
+
+    tx(() => {
+      if (Object.keys(leagueUpdates).length > 0) {
+        db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
+      }
       if (Object.keys(seasonUpdates).length > 0) {
         db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
       }
-    }
+      if (Object.keys(leagueUpdates).length > 0 || Object.keys(seasonUpdates).length > 0) {
+        db.insert(schema.activityLog).values({
+          type: 'league_config_updated',
+          category: 'config',
+          actor: user.username,
+          leagueId: params.leagueId,
+          description: `Updated config for ${league.name}`,
+          metadata: JSON.stringify({ leagueUpdates, seasonUpdates }),
+        }).run();
+      }
+    });
 
     return { success: true };
   })
 
   .delete('/api/leagues/:leagueId', ({ params, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
-      .where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    for (const tid of teamIds) {
-      db.delete(schema.rosters).where(eq(schema.rosters.teamId, tid)).run();
-      db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, tid)).run();
-    }
-    db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, params.leagueId)).run();
-    db.delete(schema.matches).where(eq(schema.matches.leagueId, params.leagueId)).run();
-    db.delete(schema.transactions).where(eq(schema.transactions.leagueId, params.leagueId)).run();
-    db.delete(schema.trades).where(eq(schema.trades.leagueId, params.leagueId)).run();
-    db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.leagueId, params.leagueId)).run();
-    db.delete(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).run();
-    db.delete(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).run();
+    tx(() => {
+      const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
+        .where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
+
+      for (const tid of teamIds) {
+        db.delete(schema.rosters).where(eq(schema.rosters.teamId, tid)).run();
+        db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, tid)).run();
+        db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.teamId, tid)).run();
+        db.delete(schema.playerAvailability).where(eq(schema.playerAvailability.teamId, tid)).run();
+      }
+      db.delete(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).run();
+      db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, params.leagueId)).run();
+      db.delete(schema.matches).where(eq(schema.matches.leagueId, params.leagueId)).run();
+      db.delete(schema.transactions).where(eq(schema.transactions.leagueId, params.leagueId)).run();
+      db.delete(schema.trades).where(eq(schema.trades.leagueId, params.leagueId)).run();
+      db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.leagueId, params.leagueId)).run();
+      db.delete(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).run();
+      db.delete(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'league_deleted',
+        category: 'admin',
+        actor: user.username,
+        leagueId: null,
+        description: `Deleted league ${league.name}`,
+        metadata: JSON.stringify({ leagueId: params.leagueId }),
+      }).run();
+    });
+
     return { success: true };
   })
 
@@ -287,25 +340,81 @@ export const adminRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { phase } = body as { phase: string };
+    const { phase, override } = body as { phase: string; override?: boolean };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-    const previousPhase = season?.phase;
+    if (!season) { set.status = 404; return { error: 'Season not found' }; }
+    const previousPhase = season.phase;
 
-    db.update(schema.seasons).set({ phase: phase as any }).where(eq(schema.seasons.id, league.seasonId)).run();
+    // ─── Phase transition preconditions ────────────────────────────────
+    const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all();
+    const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
 
-    // Auto-generate schedule when advancing from draft → regular
-    let scheduleGenerated = false;
-    if (previousPhase === 'draft' && phase === 'regular') {
-      const result = generateLeagueSchedule(params.leagueId);
-      scheduleGenerated = result.success;
-      // Also set week to 1
-      if (season) {
-        db.update(schema.seasons).set({ currentWeek: 1 }).where(eq(schema.seasons.id, season.id)).run();
+    if (phase === 'draft') {
+      const order: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+      if (order.length === 0) { set.status = 400; return { error: 'Cannot start draft: draft order not set' }; }
+      if (order.length !== teams.length) {
+        set.status = 400; return { error: `Draft order has ${order.length} teams but league has ${teams.length}` };
+      }
+      const teamIdSet = new Set(teams.map(t => t.id));
+      const seen = new Set<string>();
+      for (const tid of order) {
+        if (!teamIdSet.has(tid)) { set.status = 400; return { error: `Draft order contains unknown team ${tid}` }; }
+        if (seen.has(tid)) { set.status = 400; return { error: `Draft order has duplicate team ${tid}` }; }
+        seen.add(tid);
+      }
+      if (draftState && draftState.status === 'in_progress') {
+        set.status = 400; return { error: 'Draft already in progress' };
       }
     }
+
+    if (phase === 'regular' && previousPhase === 'draft') {
+      if (!draftState || draftState.status !== 'completed') {
+        if (!override) {
+          set.status = 400; return { error: 'Draft is not complete', code: 'DRAFT_NOT_COMPLETE' };
+        }
+      }
+    }
+
+    if (phase === 'playoffs') {
+      const incomplete = db.select({ count: sql<number>`COUNT(*)` })
+        .from(schema.matches)
+        .where(and(
+          eq(schema.matches.leagueId, params.leagueId),
+          eq(schema.matches.phase, 'regular'),
+          sql`(home_score IS NULL OR away_score IS NULL)`,
+        )).get()?.count ?? 0;
+      if (incomplete > 0 && !override) {
+        set.status = 400;
+        return { error: `${incomplete} regular-season matches still missing scores`, code: 'REGULAR_INCOMPLETE' };
+      }
+    }
+
+    let scheduleGenerated = false;
+    tx(() => {
+      const seasonUpdates: Record<string, unknown> = { phase: phase as any };
+      if (phase === 'regular' && previousPhase !== 'regular') {
+        seasonUpdates.currentWeek = 1;
+      }
+      db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
+
+      // Auto-generate schedule when advancing from draft → regular
+      if (previousPhase === 'draft' && phase === 'regular') {
+        const result = generateLeagueSchedule(params.leagueId);
+        scheduleGenerated = result.success;
+      }
+
+      db.insert(schema.activityLog).values({
+        type: 'phase_advanced',
+        category: 'config',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, scheduleGenerated }),
+      }).run();
+    });
 
     return { success: true, scheduleGenerated };
   })
@@ -318,14 +427,49 @@ export const adminRoutes = new Elysia()
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
     if (!season) { set.status = 404; return { error: 'Season not found' }; }
 
-    db.update(schema.seasons).set({ currentWeek: season.currentWeek + 1 }).where(eq(schema.seasons.id, season.id)).run();
-    return { success: true, week: season.currentWeek + 1 };
+    const newWeek = season.currentWeek + 1;
+    tx(() => {
+      db.update(schema.seasons).set({ currentWeek: newWeek }).where(eq(schema.seasons.id, season.id)).run();
+      db.insert(schema.activityLog).values({
+        type: 'week_advanced',
+        category: 'config',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `Week ${season.currentWeek} → ${newWeek}`,
+        metadata: JSON.stringify({ from: season.currentWeek, to: newWeek }),
+      }).run();
+    });
+    return { success: true, week: newWeek };
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
-    db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
+
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+    // Lock once we're past draft phase
+    if (season && season.phase !== 'predraft' && season.phase !== 'draft') {
+      set.status = 400; return { error: `Cannot change draft order in ${season.phase} phase` };
+    }
+    // Lock once the draft has begun (any picks made)
+    const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
+    if (draftState && draftState.currentPickIndex > 0) {
+      set.status = 400; return { error: 'Cannot change draft order once picks have been made' };
+    }
+
+    tx(() => {
+      db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
+      db.insert(schema.activityLog).values({
+        type: 'draft_order_set',
+        category: 'config',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `Set draft order (${order.length} teams)`,
+        metadata: JSON.stringify({ order }),
+      }).run();
+    });
     return { success: true };
   })
 

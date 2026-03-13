@@ -11,6 +11,10 @@ export const users = sqliteTable('users', {
   mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(true),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
+  /** Hex #RRGGBB — accent color used in user avatars, mention pills, etc. */
+  primaryColor: text('primary_color'),
+  secondaryColor: text('secondary_color'),
+  tertiaryColor: text('tertiary_color'),
 });
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
@@ -27,7 +31,7 @@ export const sessions = sqliteTable('sessions', {
 export const seasons = sqliteTable('seasons', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   seasonNumber: integer('season_number').notNull(),
-  phase: text('phase', { enum: ['draft', 'regular', 'playoffs', 'offseason'] }).notNull(),
+  phase: text('phase', { enum: ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] }).notNull(),
   currentWeek: integer('current_week').notNull().default(0),
   totalWeeks: integer('total_weeks').notNull().default(11),
   pointCap: integer('point_cap').notNull().default(110),
@@ -36,6 +40,10 @@ export const seasons = sqliteTable('seasons', {
   scheduleType: text('schedule_type', { enum: ['round_robin', 'manual'] }).default('round_robin'),
   /** JSON object mapping week number to ISO date string, e.g. {"1":"2026-04-14","2":"2026-04-21"} */
   weekDates: text('week_dates'),
+  /** When 1, scheduler skips auto-advance + auto-forfeit for this season */
+  paused: integer('paused', { mode: 'boolean' }).notNull().default(false),
+  /** What happens when a match deadline passes without a result */
+  forfeitPolicy: text('forfeit_policy', { enum: ['double_forfeit', 'admin_review'] }).notNull().default('double_forfeit'),
 });
 
 // ─── Leagues ─────────────────────────────────────────────────────────────────
@@ -64,6 +72,8 @@ export const teams = sqliteTable('teams', {
   teamColor: text('team_color').notNull().default('#888888'),
   showdownUsername: text('showdown_username'),
   rank: integer('rank'),
+  /** Path to uploaded team logo (relative to backend/uploads/) */
+  logoPath: text('logo_path'),
 });
 
 // ─── Pokemon (reference table — full national dex) ──────────────────────────
@@ -85,6 +95,10 @@ export const pokemon = sqliteTable('pokemon', {
   tier: integer('tier').notNull().default(0),
   teraBanned: integer('tera_banned', { mode: 'boolean' }).notNull().default(false),
   banned: integer('banned', { mode: 'boolean' }).notNull().default(false),
+  /** National Dex number — used to enforce "no two Pokemon with same dex# on same roster" */
+  nationalDexNumber: integer('national_dex_number'),
+  /** Form classification: 'base', 'mega', 'regional' (alolan/galarian/hisuian/paldean), 'other' */
+  formCategory: text('form_category', { enum: ['base', 'mega', 'regional', 'other'] }).notNull().default('base'),
 });
 
 // ─── Rosters (team ↔ pokemon for a season) ──────────────────────────────────
@@ -148,6 +162,10 @@ export const matches = sqliteTable('matches', {
   homeSeed: integer('home_seed'),
   /** Seed of away team */
   awaySeed: integer('away_seed'),
+  /** ISO timestamp by which a result must be recorded (auto-forfeit after) */
+  deadline: text('deadline'),
+  /** Marks a forfeited match: 'home', 'away', or 'both' (double-forfeit) */
+  forfeitedBy: text('forfeited_by', { enum: ['home', 'away', 'both'] }),
 });
 
 // ─── Match Pokemon (per-match K/D for each Pokemon) ─────────────────────────
@@ -206,7 +224,7 @@ export const trades = sqliteTable('trades', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   leagueId: text('league_id').notNull().references(() => leagues.id),
   week: integer('week').notNull(),
-  status: text('status', { enum: ['pending', 'accepted', 'rejected', 'expired'] }).notNull().default('pending'),
+  status: text('status', { enum: ['pending', 'awaiting_admin', 'accepted', 'rejected', 'expired'] }).notNull().default('pending'),
   proposerId: text('proposer_id').notNull().references(() => teams.id),
   recipientId: text('recipient_id').notNull().references(() => teams.id),
   /** JSON array of pokemon names */

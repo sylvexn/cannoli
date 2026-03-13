@@ -48,7 +48,7 @@ export const draftRoutes = new Elysia()
   .post('/api/leagues/:leagueId/draft/start', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { timerDuration } = (body as { timerDuration?: number }) ?? {};
-    const result = startDraft(params.leagueId, timerDuration ?? 120);
+    const result = startDraft(params.leagueId, timerDuration ?? 120, user.username);
     if (!result.success) { set.status = 400; return { error: result.error }; }
     return getDraftSnapshot(params.leagueId);
   })
@@ -62,11 +62,24 @@ export const draftRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const teamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : team?.id;
+    const overrideTeamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : null;
+    const teamId = overrideTeamId ?? team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
-    const result = executePick(params.leagueId, pokemonName, teamId);
+    const actor = overrideTeamId ? `${user.username} (override → ${overrideTeamId})` : user.username;
+    const result = executePick(params.leagueId, pokemonName, teamId, actor);
     if (!result.success) { set.status = 400; return { error: result.error }; }
+
+    if (overrideTeamId) {
+      db.insert(schema.activityLog).values({
+        type: 'draft_pick_override',
+        category: 'admin',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `Staff override: ${user.username} picked ${pokemonName} on behalf of ${overrideTeamId}`,
+        metadata: JSON.stringify({ teamId: overrideTeamId, pokemonName }),
+      }).run();
+    }
 
     return result;
   })
@@ -76,6 +89,16 @@ export const draftRoutes = new Elysia()
     const state = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
     if (!state || state.status !== 'in_progress') { set.status = 400; return { error: 'Draft is not in progress' }; }
     db.update(schema.draftState).set({ status: 'paused', timerStartedAt: null }).where(eq(schema.draftState.leagueId, params.leagueId)).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'draft_paused',
+      category: 'draft',
+      actor: user.username,
+      leagueId: params.leagueId,
+      description: `Draft paused`,
+      metadata: JSON.stringify({}),
+    }).run();
+
     return { success: true };
   })
 
@@ -84,12 +107,28 @@ export const draftRoutes = new Elysia()
     const state = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
     if (!state || state.status !== 'paused') { set.status = 400; return { error: 'Draft is not paused' }; }
     db.update(schema.draftState).set({ status: 'in_progress', timerStartedAt: new Date().toISOString() }).where(eq(schema.draftState.leagueId, params.leagueId)).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'draft_resumed',
+      category: 'draft',
+      actor: user.username,
+      leagueId: params.leagueId,
+      description: `Draft resumed`,
+      metadata: JSON.stringify({}),
+    }).run();
+
     return getDraftSnapshot(params.leagueId);
   })
 
   .post('/api/leagues/:leagueId/draft/auto-pick', ({ params, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const result = executeAutoPick(params.leagueId);
+    let result;
+    try {
+      result = executeAutoPick(params.leagueId, user.username);
+    } catch (e) {
+      set.status = 400;
+      return { error: (e as Error).message };
+    }
     if (!result) { set.status = 400; return { error: 'Cannot auto-pick' }; }
 
     // Broadcast updated state to all WS subscribers
@@ -103,7 +142,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/skip', ({ params, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const result = skipPick(params.leagueId);
+    const result = skipPick(params.leagueId, user.username);
     if (!result.success) { set.status = 400; return { error: (result as any).error }; }
 
     // Broadcast updated state to all WS subscribers
@@ -152,13 +191,13 @@ export const draftRoutes = new Elysia()
         }
 
         if (msg.type === 'pick') {
-          const { pokemonName, teamId } = msg;
+          const { pokemonName, teamId, username } = msg;
           if (!pokemonName || !teamId) {
             ws.send(JSON.stringify({ type: 'error', error: 'pokemonName and teamId required' }));
             return;
           }
 
-          const result = executePick(leagueId, pokemonName, teamId);
+          const result = executePick(leagueId, pokemonName, teamId, username || teamId);
           if (!result.success) {
             ws.send(JSON.stringify({ type: 'error', error: result.error }));
             return;

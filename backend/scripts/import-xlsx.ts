@@ -14,6 +14,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
 import { hashSync } from 'bcryptjs';
 import * as schema from '../src/db/schema';
+import { getFormCategory } from '../src/lib/pokedex';
 
 export const IMPORTS_DIR = resolve(import.meta.dir, '../imports');
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
@@ -199,11 +200,16 @@ export function importSeason(
 
   // Batch insert pokemon
   const insertPokemon = sqlite.prepare(`
-    INSERT OR IGNORE INTO pokemon (name, type1, type2, hp, atk, def, spa, spd, spe, ability1, ability2, hidden_ability, tier, tera_banned, banned)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO pokemon (name, type1, type2, hp, atk, def, spa, spd, spe, ability1, ability2, hidden_ability, tier, tera_banned, banned, form_category)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const p of pokemonRows) {
-    insertPokemon.run(p.name, p.type1, p.type2, p.hp, p.atk, p.def, p.spa, p.spd, p.spe, p.ability1, p.ability2, p.hiddenAbility, p.tier, p.teraBanned ? 1 : 0, p.banned ? 1 : 0);
+    insertPokemon.run(
+      p.name, p.type1, p.type2, p.hp, p.atk, p.def, p.spa, p.spd, p.spe,
+      p.ability1, p.ability2, p.hiddenAbility, p.tier,
+      p.teraBanned ? 1 : 0, p.banned ? 1 : 0,
+      getFormCategory(p.name),
+    );
   }
   console.log(`  Inserted ${pokemonRows.length} Pokemon`);
 

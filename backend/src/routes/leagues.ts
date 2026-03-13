@@ -2,6 +2,8 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
+import { tx } from '../lib/tx';
+import { effectiveCost } from '../lib/tera-cost';
 
 export const leagueRoutes = new Elysia()
 
@@ -548,51 +550,69 @@ export const leagueRoutes = new Elysia()
       }
     }
 
-    // Clear all existing tera captains for this team
-    db.update(schema.rosters).set({
-      isTeraCaptain: false,
-      teraType1: null,
-      teraType2: null,
-      teraType3: null,
-    }).where(eq(schema.rosters.teamId, params.teamId)).run();
-
-    // Set new captains
-    for (const c of captains) {
-      db.update(schema.rosters).set({
-        isTeraCaptain: true,
-        teraType1: c.teraTypes[0] ?? null,
-        teraType2: c.teraTypes[1] ?? null,
-        teraType3: c.teraTypes[2] ?? null,
-      }).where(and(
-        eq(schema.rosters.teamId, params.teamId),
-        eq(schema.rosters.pokemonName, c.pokemonName),
-      )).run();
+    // Tera-cost markup point cap check: simulate the new captain assignments
+    // against the team's full roster and verify total ≤ pointCap.
+    const roster = db.select().from(schema.rosters)
+      .where(eq(schema.rosters.teamId, params.teamId))
+      .all();
+    const captainSet = new Set(captains.map(c => c.pokemonName));
+    const totalCost = roster.reduce(
+      (sum, r) => sum + effectiveCost(r.tier, captainSet.has(r.pokemonName)),
+      0,
+    );
+    const cap = season?.pointCap ?? 110;
+    if (totalCost > cap) {
+      set.status = 400;
+      return { error: `Tera captain markup would exceed point cap (${totalCost} > ${cap})`, code: 'POINT_CAP_EXCEEDED' };
     }
 
-    // Log tera change transaction
-    if (league) {
-      const week = season?.currentWeek ?? 0;
+    return tx(() => {
+      // Clear all existing tera captains for this team
+      db.update(schema.rosters).set({
+        isTeraCaptain: false,
+        teraType1: null,
+        teraType2: null,
+        teraType3: null,
+      }).where(eq(schema.rosters.teamId, params.teamId)).run();
+
+      // Set new captains
       for (const c of captains) {
-        db.insert(schema.transactions).values({
+        db.update(schema.rosters).set({
+          isTeraCaptain: true,
+          teraType1: c.teraTypes[0] ?? null,
+          teraType2: c.teraTypes[1] ?? null,
+          teraType3: c.teraTypes[2] ?? null,
+        }).where(and(
+          eq(schema.rosters.teamId, params.teamId),
+          eq(schema.rosters.pokemonName, c.pokemonName),
+        )).run();
+      }
+
+      // Log tera change transaction
+      if (league) {
+        const week = season?.currentWeek ?? 0;
+        for (const c of captains) {
+          db.insert(schema.transactions).values({
+            leagueId: team.leagueId,
+            week,
+            type: 'tera_change',
+            teamId: params.teamId,
+            teraPokemon: c.pokemonName,
+          }).run();
+        }
+
+        db.insert(schema.activityLog).values({
+          type: 'tera_captains_updated',
+          category: 'team',
+          actor: user.username,
           leagueId: team.leagueId,
-          week,
-          type: 'tera_change',
-          teamId: params.teamId,
-          teraPokemon: c.pokemonName,
+          description: `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
+          metadata: JSON.stringify({ teamId: params.teamId, captains }),
         }).run();
       }
 
-      db.insert(schema.activityLog).values({
-        type: 'tera_captains_updated',
-        category: 'team',
-        actor: user.username,
-        leagueId: team.leagueId,
-        description: `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
-        metadata: JSON.stringify({ teamId: params.teamId, captains }),
-      }).run();
-    }
-
-    return { success: true };
+      return { success: true };
+    });
   })
 
   // ─── Shiny Toggle ─────────────────────────────────────────────────
@@ -709,44 +729,46 @@ export const leagueRoutes = new Elysia()
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = season?.currentWeek ?? 0;
 
-    // Drop pokemon if specified
-    if (dropPokemonName) {
-      db.delete(schema.rosters)
-        .where(and(eq(schema.rosters.teamId, teamId), eq(schema.rosters.pokemonName, dropPokemonName)))
-        .run();
-    }
+    return tx(() => {
+      // Drop pokemon if specified
+      if (dropPokemonName) {
+        db.delete(schema.rosters)
+          .where(and(eq(schema.rosters.teamId, teamId), eq(schema.rosters.pokemonName, dropPokemonName)))
+          .run();
+      }
 
-    // Add new pokemon to roster
-    db.insert(schema.rosters).values({
-      teamId,
-      pokemonName,
-      tier: pkmn.tier,
-      acquiredVia: 'fa',
-      acquiredWeek: week,
-    }).run();
+      // Add new pokemon to roster
+      db.insert(schema.rosters).values({
+        teamId,
+        pokemonName,
+        tier: pkmn.tier,
+        acquiredVia: 'fa',
+        acquiredWeek: week,
+      }).run();
 
-    // Transaction record
-    db.insert(schema.transactions).values({
-      leagueId: params.leagueId,
-      week,
-      type: 'fa',
-      teamId,
-      pokemonIn: pokemonName,
-      pointsIn: pkmn.tier,
-      pokemonOut: dropPokemonName || null,
-    }).run();
+      // Transaction record
+      db.insert(schema.transactions).values({
+        leagueId: params.leagueId,
+        week,
+        type: 'fa',
+        teamId,
+        pokemonIn: pokemonName,
+        pointsIn: pkmn.tier,
+        pokemonOut: dropPokemonName || null,
+      }).run();
 
-    // Activity log
-    db.insert(schema.activityLog).values({
-      type: 'fa_pickup',
-      category: 'trade',
-      actor: user.username,
-      leagueId: params.leagueId,
-      description: `FA: ${team.teamName} picked up ${pokemonName}${dropPokemonName ? `, dropped ${dropPokemonName}` : ''}`,
-      metadata: JSON.stringify({ teamId, pokemonName, dropPokemonName }),
-    }).run();
+      // Activity log
+      db.insert(schema.activityLog).values({
+        type: 'fa_pickup',
+        category: 'trade',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `FA: ${team.teamName} picked up ${pokemonName}${dropPokemonName ? `, dropped ${dropPokemonName}` : ''}`,
+        metadata: JSON.stringify({ teamId, pokemonName, dropPokemonName }),
+      }).run();
 
-    return { success: true };
+      return { success: true };
+    });
   })
 
   // ─── Tier List ─────────────────────────────────────────────────────
