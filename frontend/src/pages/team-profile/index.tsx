@@ -475,14 +475,14 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
-                {/* Shiny toggle button */}
-                {isAdmin && !theorycraftMode && (
+                {/* Shiny toggle button — any authenticated user (backend checks ownership) */}
+                {user && !theorycraftMode && (
                   <button
                     onClick={(e) => { e.stopPropagation(); handleToggleShiny(mon); }}
-                    className={`absolute bottom-7 left-1 z-10 opacity-0 group-hover:opacity-100 transition-all p-1 rounded-md ${
+                    className={`absolute bottom-7 left-1 z-10 transition-all p-1 rounded-md ${
                       isMonShiny(mon)
                         ? 'opacity-100 bg-yellow-500/20 text-yellow-400'
-                        : 'bg-surface/80 text-text-muted hover:text-yellow-400 hover:bg-yellow-500/10'
+                        : 'opacity-0 group-hover:opacity-100 bg-surface/80 text-text-muted hover:text-yellow-400 hover:bg-yellow-500/10'
                     }`}
                   >
                     <Sparkles size={13} />
