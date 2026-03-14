@@ -39,6 +39,72 @@ const arenaClients = new Map</* ws */ object, ArenaClient>();
 const scrimLobbies = new Map<string, ScrimLobby>();
 let nextScrimId = 1;
 
+/**
+ * Per-match ready-up timeout. If both teams ready up but the bot doesn't transition
+ * the match to in_progress within READY_TIMEOUT_MS, revert to scheduled and notify.
+ */
+const READY_TIMEOUT_MS = parseInt(process.env.READY_TIMEOUT_MS || '120000');
+const readyTimers = new Map<string, NodeJS.Timeout>();
+
+function clearReadyTimer(matchId: string) {
+  const t = readyTimers.get(matchId);
+  if (t) {
+    clearTimeout(t);
+    readyTimers.delete(matchId);
+  }
+}
+
+function scheduleReadyTimeout(matchId: string) {
+  clearReadyTimer(matchId);
+  const handle = setTimeout(() => {
+    readyTimers.delete(matchId);
+    const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+    // Only revert if still ready (bot hasn't picked it up)
+    if (!m || m.status !== 'ready') return;
+
+    db.update(schema.matches)
+      .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
+      .where(eq(schema.matches.id, matchId))
+      .run();
+
+    db.insert(schema.matchReadyLog).values({
+      matchId,
+      teamId: m.homeTeamId,
+      event: 'timeout',
+    }).run();
+    db.insert(schema.matchReadyLog).values({
+      matchId,
+      teamId: m.awayTeamId,
+      event: 'timeout',
+    }).run();
+    db.insert(schema.activityLog).values({
+      type: 'match_ready_timeout',
+      category: 'match',
+      actor: 'system',
+      leagueId: m.leagueId,
+      description: `Ready-up timed out for ${matchId} — battle was not created within ${READY_TIMEOUT_MS / 1000}s`,
+      metadata: JSON.stringify({ matchId }),
+    }).run();
+
+    if (broadcastWs) {
+      broadcastWs.publish(`arena:match:${matchId}`, JSON.stringify({
+        type: 'match_timeout',
+        matchId,
+        message: 'Ready-up timed out — try again',
+      }));
+      broadcastMatchState(matchId);
+    }
+
+    console.log(`[arena] ready-up timeout: ${matchId}`);
+  }, READY_TIMEOUT_MS);
+  readyTimers.set(matchId, handle);
+}
+
+/** Called by ps-bot when it picks up a battle for a match (transitions to in_progress). */
+export function clearReadyTimerForMatch(matchId: string) {
+  clearReadyTimer(matchId);
+}
+
 // Reference for broadcasting from external code (e.g., bot result handler)
 let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
 
@@ -322,6 +388,8 @@ export const arenaRoutes = new Elysia()
                 .set({ status: 'ready', startedAt: new Date().toISOString() })
                 .where(eq(schema.matches.id, match.id)).run();
 
+              scheduleReadyTimeout(match.id);
+
               // Log to activity
               db.insert(schema.activityLog).values({
                 type: 'match_ready',
@@ -366,6 +434,7 @@ export const arenaRoutes = new Elysia()
             db.update(schema.matches)
               .set({ ...updateField, status: 'scheduled' })
               .where(eq(schema.matches.id, match.id)).run();
+            clearReadyTimer(match.id);
 
             db.insert(schema.matchReadyLog).values({
               matchId: match.id,

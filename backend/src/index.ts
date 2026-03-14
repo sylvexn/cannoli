@@ -13,6 +13,32 @@ import { feedbackRoutes } from './routes/feedback';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
 import { startBot } from './lib/ps-bot';
+import { startSchedulers } from './lib/scheduler';
+
+// ─── Boot-time env guards ───────────────────────────────────────────────────
+// Catch foot-guns before they cause silent corruption / silent auth failure.
+
+const MODE = process.env.CANNOLI_MODE || 'mock';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const DB_PATH = process.env.CANNOLI_DB_PATH;
+
+// Guard: refuse to boot in mock mode against a DB path that looks live.
+if (MODE === 'mock' && DB_PATH && /live|prod|production/i.test(DB_PATH)) {
+  console.error(`[boot] Refusing to start: CANNOLI_MODE=mock but DB_PATH=${DB_PATH} looks live.`);
+  process.exit(1);
+}
+
+// Warn loudly: bot enabled without RSA private key → silent auth failure.
+if (process.env.PS_SERVER_WS_URL && !process.env.PS_RSA_PRIVATE_KEY) {
+  console.warn('[boot] WARNING: PS_SERVER_WS_URL is set but PS_RSA_PRIVATE_KEY is missing.');
+  console.warn('[boot]          Bot will fail to authenticate; battles will not be detected.');
+}
+
+// Warn: production should run with NODE_ENV=production so SSO cookies set domain=.cannoli.live
+if (MODE === 'live' && NODE_ENV !== 'production') {
+  console.warn(`[boot] WARNING: CANNOLI_MODE=live but NODE_ENV=${NODE_ENV} (expected production).`);
+  console.warn('[boot]          SSO cookies may not propagate across cannoli.live ↔ sim.cannoli.live.');
+}
 
 const app = new Elysia()
   .use(cors({
@@ -64,11 +90,15 @@ const app = new Elysia()
   .listen(3001);
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
+console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);
 
 // Start PS Monitor Bot if configured
 if (process.env.PS_SERVER_WS_URL) {
   startBot();
   console.log('PS Monitor Bot starting...');
 }
+
+// Start cron-style schedulers (auto-forfeit, week-advance)
+startSchedulers();
 
 export type App = typeof app;

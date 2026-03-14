@@ -4,6 +4,8 @@ import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { hashPassword, isStaff } from '../lib/auth';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { tx } from '../lib/tx';
+import { getBotStatus } from '../lib/ps-bot';
+import { runOnce } from '../lib/scheduler';
 
 export const adminRoutes = new Elysia()
 
@@ -25,6 +27,65 @@ export const adminRoutes = new Elysia()
       .orderBy(asc(schema.users.id))
       .all()
       .map(u => ({ ...u, id: String(u.id) }));
+  })
+
+  // ─── PS Bot Status ──────────────────────────────────────────────────
+
+  .get('/api/admin/bot-status', ({ user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    return getBotStatus();
+  })
+
+  // ─── Manual job trigger (admin tool) ────────────────────────────────
+
+  .post('/api/admin/jobs/:name/run', async ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const ok = await runOnce(params.name);
+    if (!ok) { set.status = 404; return { error: `Unknown job: ${params.name}` }; }
+    db.insert(schema.activityLog).values({
+      type: 'job_run',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Manually ran job: ${params.name}`,
+      metadata: JSON.stringify({ jobName: params.name }),
+    }).run();
+    return { success: true };
+  })
+
+  // ─── Force match result (admin override for forfeits / disputes) ────
+
+  .post('/api/admin/matches/:matchId/force-result', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const { homeScore, awayScore, forfeitedBy, note } = body as {
+      homeScore: number; awayScore: number;
+      forfeitedBy?: 'home' | 'away' | 'both' | null;
+      note?: string;
+    };
+    const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    tx(() => {
+      db.update(schema.matches).set({
+        status: 'completed',
+        homeScore: homeScore ?? 0,
+        awayScore: awayScore ?? 0,
+        forfeitedBy: forfeitedBy ?? null,
+        completedAt: new Date().toISOString(),
+        warnings: null,
+      }).where(eq(schema.matches.id, params.matchId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'match_force_result',
+        category: 'admin',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${note ? ' — ' + note : ''}`,
+        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note }),
+      }).run();
+    });
+
+    return { success: true };
   })
 
   // ─── Activity Log ───────────────────────────────────────────────────
