@@ -15,7 +15,7 @@ import { validateMatchResult } from './replay-parser';
 import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
-import { getArenaBroadcaster } from '../routes/arena';
+import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +42,65 @@ let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let challstr: string | null = null;
 
 const monitoredBattles = new Map<string, MonitoredBattle>();
+
+interface BotState {
+  connected: boolean;
+  authedAs: string | null;
+  reconnectAttempts: number;
+  lastEventAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+}
+
+const botState: BotState = {
+  connected: false,
+  authedAs: null,
+  reconnectAttempts: 0,
+  lastEventAt: null,
+  lastError: null,
+  lastErrorAt: null,
+};
+
+function bump() { botState.lastEventAt = new Date().toISOString(); }
+function recordError(msg: string) {
+  botState.lastError = msg;
+  botState.lastErrorAt = new Date().toISOString();
+  console.error(`[PS Bot] ${msg}`);
+}
+
+export function getBotStatus(): {
+  connected: boolean;
+  authedAs: string | null;
+  reconnectAttempts: number;
+  lastEventAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  monitoredBattles: { roomId: string; matchId: string | null; p1: string; p2: string }[];
+  health: 'green' | 'yellow' | 'red';
+} {
+  let health: 'green' | 'yellow' | 'red' = 'red';
+  if (botState.connected) {
+    const idleMs = botState.lastEventAt
+      ? Date.now() - new Date(botState.lastEventAt).getTime()
+      : Infinity;
+    health = idleMs < 60_000 ? 'green' : 'yellow';
+  }
+  return {
+    connected: botState.connected,
+    authedAs: botState.authedAs,
+    reconnectAttempts: botState.reconnectAttempts,
+    lastEventAt: botState.lastEventAt,
+    lastError: botState.lastError,
+    lastErrorAt: botState.lastErrorAt,
+    monitoredBattles: Array.from(monitoredBattles.values()).map(b => ({
+      roomId: b.roomId,
+      matchId: b.matchId,
+      p1: b.p1,
+      p2: b.p2,
+    })),
+    health,
+  };
+}
 
 // Map showdown userids → team IDs for match lookup
 const useridToTeam = new Map<string, { teamId: string; leagueId: string }>();
@@ -96,31 +155,41 @@ function connect() {
   ws.onopen = () => {
     console.log('[PS Bot] Connected to PS server');
     connected = true;
+    botState.connected = true;
+    botState.reconnectAttempts = 0;
+    bump();
   };
 
   ws.onmessage = (event) => {
     const data = typeof event.data === 'string' ? event.data : '';
+    bump();
     handleMessage(data);
   };
 
   ws.onclose = () => {
     console.log('[PS Bot] Disconnected');
     connected = false;
+    botState.connected = false;
+    botState.authedAs = null;
     ws = null;
     scheduleReconnect();
   };
 
   ws.onerror = () => {
+    recordError('WebSocket error');
     ws?.close();
   };
 }
 
 function scheduleReconnect() {
   clearTimeout(reconnectTimer);
+  // Exponential backoff capped at 60s
+  const delay = Math.min(60_000, 5000 * Math.pow(1.5, botState.reconnectAttempts));
+  botState.reconnectAttempts++;
   reconnectTimer = setTimeout(() => {
-    console.log('[PS Bot] Reconnecting...');
+    console.log(`[PS Bot] Reconnecting (attempt ${botState.reconnectAttempts})...`);
     connect();
-  }, 5000);
+  }, delay);
 }
 
 // ─── Message Handling ───────────────────────────────────────────────────────
@@ -167,6 +236,7 @@ function handleGlobalLine(line: string) {
       // |updateuser|USERNAME|NAMED|AVATAR
       const named = parts[3] === '1';
       if (named) {
+        botState.authedAs = parts[2];
         console.log(`[PS Bot] Authenticated as ${parts[2]}`);
       }
       break;
@@ -305,6 +375,7 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
     }).run();
 
     console.log(`[PS Bot] Official match detected: ${match.id} → ${battle.roomId}`);
+    clearReadyTimerForMatch(match.id);
   }
 }
 
@@ -448,7 +519,7 @@ function authenticate() {
   if (assertion) {
     sendToPs(`|/trn ${BOT_USERNAME},0,${assertion}`);
   } else {
-    console.error('[PS Bot] Failed to sign assertion — check PS_RSA_PRIVATE_KEY');
+    recordError('Failed to sign assertion — check PS_RSA_PRIVATE_KEY');
   }
 }
 
