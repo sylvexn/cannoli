@@ -6,12 +6,13 @@ import { LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor } from '
 import { toast } from 'sonner';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
-import { DraftPoolGrid } from './draft-board/draft-pool-grid';
+import { DraftPoolWithRail } from './draft-board/draft-pool-with-rail';
 import { DraftTeamSidebar } from './draft-board/draft-team-sidebar';
 import { DraftPoolTable } from './draft-board/draft-pool-table';
 import { PokemonHoverCard } from './draft-board/pokemon-hover-card';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
 import { DraftControlBar } from './draft-board/draft-control-bar';
+import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftPickLog } from './draft-board/draft-pick-log';
 import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
 import { TIER_LIST } from '@/data/tier-list';
@@ -56,6 +57,7 @@ export function DraftBoardPage() {
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
+    userConflictRoster,
     draftTimerEnabled, draftDemoVisible,
   } = useDraftState();
 
@@ -295,26 +297,51 @@ export function DraftBoardPage() {
 
       {/* Main content: pool + sidebar — fills remaining space */}
       <div className="flex flex-1 mt-1.5 min-h-0 gap-0">
-        {/* Pool column: pool + footer stacked (footer doesn't extend under sidebar) */}
+        {/* Pool column: hero + pool + chrome bar stacked (chrome doesn't extend under sidebar) */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* Pool area — scrollable */}
-          <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
-            {state.viewMode === 'grid' ? (
-              <DraftPoolGrid
-                poolByTier={poolByTier}
-                ownershipMap={ownershipMap}
-                playerLookup={playerLookup}
-                rosterLookup={rosterLookup}
-                selectedTeamId={state.selectedTeamId}
-                isUserPickable={isUserTurn}
-                showTierBadges={isLiveMode}
-                userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
-                draftQueue={isLiveMode ? state.draftQueue : undefined}
-                onCardClick={handleCardClick}
-                onCardHoverStart={handleCardHoverStart}
-                onCardHoverEnd={handleCardHoverEnd}
-              />
-            ) : (
+          {/* OTC hero — docks above the pool when a draft is active */}
+          {isLiveMode && currentPick && !isDemoComplete && (() => {
+            const drafter = playerLookup.get(currentPick.playerId);
+            if (!drafter) return null;
+            return (
+              <div className="shrink-0 mb-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
+                <DraftOnTheClock
+                  pick={currentPick}
+                  player={drafter}
+                  timerSeconds={state.timerSeconds}
+                  timerDuration={state.timerDuration}
+                  isUserTurn={isUserTurn}
+                  totalPicks={state.snakeOrder.length}
+                  timerPaused={state.timerPaused}
+                  timerEnabled={draftTimerEnabled}
+                  topQueuedName={state.draftQueue[0] ?? null}
+                  onDraftFromQueue={handleDraftFromQueue}
+                  autoDraftQueueEnabled={state.autoDraftQueue}
+                />
+              </div>
+            );
+          })()}
+
+          {/* Pool area */}
+          {state.viewMode === 'grid' ? (
+            <DraftPoolWithRail
+              poolByTier={poolByTier}
+              ownershipMap={ownershipMap}
+              playerLookup={playerLookup}
+              rosterLookup={rosterLookup}
+              selectedTeamId={state.selectedTeamId}
+              isUserPickable={isUserTurn}
+              showTierBadges={isLiveMode}
+              userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+              userConflictRoster={isLiveMode ? userConflictRoster : undefined}
+              pointCap={state.pointCap}
+              draftQueue={isLiveMode ? state.draftQueue : undefined}
+              onCardClick={handleCardClick}
+              onCardHoverStart={handleCardHoverStart}
+              onCardHoverEnd={handleCardHoverEnd}
+            />
+          ) : (
+            <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
               <DraftPoolTable
                 pool={filteredPool}
                 ownershipMap={ownershipMap}
@@ -325,10 +352,10 @@ export function DraftBoardPage() {
                 userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
                 onRowClick={handleCardClick}
               />
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* Control bar (OTC merged in) — only spans pool width */}
+          {/* Slim chrome bar at the bottom — progress + presence + admin + reset */}
           {showFooter && (
             <div className="shrink-0 mt-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
               <DraftControlBar
@@ -339,10 +366,6 @@ export function DraftBoardPage() {
                 presence={presence}
                 wsConnected={wsConnected}
                 timerEnabled={draftTimerEnabled}
-                currentPick={isLiveMode && currentPick && !isDemoComplete ? currentPick : null}
-                currentPlayer={isLiveMode && currentPick ? playerLookup.get(currentPick.playerId) ?? null : null}
-                isUserTurn={isUserTurn}
-                totalPicks={state.snakeOrder.length}
               />
             </div>
           )}
@@ -397,6 +420,8 @@ export function DraftBoardPage() {
         isQueued={confirmPopover ? state.draftQueue.includes(confirmPopover.name) : false}
         queueFull={state.draftQueue.length >= 3}
         isUserTurn={isUserTurn}
+        userConflictRoster={isLiveMode ? userConflictRoster : undefined}
+        pointCap={state.pointCap}
       />
 
       {/* Detail sheet */}

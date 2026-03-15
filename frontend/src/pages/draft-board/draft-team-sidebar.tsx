@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
@@ -7,11 +6,15 @@ import { PointCapBar } from '@/components/point-cap-bar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronRight, ChevronLeft, ChevronDown, ArrowRightLeft, Zap, AlertTriangle, X, ListOrdered, Circle, Eye } from 'lucide-react';
+import {
+  ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X,
+  ListOrdered, Circle, Eye, Crown, Sparkles,
+} from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
 import { getTierEntry } from '@/data/tier-list';
+import { captainHeadroomNeeded } from '@/lib/draft-rules';
 
 interface DraftTeamSidebarProps {
   /** Players in display order (draft order during draft, standings after) */
@@ -30,6 +33,10 @@ interface DraftTeamSidebarProps {
   userTeamId?: string | null;
   /** Point cap for the league */
   pointCap?: number;
+  /** Tera captain slots configured for this league (for headroom hint) */
+  teraCaptainSlots?: number;
+  /** Roster size for picks-left math */
+  rosterSize?: number;
   /** User's draft queue (max 3 Pokemon names) */
   draftQueue?: string[];
   onQueueRemove?: (name: string) => void;
@@ -42,28 +49,20 @@ interface DraftTeamSidebarProps {
   presence?: DraftPresenceData;
 }
 
-export function DraftTeamSidebar({
-  teamOrder,
-  teamRosters,
-  teamPoints,
-  selectedTeamId,
-  onSelectTeam,
-  collapsed,
-  onToggleCollapse,
-  currentDrafterId,
-  isLiveMode,
-  userTeamId,
-  pointCap = 110,
-  draftQueue = [],
-  onQueueRemove,
-  autoDraftQueue,
-  onToggleAutoDraft,
-  onDraftFromQueue,
-  isUserTurn: isUserTurnProp,
-  presence,
-}: DraftTeamSidebarProps) {
+const DEFAULT_ROSTER_SIZE = 10;
+
+export function DraftTeamSidebar(props: DraftTeamSidebarProps) {
+  const {
+    teamOrder, teamRosters, teamPoints, selectedTeamId, onSelectTeam,
+    collapsed, onToggleCollapse, currentDrafterId, isLiveMode, userTeamId,
+    pointCap = 110, teraCaptainSlots = 2, rosterSize = DEFAULT_ROSTER_SIZE,
+    draftQueue = [], onQueueRemove, autoDraftQueue, onToggleAutoDraft,
+    onDraftFromQueue, isUserTurn, presence,
+  } = props;
+
   const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
-  // Collapsed state — always the same
+
+  // Collapsed: just team logos vertically
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-1 py-2 w-10 bg-surface-raised border-l border-border-default">
@@ -83,6 +82,7 @@ export function DraftTeamSidebar({
               'transition-all duration-150 relative',
               selectedTeamId === p.id && 'ring-1 ring-neon rounded-full',
               currentDrafterId === p.id && 'ring-1 ring-pink rounded-full animate-pulse',
+              userTeamId === p.id && 'ring-1 ring-neon/40 rounded-full',
             )}
           >
             <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
@@ -92,129 +92,306 @@ export function DraftTeamSidebar({
     );
   }
 
-  // Live draft mode: focused "Your Draft" panel
-  if (isLiveMode && userTeamId) {
-    return (
-      <DraftFocusedPanel
-        teamOrder={teamOrder}
-        teamRosters={teamRosters}
-        teamPoints={teamPoints}
-        userTeamId={userTeamId}
-        pointCap={pointCap}
-        currentDrafterId={currentDrafterId}
-        onToggleCollapse={onToggleCollapse}
-        onSelectTeam={onSelectTeam}
-        selectedTeamId={selectedTeamId}
-        draftQueue={draftQueue}
-        onQueueRemove={onQueueRemove}
-        autoDraftQueue={autoDraftQueue}
-        onToggleAutoDraft={onToggleAutoDraft}
-        onDraftFromQueue={onDraftFromQueue}
-        isUserTurn={isUserTurnProp}
-        connectedTeamIds={connectedTeamIds}
-        presence={presence}
-      />
-    );
-  }
-
-  // Season mode: full team list
-  return (
-    <SeasonTeamList
-      teamOrder={teamOrder}
-      teamRosters={teamRosters}
-      teamPoints={teamPoints}
-      selectedTeamId={selectedTeamId}
-      onSelectTeam={onSelectTeam}
-      onToggleCollapse={onToggleCollapse}
-      currentDrafterId={currentDrafterId}
-      isLiveMode={isLiveMode}
-      connectedTeamIds={connectedTeamIds}
-      presence={presence}
-    />
-  );
-}
-
-// ─── Focused panel for active draft ─────────────────────────────────────────
-
-function DraftFocusedPanel({
-  teamOrder,
-  teamRosters,
-  teamPoints,
-  userTeamId,
-  pointCap,
-  currentDrafterId,
-  onToggleCollapse,
-  onSelectTeam,
-  selectedTeamId,
-  draftQueue = [],
-  onQueueRemove,
-  autoDraftQueue,
-  onToggleAutoDraft,
-  onDraftFromQueue,
-  isUserTurn,
-  connectedTeamIds,
-  presence,
-}: {
-  teamOrder: Player[];
-  teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
-  teamPoints: Map<string, number>;
-  userTeamId: string;
-  pointCap: number;
-  currentDrafterId?: string | null;
-  onToggleCollapse: () => void;
-  onSelectTeam: (teamId: string | null) => void;
-  selectedTeamId: string | null;
-  draftQueue?: string[];
-  onQueueRemove?: (name: string) => void;
-  autoDraftQueue?: boolean;
-  onToggleAutoDraft?: () => void;
-  onDraftFromQueue?: () => void;
-  isUserTurn?: boolean;
-  connectedTeamIds?: Set<string>;
-  presence?: DraftPresenceData;
-}) {
-  const ROSTER_SIZE = 10;
-  const userPlayer = teamOrder.find(p => p.id === userTeamId);
-  const userRoster = teamRosters.get(userTeamId) ?? [];
-  const userPoints = teamPoints.get(userTeamId) ?? 0;
+  const userPlayer = userTeamId ? teamOrder.find(p => p.id === userTeamId) : undefined;
+  const userPoints = userPlayer ? teamPoints.get(userPlayer.id) ?? 0 : 0;
+  const userRoster = userPlayer ? teamRosters.get(userPlayer.id) ?? [] : [];
   const remaining = pointCap - userPoints;
-  const picksLeft = Math.max(0, ROSTER_SIZE - userRoster.length);
+  const picksLeft = Math.max(0, rosterSize - userRoster.length);
   const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
-  const otherTeams = teamOrder.filter(p => p.id !== userTeamId);
-  const [teamsCollapsed, setTeamsCollapsed] = useState(false);
+  const captainReserve = isLiveMode && userPlayer
+    ? captainHeadroomNeeded(userRoster, teraCaptainSlots)
+    : 0;
+  const captainBudgetWarning = captainReserve > 0 && remaining < captainReserve;
+
+  // Place user's team at the top during live mode
+  const orderedTeams = isLiveMode && userTeamId
+    ? [userPlayer!, ...teamOrder.filter(p => p.id !== userTeamId)].filter(Boolean) as Player[]
+    : teamOrder;
 
   return (
-    <div className="w-[280px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
+    <div className="w-[290px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
-        <span className="text-xs font-heading font-semibold text-text-primary">Your Draft</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleCollapse}
-          className="h-6 w-6 p-0 text-text-muted hover:text-neon"
-        >
-          <ChevronRight size={14} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-heading font-semibold text-text-primary">Teams</span>
+          {isLiveMode && (
+            <Badge className="bg-pink/10 text-pink border border-pink/30 text-[9px] h-4 px-1.5 font-mono">DRAFT</Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {presence && presence.spectators.length > 0 && (
+            <span className="text-[9px] font-mono text-text-muted/70 flex items-center gap-1">
+              <Eye size={10} />
+              {presence.spectators.length}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleCollapse}
+            className="h-6 w-6 p-0 text-text-muted hover:text-neon"
+          >
+            <ChevronRight size={14} />
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1">
-        {/* Your team section */}
-        {userPlayer && (
-          <div className="p-3 border-b border-border-default">
-            {/* Team header with budget */}
-            <div className="flex items-center gap-2 mb-2">
-              <TeamLogo abbrev={userPlayer.teamAbbrev} color={userPlayer.teamColor} size="md" />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-text-primary truncate">{userPlayer.teamName}</div>
-                <div className="text-[10px] text-text-muted">{userPlayer.name}</div>
-              </div>
-            </div>
+        {/* Live mode: budget cue + queue, anchored under the user's team row */}
+        {orderedTeams.map((p, idx) => {
+          const isUser = isLiveMode && p.id === userTeamId;
+          const isFirst = idx === 0;
+          const isDrafter = currentDrafterId === p.id;
+          const isSelected = selectedTeamId === p.id;
+          const points = teamPoints.get(p.id) ?? 0;
+          const roster = teamRosters.get(p.id) ?? [];
+          const isOnline = connectedTeamIds.has(p.id);
+          const showOnline = !!isLiveMode;
 
-            {/* Budget bar */}
-            <PointCapBar used={userPoints} className="mb-1" />
-            <div className="flex justify-between text-[10px] font-mono text-text-muted">
-              <span>Spent: <span className="text-text-primary">{userPoints}</span>/{pointCap}</span>
+          return (
+            <div key={p.id}>
+              {isLiveMode && isUser && idx === 0 && (
+                <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle">
+                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
+                    Your Draft
+                  </span>
+                </div>
+              )}
+              {!isLiveMode && isFirst && (
+                <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle">
+                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
+                    Teams
+                  </span>
+                </div>
+              )}
+              {/* Section header for "Other teams" appears once after the user's row in live mode */}
+              {isLiveMode && idx === 1 && (
+                <div className="px-3 py-1.5 border-y border-border-subtle bg-surface-overlay/20 flex items-center gap-2">
+                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
+                    Draft Order
+                  </span>
+                  {presence && presence.players.length > 0 && (
+                    <span className="text-[9px] font-mono text-text-muted/60 ml-auto">
+                      {[...connectedTeamIds].filter(id => id !== userTeamId).length}/{orderedTeams.length - 1} online
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <UnifiedTeamRow
+                player={p}
+                points={points}
+                roster={roster}
+                pointCap={pointCap}
+                isUser={isUser}
+                isDrafter={isDrafter}
+                isSelected={isSelected}
+                onSelect={() => onSelectTeam(isSelected ? null : p.id)}
+                isOnline={isOnline}
+                showOnline={showOnline}
+                expanded={isUser /* user's row stays expanded */ || isSelected}
+                forceExpand={isUser}
+              />
+
+              {/* Live-only sections inline under the user's row */}
+              {isLiveMode && isUser && (
+                <>
+                  {/* Budget cue / picks-left math */}
+                  {picksLeft > 0 && (
+                    <div className="px-3 pb-2">
+                      <div className={cn(
+                        'flex items-center justify-between gap-2 px-2 py-1 rounded text-[10px] font-mono',
+                        avgPerPick <= 2
+                          ? 'bg-loss/10 border border-loss/20 text-loss'
+                          : avgPerPick <= 4
+                          ? 'bg-draw/10 border border-draw/20 text-draw'
+                          : 'bg-surface-overlay/40 text-text-muted',
+                      )}>
+                        <span>~<span className="font-bold">{avgPerPick.toFixed(1)}</span>pt/pick</span>
+                        <span className="text-text-muted/60">{picksLeft} picks left</span>
+                        {avgPerPick <= 2 && <AlertTriangle size={10} />}
+                      </div>
+                      {captainReserve > 0 && (
+                        <div className={cn(
+                          'mt-1 flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono',
+                          captainBudgetWarning
+                            ? 'bg-loss/10 border border-loss/20 text-loss'
+                            : 'bg-surface-overlay/30 text-text-muted',
+                        )}>
+                          <span className="flex items-center gap-1">
+                            <Crown size={10} />
+                            captain reserve: <span className="font-bold">{captainReserve}pt</span>
+                          </span>
+                          {captainBudgetWarning && (
+                            <span title="Not enough headroom to designate the configured number of captains at worst-case markup">
+                              <AlertTriangle size={10} />
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Draft queue */}
+                  {draftQueue.length > 0 && (
+                    <div className="px-3 pb-2 border-b border-border-subtle">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <ListOrdered size={11} className="text-pink" />
+                        <span className="text-[10px] font-heading font-semibold text-text-muted uppercase">Queue</span>
+                        <span className="text-[9px] font-mono text-text-muted/60 ml-auto">{draftQueue.length}/3</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        {draftQueue.map((name, qi) => {
+                          const tierEntry = getTierEntry(name);
+                          return (
+                            <div key={name} className="flex items-center gap-1.5 py-0.5 px-1 rounded bg-pink/5 border border-pink/15 group/q">
+                              <span className="text-[9px] font-mono tabular-nums text-pink/60 w-3 shrink-0 text-right">{qi + 1}</span>
+                              <PokemonSprite name={name} size="xs" />
+                              <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{name}</span>
+                              {tierEntry && <TierBadge points={tierEntry.tier} />}
+                              {onQueueRemove && (
+                                <button
+                                  onClick={() => onQueueRemove(name)}
+                                  className="opacity-0 group-hover/q:opacity-100 p-0.5 rounded text-text-muted hover:text-loss transition-all"
+                                >
+                                  <X size={10} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {onToggleAutoDraft && (
+                        <button
+                          onClick={onToggleAutoDraft}
+                          className={cn(
+                            'mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all border',
+                            autoDraftQueue
+                              ? 'bg-pink/10 border-pink/30 text-pink'
+                              : 'bg-surface-overlay/30 border-border-subtle text-text-muted hover:border-border-default hover:text-text-secondary',
+                          )}
+                        >
+                          <div className={cn(
+                            'w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0',
+                            autoDraftQueue ? 'bg-pink' : 'bg-surface-overlay',
+                          )}>
+                            <div className={cn(
+                              'absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
+                              autoDraftQueue ? 'left-3' : 'left-0.5',
+                            )} />
+                          </div>
+                          <span>Auto-draft from queue</span>
+                        </button>
+                      )}
+                      {!autoDraftQueue && isUserTurn && onDraftFromQueue && (
+                        <button
+                          onClick={onDraftFromQueue}
+                          className={cn(
+                            'group/qd mt-1.5 w-full relative overflow-hidden',
+                            'flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md',
+                            'bg-gradient-to-r from-pink/20 via-neon/20 to-pink/20',
+                            'border border-pink/30 hover:border-neon/50',
+                            'transition-all duration-300',
+                            'hover:shadow-[0_0_16px_rgba(232,121,249,0.2)]',
+                          )}
+                        >
+                          <Sparkles size={12} className="text-neon" />
+                          <span className="text-[11px] font-bold text-text-primary">Draft #{1}</span>
+                          <span className="text-[10px] text-text-muted truncate max-w-[100px]">{draftQueue[0]}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </ScrollArea>
+    </div>
+  );
+}
+
+// ─── Unified team row template ─────────────────────────────────────────────
+
+interface UnifiedTeamRowProps {
+  player: Player;
+  points: number;
+  roster: { name: string; tier: number; acquisition: Acquisition }[];
+  pointCap: number;
+  isUser?: boolean;
+  isDrafter?: boolean;
+  isSelected?: boolean;
+  onSelect: () => void;
+  isOnline?: boolean;
+  showOnline?: boolean;
+  /** Visual expansion (roster shown). User's row always expanded; others on selection. */
+  expanded?: boolean;
+  /** When true the click toggles only inspection elsewhere — row never collapses */
+  forceExpand?: boolean;
+}
+
+function UnifiedTeamRow({
+  player, points, roster, pointCap, isUser, isDrafter, isSelected,
+  onSelect, isOnline, showOnline, expanded, forceExpand,
+}: UnifiedTeamRowProps) {
+  const remaining = pointCap - points;
+  const showRoster = !!expanded;
+
+  return (
+    <div className={cn(
+      'relative border-b border-border-subtle/60',
+      isUser && 'bg-gradient-to-r from-neon/[0.05] via-neon/[0.015] to-transparent',
+      isDrafter && !isUser && 'bg-pink/5',
+    )}>
+      {/* Side accent for user / drafter */}
+      {(isUser || isDrafter) && (
+        <div
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-md"
+          style={{ backgroundColor: isUser ? player.teamColor : '#e879f9' }}
+        />
+      )}
+
+      <button
+        onClick={forceExpand ? () => onSelect() : onSelect}
+        className={cn(
+          'w-full flex items-center gap-2 px-3 py-1.5 transition-colors text-left',
+          'hover:bg-surface-overlay/30',
+        )}
+      >
+        {showOnline && (
+          <Circle size={5} className={cn('shrink-0', isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60')} />
+        )}
+        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={cn('text-xs font-medium truncate', isUser ? 'text-text-primary' : 'text-text-secondary')}>
+              {player.teamAbbrev}
+            </span>
+            {isUser && <Crown size={9} className="text-neon shrink-0" />}
+            {isDrafter && (
+              <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] h-3.5 px-1 py-0 font-mono">
+                <Zap size={7} className="mr-0.5" />OTC
+              </Badge>
+            )}
+          </div>
+        </div>
+        <span className="text-[10px] font-mono tabular-nums text-text-muted shrink-0">
+          {points}<span className="text-text-muted/40">/{pointCap}</span>
+        </span>
+        <span className="text-[9px] font-mono text-text-muted/60 w-7 text-right shrink-0 tabular-nums">
+          {roster.length}pk
+        </span>
+      </button>
+
+      {/* Inline budget bar — visible always for the user, on selection for others */}
+      {(isUser || (isSelected && roster.length > 0)) && (
+        <div className="px-3 pb-1.5">
+          <PointCapBar used={points} total={pointCap} />
+          {isUser && (
+            <div className="flex justify-between text-[9px] font-mono text-text-muted mt-1">
+              <span>{points}/{pointCap}</span>
               <span className={cn(
                 'font-bold',
                 remaining < 10 ? 'text-loss' : remaining < 20 ? 'text-draw' : 'text-neon',
@@ -222,368 +399,31 @@ function DraftFocusedPanel({
                 {remaining}pt left
               </span>
             </div>
-
-            {/* Avg per remaining pick */}
-            {picksLeft > 0 && (
-              <div className={cn(
-                'mt-1.5 px-2 py-1 rounded text-[10px] font-mono flex items-center justify-between',
-                avgPerPick <= 2 ? 'bg-loss/10 border border-loss/20' : 'bg-surface-overlay/40',
-              )}>
-                <span className="text-text-muted">
-                  ~<span className={cn(
-                    'font-bold',
-                    avgPerPick <= 2 ? 'text-loss' : avgPerPick <= 4 ? 'text-draw' : 'text-text-primary',
-                  )}>{avgPerPick.toFixed(1)}</span>pt/pick
-                </span>
-                <span className="text-text-muted/60">{picksLeft} picks left</span>
-                {avgPerPick <= 2 && (
-                  <AlertTriangle size={10} className="text-loss animate-pulse" />
-                )}
-              </div>
-            )}
-
-            {/* Your roster */}
-            <div className="mt-3 space-y-0.5">
-              {userRoster.length > 0 ? (
-                userRoster.map((mon, idx) => (
-                  <div
-                    key={mon.name}
-                    className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40 -mx-1"
-                  >
-                    <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">
-                      {idx + 1}
-                    </span>
-                    <PokemonSprite name={mon.name} size="xs" />
-                    <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">
-                      {mon.name}
-                    </span>
-                    <TierBadge points={mon.tier} />
-                  </div>
-                ))
-              ) : (
-                <div className="text-[10px] text-text-muted text-center py-2">No picks yet</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Draft queue */}
-        {draftQueue && draftQueue.length > 0 && (
-          <div className="p-3 border-b border-border-default">
-            <div className="flex items-center gap-1.5 mb-2">
-              <ListOrdered size={11} className="text-pink" />
-              <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
-                Queue
-              </span>
-              <span className="text-[9px] font-mono text-text-muted/50 ml-auto">{draftQueue.length}/3</span>
-            </div>
-            <div className="space-y-0.5">
-              {draftQueue.map((name, idx) => {
-                const tierEntry = getTierEntry(name);
-                return (
-                  <div
-                    key={name}
-                    className="flex items-center gap-1.5 py-0.5 px-1 rounded bg-pink/5 border border-pink/10 -mx-1 group/q"
-                  >
-                    <span className="text-[9px] font-mono tabular-nums text-pink/50 w-3 shrink-0 text-right">
-                      {idx + 1}
-                    </span>
-                    <PokemonSprite name={name} size="xs" />
-                    <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">
-                      {name}
-                    </span>
-                    {tierEntry && <TierBadge points={tierEntry.tier} />}
-                    {onQueueRemove && (
-                      <button
-                        onClick={() => onQueueRemove(name)}
-                        className="opacity-0 group-hover/q:opacity-100 p-0.5 rounded text-text-muted hover:text-loss transition-all"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Auto-draft toggle */}
-            {onToggleAutoDraft && (
-              <button
-                onClick={onToggleAutoDraft}
-                className={cn(
-                  'mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all',
-                  'border',
-                  autoDraftQueue
-                    ? 'bg-pink/10 border-pink/30 text-pink'
-                    : 'bg-surface-overlay/30 border-border-subtle text-text-muted hover:border-border-default hover:text-text-secondary',
-                )}
-              >
-                <div className={cn(
-                  'w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0',
-                  autoDraftQueue ? 'bg-pink' : 'bg-surface-overlay',
-                )}>
-                  <div className={cn(
-                    'absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
-                    autoDraftQueue ? 'left-3' : 'left-0.5',
-                  )} />
-                </div>
-                <span>Auto-draft from queue</span>
-              </button>
-            )}
-
-            {/* Quick draft from queue button — shown when toggle is OFF and it's user's turn */}
-            {!autoDraftQueue && isUserTurn && onDraftFromQueue && (
-              <button
-                onClick={onDraftFromQueue}
-                className={cn(
-                  'group/qd mt-1.5 w-full relative overflow-hidden',
-                  'flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md',
-                  'bg-gradient-to-r from-pink/20 via-neon/20 to-pink/20',
-                  'border border-pink/30 hover:border-neon/50',
-                  'transition-all duration-300',
-                  'hover:shadow-[0_0_16px_rgba(232,121,249,0.2)]',
-                )}
-              >
-                {/* Shimmer effect on hover */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover/qd:translate-x-full transition-transform duration-700" />
-                <Zap size={12} className="text-neon relative" />
-                <span className="text-[11px] font-bold text-text-primary relative">
-                  Draft #{1}
-                </span>
-                <span className="text-[10px] text-text-muted relative truncate max-w-[100px]">
-                  {draftQueue[0]}
-                </span>
-                {/* Tooltip on hover */}
-                <span className={cn(
-                  'absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[9px] font-mono',
-                  'bg-surface text-text-secondary border border-border-subtle whitespace-nowrap',
-                  'opacity-0 group-hover/qd:opacity-100 transition-opacity pointer-events-none',
-                )}>
-                  Draft top of queue
-                </span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Other teams — compact collapsible */}
-        <div className="p-2">
-          <button
-            onClick={() => setTeamsCollapsed(c => !c)}
-            className="flex items-center gap-1.5 mb-1.5 px-1 w-full group/th"
-          >
-            <ChevronDown size={10} className={cn(
-              'text-text-muted transition-transform',
-              teamsCollapsed && '-rotate-90',
-            )} />
-            <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
-              All Teams
-            </span>
-            {presence && presence.spectators.length > 0 && (
-              <span className="text-[9px] text-text-muted/50 ml-auto flex items-center gap-1">
-                <Eye size={9} />
-                {presence.spectators.length}
-              </span>
-            )}
-          </button>
-
-          {teamsCollapsed ? (
-            /* Collapsed: row of team logo dots */
-            <div className="flex flex-wrap gap-1 px-1">
-              {otherTeams.map(p => {
-                const isDrafter = currentDrafterId === p.id;
-                const isSelected = selectedTeamId === p.id;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectTeam(p.id)}
-                    className={cn(
-                      'transition-all duration-150 relative',
-                      isSelected && 'ring-1 ring-neon rounded-full',
-                      isDrafter && 'ring-1 ring-pink rounded-full animate-pulse',
-                    )}
-                  >
-                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            /* Expanded: 2-column compact grid */
-            <div className="grid grid-cols-2 gap-0.5">
-              {otherTeams.map(p => {
-                const points = teamPoints.get(p.id) ?? 0;
-                const roster = teamRosters.get(p.id) ?? [];
-                const isDrafter = currentDrafterId === p.id;
-                const isSelected = selectedTeamId === p.id;
-                const isOnline = connectedTeamIds?.has(p.id);
-
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => onSelectTeam(p.id)}
-                    className={cn(
-                      'flex items-center gap-1.5 px-1.5 py-1 rounded transition-all duration-150',
-                      isDrafter
-                        ? 'bg-pink/5 border border-pink/30'
-                        : isSelected
-                        ? 'bg-surface-overlay/40 border border-border-default'
-                        : 'border border-transparent hover:bg-surface-overlay/20 hover:border-border-subtle',
-                    )}
-                  >
-                    {connectedTeamIds && connectedTeamIds.size > 0 && (
-                      <Circle size={4} className={cn(
-                        'shrink-0',
-                        isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
-                      )} />
-                    )}
-                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                    <span className="text-[10px] font-medium text-text-primary truncate">
-                      {p.teamAbbrev}
-                    </span>
-                    {isDrafter && (
-                      <Zap size={8} className="text-pink shrink-0" />
-                    )}
-                    <span className="text-[9px] font-mono tabular-nums text-text-muted ml-auto">
-                      {roster.length}pk
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
           )}
         </div>
-      </ScrollArea>
-    </div>
-  );
-}
+      )}
 
-// ─── Season mode: full team list (original) ─────────────────────────────────
-
-function SeasonTeamList({
-  teamOrder,
-  teamRosters,
-  teamPoints,
-  selectedTeamId,
-  onSelectTeam,
-  onToggleCollapse,
-  currentDrafterId,
-  isLiveMode,
-  connectedTeamIds,
-  presence: _presence,
-}: {
-  teamOrder: Player[];
-  teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
-  teamPoints: Map<string, number>;
-  selectedTeamId: string | null;
-  onSelectTeam: (teamId: string | null) => void;
-  onToggleCollapse: () => void;
-  currentDrafterId?: string | null;
-  isLiveMode?: boolean;
-  connectedTeamIds?: Set<string>;
-  presence?: DraftPresenceData;
-}) {
-  return (
-    <div className="w-[300px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
-        <span className="text-xs font-heading font-semibold text-text-primary">
-          {isLiveMode ? 'Draft Order' : 'Teams'}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleCollapse}
-          className="h-6 w-6 p-0 text-text-muted hover:text-neon"
-        >
-          <ChevronRight size={14} />
-        </Button>
-      </div>
-
-      {/* Team list */}
-      <ScrollArea className="flex-1">
-        <div className="p-1.5 space-y-0.5">
-          {teamOrder.map((p, orderIdx) => {
-            const roster = teamRosters.get(p.id) ?? [];
-            const points = teamPoints.get(p.id) ?? 0;
-            const isSelected = selectedTeamId === p.id;
-            const isDrafter = currentDrafterId === p.id;
-
-            return (
-              <div
-                key={p.id}
-                className={cn(
-                  'rounded-md border transition-all duration-150 overflow-hidden',
-                  isDrafter
-                    ? 'border-pink/50 bg-pink/5'
-                    : isSelected
-                    ? 'border-border-default bg-surface-overlay/40'
-                    : 'border-transparent hover:border-border-subtle hover:bg-surface-overlay/20',
-                )}
-              >
-                {/* Team header */}
-                <button
-                  onClick={() => onSelectTeam(p.id)}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 cursor-pointer"
-                >
-                  {/* Draft position number */}
-                  {isLiveMode && (
-                    <span className="text-[10px] font-mono tabular-nums text-text-muted w-3 shrink-0">
-                      {orderIdx + 1}
-                    </span>
-                  )}
-                  {isLiveMode && connectedTeamIds && connectedTeamIds.size > 0 && (
-                    <Circle size={5} className={cn(
-                      'shrink-0',
-                      connectedTeamIds.has(p.id) ? 'fill-win text-win' : 'fill-loss/60 text-loss/60',
-                    )} />
-                  )}
-                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                  <span className="text-xs font-medium text-text-primary truncate flex-1 text-left">{p.teamAbbrev}</span>
-                  {isDrafter && (
-                    <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] px-1 py-0 h-3.5">
-                      <Zap size={8} className="mr-0.5" />
-                      OTC
-                    </Badge>
-                  )}
-                  <span className="text-[10px] font-mono tabular-nums text-text-muted">
-                    {points}/110
-                  </span>
-                </button>
-
-                {/* Expanded roster / pick history */}
-                {isSelected && (
-                  <div className="px-2 pb-2 space-y-1">
-                    <PointCapBar used={points} className="mb-1.5" />
-                    {roster.map((mon, pickIdx) => (
-                      <div
-                        key={mon.name}
-                        className="flex items-center gap-1.5 py-0.5 group/row hover:bg-surface-overlay/40 rounded px-1 -mx-1"
-                      >
-                        {/* Pick number */}
-                        <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">
-                          {pickIdx + 1}
-                        </span>
-                        <PokemonSprite name={mon.name} size="xs" />
-                        <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">
-                          {mon.name}
-                        </span>
-                        {mon.acquisition.method === 'traded' && (
-                          <ArrowRightLeft size={10} className="text-pink flex-shrink-0" />
-                        )}
-                        <TierBadge points={mon.tier} />
-                      </div>
-                    ))}
-                    {roster.length === 0 && (
-                      <div className="text-[10px] text-text-muted py-1 text-center">No picks yet</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* Roster expansion */}
+      {showRoster && (
+        <div className="px-3 pb-2 space-y-0.5">
+          {roster.length > 0 ? roster.map((mon, i) => (
+            <div
+              key={mon.name}
+              className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40"
+            >
+              <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">{i + 1}</span>
+              <PokemonSprite name={mon.name} size="xs" />
+              <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
+              {mon.acquisition.method === 'traded' && (
+                <ArrowRightLeft size={10} className="text-pink shrink-0" />
+              )}
+              <TierBadge points={mon.tier} />
+            </div>
+          )) : (
+            <div className="text-[10px] text-text-muted py-1 text-center">No picks yet</div>
+          )}
         </div>
-      </ScrollArea>
+      )}
     </div>
   );
 }
