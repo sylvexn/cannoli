@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe, Gamepad2,
-  Settings, LogOut, User, Archive, LogIn, Film,
+  Settings, LogOut, User, Archive, LogIn, Film, UserPlus,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -37,6 +37,7 @@ const leaguePages = [
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
   { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
+  { path: '/free-agents', label: 'Free Agents', icon: UserPlus },
 ];
 
 // Routes that need full-width layout (no max-w constraint)

@@ -11,6 +11,7 @@ const routeLabels: Record<string, string> = {
   'stats': 'Pokemon Stats',
   'teams': 'Team Profile',
   'trades': 'Trade Block',
+  'free-agents': 'Free Agents',
 };
 
 export function LeagueLayout() {

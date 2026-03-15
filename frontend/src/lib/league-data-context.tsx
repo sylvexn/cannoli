@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from './api';
 import type { Player, Match, MatchPokemonEntry, Trade } from './types';
 import type { ApiTransaction } from './api';
@@ -18,6 +18,8 @@ interface LeagueData {
   getMatchDetail: (matchId: string) => Promise<{ home: MatchPokemonEntry[]; away: MatchPokemonEntry[] } | null>;
   /** Get trades involving a specific team */
   getTeamTrades: (teamId: string) => Trade[];
+  /** Refetch teams + transactions (e.g. after a roster mutation) */
+  refresh: () => Promise<void>;
 }
 
 const LeagueDataContext = createContext<LeagueData | null>(null);
@@ -31,15 +33,15 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
   // Match detail cache
   const [detailCache] = useState(() => new Map<string, { home: MatchPokemonEntry[]; away: MatchPokemonEntry[] }>());
 
-  useEffect(() => {
-    setLoading(true);
-    detailCache.clear();
+  const loadAll = useCallback(async (showSpinner: boolean) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const [apiTeams, apiMatches, apiTx] = await Promise.all([
+        api.getTeams(leagueId),
+        api.getSchedule(leagueId),
+        api.getTransactions(leagueId),
+      ]);
 
-    Promise.all([
-      api.getTeams(leagueId),
-      api.getSchedule(leagueId),
-      api.getTransactions(leagueId),
-    ]).then(([apiTeams, apiMatches, apiTx]) => {
       const convertedPlayers = apiTeams.map(t => ({
         id: t.id,
         name: t.name,
@@ -78,9 +80,20 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
       setPlayers(convertedPlayers);
       setMatches(convertedMatches);
       setTransactions(apiTx);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
   }, [leagueId]);
+
+  useEffect(() => {
+    detailCache.clear();
+    loadAll(true).catch(() => setLoading(false));
+  }, [leagueId, loadAll, detailCache]);
+
+  const refresh = useCallback(async () => {
+    detailCache.clear();
+    await loadAll(false);
+  }, [loadAll, detailCache]);
 
   const standings = [...players].sort((a, b) => {
     if (b.record.wins !== a.record.wins) return b.record.wins - a.record.wins;
@@ -150,6 +163,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
       getTeamMatches,
       getMatchDetail,
       getTeamTrades,
+      refresh,
     }}>
       {children}
     </LeagueDataContext.Provider>
