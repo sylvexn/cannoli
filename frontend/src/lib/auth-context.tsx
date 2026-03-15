@@ -10,6 +10,7 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   changePassword: (current: string, next: string) => Promise<{ success: boolean; error?: string }>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -51,6 +52,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const { user: u } = await api.me().catch(() => ({ user: null }));
+    setUser(u as User | null);
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -60,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       changePassword,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

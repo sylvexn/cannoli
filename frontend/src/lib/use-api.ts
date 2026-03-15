@@ -90,13 +90,19 @@ function toLeague(a: ApiLeague): League {
     phase: a.season.phase,
     currentWeek: a.season.currentWeek,
     totalWeeks: a.season.totalWeeks,
+    pointCap: a.season.pointCap ?? 110,
+    teraCaptainSlots: a.season.teraCaptainSlots ?? 2,
     tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
+    forfeitPolicy: a.season.forfeitPolicy,
+    paused: a.season.paused,
   } : {
     id: 'unknown',
     seasonNumber: 0,
     phase: 'offseason',
     currentWeek: 0,
     totalWeeks: 0,
+    pointCap: 110,
+    teraCaptainSlots: 2,
     tradeDeadlineWeek: 7,
   };
 

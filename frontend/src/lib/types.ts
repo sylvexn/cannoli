@@ -8,6 +8,9 @@ export interface User {
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  tertiaryColor?: string | null;
 }
 
 /** League-level configuration (admin-managed) */
@@ -88,17 +91,21 @@ export interface DraftPick {
 export interface LeagueSeason {
   id: string;
   seasonNumber: number;
-  phase: 'draft' | 'regular' | 'playoffs' | 'offseason';
+  phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
   currentWeek: number;
   totalWeeks: number;
+  pointCap: number;
+  teraCaptainSlots: number;
   tradeDeadlineWeek: number;
+  forfeitPolicy?: 'double_forfeit' | 'admin_review';
+  paused?: boolean;
   weekDates?: Record<string, string> | null;
 }
 
 export interface Trade {
   id: string;
   week: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'awaiting_admin' | 'accepted' | 'rejected' | 'expired';
   proposer: string;
   recipient: string;
   offering: string[];

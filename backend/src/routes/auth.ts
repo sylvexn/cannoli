@@ -45,6 +45,9 @@ export const authRoutes = new Elysia()
         mustChangePassword: user.mustChangePassword,
         active: user.active,
         createdAt: user.createdAt,
+        primaryColor: user.primaryColor,
+        secondaryColor: user.secondaryColor,
+        tertiaryColor: user.tertiaryColor,
       },
     }), { headers });
   })
@@ -66,6 +69,39 @@ export const authRoutes = new Elysia()
       return { user: null };
     }
     return { user };
+  })
+
+  .patch('/api/users/me/colors', ({ body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const { primaryColor, secondaryColor, tertiaryColor } = (body ?? {}) as Record<string, unknown>;
+    const hexRe = /^#[0-9a-fA-F]{6}$/;
+    const updates: Record<string, unknown> = {};
+    for (const [key, value] of [
+      ['primaryColor', primaryColor],
+      ['secondaryColor', secondaryColor],
+      ['tertiaryColor', tertiaryColor],
+    ] as const) {
+      if (value === null) { updates[key] = null; continue; }
+      if (value === undefined) continue;
+      if (typeof value !== 'string' || !hexRe.test(value)) {
+        set.status = 400;
+        return { error: `${key} must be a #RRGGBB hex string` };
+      }
+      updates[key] = value;
+    }
+    if (Object.keys(updates).length === 0) {
+      set.status = 400; return { error: 'No fields to update' };
+    }
+    db.update(schema.users).set(updates).where(eq(schema.users.id, parseInt(user.id))).run();
+    db.insert(schema.activityLog).values({
+      type: 'user_colors_updated',
+      category: 'auth',
+      actor: user.username,
+      leagueId: null,
+      description: `Updated profile colors`,
+      metadata: JSON.stringify(updates),
+    }).run();
+    return { success: true };
   })
 
   .post('/api/auth/change-password', ({ body, user, set }) => {

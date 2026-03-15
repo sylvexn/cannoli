@@ -12,9 +12,8 @@ export function AdminTeams() {
   const { leagues } = useAppData();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
   const [loading, setLoading] = useState(true);
-  const [logos, setLogos] = useState<Record<string, string>>({});
 
-  useEffect(() => {
+  function loadTeams() {
     if (leagues.length === 0) return;
     Promise.all(
       leagues.map(l => api.getTeams(l.id).then(teams => [l.id, teams] as const))
@@ -22,9 +21,11 @@ export function AdminTeams() {
       setTeamsPerLeague(Object.fromEntries(results));
       setLoading(false);
     });
-  }, [leagues]);
+  }
 
-  function handleLogoUpload(teamId: string, file: File) {
+  useEffect(loadTeams, [leagues]);
+
+  async function handleLogoUpload(teamId: string, file: File) {
     if (!file.type.startsWith('image/')) {
       toast.error('Please upload an image file');
       return;
@@ -33,17 +34,29 @@ export function AdminTeams() {
       toast.error('Image must be under 512KB');
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setLogos(prev => ({ ...prev, [teamId]: reader.result as string }));
+    try {
+      const result = await api.uploadTeamLogo(teamId, file);
+      // Append cache-buster so the new image renders immediately
+      const cacheBust = `?v=${Date.now()}`;
+      setTeamsPerLeague(prev => {
+        const next: Record<string, ApiTeam[]> = {};
+        for (const [lid, teams] of Object.entries(prev)) {
+          next[lid] = teams.map(t =>
+            t.id === teamId ? { ...t, logoPath: result.path.replace(/^\/uploads\//, '') + cacheBust } : t
+          );
+        }
+        return next;
+      });
       toast.success(`Logo uploaded for ${teamId.split('-').pop()?.toUpperCase()}`);
-      // TODO: POST to backend when upload endpoint exists
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      toast.error(err.message || 'Upload failed');
+    }
   }
 
   if (loading) return <div className="text-text-muted text-sm">Loading teams...</div>;
+
+  const allTeams = Object.values(teamsPerLeague).flat();
+  const logoCount = allTeams.filter(t => !!t.logoPath).length;
 
   return (
     <div className="space-y-6">
@@ -51,12 +64,12 @@ export function AdminTeams() {
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Total Teams:</span>
           <span className="text-text-primary font-medium font-mono">
-            {Object.values(teamsPerLeague).flat().length}
+            {allTeams.length}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Logos Set:</span>
-          <span className="text-win font-medium font-mono">{Object.keys(logos).length}</span>
+          <span className="text-win font-medium font-mono">{logoCount}</span>
         </div>
       </div>
 
@@ -79,7 +92,6 @@ export function AdminTeams() {
                   <TeamLogoCard
                     key={team.id}
                     team={team}
-                    logo={logos[team.id]}
                     onUpload={(file) => handleLogoUpload(team.id, file)}
                   />
                 ))}
@@ -92,9 +104,8 @@ export function AdminTeams() {
   );
 }
 
-function TeamLogoCard({ team, logo, onUpload }: {
+function TeamLogoCard({ team, onUpload }: {
   team: ApiTeam;
-  logo?: string;
   onUpload: (file: File) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -103,15 +114,7 @@ function TeamLogoCard({ team, logo, onUpload }: {
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-border-default transition-colors">
       {/* Current logo or placeholder */}
       <div className="relative shrink-0 group">
-        {logo ? (
-          <img
-            src={logo}
-            alt={team.teamAbbrev}
-            className="w-10 h-10 rounded-md object-cover"
-          />
-        ) : (
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" />
-        )}
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" logoPath={team.logoPath} />
         <button
           onClick={() => fileRef.current?.click()}
           className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -147,7 +150,7 @@ function TeamLogoCard({ team, logo, onUpload }: {
       </label>
 
       {/* Status */}
-      {logo ? (
+      {team.logoPath ? (
         <ImageIcon size={14} className="text-win shrink-0" />
       ) : (
         <span className="text-[10px] text-text-muted/40 shrink-0">No logo</span>

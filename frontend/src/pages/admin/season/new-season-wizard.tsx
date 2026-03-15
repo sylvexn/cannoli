@@ -10,6 +10,8 @@ import {
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import type { EditableLeague } from './phase-config';
+import { api } from '@/lib/api';
+import { useAppData } from '@/lib/app-data-context';
 
 type WizardStep = 'source' | 'leagues' | 'settings' | 'confirm';
 
@@ -47,8 +49,10 @@ function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
 }
 
 export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onClose: () => void; leagues: EditableLeague[] }) {
+  const { refreshLeagues } = useAppData();
   const [step, setStep] = useState<WizardStep>('source');
   const [config, setConfig] = useState<NewSeasonConfig>(() => makeInitialConfig(leagues));
+  const [creating, setCreating] = useState(false);
 
   // Inline add league
   const [addingLeague, setAddingLeague] = useState(false);
@@ -62,13 +66,36 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
     onClose();
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     const included = [
       ...config.leagues.filter(l => l.included),
       ...config.newLeagues.filter(l => l.included),
     ];
-    toast.success(`Season ${config.seasonNumber} created for ${included.length} league(s)`);
-    handleClose();
+    if (included.length === 0) {
+      toast.error('Select at least one league');
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.createSeason({
+        seasonNumber: config.seasonNumber,
+        totalWeeks: config.totalWeeks,
+        pointCap: config.pointCap,
+        teraCaptainSlots: config.teraCaptainSlots,
+        leagues: included.map(l => ({
+          id: l.id,
+          name: l.name,
+          color: l.color,
+        })),
+      });
+      toast.success(`Season ${config.seasonNumber} created for ${included.length} league(s)`);
+      refreshLeagues();
+      handleClose();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create season');
+    } finally {
+      setCreating(false);
+    }
   }
 
   function toggleLeague(id: string, isNew: boolean) {
@@ -396,9 +423,9 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
               Next
             </Button>
           ) : (
-            <Button onClick={handleCreate} className="bg-pink text-surface-base hover:bg-pink/90">
+            <Button onClick={handleCreate} disabled={creating} className="bg-pink text-surface-base hover:bg-pink/90">
               <Sparkles size={14} />
-              Create Season {config.seasonNumber}
+              {creating ? 'Creating…' : `Create Season ${config.seasonNumber}`}
             </Button>
           )}
         </DialogFooter>

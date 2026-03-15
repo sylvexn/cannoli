@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { api } from '@/lib/api';
-
 import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
@@ -19,13 +23,16 @@ interface AdminTrade {
   offering: string[];
   requesting: string[];
   proposedAt: string;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'awaiting_admin' | 'accepted' | 'rejected' | 'expired';
+  rejectReason?: string | null;
 }
 
 export function AdminTrades() {
   const { leagues } = useAppData();
   const [tradeList, setTradeList] = useState<AdminTrade[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rejectTarget, setRejectTarget] = useState<AdminTrade | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -43,6 +50,7 @@ export function AdminTrades() {
           requesting: t.requesting,
           proposedAt: t.proposedAt || '',
           status: t.status,
+          rejectReason: t.rejectReason,
         })))
       )
     ).then(results => {
@@ -51,8 +59,8 @@ export function AdminTrades() {
     }).catch(() => setLoading(false));
   }, [leagues]);
 
-  const pending = tradeList.filter(t => t.status === 'pending');
-  const resolved = tradeList.filter(t => t.status !== 'pending');
+  const pending = tradeList.filter(t => t.status === 'pending' || t.status === 'awaiting_admin');
+  const resolved = tradeList.filter(t => t.status !== 'pending' && t.status !== 'awaiting_admin');
 
   async function handleApprove(id: string) {
     try {
@@ -64,13 +72,18 @@ export function AdminTrades() {
     } catch (err: any) { toast.error(err.message); }
   }
 
-  async function handleReject(id: string) {
+  async function confirmReject() {
+    if (!rejectTarget) return;
+    const id = rejectTarget.id;
+    const reason = rejectReason.trim();
     try {
-      await api.rejectTrade(id);
+      await api.rejectTrade(id, reason || undefined);
       setTradeList(prev => prev.map(t =>
-        t.id === id ? { ...t, status: 'rejected' as const } : t
+        t.id === id ? { ...t, status: 'rejected' as const, rejectReason: reason || null } : t
       ));
       toast.success('Trade rejected');
+      setRejectTarget(null);
+      setRejectReason('');
     } catch (err: any) { toast.error(err.message); }
   }
 
@@ -104,7 +117,7 @@ export function AdminTrades() {
                 key={trade.id}
                 trade={trade}
                 onApprove={() => handleApprove(trade.id)}
-                onReject={() => handleReject(trade.id)}
+                onReject={() => { setRejectTarget(trade); setRejectReason(''); }}
               />
             ))}
           </div>
@@ -122,6 +135,29 @@ export function AdminTrades() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!rejectTarget} onOpenChange={v => { if (!v) setRejectTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject trade</DialogTitle>
+            <DialogDescription>
+              Optionally explain why so the proposer can adjust.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Reason (optional)"
+            value={rejectReason}
+            onChange={e => setRejectReason(e.target.value)}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectTarget(null)}>Cancel</Button>
+            <Button onClick={confirmReject} className="bg-loss text-surface-base hover:bg-loss/90">
+              <X size={14} /> Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -135,10 +171,10 @@ function TradeApprovalCard({
   onApprove?: () => void;
   onReject?: () => void;
 }) {
-  const isPending = trade.status === 'pending';
+  const isActive = trade.status === 'pending' || trade.status === 'awaiting_admin';
 
   return (
-    <Card className={!isPending ? 'opacity-60' : undefined}>
+    <Card className={!isActive ? 'opacity-60' : undefined}>
       <CardContent className="py-3 px-4">
         <div className="flex items-start gap-3">
           {/* League + week */}
@@ -163,6 +199,11 @@ function TradeApprovalCard({
               <span className="font-medium text-text-primary">{trade.proposer}</span>
               <ArrowLeftRight size={12} className="text-text-muted shrink-0" />
               <span className="font-medium text-text-primary">{trade.recipient}</span>
+              {trade.status === 'awaiting_admin' && (
+                <Badge variant="outline" className="text-[10px] border-draw/30 text-draw bg-draw/10">
+                  awaiting admin
+                </Badge>
+              )}
             </div>
             <div className="flex gap-4 text-xs">
               <div>
@@ -178,11 +219,16 @@ function TradeApprovalCard({
               <Clock size={10} />
               {new Date(trade.proposedAt).toLocaleString()}
             </div>
+            {trade.rejectReason && (
+              <div className="text-[11px] text-loss/80 italic">
+                Reason: {trade.rejectReason}
+              </div>
+            )}
           </div>
 
           {/* Actions / Status */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {isPending ? (
+            {isActive ? (
               <>
                 <Button size="xs" variant="outline" onClick={onReject} className="text-loss border-loss/30 hover:bg-loss/10">
                   <X size={12} />
