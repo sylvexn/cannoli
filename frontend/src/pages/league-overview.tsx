@@ -95,7 +95,7 @@ export function LeagueOverviewPage() {
       )}
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="inline-flex flex-wrap items-stretch rounded-lg border border-border-default bg-surface-raised divide-x divide-border-subtle overflow-hidden">
         <StatCard icon={Users} label="Players" value={totalPlayers} color="text-neon" loading={teamsLoading} />
         <StatCard icon={Trophy} label="Pokemon Drafted" value={totalDrafted} color="text-draw" loading={teamsLoading} />
         <StatCard icon={ArrowLeftRight} label="Trades" value={0} color="text-purple-400" loading={false} />
@@ -211,19 +211,17 @@ function StatCard({ icon: Icon, label, value, color, loading }: {
   loading: boolean;
 }) {
   return (
-    <Card className="bg-surface-raised border-border-default">
-      <CardContent className="py-3 px-4 flex items-center gap-3">
-        <div className={`${color} opacity-60`}>
-          <Icon size={18} />
+    <div className="flex items-center gap-2.5 px-4 py-2 min-w-[140px]">
+      <div className={`${color} opacity-60`}>
+        <Icon size={16} />
+      </div>
+      <div className="leading-tight">
+        <div className={`text-base font-bold font-mono tabular-nums ${color}`}>
+          {loading ? '—' : value}
         </div>
-        <div>
-          <div className={`text-lg font-bold font-mono tabular-nums ${color}`}>
-            {loading ? '—' : value}
-          </div>
-          <div className="text-[10px] text-text-muted uppercase tracking-wide">{label}</div>
-        </div>
-      </CardContent>
-    </Card>
+        <div className="text-[10px] text-text-muted uppercase tracking-wide">{label}</div>
+      </div>
+    </div>
   );
 }
 

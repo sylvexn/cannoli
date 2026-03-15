@@ -6,7 +6,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
 import {
-  Trophy, Crown, ChevronDown, Medal,
+  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon,
 } from 'lucide-react';
 
 interface ArchiveSeason {
@@ -154,6 +154,16 @@ export function ArchivePage() {
 
       {leaguesLoading ? (
         <div className="text-text-muted py-12 text-center">Loading season data...</div>
+      ) : leagues.length === 0 ? (
+        <div className="rounded-xl border border-border-default bg-surface-raised/40 py-16 px-6 flex flex-col items-center justify-center text-center">
+          <div className="rounded-full p-4 bg-purple-400/5 border border-purple-400/20 mb-4">
+            <ArchiveIcon size={28} className="text-purple-400/70" />
+          </div>
+          <h2 className="text-base font-medium text-text-primary mb-1">No archived seasons yet</h2>
+          <p className="text-sm text-text-muted max-w-sm">
+            Past seasons will appear here once they're completed. The current season ({currentSeason ? `S${currentSeason.seasonNumber}` : 'live'}) is still in progress.
+          </p>
+        </div>
       ) : (
         <div className="space-y-8">
           {leagues.map(league => (
