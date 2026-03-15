@@ -18,7 +18,11 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       phase: a.season.phase,
       currentWeek: a.season.currentWeek,
       totalWeeks: a.season.totalWeeks,
+      pointCap: a.season.pointCap ?? 110,
+      teraCaptainSlots: a.season.teraCaptainSlots ?? 2,
       tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
+      forfeitPolicy: a.season.forfeitPolicy,
+      paused: a.season.paused,
       weekDates: a.season.weekDates,
     } : {
       id: 'unknown',
@@ -26,6 +30,8 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       phase: 'offseason',
       currentWeek: 0,
       totalWeeks: 0,
+      pointCap: 110,
+      teraCaptainSlots: 2,
       tradeDeadlineWeek: 7,
     };
     return {

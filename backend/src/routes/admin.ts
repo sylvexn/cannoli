@@ -23,6 +23,9 @@ export const adminRoutes = new Elysia()
       mustChangePassword: schema.users.mustChangePassword,
       active: schema.users.active,
       createdAt: schema.users.createdAt,
+      primaryColor: schema.users.primaryColor,
+      secondaryColor: schema.users.secondaryColor,
+      tertiaryColor: schema.users.tertiaryColor,
     }).from(schema.users)
       .orderBy(asc(schema.users.id))
       .all()
@@ -108,6 +111,11 @@ export const adminRoutes = new Elysia()
     const leagueId = query.leagueId as string | undefined;
     if (leagueId && leagueId !== 'all') {
       rows = rows.filter(r => r.leagueId === leagueId);
+    }
+
+    const actor = query.actor as string | undefined;
+    if (actor && actor !== 'all') {
+      rows = rows.filter(r => r.actor === actor);
     }
 
     const search = (query.search as string || '').toLowerCase();
@@ -290,6 +298,164 @@ export const adminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, parseInt(params.id))).run();
     return { success: true };
+  })
+
+  // ─── Seasons CRUD ───────────────────────────────────────────────────
+
+  .post('/api/seasons', async ({ body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const {
+      seasonNumber,
+      totalWeeks = 11,
+      pointCap = 110,
+      teraCaptainSlots = 2,
+      tradeDeadlineWeek = 7,
+      forfeitPolicy = 'double_forfeit',
+      weekDates = null,
+      leagues: leaguePayloads = [],
+    } = body as {
+      seasonNumber: number;
+      totalWeeks?: number;
+      pointCap?: number;
+      teraCaptainSlots?: number;
+      tradeDeadlineWeek?: number;
+      forfeitPolicy?: 'double_forfeit' | 'admin_review';
+      weekDates?: Record<string, string> | null;
+      leagues?: { id: string; name: string; color: string; draftDate?: string | null }[];
+    };
+
+    if (!seasonNumber || typeof seasonNumber !== 'number') {
+      set.status = 400; return { error: 'seasonNumber required' };
+    }
+    const dup = db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, seasonNumber)).get();
+    if (dup) { set.status = 409; return { error: `Season ${seasonNumber} already exists` }; }
+
+    const seasonId = tx(() => {
+      const row = db.insert(schema.seasons).values({
+        seasonNumber,
+        phase: 'predraft',
+        currentWeek: 0,
+        totalWeeks,
+        pointCap,
+        teraCaptainSlots,
+        tradeDeadlineWeek,
+        forfeitPolicy,
+        weekDates: weekDates ? JSON.stringify(weekDates) : null,
+      }).returning().get();
+
+      for (const lg of leaguePayloads) {
+        db.insert(schema.leagues).values({
+          id: lg.id,
+          name: lg.name,
+          color: lg.color,
+          seasonId: row.id,
+          draftDate: lg.draftDate ?? null,
+        }).run();
+      }
+
+      db.insert(schema.activityLog).values({
+        type: 'season_created',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Created Season ${seasonNumber} (${leaguePayloads.length} leagues)`,
+        metadata: JSON.stringify({ seasonNumber, leagues: leaguePayloads.map(l => l.id), pointCap, teraCaptainSlots }),
+      }).run();
+
+      return row.id;
+    });
+
+    return { id: seasonId, seasonNumber };
+  })
+
+  // ─── Team creation (per-league) ────────────────────────────────────
+
+  .post('/api/leagues/:leagueId/teams', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const { id, coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = body as {
+      id?: string;
+      coachName: string;
+      teamName: string;
+      teamAbbrev: string;
+      teamColor?: string;
+      userId?: number | null;
+      showdownUsername?: string | null;
+    };
+    if (!coachName || !teamName || !teamAbbrev) {
+      set.status = 400; return { error: 'coachName, teamName, teamAbbrev required' };
+    }
+    const teamId = id ?? `${params.leagueId}-${teamAbbrev.toLowerCase()}`;
+    const exists = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
+    if (exists) { set.status = 409; return { error: `Team ${teamId} already exists` }; }
+
+    tx(() => {
+      db.insert(schema.teams).values({
+        id: teamId,
+        leagueId: params.leagueId,
+        userId: userId ?? null,
+        coachName,
+        teamName,
+        teamAbbrev,
+        teamColor: teamColor ?? '#888888',
+        showdownUsername: showdownUsername ?? null,
+      }).run();
+      db.insert(schema.activityLog).values({
+        type: 'team_created',
+        category: 'admin',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: `Created team ${teamName} (${teamAbbrev})`,
+        metadata: JSON.stringify({ teamId, userId, coachName }),
+      }).run();
+    });
+
+    return { id: teamId };
+  })
+
+  // ─── Team logo upload ──────────────────────────────────────────────
+
+  .post('/api/teams/:teamId/logo', async ({ params, request, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const form = await request.formData().catch(() => null);
+    const file = form?.get('logo');
+    if (!(file instanceof File)) { set.status = 400; return { error: 'No file uploaded under "logo" field' }; }
+    if (!file.type.startsWith('image/')) { set.status = 400; return { error: 'File must be an image' }; }
+    if (file.size > 512 * 1024) { set.status = 400; return { error: 'File must be ≤ 512KB' }; }
+
+    const ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) ? ext : 'png';
+    const filename = `${params.teamId}.${safeExt}`;
+    const relativePath = `team-logos/${filename}`;
+    const absPath = `${process.cwd()}/uploads/${relativePath}`;
+
+    await Bun.write(absPath, file);
+
+    db.update(schema.teams).set({ logoPath: relativePath }).where(eq(schema.teams.id, params.teamId)).run();
+    db.insert(schema.activityLog).values({
+      type: 'team_logo_uploaded',
+      category: 'team',
+      actor: user.username,
+      leagueId: team.leagueId,
+      description: `Uploaded logo for ${team.teamName}`,
+      metadata: JSON.stringify({ teamId: params.teamId, path: relativePath, size: file.size }),
+    }).run();
+
+    return { success: true, path: `/uploads/${relativePath}` };
+  })
+
+  // ─── Static upload serving ─────────────────────────────────────────
+
+  .get('/uploads/:dir/:file', async ({ params, set }) => {
+    // Whitelist directories — only the ones we write to
+    if (params.dir !== 'team-logos') { set.status = 404; return 'Not found'; }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(params.file)) { set.status = 400; return 'Invalid filename'; }
+    const path = `${process.cwd()}/uploads/${params.dir}/${params.file}`;
+    const f = Bun.file(path);
+    if (!(await f.exists())) { set.status = 404; return 'Not found'; }
+    return new Response(f);
   })
 
   // ─── Leagues CRUD ───────────────────────────────────────────────────

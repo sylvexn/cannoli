@@ -28,6 +28,8 @@ import { CommandPalette } from './command-palette';
 import { MatchBanner } from './match-banner';
 import { Search } from 'lucide-react';
 import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
+import { UserAccentScope } from './user-accent-scope';
+import { BotStatusChip } from './bot-status-chip';
 
 const leaguePages = [
   { path: '', label: 'Standings', icon: Trophy },
@@ -336,15 +338,17 @@ export function AppShell() {
         {/* Footer — My Team + user dropdown (or login for guests) */}
         <div className="p-3 border-t border-border-default space-y-2">
           {user && (
-            /* My Team shortcut — greyed until user↔team mapping exists */
-            <button
-              disabled
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted/40 cursor-not-allowed"
+            /* My Team shortcut — disabled until user↔team mapping is wired up */
+            <div
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted/50"
               title="Team assignment not configured yet"
             >
               <User size={14} />
               <span>My Team</span>
-            </button>
+              <span className="ml-auto text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-overlay text-text-muted/60">
+                Soon
+              </span>
+            </div>
           )}
 
           <button
@@ -360,13 +364,24 @@ export function AppShell() {
 
           {user && <FeedbackDialog />}
 
+          {/* PS bot status — staff only */}
+          {isAdmin && <BotStatusChip />}
+
           {user ? (
+            <UserAccentScope user={user}>
             <DropdownMenu>
               <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
-                <div className={cn(
-                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                  isAdmin ? 'bg-neon/20 text-neon' : 'bg-surface-overlay text-text-secondary',
-                )}>
+                <div
+                  className={cn(
+                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
+                    !user.primaryColor && (isAdmin ? 'bg-neon/20 text-neon' : 'bg-surface-overlay text-text-secondary'),
+                  )}
+                  style={user.primaryColor ? {
+                    backgroundColor: 'color-mix(in oklab, var(--user-primary) 30%, transparent)',
+                    color: 'var(--user-primary)',
+                    boxShadow: '0 0 0 1.5px var(--user-secondary)',
+                  } : undefined}
+                >
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <div className="text-xs text-left min-w-0">
@@ -386,6 +401,7 @@ export function AppShell() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </UserAccentScope>
           ) : (
             <button
               onClick={() => navigate('/login')}

@@ -11,6 +11,7 @@ import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
+  awaiting_admin: { label: 'Awaiting Admin', className: 'text-pink border-pink/30 bg-pink/10' },
   accepted: { label: 'Accepted', className: 'text-win border-win/30 bg-win/10' },
   rejected: { label: 'Rejected', className: 'text-loss border-loss/30 bg-loss/10' },
   expired: { label: 'Expired', className: 'text-text-muted border-border-subtle bg-surface-overlay/50' },

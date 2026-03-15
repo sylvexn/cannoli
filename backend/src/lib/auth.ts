@@ -49,6 +49,9 @@ export function validateSession(token: string) {
     mustChangePassword: user.mustChangePassword,
     active: user.active,
     createdAt: user.createdAt,
+    primaryColor: user.primaryColor,
+    secondaryColor: user.secondaryColor,
+    tertiaryColor: user.tertiaryColor,
   };
 }
 

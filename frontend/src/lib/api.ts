@@ -44,13 +44,18 @@ export interface ApiLeague {
   name: string;
   color: string;
   draftDate?: string | null;
+  draftOrder?: string[] | null;
   season: {
     id: string;
     seasonNumber: number;
-    phase: 'draft' | 'regular' | 'playoffs' | 'offseason';
+    phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
     currentWeek: number;
     totalWeeks: number;
+    pointCap: number;
+    teraCaptainSlots: number;
     tradeDeadlineWeek: number;
+    forfeitPolicy?: 'double_forfeit' | 'admin_review';
+    paused?: boolean;
     weekDates?: Record<string, string> | null;
   } | null;
 }
@@ -63,6 +68,7 @@ export interface ApiTeam {
   teamColor: string;
   rank: number;
   showdownUsername: string | null;
+  logoPath?: string | null;
   record: { wins: number; losses: number; differential: number };
   roster: ApiRosterPokemon[];
 }
@@ -172,6 +178,20 @@ export interface ApiAuthUser {
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  tertiaryColor?: string | null;
+}
+
+export interface ApiBotStatus {
+  connected: boolean;
+  authedAs: string | null;
+  reconnectAttempts: number;
+  lastEventAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  monitoredBattles: { roomId: string; matchId: string | null; p1: string; p2: string }[];
+  health: 'green' | 'yellow' | 'red';
 }
 
 // ─── Admin types ────────────────────────────────────────────────────────────
@@ -218,7 +238,7 @@ export interface ApiTrade {
   id: string;
   leagueId: string;
   week: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'expired';
+  status: 'pending' | 'awaiting_admin' | 'accepted' | 'rejected' | 'expired';
   proposerId: string;
   recipientId: string;
   offering: string[];
@@ -374,6 +394,60 @@ export const api = {
   // User write (own team)
   proposeTrade: (leagueId: string, data: { recipientId: string; offering: string[]; requesting: string[]; proposerId?: string }) =>
     postJson<{ id: string }>(`/api/leagues/${leagueId}/trades/propose`, data),
+
+  // Counterparty trade response (accept → awaiting_admin, reject → rejected)
+  respondToTrade: (tradeId: string, action: 'accept' | 'reject', reason?: string) =>
+    postJson<{ success: boolean }>(`/api/trades/${tradeId}/respond`, { action, reason }),
+
+  // Profile colors
+  updateMyColors: (colors: { primaryColor?: string | null; secondaryColor?: string | null; tertiaryColor?: string | null }) =>
+    mutateJson<{ success: boolean }>('PATCH', '/api/users/me/colors', colors),
+
+  // PS Bot
+  getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
+
+  runJob: (name: string) => postJson<{ success: boolean }>(`/api/admin/jobs/${name}/run`),
+
+  forceMatchResult: (matchId: string, data: { homeScore: number; awayScore: number; forfeitedBy?: 'home' | 'away' | 'both' | null; note?: string }) =>
+    postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
+
+  // Team logo
+  uploadTeamLogo: async (teamId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    const res = await fetch(`${API_BASE}/api/teams/${teamId}/logo`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Upload failed: ${res.status}`);
+    }
+    return res.json() as Promise<{ success: boolean; path: string }>;
+  },
+
+  // Season + Team admin
+  createSeason: (data: {
+    seasonNumber: number;
+    totalWeeks?: number;
+    pointCap?: number;
+    teraCaptainSlots?: number;
+    tradeDeadlineWeek?: number;
+    forfeitPolicy?: 'double_forfeit' | 'admin_review';
+    weekDates?: Record<string, string> | null;
+    leagues?: { id: string; name: string; color: string; draftDate?: string | null }[];
+  }) => postJson<{ id: number; seasonNumber: number }>('/api/seasons', data),
+
+  createTeam: (leagueId: string, data: {
+    id?: string;
+    coachName: string;
+    teamName: string;
+    teamAbbrev: string;
+    teamColor?: string;
+    userId?: number | null;
+    showdownUsername?: string | null;
+  }) => postJson<{ id: string }>(`/api/leagues/${leagueId}/teams`, data),
 
   // Feedback
   submitFeedback: (title: string, description: string, page?: string) =>

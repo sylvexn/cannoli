@@ -22,13 +22,18 @@ export const leagueRoutes = new Elysia()
       name: l.name,
       color: l.color,
       draftDate: l.draftDate,
+      draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
       season: season ? {
         id: `s${season.seasonNumber}`,
         seasonNumber: season.seasonNumber,
         phase: season.phase,
         currentWeek: season.currentWeek,
         totalWeeks: season.totalWeeks,
+        pointCap: season.pointCap,
+        teraCaptainSlots: season.teraCaptainSlots,
         tradeDeadlineWeek: season.tradeDeadlineWeek,
+        forfeitPolicy: season.forfeitPolicy,
+        paused: season.paused,
         weekDates: season.weekDates ? JSON.parse(season.weekDates) : null,
       } : null,
     }));
@@ -133,6 +138,7 @@ export const leagueRoutes = new Elysia()
         teamColor: team.teamColor,
         rank: team.rank,
         showdownUsername: team.showdownUsername,
+        logoPath: team.logoPath,
         record: { wins, losses, differential },
         roster: enrichedRoster,
       };

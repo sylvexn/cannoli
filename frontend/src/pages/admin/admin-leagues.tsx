@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppData } from '@/lib/app-data-context';
-import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Save, Users, Calendar, Trophy, Swords } from 'lucide-react';
+import { Save, Users, Calendar, Trophy, Swords, Lock } from 'lucide-react';
 
 interface LeagueSettings {
   pointCap: number;
@@ -16,29 +16,57 @@ interface LeagueSettings {
   rosterSize: number;
 }
 
-const defaultSettings: LeagueSettings = {
-  pointCap: DEFAULT_LEAGUE_CONFIG.pointCap,
-  teraCaptainSlots: DEFAULT_LEAGUE_CONFIG.teraCaptainSlots,
-  tradeDeadlineWeek: 8,
-  maxTeams: 12,
-  rosterSize: 11,
-};
-
 const phaseLabels: Record<string, { label: string; color: string }> = {
+  predraft: { label: 'Pre-draft', color: 'text-text-muted bg-surface-overlay border-border-default' },
   draft: { label: 'Draft', color: 'text-draw bg-draw/10 border-draw/30' },
   regular: { label: 'Regular Season', color: 'text-neon bg-neon/10 border-neon/30' },
   playoffs: { label: 'Playoffs', color: 'text-pink bg-pink/10 border-pink/30' },
   offseason: { label: 'Offseason', color: 'text-text-muted bg-surface-overlay border-border-default' },
 };
 
-export function AdminLeagues() {
-  const { leagues } = useAppData();
-  const [settings, setSettings] = useState<Record<string, LeagueSettings>>({});
+interface LockState {
+  pointCap: boolean;
+  teraCaptainSlots: boolean;
+  tradeDeadlineWeek: boolean;
+  maxTeams: boolean;
+  rosterSize: boolean;
+}
 
-  // Re-initialize settings when leagues load
-  if (leagues.length > 0 && Object.keys(settings).length === 0) {
-    setSettings(Object.fromEntries(leagues.map(l => [l.id, { ...defaultSettings }])));
-  }
+function computeLocks(phase: string): LockState {
+  // Conservative defaults — see plan §2a phase-aware locks.
+  const inOrPastDraft = phase === 'regular' || phase === 'playoffs' || phase === 'offseason';
+  return {
+    pointCap: inOrPastDraft,
+    rosterSize: inOrPastDraft,
+    teraCaptainSlots: phase === 'regular' || phase === 'playoffs' || phase === 'offseason',
+    tradeDeadlineWeek: phase === 'playoffs' || phase === 'offseason',
+    maxTeams: phase !== 'predraft' && phase !== 'draft', // lock once we have teams
+  };
+}
+
+export function AdminLeagues() {
+  const { leagues, refreshLeagues } = useAppData();
+  const [settings, setSettings] = useState<Record<string, LeagueSettings>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+
+  // Hydrate settings from real league/season data on first load
+  useEffect(() => {
+    if (leagues.length === 0) return;
+    setSettings(prev => {
+      const next = { ...prev };
+      for (const l of leagues) {
+        if (next[l.id]) continue;
+        next[l.id] = {
+          pointCap: l.season.pointCap ?? 110,
+          teraCaptainSlots: l.season.teraCaptainSlots ?? 2,
+          tradeDeadlineWeek: l.season.tradeDeadlineWeek ?? 7,
+          maxTeams: 12,
+          rosterSize: 11,
+        };
+      }
+      return next;
+    });
+  }, [leagues]);
 
   function updateSetting(leagueId: string, key: keyof LeagueSettings, value: number) {
     setSettings(prev => ({
@@ -47,8 +75,25 @@ export function AdminLeagues() {
     }));
   }
 
-  function handleSave(leagueId: string) {
-    toast.success(`Settings saved for ${leagues.find(l => l.id === leagueId)?.name}`);
+  async function handleSave(leagueId: string) {
+    const s = settings[leagueId];
+    if (!s) return;
+    setSaving(prev => ({ ...prev, [leagueId]: true }));
+    try {
+      await api.updateLeague(leagueId, {
+        pointCap: s.pointCap,
+        teraCaptainSlots: s.teraCaptainSlots,
+        tradeDeadlineWeek: s.tradeDeadlineWeek,
+        maxTeams: s.maxTeams,
+        rosterSize: s.rosterSize,
+      });
+      toast.success(`Saved settings for ${leagues.find(l => l.id === leagueId)?.name}`);
+      refreshLeagues();
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed');
+    } finally {
+      setSaving(prev => ({ ...prev, [leagueId]: false }));
+    }
   }
 
   return (
@@ -61,7 +106,9 @@ export function AdminLeagues() {
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Season:</span>
-          <span className="text-text-primary font-medium">10</span>
+          <span className="text-text-primary font-medium">
+            {leagues[0]?.season.seasonNumber ?? '—'}
+          </span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Total Players:</span>
@@ -74,8 +121,10 @@ export function AdminLeagues() {
       {/* League cards */}
       <div className="grid gap-4">
         {leagues.map(league => {
-          const s = settings[league.id] ?? defaultSettings;
+          const s = settings[league.id];
+          if (!s) return null;
           const phase = phaseLabels[league.season.phase] ?? phaseLabels.offseason;
+          const locks = computeLocks(league.season.phase);
           return (
             <Card key={league.id}>
               <CardHeader className="pb-3">
@@ -101,59 +150,53 @@ export function AdminLeagues() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs text-text-muted flex items-center gap-1">
-                      <Trophy size={10} /> Point Cap
-                    </label>
-                    <NumberInput
-                      value={s.pointCap}
-                      onChange={v => updateSetting(league.id, 'pointCap', v)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-text-muted flex items-center gap-1">
-                      <Swords size={10} /> Tera Captains
-                    </label>
-                    <NumberInput
-                      value={s.teraCaptainSlots}
-                      onChange={v => updateSetting(league.id, 'teraCaptainSlots', v)}
-                      min={0}
-                      max={6}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-text-muted flex items-center gap-1">
-                      <Calendar size={10} /> Trade Deadline
-                    </label>
-                    <NumberInput
-                      value={s.tradeDeadlineWeek}
-                      onChange={v => updateSetting(league.id, 'tradeDeadlineWeek', v)}
-                      min={1}
-                      max={league.season.totalWeeks}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-text-muted flex items-center gap-1">
-                      <Users size={10} /> Max Teams
-                    </label>
-                    <NumberInput
-                      value={s.maxTeams}
-                      onChange={v => updateSetting(league.id, 'maxTeams', v)}
-                      min={2}
-                      max={20}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-text-muted flex items-center gap-1">
-                      Roster Size
-                    </label>
-                    <NumberInput
-                      value={s.rosterSize}
-                      onChange={v => updateSetting(league.id, 'rosterSize', v)}
-                      min={6}
-                      max={20}
-                    />
-                  </div>
+                  <SettingField
+                    label="Point Cap"
+                    icon={<Trophy size={10} />}
+                    value={s.pointCap}
+                    onChange={v => updateSetting(league.id, 'pointCap', v)}
+                    locked={locks.pointCap}
+                    lockReason="Locked once draft has begun"
+                  />
+                  <SettingField
+                    label="Tera Captains"
+                    icon={<Swords size={10} />}
+                    value={s.teraCaptainSlots}
+                    onChange={v => updateSetting(league.id, 'teraCaptainSlots', v)}
+                    min={0}
+                    max={6}
+                    locked={locks.teraCaptainSlots}
+                    lockReason="Locked once regular season begins"
+                  />
+                  <SettingField
+                    label="Trade Deadline"
+                    icon={<Calendar size={10} />}
+                    value={s.tradeDeadlineWeek}
+                    onChange={v => updateSetting(league.id, 'tradeDeadlineWeek', v)}
+                    min={1}
+                    max={league.season.totalWeeks}
+                    locked={locks.tradeDeadlineWeek}
+                    lockReason="Locked after regular season"
+                  />
+                  <SettingField
+                    label="Max Teams"
+                    icon={<Users size={10} />}
+                    value={s.maxTeams}
+                    onChange={v => updateSetting(league.id, 'maxTeams', v)}
+                    min={2}
+                    max={20}
+                    locked={locks.maxTeams}
+                    lockReason="Locked once teams exist"
+                  />
+                  <SettingField
+                    label="Roster Size"
+                    value={s.rosterSize}
+                    onChange={v => updateSetting(league.id, 'rosterSize', v)}
+                    min={6}
+                    max={20}
+                    locked={locks.rosterSize}
+                    lockReason="Locked once draft has begun"
+                  />
                 </div>
                 <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-subtle">
                   <div className="text-xs text-text-muted">
@@ -163,10 +206,11 @@ export function AdminLeagues() {
                   <Button
                     size="sm"
                     onClick={() => handleSave(league.id)}
+                    disabled={saving[league.id]}
                     className="bg-neon text-surface-base hover:bg-neon/90"
                   >
                     <Save size={14} />
-                    Save
+                    {saving[league.id] ? 'Saving…' : 'Save'}
                   </Button>
                 </div>
               </CardContent>
@@ -174,6 +218,40 @@ export function AdminLeagues() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function SettingField({
+  label, icon, value, onChange, min, max, locked, lockReason,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  locked: boolean;
+  lockReason: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-text-muted flex items-center gap-1">
+        {icon}
+        {label}
+        {locked && (
+          <span title={lockReason} className="text-text-muted/60">
+            <Lock size={9} />
+          </span>
+        )}
+      </label>
+      <NumberInput
+        value={value}
+        onChange={onChange}
+        min={min}
+        max={max}
+        disabled={locked}
+      />
     </div>
   );
 }
