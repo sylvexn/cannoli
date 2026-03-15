@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
 import { TeamLogo } from '@/components/team-logo';
+import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
-import { Timer, Pause, Zap } from 'lucide-react';
+import { Timer, Pause, ListOrdered, Sparkles, ArrowRight, AlertTriangle } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import type { DraftPickEntry } from './types';
 
@@ -13,8 +14,23 @@ interface DraftOnTheClockProps {
   isUserTurn: boolean;
   totalPicks: number;
   timerPaused?: boolean;
+  /** Whether we should show timer-related affordances (admin can disable) */
+  timerEnabled?: boolean;
+  /** Top of the user's queue, shown inline when relevant */
+  topQueuedName?: string | null;
+  /** Quick action: draft top of queue (when it's user's turn) */
+  onDraftFromQueue?: () => void;
+  /** Whether auto-draft is on (changes the waiting message) */
+  autoDraftQueueEnabled?: boolean;
 }
 
+/**
+ * "On the clock" hero strip — docks at the TOP of the pool when a draft is active.
+ *
+ * Two visual modes:
+ *   - Your turn: high-contrast, urgent, primary action front-and-center
+ *   - Waiting: quieter pink-accented, surfaces auto-pick context
+ */
 export function DraftOnTheClock({
   pick,
   player,
@@ -23,74 +39,142 @@ export function DraftOnTheClock({
   isUserTurn,
   totalPicks,
   timerPaused,
+  timerEnabled = true,
+  topQueuedName,
+  onDraftFromQueue,
+  autoDraftQueueEnabled,
 }: DraftOnTheClockProps) {
   const urgency = timerSeconds > timerDuration * 0.6 ? 'calm'
     : timerSeconds > timerDuration * 0.3 ? 'warning'
     : 'critical';
 
+  const timerWidth = timerEnabled
+    ? Math.max(0, (timerSeconds / Math.max(timerSeconds, timerDuration)) * 100)
+    : 0;
+
   return (
     <div
       className={cn(
-        'relative px-3 py-1.5 overflow-hidden border-b border-border-subtle',
-        isUserTurn && urgency === 'calm' && 'bg-neon/[0.04]',
-        isUserTurn && urgency === 'warning' && 'bg-draw/[0.04]',
-        isUserTurn && urgency === 'critical' && 'bg-loss/[0.06]',
-        !isUserTurn && 'bg-surface-overlay/20',
+        'relative overflow-hidden border-b',
+        isUserTurn
+          ? urgency === 'calm'
+            ? 'border-neon/40 bg-gradient-to-r from-neon/[0.08] via-neon/[0.04] to-transparent'
+            : urgency === 'warning'
+            ? 'border-draw/40 bg-gradient-to-r from-draw/[0.10] via-draw/[0.04] to-transparent'
+            : 'border-loss/50 bg-gradient-to-r from-loss/[0.14] via-loss/[0.06] to-transparent'
+          : 'border-border-default bg-surface-overlay/15',
       )}
     >
-      {/* Timer progress bar — thin line at top */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-surface-overlay/30">
-        <div
-          className={cn(
-            'h-full transition-all duration-1000 ease-linear',
-            urgency === 'calm' && 'bg-neon',
-            urgency === 'warning' && 'bg-draw',
-            urgency === 'critical' && 'bg-loss',
-          )}
-          style={{ width: `${(timerSeconds / Math.max(timerSeconds, timerDuration)) * 100}%` }}
-        />
-      </div>
+      {/* Timer progress line — thin, animated */}
+      {timerEnabled && (
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-surface-overlay/40">
+          <div
+            className={cn(
+              'h-full transition-all duration-1000 ease-linear',
+              isUserTurn && urgency === 'calm' && 'bg-neon',
+              isUserTurn && urgency === 'warning' && 'bg-draw',
+              isUserTurn && urgency === 'critical' && 'bg-loss',
+              !isUserTurn && 'bg-pink/60',
+              timerPaused && 'opacity-50',
+            )}
+            style={{ width: `${timerWidth}%` }}
+          />
+        </div>
+      )}
 
-      <div className="flex items-center gap-3">
-        {/* Team info — compact */}
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-        <span className="text-xs font-medium text-text-primary truncate">
-          {player.teamAbbrev}
-        </span>
+      <div className="px-3 py-2 flex items-center gap-3 flex-wrap">
+        {/* Drafter identity */}
+        <div className="flex items-center gap-2 min-w-0">
+          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="md" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className={cn(
+                'text-sm font-heading font-bold truncate',
+                isUserTurn ? 'text-text-primary' : 'text-text-secondary',
+              )}>
+                {player.teamAbbrev}
+              </span>
+              {isUserTurn && (
+                <Badge className={cn(
+                  'text-[10px] font-bold px-1.5 py-0 h-4 font-mono uppercase tracking-wider',
+                  urgency === 'critical'
+                    ? 'bg-loss/20 text-loss border-loss/40 animate-pulse'
+                    : 'bg-neon/15 text-neon border-neon/30',
+                )}>
+                  Your pick
+                </Badge>
+              )}
+            </div>
+            <div className="text-[10px] font-mono text-text-muted">
+              R{pick.round} · P{pick.pick} · pick #{pick.overallPick}/{totalPicks}
+            </div>
+          </div>
+        </div>
 
-        {isUserTurn && (
-          <Badge className="bg-neon/20 text-neon border-neon/30 text-[9px] font-bold px-1.5 py-0 h-4 animate-pulse">
-            <Zap size={8} className="mr-0.5" />
-            YOUR PICK
-          </Badge>
+        {/* Big timer */}
+        {timerEnabled && (
+          <div className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono tabular-nums',
+            isUserTurn
+              ? urgency === 'calm' ? 'text-neon border-neon/40 bg-neon/[0.06]'
+              : urgency === 'warning' ? 'text-draw border-draw/40 bg-draw/[0.06]'
+              : 'text-loss border-loss/40 bg-loss/[0.10] animate-pulse'
+              : 'text-pink/80 border-pink/30 bg-pink/[0.04]',
+            timerPaused && 'animate-pulse',
+          )}>
+            {timerPaused ? <Pause size={14} /> : <Timer size={14} />}
+            <span className="text-lg font-bold leading-none">
+              {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
+            </span>
+          </div>
         )}
 
-        <span className="text-[10px] text-text-muted font-mono">
-          R{pick.round} P{pick.pick} · #{pick.overallPick}/{totalPicks}
-        </span>
+        {/* Top-of-queue context */}
+        {isUserTurn ? (
+          topQueuedName && (
+            <div className="hidden md:flex items-center gap-1.5 pl-2 border-l border-border-subtle text-[11px] text-text-muted">
+              <ListOrdered size={11} className="text-pink shrink-0" />
+              <span>queue:</span>
+              <PokemonSprite name={topQueuedName} size="xs" />
+              <span className="text-text-primary truncate max-w-[120px]">{topQueuedName}</span>
+            </div>
+          )
+        ) : (
+          <div className="hidden md:flex items-center gap-1.5 pl-2 border-l border-border-subtle text-[11px] text-text-muted">
+            {autoDraftQueueEnabled ? (
+              <>
+                <Sparkles size={10} className="text-pink shrink-0" />
+                <span>spectating · auto-pick on</span>
+              </>
+            ) : (
+              <span>spectating</span>
+            )}
+            {urgency === 'critical' && (
+              <span className="flex items-center gap-1 text-loss font-mono">
+                <AlertTriangle size={11} />likely to skip
+              </span>
+            )}
+          </div>
+        )}
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        {/* Timer — right aligned, prominent */}
-        <div className={cn(
-          'flex items-center gap-1.5 px-2 py-0.5 rounded',
-          'font-mono tabular-nums text-sm font-bold',
-          timerPaused
-            ? 'text-draw'
-            : urgency === 'calm' ? 'text-neon'
-            : urgency === 'warning' ? 'text-draw'
-            : 'text-loss animate-pulse',
-        )}>
-          {timerPaused ? (
-            <Pause size={12} />
-          ) : (
-            <Timer size={12} />
-          )}
-          <span className={timerPaused ? 'animate-pulse' : ''}>
-            {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
-          </span>
-        </div>
+        {/* Primary action — only when it's user's turn and we have something queued */}
+        {isUserTurn && topQueuedName && onDraftFromQueue && (
+          <button
+            onClick={onDraftFromQueue}
+            className={cn(
+              'group h-8 px-3 rounded-md font-bold text-[11px] flex items-center gap-1.5 transition-all',
+              'bg-neon text-surface hover:bg-neon/90 hover:shadow-[0_0_18px_rgba(34,211,238,0.45)]',
+              urgency === 'critical' && 'animate-pulse',
+            )}
+            title="Draft top of queue"
+          >
+            <Sparkles size={12} />
+            Draft #1
+            <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        )}
       </div>
     </div>
   );

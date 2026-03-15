@@ -21,9 +21,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { generateSnakeSlots } from './use-draft-state';
-import type { DraftState, DraftAction, DraftPickEntry } from './types';
+import type { DraftState, DraftAction } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
-import type { Player } from '@/lib/types';
 
 interface DraftControlBarProps {
   state: DraftState;
@@ -33,13 +32,16 @@ interface DraftControlBarProps {
   presence?: DraftPresenceData;
   wsConnected?: boolean;
   timerEnabled?: boolean;
-  /** On-the-clock info (merged into bar) */
-  currentPick?: DraftPickEntry | null;
-  currentPlayer?: Player | null;
-  isUserTurn?: boolean;
-  totalPicks?: number;
 }
 
+/**
+ * Draft control bar — handles two phases:
+ *   1. Pre-start: team selector, timer config, Start button (with hover panel + force-start dialog).
+ *   2. In-progress / completed: thin "chrome" — progress + counter + presence + admin timer controls + reset.
+ *
+ * On-the-clock identity, your-turn affordance, and the prominent timer have been moved to
+ * `DraftOnTheClock` (the hero strip docked above the pool).
+ */
 export function DraftControlBar({
   state,
   dispatch,
@@ -48,10 +50,6 @@ export function DraftControlBar({
   presence,
   wsConnected: _wsConnected,
   timerEnabled = true,
-  currentPick,
-  currentPlayer,
-  isUserTurn: isUserTurnProp,
-  totalPicks = 0,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();
   const [shiftHeld, setShiftHeld] = useState(false);
@@ -60,7 +58,6 @@ export function DraftControlBar({
   const hoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Global shift tracking
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => setShiftHeld(e.shiftKey);
     window.addEventListener('keydown', onKey);
@@ -71,23 +68,19 @@ export function DraftControlBar({
     };
   }, []);
 
-  // Track connected team IDs
   const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
   const allConnected = draftOrder.every(p => connectedTeamIds.has(p.id));
   const disconnectedTeams = draftOrder.filter(p => !connectedTeamIds.has(p.id));
 
-  // Spectators: group dev+admin as "admins", rest as spectators
   const adminSpecs = presence?.spectators.filter(s => s.role === 'dev' || s.role === 'admin') ?? [];
   const viewerSpecs = presence?.spectators.filter(s => s.role !== 'dev' && s.role !== 'admin') ?? [];
 
   const handleStartClick = useCallback((e: React.MouseEvent) => {
     if (!state.userTeamId) return;
-
     if (e.shiftKey && !allConnected) {
       setForceStartOpen(true);
       return;
     }
-
     const teamIds = draftOrder.map(p => p.id);
     const snakeOrder = generateSnakeSlots(teamIds, 10);
     dispatch({
@@ -113,13 +106,12 @@ export function DraftControlBar({
     setForceStartOpen(false);
   }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
 
-  // Pre-start: show configuration
+  // ─── Pre-start configuration ──────────────────────────────────────────────
   if (!state.demoStarted) {
     return (
       <>
         <div className="px-4 py-2.5">
           <div className="flex items-center gap-3">
-            {/* Your team selector */}
             <div className="flex items-center gap-2">
               <User size={13} className="text-text-muted" />
               <Select
@@ -145,7 +137,6 @@ export function DraftControlBar({
 
             <div className="w-px h-6 bg-border-subtle" />
 
-            {/* Timer duration — hidden when timer disabled */}
             {timerEnabled && (
               <div className="flex items-center gap-1.5">
                 <Timer size={13} className="text-text-muted" />
@@ -167,7 +158,6 @@ export function DraftControlBar({
               </div>
             )}
 
-            {/* Connected count badge */}
             {state.mode === 'live' && presence && (
               <>
                 <div className="w-px h-6 bg-border-subtle" />
@@ -186,10 +176,8 @@ export function DraftControlBar({
               </>
             )}
 
-            {/* Spacer pushes button right */}
             <div className="flex-1" />
 
-            {/* Start button with hover panel */}
             <div
               className="relative"
               ref={hoverRef}
@@ -221,17 +209,13 @@ export function DraftControlBar({
                 )}
               </Button>
 
-              {/* Connection status hover panel */}
               {hoverOpen && state.mode === 'live' && presence && (
                 <div className="absolute right-0 bottom-full mb-2 w-[220px] z-50 rounded-lg border border-border-default bg-surface-raised shadow-lg overflow-hidden">
-                  {/* Header */}
                   <div className="px-3 py-1.5 border-b border-border-subtle bg-surface-overlay/30">
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">
                       Connection Status
                     </span>
                   </div>
-
-                  {/* Player list */}
                   <div className="px-2 py-1.5 space-y-0.5">
                     {draftOrder.map(p => {
                       const online = connectedTeamIds.has(p.id);
@@ -239,30 +223,19 @@ export function DraftControlBar({
                         <div key={p.id} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-surface-overlay/30">
                           <Circle
                             size={6}
-                            className={cn(
-                              'shrink-0',
-                              online ? 'fill-win text-win' : 'fill-loss text-loss',
-                            )}
+                            className={cn('shrink-0', online ? 'fill-win text-win' : 'fill-loss text-loss')}
                           />
                           <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                          <span className={cn(
-                            'text-[11px] flex-1 truncate',
-                            online ? 'text-text-primary' : 'text-text-muted',
-                          )}>
+                          <span className={cn('text-[11px] flex-1 truncate', online ? 'text-text-primary' : 'text-text-muted')}>
                             {p.teamAbbrev}
                           </span>
-                          <span className={cn(
-                            'text-[9px] font-mono',
-                            online ? 'text-win/70' : 'text-loss/70',
-                          )}>
+                          <span className={cn('text-[9px] font-mono', online ? 'text-win/70' : 'text-loss/70')}>
                             {online ? 'on' : 'off'}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-
-                  {/* Admins + Spectators footer */}
                   {(adminSpecs.length > 0 || viewerSpecs.length > 0) && (
                     <div className="px-3 py-1.5 border-t border-border-subtle bg-surface-overlay/20 flex items-center gap-2 text-[9px] text-text-muted">
                       {adminSpecs.length > 0 && (
@@ -285,7 +258,6 @@ export function DraftControlBar({
           </div>
         </div>
 
-        {/* Force Start Confirmation Dialog */}
         <Dialog open={forceStartOpen} onOpenChange={setForceStartOpen}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
@@ -308,7 +280,8 @@ export function DraftControlBar({
               ))}
             </div>
             <p className="text-xs text-text-muted">
-              Force-started drafts with missing players will use auto-pick for disconnected teams. This session will be cleaned up if not completed.
+              Force-started drafts with missing players will use auto-pick for disconnected teams.
+              This session will be cleaned up if not completed.
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setForceStartOpen(false)}>Cancel</Button>
@@ -327,151 +300,71 @@ export function DraftControlBar({
     );
   }
 
-  // In-progress / completed
+  // ─── In-progress / completed: chrome only (timer/OTC live in DraftOnTheClock hero) ──
   const progress = state.snakeOrder.length > 0
     ? (state.currentPickIndex / state.snakeOrder.length) * 100
     : 0;
 
-  // OTC urgency (merged into this bar)
-  const urgency = currentPick && !isDemoComplete
-    ? (state.timerSeconds > state.timerDuration * 0.6 ? 'calm'
-      : state.timerSeconds > state.timerDuration * 0.3 ? 'warning'
-      : 'critical')
-    : null;
-
   return (
-    <div
-      className={cn(
-        'relative px-3 py-1.5 overflow-hidden',
-        urgency && isUserTurnProp && urgency === 'calm' && 'bg-neon/[0.04]',
-        urgency && isUserTurnProp && urgency === 'warning' && 'bg-draw/[0.04]',
-        urgency && isUserTurnProp && urgency === 'critical' && 'bg-loss/[0.06]',
-        urgency && !isUserTurnProp && 'bg-surface-overlay/20',
-      )}
-    >
-      {/* Timer progress bar — thin line at top (only during active draft) */}
-      {urgency && (
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-surface-overlay/30">
-          <div
-            className={cn(
-              'h-full transition-all duration-1000 ease-linear',
-              urgency === 'calm' && 'bg-neon',
-              urgency === 'warning' && 'bg-draw',
-              urgency === 'critical' && 'bg-loss',
-            )}
-            style={{ width: `${(state.timerSeconds / Math.max(state.timerSeconds, state.timerDuration)) * 100}%` }}
-          />
-        </div>
-      )}
-
-      {/* Draft progress bar (below timer line) */}
-      <div className="h-0.5 w-full rounded-full bg-surface-overlay overflow-hidden mb-2">
+    <div className="px-3 py-1.5">
+      {/* Draft progress (thin line) */}
+      <div className="h-0.5 w-full rounded-full bg-surface-overlay overflow-hidden mb-1.5">
         <div
           className="h-full rounded-full bg-pink transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        {/* On-the-clock drafter info */}
-        {currentPick && currentPlayer && !isDemoComplete ? (
-          <>
-            <TeamLogo abbrev={currentPlayer.teamAbbrev} color={currentPlayer.teamColor} size="sm" />
-            <span className="text-xs font-medium text-text-primary">{currentPlayer.teamAbbrev}</span>
-            {isUserTurnProp && (
-              <Badge className="bg-neon/20 text-neon border-neon/30 text-[9px] font-bold px-1.5 py-0 h-4 animate-pulse">
-                <Zap size={8} className="mr-0.5" />
-                YOUR PICK
-              </Badge>
-            )}
-            <span className="text-[10px] text-text-muted font-mono">
-              R{currentPick.round} P{currentPick.pick} · #{currentPick.overallPick}/{totalPicks}
-            </span>
-            <div className="w-px h-5 bg-border-subtle" />
-          </>
-        ) : (
-          <>
-            {/* Your team (when no active pick / complete) */}
-            {state.userTeamId && (() => {
-              const p = draftOrder.find(t => t.id === state.userTeamId);
-              return p ? (
-                <span className="flex items-center gap-1 text-xs">
-                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-                  <span className="text-text-primary font-medium">{p.teamAbbrev}</span>
-                </span>
-              ) : null;
-            })()}
-            <div className="w-px h-5 bg-border-subtle" />
-          </>
-        )}
-
-        {/* Pick counter */}
-        <span className="text-[11px] text-text-muted font-mono tabular-nums">
-          {Math.min(state.currentPickIndex + 1, state.snakeOrder.length)}<span className="text-text-muted/50">/{state.snakeOrder.length}</span>
+      <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted flex-wrap">
+        <span>
+          <span className="text-text-primary">
+            {Math.min(state.currentPickIndex + (isDemoComplete ? 0 : 1), state.snakeOrder.length)}
+          </span>
+          <span className="text-text-muted/40">/{state.snakeOrder.length}</span> picks
         </span>
 
         {isDemoComplete && (
           <>
-            <div className="w-px h-5 bg-border-subtle" />
-            <div className="flex items-center gap-1 text-xs">
-              <Trophy size={12} className="text-win" />
-              <span className="text-win font-medium">Complete</span>
-            </div>
+            <div className="w-px h-3 bg-border-subtle" />
+            <span className="flex items-center gap-1 text-win">
+              <Trophy size={11} />
+              Complete
+            </span>
           </>
         )}
 
-        {/* Online count (live mode, during draft) */}
         {state.mode === 'live' && presence && !isDemoComplete && (
           <>
-            <div className="w-px h-5 bg-border-subtle" />
-            <span className="text-[10px] text-text-muted font-mono">
-              <Circle size={5} className="inline fill-win text-win mr-0.5 -mt-px" />
-              {connectedTeamIds.size}/{draftOrder.length}
+            <div className="w-px h-3 bg-border-subtle" />
+            <span className="flex items-center gap-1">
+              <Circle size={5} className="fill-win text-win" />
+              {connectedTeamIds.size}/{draftOrder.length} online
             </span>
             {(adminSpecs.length > 0 || viewerSpecs.length > 0) && (
-              <span className="text-[9px] text-text-muted/60 flex items-center gap-0.5">
-                <Eye size={8} />
-                {adminSpecs.length + viewerSpecs.length}
+              <span className="flex items-center gap-1 text-text-muted/70">
+                <Eye size={9} />
+                {adminSpecs.length + viewerSpecs.length} spec
               </span>
             )}
           </>
         )}
 
-        {/* Timer display (merged from OTC) */}
-        {currentPick && !isDemoComplete && timerEnabled && (
-          <>
-            <div className="w-px h-5 bg-border-subtle" />
-            <div className={cn(
-              'flex items-center gap-1 px-1.5 py-0.5 rounded',
-              'font-mono tabular-nums text-sm font-bold',
-              state.timerPaused
-                ? 'text-draw'
-                : urgency === 'calm' ? 'text-neon'
-                : urgency === 'warning' ? 'text-draw'
-                : 'text-loss animate-pulse',
-            )}>
-              {state.timerPaused ? <Pause size={12} /> : <Timer size={12} />}
-              <span className={state.timerPaused ? 'animate-pulse' : ''}>
-                {Math.floor(state.timerSeconds / 60)}:{String(state.timerSeconds % 60).padStart(2, '0')}
-              </span>
-            </div>
-          </>
-        )}
+        <div className="flex-1" />
 
-        {/* Admin timer controls — hidden when timer disabled */}
+        {/* Admin timer chrome (hidden when timer disabled or draft complete) */}
         {isAdmin && !isDemoComplete && timerEnabled && (
           <>
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
               className={cn(
-                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors',
+                'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors',
                 state.timerPaused
                   ? 'text-draw hover:bg-draw/10'
                   : 'text-text-muted hover:text-neon hover:bg-neon/5',
               )}
             >
               {state.timerPaused ? <Play size={10} /> : <Pause size={10} />}
-              {state.timerPaused ? 'Resume' : 'Pause'}
+              {state.timerPaused ? 'resume' : 'pause'}
             </button>
 
             <div className="flex items-center rounded border border-border-subtle overflow-hidden">
@@ -492,13 +385,12 @@ export function DraftControlBar({
           </>
         )}
 
-        {/* Reset */}
         <button
           onClick={() => dispatch({ type: 'DEMO_RESET' })}
-          className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-text-muted hover:text-neon transition-colors"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-neon transition-colors"
         >
           <RotateCcw size={10} />
-          Reset
+          reset
         </button>
       </div>
     </div>
