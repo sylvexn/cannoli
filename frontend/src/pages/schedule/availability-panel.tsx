@@ -104,8 +104,30 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
 
   // Determine which teams the user can edit
   const canEdit = isAdmin; // For now, admins can edit any team
+  const isEmpty = weekEntries.length === 0;
+  const [expanded, setExpanded] = useState(false);
 
   if (players.length === 0) return null;
+
+  // Collapsed state for non-editors when no data exists
+  if (isEmpty && !canEdit && !expanded) {
+    return (
+      <div className="rounded-lg border border-border-subtle bg-surface-raised/40 px-4 py-3 flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider">
+            Week {selectedWeek} Availability
+          </h3>
+          <p className="text-[11px] text-text-muted mt-0.5">No availability submitted this week.</p>
+        </div>
+        <button
+          onClick={() => setExpanded(true)}
+          className="text-[11px] text-text-muted hover:text-text-primary transition-colors"
+        >
+          Show grid
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -179,9 +201,9 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
                     ) : (
                       <div className={cn(
                         'w-full h-6 rounded flex items-center justify-center text-[9px] font-semibold',
-                        style ? `${style.bg} ${style.text} border` : 'text-text-muted/20',
+                        style ? `${style.bg} ${style.text} border` : '',
                       )}>
-                        {style?.label ?? '—'}
+                        {style ? style.label : <span className="w-1 h-1 rounded-full bg-text-muted/15" />}
                       </div>
                     )}
                   </div>

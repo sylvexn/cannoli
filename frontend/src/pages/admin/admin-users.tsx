@@ -155,13 +155,13 @@ export function AdminUsers() {
 
       {/* Column headers */}
       <div className="flex items-center gap-3 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted/50">
-        <SortHeader label="User" col="username" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[120px]" />
-        <SortHeader label="Role" col="role" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[48px]" />
-        <SortHeader label="St" col="status" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[14px]" />
-        <span className="w-[44px]" />
+        <SortHeader label="User" col="username" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[160px]" />
+        <SortHeader label="Role" col="role" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[60px]" />
+        <SortHeader label="Active" col="status" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[56px] justify-center" />
+        <span className="w-[60px]" />
         <span className="flex-1" />
-        <SortHeader label="Created" col="created" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[70px] text-right" />
-        <span className="w-[20px]" />
+        <SortHeader label="Created" col="created" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[80px] justify-end" />
+        <span className="w-[24px]" />
       </div>
 
       {/* Compact user list */}
@@ -175,7 +175,7 @@ export function AdminUsers() {
             )}
           >
             {/* Username */}
-            <span className="text-[13px] font-medium text-text-primary w-[120px] truncate">
+            <span className="text-[13px] font-medium text-text-primary w-[160px] truncate">
               {user.username}
             </span>
 
@@ -183,7 +183,7 @@ export function AdminUsers() {
             <Badge
               variant="outline"
               className={cn(
-                'text-[10px] px-1.5 py-0 h-4 w-[48px] justify-center',
+                'text-[10px] px-1.5 py-0 h-4 w-[60px] justify-center',
                 (user.role === 'admin' || user.role === 'dev')
                   ? 'bg-neon/10 text-neon border-neon/30'
                   : 'text-text-muted border-border-subtle',
@@ -193,26 +193,28 @@ export function AdminUsers() {
             </Badge>
 
             {/* Status dot */}
-            <div className={cn(
-              'w-1.5 h-1.5 rounded-full shrink-0',
-              user.active ? 'bg-win' : 'bg-loss',
-            )} />
+            <div className="w-[56px] flex justify-center">
+              <div
+                className={cn('w-1.5 h-1.5 rounded-full', user.active ? 'bg-win' : 'bg-loss')}
+                aria-label={user.active ? 'Active' : 'Inactive'}
+              />
+            </div>
 
             {/* Must change pw */}
-            {user.mustChangePassword && (
-              <span className="text-[9px] text-draw font-mono">pw reset</span>
-            )}
+            <span className="w-[60px] text-[9px] text-draw font-mono">
+              {user.mustChangePassword ? 'pw reset' : ''}
+            </span>
 
             <span className="flex-1" />
 
             {/* Created date */}
-            <span className="text-[10px] text-text-muted/60 font-mono tabular-nums w-[70px] text-right">
+            <span className="text-[10px] text-text-muted/60 font-mono tabular-nums w-[80px] text-right">
               {user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'}
             </span>
 
             {/* Actions */}
             <DropdownMenu>
-              <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none">
+              <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none w-[24px] flex justify-end">
                 <MoreHorizontal size={13} className="text-text-muted" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[170px] w-auto">
