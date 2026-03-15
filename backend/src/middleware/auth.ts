@@ -8,6 +8,12 @@ export interface AuthUser {
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
+  tertiaryColor?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  avatarPath?: string | null;
 }
 
 export const authPlugin = new Elysia({ name: 'auth' })

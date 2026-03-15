@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc } from 'drizzle-orm';
-import { hashPassword, isStaff } from '../lib/auth';
+import { hashPassword, isStaff, isStaffOrTeamOwner } from '../lib/auth';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { tx } from '../lib/tx';
 import { getBotStatus } from '../lib/ps-bot';
@@ -415,21 +415,31 @@ export const adminRoutes = new Elysia()
   // ─── Team update ──────────────────────────────────────────────────
 
   .put('/api/teams/:teamId', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const staff = isStaff(user);
 
-    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = body as Record<string, unknown>;
+    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername, bio } = body as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
-    if (typeof coachName === 'string' && coachName.trim()) updates.coachName = coachName.trim();
-    if (typeof teamName === 'string' && teamName.trim()) updates.teamName = teamName.trim();
-    if (typeof teamAbbrev === 'string' && teamAbbrev.trim()) updates.teamAbbrev = teamAbbrev.trim();
+    // Owner-allowed fields:
     if (typeof teamColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(teamColor)) updates.teamColor = teamColor;
-    if (userId === null) updates.userId = null;
-    else if (typeof userId === 'number') updates.userId = userId;
-    if (showdownUsername === null) updates.showdownUsername = null;
-    else if (typeof showdownUsername === 'string') updates.showdownUsername = showdownUsername.trim() || null;
+    if (bio !== undefined) {
+      if (bio === null || bio === '') updates.bio = null;
+      else if (typeof bio === 'string' && bio.length <= 280) updates.bio = bio;
+      else { set.status = 400; return { error: 'bio must be a string ≤ 280 chars' }; }
+    }
+    // Staff-only fields:
+    if (staff) {
+      if (typeof coachName === 'string' && coachName.trim()) updates.coachName = coachName.trim();
+      if (typeof teamName === 'string' && teamName.trim()) updates.teamName = teamName.trim();
+      if (typeof teamAbbrev === 'string' && teamAbbrev.trim()) updates.teamAbbrev = teamAbbrev.trim();
+      if (userId === null) updates.userId = null;
+      else if (typeof userId === 'number') updates.userId = userId;
+      if (showdownUsername === null) updates.showdownUsername = null;
+      else if (typeof showdownUsername === 'string') updates.showdownUsername = showdownUsername.trim() || null;
+    }
 
     if (Object.keys(updates).length === 0) {
       set.status = 400; return { error: 'No valid fields to update' };
@@ -509,7 +519,7 @@ export const adminRoutes = new Elysia()
   // ─── Team logo upload ──────────────────────────────────────────────
 
   .post('/api/teams/:teamId/logo', async ({ params, request, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
@@ -531,9 +541,43 @@ export const adminRoutes = new Elysia()
     db.insert(schema.activityLog).values({
       type: 'team_logo_uploaded',
       category: 'team',
-      actor: user.username,
+      actor: user!.username,
       leagueId: team.leagueId,
       description: `Uploaded logo for ${team.teamName}`,
+      metadata: JSON.stringify({ teamId: params.teamId, path: relativePath, size: file.size }),
+    }).run();
+
+    return { success: true, path: `/uploads/${relativePath}` };
+  })
+
+  // ─── Team banner upload ────────────────────────────────────────────
+
+  .post('/api/teams/:teamId/banner', async ({ params, request, user, set }) => {
+    if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const form = await request.formData().catch(() => null);
+    const file = form?.get('banner');
+    if (!(file instanceof File)) { set.status = 400; return { error: 'No file uploaded under "banner" field' }; }
+    if (!file.type.startsWith('image/')) { set.status = 400; return { error: 'File must be an image' }; }
+    if (file.size > 1024 * 1024) { set.status = 400; return { error: 'File must be ≤ 1MB' }; }
+
+    const ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'png';
+    const filename = `${params.teamId}.${safeExt}`;
+    const relativePath = `team-banners/${filename}`;
+    const absPath = `${process.cwd()}/uploads/${relativePath}`;
+
+    await Bun.write(absPath, file);
+
+    db.update(schema.teams).set({ bannerPath: relativePath }).where(eq(schema.teams.id, params.teamId)).run();
+    db.insert(schema.activityLog).values({
+      type: 'team_banner_uploaded',
+      category: 'team',
+      actor: user!.username,
+      leagueId: team.leagueId,
+      description: `Uploaded banner for ${team.teamName}`,
       metadata: JSON.stringify({ teamId: params.teamId, path: relativePath, size: file.size }),
     }).run();
 
@@ -544,7 +588,8 @@ export const adminRoutes = new Elysia()
 
   .get('/uploads/:dir/:file', async ({ params, set }) => {
     // Whitelist directories — only the ones we write to
-    if (params.dir !== 'team-logos') { set.status = 404; return 'Not found'; }
+    const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars'];
+    if (!ALLOWED_DIRS.includes(params.dir)) { set.status = 404; return 'Not found'; }
     if (!/^[a-zA-Z0-9_.-]+$/.test(params.file)) { set.status = 400; return 'Invalid filename'; }
     const path = `${process.cwd()}/uploads/${params.dir}/${params.file}`;
     const f = Bun.file(path);
