@@ -48,6 +48,9 @@ export const authRoutes = new Elysia()
         primaryColor: user.primaryColor,
         secondaryColor: user.secondaryColor,
         tertiaryColor: user.tertiaryColor,
+        displayName: user.displayName,
+        bio: user.bio,
+        avatarPath: user.avatarPath,
       },
     }), { headers });
   })

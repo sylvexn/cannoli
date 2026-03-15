@@ -52,6 +52,9 @@ export function validateSession(token: string) {
     primaryColor: user.primaryColor,
     secondaryColor: user.secondaryColor,
     tertiaryColor: user.tertiaryColor,
+    displayName: user.displayName,
+    bio: user.bio,
+    avatarPath: user.avatarPath,
   };
 }
 
@@ -93,6 +96,20 @@ export function clearSessionCookieString(): string {
 /** Check if a user has staff privileges (dev or admin — both have full override power) */
 export function isStaff(user: { role: string } | null | undefined): boolean {
   return !!user && (user.role === 'dev' || user.role === 'admin');
+}
+
+/** True if user is staff or owns the given team (teams.userId === user.id). */
+export function isStaffOrTeamOwner(
+  user: { id: string; role: string } | null | undefined,
+  teamId: string,
+): boolean {
+  if (!user) return false;
+  if (isStaff(user)) return true;
+  const team = db.select({ userId: schema.teams.userId })
+    .from(schema.teams)
+    .where(eq(schema.teams.id, teamId))
+    .get();
+  return !!team && team.userId === parseInt(user.id);
 }
 
 export function parseSessionToken(cookieHeader: string | undefined): string | null {

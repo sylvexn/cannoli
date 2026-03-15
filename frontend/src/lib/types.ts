@@ -11,6 +11,9 @@ export interface User {
   primaryColor?: string | null;
   secondaryColor?: string | null;
   tertiaryColor?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  avatarPath?: string | null;
 }
 
 /** League-level configuration (admin-managed) */

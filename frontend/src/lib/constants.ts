@@ -16,3 +16,26 @@ export const PHASE_COLORS: Record<string, string> = {
   playoffs: 'text-pink bg-pink/10',
   offseason: 'text-text-muted bg-surface-overlay',
 };
+
+// ─── Profile / settings limits ───────────────────────────────────────────────
+export const MAX_DISPLAY_NAME = 32;
+export const MAX_BIO = 280;
+export const MAX_TEAM_BIO = 280;
+export const MAX_AVATAR_BYTES = 512 * 1024;
+export const MAX_BANNER_BYTES = 1024 * 1024;
+
+/** Profile color swatch presets — lifted from settings.tsx */
+export const PROFILE_COLOR_SWATCHES = [
+  '#7dd3fc', '#a78bfa', '#fb7185',
+  '#22d3ee', '#34d399', '#facc15',
+  '#fb923c', '#f43f5e', '#ec4899',
+  '#8b5cf6', '#3b82f6', '#10b981',
+  '#eab308', '#f97316', '#ef4444',
+];
+
+/** Default landing page options for user preferences */
+export const DEFAULT_LANDING_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '/', label: 'Home (League Overview)' },
+  { value: '/me', label: 'My Profile' },
+  { value: '/replays', label: 'Replays' },
+];

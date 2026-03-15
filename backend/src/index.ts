@@ -4,6 +4,7 @@ import { parseSessionToken, validateSession } from './lib/auth';
 import type { AuthUser } from './middleware/auth';
 
 import { authRoutes } from './routes/auth';
+import { userRoutes } from './routes/users';
 import { leagueRoutes } from './routes/leagues';
 import { adminRoutes } from './routes/admin';
 import { draftRoutes } from './routes/draft';
@@ -78,6 +79,7 @@ const app = new Elysia()
   .get('/health', () => ({ status: 'ok' }))
 
   .use(authRoutes)
+  .use(userRoutes)
   .use(leagueRoutes)
   .use(adminRoutes)
   .use(draftRoutes)

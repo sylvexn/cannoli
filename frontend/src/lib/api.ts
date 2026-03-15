@@ -182,6 +182,63 @@ export interface ApiAuthUser {
   primaryColor?: string | null;
   secondaryColor?: string | null;
   tertiaryColor?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  avatarPath?: string | null;
+}
+
+export interface ApiUserPreferences {
+  theme: 'dark' | 'light';
+  density: 'compact' | 'comfortable';
+  defaultLandingPath: string;
+  notifyTrades: boolean;
+  notifyMatches: boolean;
+  notifyAnnouncements: boolean;
+  updatedAt: string | null;
+}
+
+export interface ApiLifetimeStats {
+  seasonsPlayed: number;
+  totalRecord: { wins: number; losses: number };
+  careerKills: number;
+  careerDeaths: number;
+  totalTrades: number;
+  championships: number;
+  leagueBreakdown: Array<{
+    leagueId: string;
+    teamId: string;
+    teamName: string;
+    record: { wins: number; losses: number };
+    finish: 'champion' | 'finalist' | null;
+    isChampion: boolean;
+  }>;
+}
+
+export interface ApiPublicProfile {
+  username: string;
+  displayName: string | null;
+  bio: string | null;
+  avatarPath: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
+  createdAt: string | null;
+  currentTeams: Array<{
+    teamId: string;
+    leagueId: string;
+    teamName: string;
+    teamAbbrev: string;
+    teamColor: string;
+    logoPath: string | null;
+  }>;
+  careerSummary: {
+    seasonsPlayed: number;
+    careerWins: number;
+    careerLosses: number;
+    careerKills: number;
+    careerDeaths: number;
+    championships: number;
+  };
 }
 
 export interface ApiBotStatus {
@@ -404,6 +461,36 @@ export const api = {
   updateMyColors: (colors: { primaryColor?: string | null; secondaryColor?: string | null; tertiaryColor?: string | null }) =>
     mutateJson<{ success: boolean }>('PATCH', '/api/users/me/colors', colors),
 
+  // Profile (displayName, bio)
+  updateMe: (data: { displayName?: string | null; bio?: string | null }) =>
+    mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
+
+  // User avatar upload
+  uploadAvatar: async (file: File) => {
+    const fd = new FormData();
+    fd.append('avatar', file);
+    const res = await fetch(`${API_BASE}/api/users/me/avatar`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Upload failed: ${res.status}`);
+    }
+    return res.json() as Promise<{ success: boolean; path: string }>;
+  },
+
+  // Preferences
+  getMyPreferences: () => fetchJson<ApiUserPreferences>('/api/users/me/preferences'),
+  updateMyPreferences: (prefs: Partial<Omit<ApiUserPreferences, 'updatedAt'>>) =>
+    putJson<{ success: boolean }>('/api/users/me/preferences', prefs),
+
+  // Lifetime stats + public profile
+  getLifetimeStats: () => fetchJson<ApiLifetimeStats>('/api/users/me/lifetime-stats'),
+  getPublicProfile: (username: string) =>
+    fetchJson<ApiPublicProfile>(`/api/users/${encodeURIComponent(username)}`),
+
   // PS Bot
   getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
 
@@ -417,6 +504,22 @@ export const api = {
     const fd = new FormData();
     fd.append('logo', file);
     const res = await fetch(`${API_BASE}/api/teams/${teamId}/logo`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Upload failed: ${res.status}`);
+    }
+    return res.json() as Promise<{ success: boolean; path: string }>;
+  },
+
+  // Team banner
+  uploadTeamBanner: async (teamId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('banner', file);
+    const res = await fetch(`${API_BASE}/api/teams/${teamId}/banner`, {
       method: 'POST',
       credentials: 'include',
       body: fd,
@@ -457,6 +560,7 @@ export const api = {
     teamColor?: string;
     userId?: number | null;
     showdownUsername?: string | null;
+    bio?: string | null;
   }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
 
   deleteTeam: (teamId: string, opts?: { force?: boolean }) =>

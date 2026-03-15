@@ -15,6 +15,12 @@ export const users = sqliteTable('users', {
   primaryColor: text('primary_color'),
   secondaryColor: text('secondary_color'),
   tertiaryColor: text('tertiary_color'),
+  /** Optional preferred display name (overrides username in UI) */
+  displayName: text('display_name'),
+  /** Short profile bio — ≤ 280 chars enforced at API layer */
+  bio: text('bio'),
+  /** Path to uploaded user avatar (relative to backend/uploads/) */
+  avatarPath: text('avatar_path'),
 });
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
@@ -74,6 +80,10 @@ export const teams = sqliteTable('teams', {
   rank: integer('rank'),
   /** Path to uploaded team logo (relative to backend/uploads/) */
   logoPath: text('logo_path'),
+  /** Path to uploaded team banner (relative to backend/uploads/) */
+  bannerPath: text('banner_path'),
+  /** Short team description — ≤ 280 chars enforced at API layer */
+  bio: text('bio'),
 });
 
 // ─── Pokemon (reference table — full national dex) ──────────────────────────
@@ -334,6 +344,25 @@ export const feedbackSubmissions = sqliteTable('feedback_submissions', {
   /** ISO timestamp when user acknowledged the resolution notification */
   acknowledgedAt: text('acknowledged_at'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
+// ─── User Preferences (one row per user, lazy-upserted) ───────────────────
+
+export const userPreferences = sqliteTable('user_preferences', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  /** UI theme — 'dark' | 'light' (light deferred, default dark) */
+  theme: text('theme', { enum: ['dark', 'light'] }).notNull().default('dark'),
+  /** UI density */
+  density: text('density', { enum: ['compact', 'comfortable'] }).notNull().default('comfortable'),
+  /** Where to land when navigating to '/' */
+  defaultLandingPath: text('default_landing_path').notNull().default('/'),
+  /** Notify when a trade involves this user */
+  notifyTrades: integer('notify_trades', { mode: 'boolean' }).notNull().default(true),
+  /** Notify when a match is ready / completed */
+  notifyMatches: integer('notify_matches', { mode: 'boolean' }).notNull().default(true),
+  /** Notify on site announcements */
+  notifyAnnouncements: integer('notify_announcements', { mode: 'boolean' }).notNull().default(true),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 
 // ─── Player Availability ───────────────────────────────────────────────────
