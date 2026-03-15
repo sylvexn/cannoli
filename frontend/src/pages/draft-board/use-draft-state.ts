@@ -2,7 +2,10 @@ import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'r
 import { toast } from 'sonner';
 import { TIER_LIST, BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
-import { findPickConflict, isMegaForm, getBaseFormName, describeConflict, type ConflictInputRoster } from '@/lib/draft-rules';
+import {
+  findPickConflict, describeConflict,
+  captainHeadroomNeeded, type ConflictInputRoster,
+} from '@/lib/draft-rules';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { useAuth } from '@/lib/auth-context';
@@ -23,25 +26,20 @@ const BANNED_SET = new Set(BANNED);
 // ─── Demo AI: pick a random valid Pokemon ───────────────────────────────────
 
 /**
- * Mirrors backend draft-engine.getAutoPick: filters banned, drafted, over-budget,
- * same-species (base form collision), and mega-cap (max 1 mega per team).
+ * Mirrors backend draft-engine.getAutoPick: filters banned, drafted, and any
+ * pick that would fail findPickConflict (same-species, mega-cap, over-budget,
+ * or roster-reserve when picksLeft is provided).
  */
 function demoAutoPick(
   drafted: Set<string>,
-  teamRosterNames: string[],
-  teamPoints: number,
+  roster: ConflictInputRoster,
   pointCap: number,
 ): { name: string; tier: number } | null {
-  const remaining = pointCap - teamPoints;
-  const teamSpecies = new Set(teamRosterNames.map(getBaseFormName));
-  const teamHasMega = teamRosterNames.some(isMegaForm);
-
   const available = TIER_LIST.filter(e => {
     if (drafted.has(e.name)) return false;
     if (BANNED_SET.has(e.name)) return false;
-    if (e.tier <= 0 || e.tier > remaining) return false;
-    if (teamSpecies.has(getBaseFormName(e.name))) return false;
-    if (teamHasMega && isMegaForm(e.name)) return false;
+    if (e.tier <= 0) return false;
+    if (findPickConflict(e.name, e.tier, roster, pointCap)) return false;
     return true;
   });
   if (available.length === 0) return null;
@@ -380,6 +378,37 @@ export function useDraftState() {
     return map;
   }, [state.mode, state.allPicks]);
 
+  // Per-team picks-left during draft: count of remaining snake slots assigned to that team
+  // (including the slot currently on the clock if it's theirs).
+  const picksLeftByTeam = useMemo(() => {
+    const map = new Map<string, number>();
+    if (state.mode === 'season' || !state.demoStarted) return map;
+    for (let i = state.currentPickIndex; i < state.snakeOrder.length; i++) {
+      const slot = state.snakeOrder[i];
+      map.set(slot.teamId, (map.get(slot.teamId) ?? 0) + 1);
+    }
+    return map;
+  }, [state.mode, state.demoStarted, state.snakeOrder, state.currentPickIndex]);
+
+  const teraCaptainSlots = league.season.teraCaptainSlots ?? 0;
+
+  // Build a ConflictInputRoster for any team (used by AI auto-pick + user pick + queue auto-draft).
+  // Returns undefined when we have no draft context for that team (season mode).
+  const buildConflictRoster = useCallback((teamId: string): ConflictInputRoster | undefined => {
+    if (state.mode === 'season') return undefined;
+    const names = demoTeamRosterNames.get(teamId) ?? [];
+    const pointsUsed = demoTeamPoints.get(teamId) ?? 0;
+    const picksLeft = picksLeftByTeam.get(teamId);
+    // captainHeadroom needs {name, tier} entries — reconstruct from allPicks for this team.
+    const rosterEntries = state.allPicks
+      .filter(p => p.playerId === teamId)
+      .map(p => ({ name: p.pokemonName, tier: p.tier }));
+    const captainReserve = teraCaptainSlots > 0
+      ? captainHeadroomNeeded(rosterEntries, teraCaptainSlots)
+      : 0;
+    return { pokemonNames: names, pointsUsed, picksLeft, captainReserve };
+  }, [state.mode, state.allPicks, demoTeamRosterNames, demoTeamPoints, picksLeftByTeam, teraCaptainSlots]);
+
   // Timer tick for demo mode — runs whenever draft is active (isPlaying OR user's turn)
   const demoTimerActive = state.mode === 'demo' && state.demoStarted && !state.timerPaused
     && state.currentPickIndex < state.snakeOrder.length;
@@ -434,48 +463,46 @@ export function useDraftState() {
 
     // AI picks after a short delay (simulates thinking)
     const delay = setTimeout(() => {
-      const teamPts = demoTeamPoints.get(currentSlot.teamId) ?? 0;
-      const teamNames = demoTeamRosterNames.get(currentSlot.teamId) ?? [];
-      const pick = demoAutoPick(draftedSet, teamNames, teamPts, state.pointCap);
+      const ctx = buildConflictRoster(currentSlot.teamId);
+      if (!ctx) return;
+      const pick = demoAutoPick(draftedSet, ctx, state.pointCap);
       if (pick) {
         dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
       }
     }, 300 + Math.random() * 700); // 300-1000ms thinking time
 
     return () => clearTimeout(delay);
-  }, [state.mode, state.demoStarted, currentSlot, isUserTurn, isDemoComplete, demoTeamPoints, demoTeamRosterNames, draftedSet, state.pointCap]);
+  }, [state.mode, state.demoStarted, currentSlot, isUserTurn, isDemoComplete, buildConflictRoster, draftedSet, state.pointCap]);
 
   // Auto-pick for user on timer expiry
   useEffect(() => {
     if (state.mode !== 'demo' || !state.demoStarted || !isUserTurn) return;
     if (state.timerSeconds > 0) return;
 
-    // Timer expired for user — auto-pick
-    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
-    const teamNames = demoTeamRosterNames.get(state.userTeamId!) ?? [];
-    const pick = demoAutoPick(draftedSet, teamNames, teamPts, state.pointCap);
+    const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
+    if (!ctx) return;
+    const pick = demoAutoPick(draftedSet, ctx, state.pointCap);
     if (pick) {
       dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
     }
-  }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, demoTeamPoints, demoTeamRosterNames, draftedSet, state.pointCap, state.userTeamId]);
+  }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId]);
 
   // Auto-draft from queue when it's user's turn and autoDraftQueue is enabled
   useEffect(() => {
     if (!isUserTurn || !state.autoDraftQueue || state.draftQueue.length === 0) return;
     if (!state.demoStarted || isDemoComplete) return;
 
-    // Find first queued Pokemon that's still draftable: not already taken, fits budget,
-    // not a same-species or mega-cap conflict on the user's roster.
-    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
-    const teamNames = demoTeamRosterNames.get(state.userTeamId!) ?? [];
-    const conflictRoster: ConflictInputRoster = { pokemonNames: teamNames, pointsUsed: teamPts };
+    // Find first queued Pokemon that's still draftable per findPickConflict
+    // (handles drafted, dup species, mega cap, budget + roster reservation).
+    const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
+    if (!ctx) return;
 
     let chosen: { name: string; tier: number } | null = null;
     for (const name of state.draftQueue) {
       if (draftedSet.has(name)) continue;
       const entry = TIER_LIST.find(e => e.name === name);
       if (!entry) continue;
-      if (findPickConflict(name, entry.tier, conflictRoster, state.pointCap)) continue;
+      if (findPickConflict(name, entry.tier, ctx, state.pointCap)) continue;
       chosen = { name, tier: entry.tier };
       break;
     }
@@ -488,7 +515,7 @@ export function useDraftState() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [isUserTurn, state.autoDraftQueue, state.draftQueue, state.demoStarted, isDemoComplete, demoTeamPoints, demoTeamRosterNames, draftedSet, state.pointCap, state.userTeamId]);
+  }, [isUserTurn, state.autoDraftQueue, state.draftQueue, state.demoStarted, isDemoComplete, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId]);
 
   // ─── Live mode: WebSocket connection ──────────────────────────────
   const wsEnabled = state.mode === 'live';
@@ -577,20 +604,17 @@ export function useDraftState() {
       return;
     }
 
-    const teamPts = demoTeamPoints.get(state.userTeamId!) ?? 0;
-    const teamNames = demoTeamRosterNames.get(state.userTeamId!) ?? [];
-    const conflict = findPickConflict(
-      pokemonName, entry.tier,
-      { pokemonNames: teamNames, pointsUsed: teamPts },
-      state.pointCap,
-    );
-    if (conflict) {
-      toast.error(describeConflict(conflict));
-      return;
+    const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
+    if (ctx) {
+      const conflict = findPickConflict(pokemonName, entry.tier, ctx, state.pointCap);
+      if (conflict) {
+        toast.error(describeConflict(conflict));
+        return;
+      }
     }
 
     dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
-  }, [state.mode, isUserTurn, draftedSet, demoTeamPoints, demoTeamRosterNames, state.userTeamId, state.pointCap, handleLivePick]);
+  }, [state.mode, isUserTurn, draftedSet, buildConflictRoster, state.userTeamId, state.pointCap, handleLivePick]);
 
   // ─── Shared lookups ──────────────────────────────────────────────
 
@@ -756,23 +780,31 @@ export function useDraftState() {
   // Draft order: worst record picks first
   const draftOrder = useMemo(() => [...standings].reverse(), [standings]);
 
-  // User's remaining budget for affordability checks
+  // Conflict context for the user's roster — used by pool grid + popover to flag
+  // picks that would fail validation (mega cap / dup species / over budget / reserve).
+  const userConflictRoster = useMemo<ConflictInputRoster | undefined>(() => {
+    if (!state.userTeamId) return undefined;
+    return buildConflictRoster(state.userTeamId);
+  }, [state.userTeamId, buildConflictRoster]);
+
+  // Highest tier the user can pick right now, accounting for picks-left × min-cost
+  // and captain reserve. Falls back to raw remaining when no draft context exists.
+  const userMaxAffordableCost = useMemo(() => {
+    if (!userConflictRoster) return undefined;
+    const remaining = state.pointCap - userConflictRoster.pointsUsed;
+    if (userConflictRoster.picksLeft == null) return remaining;
+    const futureSlots = Math.max(0, userConflictRoster.picksLeft - 1);
+    const reserve = futureSlots + (userConflictRoster.captainReserve ?? 0);
+    return Math.max(0, remaining - reserve);
+  }, [userConflictRoster, state.pointCap]);
+
+  // Raw remaining (unreserved) — kept around for status displays that show
+  // budget literally rather than max pickable.
   const userBudgetRemaining = useMemo(() => {
     if (!state.userTeamId) return undefined;
     const spent = teamPoints.get(state.userTeamId) ?? 0;
     return state.pointCap - spent;
   }, [state.userTeamId, teamPoints, state.pointCap]);
-
-  // Conflict context for the user's roster — used by pool grid + popover to flag
-  // picks that would fail validation (mega cap / dup species / over budget).
-  const userConflictRoster = useMemo<ConflictInputRoster | undefined>(() => {
-    if (!state.userTeamId) return undefined;
-    const roster = teamRosters.get(state.userTeamId) ?? [];
-    return {
-      pokemonNames: roster.map(r => r.name),
-      pointsUsed: teamPoints.get(state.userTeamId) ?? 0,
-    };
-  }, [state.userTeamId, teamRosters, teamPoints]);
 
   return {
     state,
@@ -793,6 +825,7 @@ export function useDraftState() {
     wsConnected,
     presence,
     userBudgetRemaining,
+    userMaxAffordableCost,
     userConflictRoster,
     draftTimerEnabled,
     draftDemoVisible,

@@ -15,7 +15,8 @@ interface DraftPoolWithRailProps {
   selectedTeamId: string | null;
   isUserPickable?: boolean;
   showTierBadges?: boolean;
-  userBudgetRemaining?: number;
+  /** Highest tier the user can take right now after reserving for remaining picks + captain markup */
+  userMaxAffordableCost?: number;
   userConflictRoster?: ConflictInputRoster;
   pointCap?: number;
   draftQueue?: string[];
@@ -38,7 +39,7 @@ interface DraftPoolWithRailProps {
  */
 export function DraftPoolWithRail(props: DraftPoolWithRailProps) {
   const {
-    poolByTier, ownershipMap, userBudgetRemaining, showTierBadges,
+    poolByTier, ownershipMap, userMaxAffordableCost, showTierBadges,
   } = props;
 
   const showRail = showTierBadges && poolByTier.length > 1;
@@ -74,22 +75,22 @@ export function DraftPoolWithRail(props: DraftPoolWithRailProps) {
     const stats = new Map<number, { total: number; affordable: number; owned: number }>();
     for (const [tier, entries] of poolByTier) {
       const owned = entries.filter(e => ownershipMap.has(e.name)).length;
-      const affordable = userBudgetRemaining != null
-        ? entries.filter(e => !ownershipMap.has(e.name) && tier <= userBudgetRemaining).length
+      const affordable = userMaxAffordableCost != null
+        ? entries.filter(e => !ownershipMap.has(e.name) && tier <= userMaxAffordableCost).length
         : 0;
       stats.set(tier, { total: entries.length, affordable, owned });
     }
     return stats;
-  }, [poolByTier, ownershipMap, userBudgetRemaining]);
+  }, [poolByTier, ownershipMap, userMaxAffordableCost]);
 
   const bestInBudgetTier = useMemo(() => {
-    if (!showRail || userBudgetRemaining == null) return null;
+    if (!showRail || userMaxAffordableCost == null) return null;
     for (const [tier] of poolByTier) {
       const s = tierStats.get(tier);
       if (s && s.affordable > 0) return tier;
     }
     return null;
-  }, [showRail, poolByTier, tierStats, userBudgetRemaining]);
+  }, [showRail, poolByTier, tierStats, userMaxAffordableCost]);
 
   const jumpToTier = (tier: number) => {
     const el = tierRefs.current.get(tier);

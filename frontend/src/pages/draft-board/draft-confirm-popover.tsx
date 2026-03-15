@@ -10,7 +10,11 @@ import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
-import { findPickConflict, describeConflict, type ConflictInputRoster } from '@/lib/draft-rules';
+import {
+  findPickConflict, describeConflict,
+  findPickWarning, describeWarning,
+  type ConflictInputRoster,
+} from '@/lib/draft-rules';
 
 interface DraftConfirmPopoverProps {
   /** Pokemon name to draft, or null if hidden */
@@ -111,9 +115,12 @@ export function DraftConfirmPopover({
   const stats = rosterMon?.stats ?? pokeData?.stats;
   const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
-  // Conflict pre-flight (mega cap / dupe species / over budget).
+  // Pre-flight: hard conflicts (block) and soft warnings (notify, don't block).
   const conflict = tierEntry && userConflictRoster
     ? findPickConflict(name, tierEntry.tier, userConflictRoster, pointCap)
+    : null;
+  const warning = !conflict && tierEntry && userConflictRoster
+    ? findPickWarning(name, tierEntry.tier, userConflictRoster, pointCap)
     : null;
   const blocked = !!conflict;
 
@@ -180,11 +187,19 @@ export function DraftConfirmPopover({
           </div>
         )}
 
-        {/* Conflict warning (mega cap / dup species / over budget) */}
+        {/* Hard conflict — blocks the action */}
         {conflict && (
           <div className="mt-2 px-2 py-1.5 rounded border border-loss/30 bg-loss/[0.06] text-[10px] font-mono text-loss flex items-start gap-1.5">
             <AlertTriangle size={11} className="shrink-0 mt-px" />
             <span className="leading-snug">{describeConflict(conflict)}</span>
+          </div>
+        )}
+
+        {/* Soft warning — pick is legal, surface trade-off (e.g. captain reserve) */}
+        {warning && (
+          <div className="mt-2 px-2 py-1.5 rounded border border-draw/30 bg-draw/[0.06] text-[10px] font-mono text-draw flex items-start gap-1.5">
+            <AlertTriangle size={11} className="shrink-0 mt-px" />
+            <span className="leading-snug">{describeWarning(warning)}</span>
           </div>
         )}
 

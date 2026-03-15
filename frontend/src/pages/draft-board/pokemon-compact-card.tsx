@@ -22,8 +22,8 @@ interface PokemonCompactCardProps {
   showTier?: boolean;
   /** Queue position (1-3) if queued, undefined if not */
   queuePosition?: number;
-  /** Roster conflict with the user's current team (mega cap, dupe species). */
-  conflictKind?: 'duplicate-species' | 'mega-cap' | null;
+  /** Roster/budget conflict that would make this pick illegal right now. */
+  conflictKind?: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null;
   isMega?: boolean;
   isTeraBanned?: boolean;
   /** Tier ≤9 and not tera-banned — eligible to be a captain (with markup) */
@@ -224,7 +224,9 @@ export function PokemonCompactCard({
           </>
         ) : hasConflict ? (
           <span className="truncate">
-            {conflictKind === 'mega-cap' ? 'mega cap' : 'dup species'}
+            {conflictKind === 'mega-cap' ? 'mega cap'
+              : conflictKind === 'duplicate-species' ? 'dup species'
+              : 'reserve'}
           </span>
         ) : looksPickable ? (
           <span>Pick</span>

@@ -78,22 +78,65 @@ export function isMegaForm(name: string): boolean {
 
 // ─── Conflict detection ────────────────────────────────────────────────────
 
+/** Cheapest mon in the tier list — used as the floor when reserving budget for remaining picks. */
+export const MIN_PICK_COST = 1;
+
+/**
+ * Hard conflicts: a pick that hits any of these is illegal — backend will reject
+ * it, so the UI also blocks the action.
+ */
 export type ConflictReason =
   | { kind: 'duplicate-species'; conflictsWith: string }
   | { kind: 'mega-cap'; conflictsWith: string }
   | { kind: 'over-budget'; cost: number; budget: number }
+  /** Fits raw budget but leaves <(picksLeft - 1) × MIN_PICK_COST for remaining slots */
+  | { kind: 'roster-reserve'; cost: number; maxAffordable: number; picksLeft: number }
   | { kind: 'banned' };
+
+/**
+ * Soft warnings: legal picks that you might still want to second-guess. Surfaced
+ * to the user but never block the action — captains are designated post-draft
+ * and managers may decide to forgo markup headroom.
+ */
+export type PickWarning =
+  | { kind: 'captain-reserve'; cost: number; reserveNeeded: number; deficit: number };
 
 export interface ConflictInputRoster {
   pokemonNames: string[];
   pointsUsed: number;
+  /**
+   * Number of snake-draft slots this team still has, INCLUDING the one being decided.
+   * When omitted, the roster-reserve check is skipped (e.g. season mode, FA pickup).
+   */
+  picksLeft?: number;
+  /**
+   * Worst-case extra points needed to designate captains from the eventual roster
+   * (see captainHeadroomNeeded). When omitted or 0, the captain-reserve warning is skipped.
+   */
+  captainReserve?: number;
+}
+
+/**
+ * Maximum tier the user can pick right now without breaking any HARD invariant
+ * (raw budget + roster-reserve). Captain reserve is not folded in — it's a soft
+ * warning, not a block.
+ */
+export function getMaxAffordableCost(
+  roster: ConflictInputRoster,
+  pointCap: number,
+): number {
+  const remaining = pointCap - roster.pointsUsed;
+  if (roster.picksLeft == null) return remaining;
+  const futureSlots = Math.max(0, roster.picksLeft - 1);
+  return Math.max(0, remaining - futureSlots * MIN_PICK_COST);
 }
 
 /**
  * Check whether `name` would be a legal addition to a roster.
- * Mirrors backend draft-engine.validatePick (without the DB hits).
+ * Mirrors backend draft-engine.validatePick (without the DB hits) and adds the
+ * picks-left budget reservation the backend should also enforce.
  *
- * Returns the first conflict found, or null if pickable.
+ * Returns the first hard conflict found, or null if pickable.
  */
 export function findPickConflict(
   name: string,
@@ -115,8 +158,43 @@ export function findPickConflict(
     const offender = roster.pokemonNames.find(isMegaForm);
     return { kind: 'mega-cap', conflictsWith: offender ?? '' };
   }
-  if (roster.pointsUsed + tier > pointCap) {
-    return { kind: 'over-budget', cost: tier, budget: pointCap - roster.pointsUsed };
+  const remaining = pointCap - roster.pointsUsed;
+  if (tier > remaining) {
+    return { kind: 'over-budget', cost: tier, budget: remaining };
+  }
+  if (roster.picksLeft != null) {
+    const futureSlots = Math.max(0, roster.picksLeft - 1);
+    const minReserve = futureSlots * MIN_PICK_COST;
+    if (tier > remaining - minReserve) {
+      return { kind: 'roster-reserve', cost: tier, maxAffordable: remaining - minReserve, picksLeft: roster.picksLeft };
+    }
+  }
+  return null;
+}
+
+/**
+ * Soft warning: would this pick eat into the captain markup reserve?
+ * Only meaningful when `captainReserve > 0`. Returns null if no warning applies
+ * or the pick would also fail findPickConflict (those are surfaced as conflicts).
+ */
+export function findPickWarning(
+  _name: string,
+  tier: number,
+  roster: ConflictInputRoster,
+  pointCap: number,
+): PickWarning | null {
+  const reserveNeeded = roster.captainReserve ?? 0;
+  if (reserveNeeded <= 0) return null;
+  const remainingAfter = pointCap - roster.pointsUsed - tier;
+  const futureSlots = roster.picksLeft != null ? Math.max(0, roster.picksLeft - 1) : 0;
+  const headroomAfterMinReserve = remainingAfter - futureSlots * MIN_PICK_COST;
+  if (headroomAfterMinReserve < reserveNeeded) {
+    return {
+      kind: 'captain-reserve',
+      cost: tier,
+      reserveNeeded,
+      deficit: reserveNeeded - headroomAfterMinReserve,
+    };
   }
   return null;
 }
@@ -126,7 +204,15 @@ export function describeConflict(c: ConflictReason): string {
     case 'duplicate-species': return `Already have ${c.conflictsWith} — same species`;
     case 'mega-cap':          return `Already have a Mega (${c.conflictsWith}) — max 1 per team`;
     case 'over-budget':       return `${c.cost}pt costs more than ${c.budget}pt remaining`;
+    case 'roster-reserve':    return `${c.cost}pt would leave too little for ${c.picksLeft - 1} more pick${c.picksLeft - 1 === 1 ? '' : 's'} (max ${c.maxAffordable}pt now)`;
     case 'banned':            return 'Banned';
+  }
+}
+
+export function describeWarning(w: PickWarning): string {
+  switch (w.kind) {
+    case 'captain-reserve':
+      return `Eats into captain reserve by ${w.deficit}pt (need ~${w.reserveNeeded}pt for tera markup)`;
   }
 }
 
