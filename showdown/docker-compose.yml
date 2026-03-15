@@ -1,0 +1,79 @@
+# Local end-to-end Pokemon Showdown stack for Cannoli.
+#
+# Coolify will build the same Dockerfiles directly (one Coolify "Application"
+# per service), so this compose file is for LOCAL TESTING ONLY — it lets you
+# verify the full handshake (client → game server → backend login) before
+# touching production.
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ services in this file:                                                 │
+# │   ps-server  — Pokemon Showdown game server (port 8000 → host 8000)    │
+# │   ps-client  — nginx serving the PS client + reverse proxy (host 8080) │
+# │                                                                         │
+# │ NOT in this file (run separately, on the host):                        │
+# │   cannoli-backend — bun dev:backend on port 3001 (the login server)    │
+# │   cannoli-frontend — bun dev on port 5173                              │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# Run from the cannoli repo root (so the COPY ps/... paths resolve):
+#   docker compose -f showdown/docker-compose.yml up --build
+#
+# Then in another terminal:
+#   bun dev:backend    # starts the login server + bot
+#   bun dev            # starts the frontend
+#
+# Open http://localhost:5173 → Play tab. The iframe loads http://localhost:8080.
+
+services:
+  ps-server:
+    build:
+      context: ..              # repo root, so `COPY ps/...` resolves
+      dockerfile: showdown/Dockerfile.server
+    image: cannoli-ps-server:local
+    container_name: cannoli-ps-server
+    environment:
+      # In local mode, point the game server at the host-side backend.
+      # `host.docker.internal` resolves to the Docker host on Mac/Windows;
+      # on Linux you may need to add `extra_hosts: ["host.docker.internal:host-gateway"]`.
+      PS_LOGIN_SERVER_URL: http://host.docker.internal:3001/api/ps/
+      PS_KEY_ID: "4"
+      # Paste the contents of ps_public.pem here (or use --env-file)
+      PS_RSA_PUBLIC_KEY: ${PS_RSA_PUBLIC_KEY:?set PS_RSA_PUBLIC_KEY in .env or shell}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist replays + logs across restarts
+      - ps-server-logs:/ps/logs
+      - ps-server-databases:/ps/databases
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  ps-client:
+    build:
+      context: ..
+      dockerfile: showdown/Dockerfile.client
+    image: cannoli-ps-client:local
+    container_name: cannoli-ps-client
+    environment:
+      # nginx envsubst fills these into nginx.conf at startup
+      PS_SERVER_HOST: ps-server
+      PS_LOGIN_HOST: host.docker.internal   # backend runs on the host in dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:80"
+    depends_on:
+      ps-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ps-server-logs:
+  ps-server-databases:

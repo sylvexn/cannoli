@@ -1,9 +1,34 @@
+# syntax=docker/dockerfile:1.7
+#
+# Pokemon Showdown client (Cannoli fork) + nginx reverse proxy for sim.cannoli.live.
+#
+# Serves:
+#   /                         → static PS client (testclient.html as index)
+#   /replay/                  → replay viewer
+#   /showdown/websocket       → reverse-proxied to game server (PS_SERVER_HOST:8000)
+#   /action.php               → reverse-proxied to Cannoli backend (PS_LOGIN_HOST:3001/api/ps/action.php)
+#                               Most XHRs go directly to https://cannoli.live/api/ps/, this is a
+#                               fallback for testclient.html that builds action.php URLs from Config.routes.client.
+#
+# BUILD CONTEXT: cannoli repo root.
+#   Local:   docker build -f showdown/Dockerfile.client -t cannoli-ps-client .
+#   Coolify: Build Context = `/`, Dockerfile = `showdown/Dockerfile.client`
+#
+# RUNTIME ENV:
+#   PS_SERVER_HOST  — hostname of the game server container (compose: ps-server; Coolify: internal service name)
+#   PS_LOGIN_HOST   — hostname of the cannoli backend container (compose: cannoli-backend; Coolify: backend service name)
+#
+# EXPOSED PORT: 80
+
 FROM node:20-slim AS build
 WORKDIR /client
 
-# Clone official Pokemon Showdown client (shallow)
+# Clone official Pokemon Showdown client (shallow). Pin via PS_CLIENT_REF for reproducibility.
+ARG PS_CLIENT_REPO=https://github.com/smogon/pokemon-showdown-client.git
+ARG PS_CLIENT_REF=master
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/smogon/pokemon-showdown-client.git .
+RUN git clone --depth 1 --branch ${PS_CLIENT_REF} ${PS_CLIENT_REPO} . \
+    && rm -rf .git
 
 # Replace upstream jQuery with clean stock version. Smogon's distributed
 # jquery-2.2.4.min.js has injected code that mutates `challstr` field on
