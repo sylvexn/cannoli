@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import type { Player, Trade } from '@/lib/types';
-import type { ApiTradeBlockListing } from '@/lib/api';
+import type { ApiTradeBlockListing, ApiTrade } from '@/lib/api';
 import { api } from '@/lib/api';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { TeamLogo } from '@/components/team-logo';
@@ -41,9 +41,16 @@ export function TradeBlockPage() {
     api.getTradeBlock(league.id).then(setTradeBlockListings).catch(() => {});
   }, [league.id]);
 
-  // Convert API transactions to Trade format
-  const trades: Trade[] = useMemo(() =>
-    transactions
+  // Fetch real trade rows (pending / awaiting_admin / rejected — accepted come via transactions)
+  const [apiTrades, setApiTrades] = useState<ApiTrade[]>([]);
+  const loadTrades = useCallback(() => {
+    api.getTrades(league.id).then(setApiTrades).catch(() => {});
+  }, [league.id]);
+  useEffect(() => { loadTrades(); }, [loadTrades]);
+
+  // Convert API transactions (accepted FA/trade) + live trade rows to Trade format
+  const trades: Trade[] = useMemo(() => {
+    const fromTransactions: Trade[] = transactions
       .filter(t => t.type === 'fa' || t.type === 'trade')
       .map(t => ({
         id: `t${t.id}`,
@@ -56,16 +63,39 @@ export function TradeBlockPage() {
         requesting: t.pokemonIn ? [t.pokemonIn] : [],
         proposedAt: '',
         resolvedAt: '',
-      })),
-    [transactions],
-  );
+      }));
+
+    // Live trade proposals (anything not already accepted — accepted ones are
+    // already represented as transactions above to avoid duplicates)
+    const fromApi: Trade[] = apiTrades
+      .filter(t => t.status !== 'accepted')
+      .map(t => ({
+        id: t.id,
+        week: t.week,
+        status: t.status,
+        proposer: t.proposerId,
+        recipient: t.recipientId,
+        offering: t.offering,
+        requesting: t.requesting,
+        proposedAt: t.proposedAt || '',
+        resolvedAt: t.resolvedAt || '',
+      }));
+
+    return [...fromApi, ...fromTransactions];
+  }, [transactions, apiTrades]);
   const { openSideCard } = usePokemonSideCard();
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
   const [proposeOpen, setProposeOpen] = useState<{ teamId: string } | null>(null);
 
   const activeTrades = useMemo(
-    () => trades.filter(t => t.status === 'pending' || t.status === 'expired').sort((a, b) => b.week - a.week),
+    () => trades.filter(t =>
+      t.status === 'pending' || t.status === 'awaiting_admin' || t.status === 'expired'
+    ).sort((a, b) => b.week - a.week),
     [trades],
+  );
+  const pendingCount = useMemo(
+    () => activeTrades.filter(t => t.status === 'pending' || t.status === 'awaiting_admin').length,
+    [activeTrades],
   );
   const completedTrades = useMemo(() => {
     let list = trades.filter(t => t.status === 'accepted' || t.status === 'rejected');
@@ -231,9 +261,9 @@ export function TradeBlockPage() {
             <CardTitle className="text-sm font-heading font-semibold text-text-primary flex items-center gap-2 uppercase tracking-wider">
               <ArrowLeftRight size={14} className="text-draw" />
               Proposals
-              {activeTrades.filter(t => t.status === 'pending').length > 0 && (
+              {pendingCount > 0 && (
                 <Badge variant="outline" className="text-[10px] text-draw border-draw/30 bg-draw/10">
-                  {activeTrades.filter(t => t.status === 'pending').length} pending
+                  {pendingCount} pending
                 </Badge>
               )}
               <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted ml-auto">
@@ -244,7 +274,7 @@ export function TradeBlockPage() {
           <CardContent className="space-y-2 px-3 pb-3">
             {activeTrades.length > 0 ? (
               activeTrades.map(trade => (
-                <CompactTradeCard key={trade.id} trade={trade} leagueUrl={leagueUrl} />
+                <CompactTradeCard key={trade.id} trade={trade} leagueUrl={leagueUrl} onResponded={loadTrades} />
               ))
             ) : (
               <p className="text-sm text-text-muted text-center py-6">No active proposals</p>
@@ -316,11 +346,16 @@ export function TradeBlockPage() {
 
                           <div className="flex items-center gap-1 shrink-0">
                             {proposer && <TeamLogo abbrev={proposer.teamAbbrev} color={proposer.teamColor} size="sm" />}
-                            {!isFreeAgent && recipient && (
-                              <>
-                                <span className="text-text-muted text-[8px]">↔</span>
-                                <TeamLogo abbrev={recipient.teamAbbrev} color={recipient.teamColor} size="sm" />
-                              </>
+                            <span className="text-text-muted text-[8px]">{isFreeAgent ? '→' : '↔'}</span>
+                            {isFreeAgent ? (
+                              <span
+                                className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-dashed border-neon/40 bg-neon/5 text-neon"
+                                title="Free Agent Pool"
+                              >
+                                <UserPlus size={9} />
+                              </span>
+                            ) : recipient && (
+                              <TeamLogo abbrev={recipient.teamAbbrev} color={recipient.teamColor} size="sm" />
                             )}
                           </div>
 

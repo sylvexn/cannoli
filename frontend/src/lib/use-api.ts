@@ -123,6 +123,7 @@ function toPlayer(a: ApiTeam): Player {
     teamName: a.teamName,
     teamAbbrev: a.teamAbbrev,
     teamColor: a.teamColor,
+    userId: a.userId,
     record: a.record,
     roster: a.roster.map(toRosterPokemon),
   };

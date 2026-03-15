@@ -1,13 +1,23 @@
+import { useState } from 'react';
 import type { Player, Trade } from '@/lib/types';
 import { useLeagueData } from '@/lib/league-data-context';
+import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, UserPlus } from 'lucide-react';
+import { ArrowLeftRight, UserPlus, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { toast } from 'sonner';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
@@ -18,29 +28,85 @@ const statusConfig: Record<Trade['status'], { label: string; className: string }
 };
 
 /** Compact horizontal trade card for proposals */
-export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl: (path: string) => string }) {
+export function CompactTradeCard({
+  trade,
+  leagueUrl,
+  onResponded,
+}: {
+  trade: Trade;
+  leagueUrl: (path: string) => string;
+  onResponded?: () => void;
+}) {
   const { players } = useLeagueData();
+  const { user } = useAuth();
   const { openSideCard } = usePokemonSideCard();
   const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
   const proposer = playerMap.get(trade.proposer);
   const isFreeAgent = trade.recipient === 'pool';
   const recipient = isFreeAgent ? null : playerMap.get(trade.recipient);
-  const status = statusConfig[trade.status];
+
+  // Counterparty action eligibility: pending trade + current user owns the recipient team
+  const canRespond = !!(
+    trade.status === 'pending' &&
+    user &&
+    recipient &&
+    recipient.userId != null &&
+    String(recipient.userId) === user.id
+  );
+
+  const [submitting, setSubmitting] = useState<'accept' | 'reject' | null>(null);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  // Track local optimistic status so the card updates immediately
+  const [localStatus, setLocalStatus] = useState<Trade['status'] | null>(null);
+  const displayStatus = localStatus ?? trade.status;
+  const displayStatusConfig = statusConfig[displayStatus];
 
   function findTier(pokemonName: string, teamId: string): number {
     return playerMap.get(teamId)?.roster.find(m => m.name === pokemonName)?.tier ?? 0;
   }
 
+  async function handleAccept() {
+    setSubmitting('accept');
+    try {
+      await api.respondToTrade(trade.id, 'accept');
+      setLocalStatus('awaiting_admin');
+      toast.success('Sent for admin approval');
+      onResponded?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
+  async function confirmReject() {
+    const reason = rejectReason.trim();
+    setSubmitting('reject');
+    try {
+      await api.respondToTrade(trade.id, 'reject', reason || undefined);
+      setLocalStatus('rejected');
+      toast.success('Trade rejected');
+      setRejectOpen(false);
+      setRejectReason('');
+      onResponded?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
   return (
     <div className={cn(
       'rounded-lg border bg-surface-raised/50 overflow-hidden',
-      trade.status === 'pending' ? 'border-draw/20' : 'border-border-default',
+      displayStatus === 'pending' ? 'border-draw/20' : 'border-border-default',
     )}>
       {/* Header strip */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-overlay/20 border-b border-border-subtle/30">
         <span className="text-[10px] font-mono text-text-muted">W{trade.week}</span>
-        <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', status.className)}>
-          {status.label}
+        <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', displayStatusConfig.className)}>
+          {displayStatusConfig.label}
         </Badge>
         {isFreeAgent && (
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-neon border-neon/30 bg-neon/10">
@@ -48,7 +114,7 @@ export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl
           </Badge>
         )}
         <span className="text-[9px] text-text-muted ml-auto">
-          {new Date(trade.proposedAt).toLocaleDateString()}
+          {trade.proposedAt ? new Date(trade.proposedAt).toLocaleDateString() : ''}
         </span>
       </div>
 
@@ -108,6 +174,61 @@ export function CompactTradeCard({ trade, leagueUrl }: { trade: Trade; leagueUrl
           </div>
         </div>
       </div>
+
+      {/* Counterparty actions */}
+      {canRespond && localStatus == null && (
+        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle/30 bg-surface-overlay/20">
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => { setRejectReason(''); setRejectOpen(true); }}
+            disabled={submitting !== null}
+            className="text-loss border-loss/30 hover:bg-loss/10"
+          >
+            <X size={12} />
+            Reject
+          </Button>
+          <Button
+            size="xs"
+            onClick={handleAccept}
+            disabled={submitting !== null}
+            className="bg-win text-surface-base hover:bg-win/90"
+          >
+            <Check size={12} />
+            {submitting === 'accept' ? 'Accepting…' : 'Accept'}
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={rejectOpen} onOpenChange={v => { if (!v && submitting !== 'reject') setRejectOpen(false); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject trade</DialogTitle>
+            <DialogDescription>
+              Optionally explain why so the proposer can adjust.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Reason (optional)"
+            value={rejectReason}
+            onChange={e => setRejectReason(e.target.value)}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)} disabled={submitting === 'reject'}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReject}
+              disabled={submitting === 'reject'}
+              className="bg-loss text-surface-base hover:bg-loss/90"
+            >
+              <X size={14} />
+              {submitting === 'reject' ? 'Rejecting…' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
