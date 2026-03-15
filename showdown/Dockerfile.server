@@ -1,23 +1,69 @@
-FROM node:20-slim
+# syntax=docker/dockerfile:1.7
+#
+# Pokemon Showdown game server (Cannoli fork).
+#
+# BUILD CONTEXT: must be the cannoli repo root (so the COPY ps/... paths resolve).
+#   Local:   docker build -f showdown/Dockerfile.server -t cannoli-ps-server .
+#   Coolify: set Build Context = `/` (repo root) and Dockerfile = `showdown/Dockerfile.server`
+#
+# RUNTIME ENV (set in Coolify on this service):
+#   PS_RSA_PUBLIC_KEY  — PEM string of the matching public key (paired with backend's PS_RSA_PRIVATE_KEY)
+#   PS_KEY_ID          — defaults to 4; must match backend's PS_KEY_ID
+#   PS_LOGIN_SERVER_URL — defaults to https://cannoli.live/api/ps/ (the Cannoli backend)
+#
+# EXPOSED PORT: 8000 (game server WebSocket)
+
+FROM node:20-slim AS build
 WORKDIR /ps
 
-# Clone official Pokemon Showdown (shallow)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/smogon/pokemon-showdown.git .
+# Pin upstream PS to a known-good revision so rebuilds are reproducible.
+# Bump this hash deliberately when you want to pull in upstream changes.
+ARG PS_REPO=https://github.com/smogon/pokemon-showdown.git
+ARG PS_REF=master
 
-# Install deps
-RUN npm install --omit=dev
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy Cannoli config + chat plugin
+RUN git clone --depth 1 --branch ${PS_REF} ${PS_REPO} . \
+    && rm -rf .git
+
+# Production deps only (skips devDependencies — eslint, mocha, tsc, etc.)
+RUN npm install --omit=dev --no-audit --no-fund
+
+# Cannoli config (env-driven — reads PS_RSA_PUBLIC_KEY, PS_LOGIN_SERVER_URL, etc. at runtime)
 COPY ps/config-example.js config/config.js
+
+# Cannoli /cannoli-battle chat plugin
 COPY ps/cannoli.ts server/chat-plugins/cannoli.ts
 
-# CannoliBot global voice
+# CannoliBot gets global voice (+) so it can use /cannoli-battle in any room
 RUN echo "cannolibot,+" >> config/usergroups.csv
 
-# Replay storage volume
+# Replay log volume mount target
 RUN mkdir -p logs
 
+# ─── Runtime stage ──────────────────────────────────────────────────────────
+FROM node:20-slim AS runtime
+WORKDIR /ps
+
+# Curl needed only for healthcheck (PS exposes /api/ping or websocket upgrade).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /ps /ps
+
+# Drop root for the actual server process.
+RUN useradd --system --uid 1001 --home /ps showdown \
+    && chown -R showdown:showdown /ps
+USER showdown
+
 EXPOSE 8000
+
+# PS server has no built-in HTTP healthcheck. The websocket endpoint upgrades on
+# /showdown/websocket; a plain GET returns 200. Use that.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/ >/dev/null || exit 1
 
 CMD ["node", "pokemon-showdown", "start", "--no-security"]

@@ -7,3 +7,15 @@ plan
 dist
 .env
 .env.*
+
+# Showdown: only ship the small files the Dockerfiles actually COPY.
+# Skip the multi-GB cloned forks (server/, client/) and any local PEMs that
+# aren't already gitignored — they should arrive via env vars, not COPY.
+showdown/server
+showdown/client
+showdown/*.pem
+showdown/.env
+
+# Local notes
+notes2
+
