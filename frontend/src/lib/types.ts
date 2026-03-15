@@ -32,6 +32,8 @@ export interface Player {
   teamName: string;
   teamAbbrev: string;
   teamColor: string;
+  /** Owner user id (null if no manager assigned) */
+  userId?: number | null;
   record: { wins: number; losses: number; differential: number };
   roster: RosterPokemon[];
 }

@@ -46,6 +46,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         teamName: t.teamName,
         teamAbbrev: t.teamAbbrev,
         teamColor: t.teamColor,
+        userId: t.userId,
         record: t.record,
         roster: t.roster.map(r => ({
           name: r.name,

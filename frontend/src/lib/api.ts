@@ -69,6 +69,7 @@ export interface ApiTeam {
   rank: number;
   showdownUsername: string | null;
   logoPath?: string | null;
+  userId: number | null;
   record: { wins: number; losses: number; differential: number };
   roster: ApiRosterPokemon[];
 }
@@ -448,6 +449,18 @@ export const api = {
     userId?: number | null;
     showdownUsername?: string | null;
   }) => postJson<{ id: string }>(`/api/leagues/${leagueId}/teams`, data),
+
+  updateTeam: (teamId: string, data: {
+    coachName?: string;
+    teamName?: string;
+    teamAbbrev?: string;
+    teamColor?: string;
+    userId?: number | null;
+    showdownUsername?: string | null;
+  }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
+
+  deleteTeam: (teamId: string, opts?: { force?: boolean }) =>
+    deleteJson<{ success: boolean }>(`/api/teams/${teamId}${opts?.force ? '?force=1' : ''}`),
 
   // Feedback
   submitFeedback: (title: string, description: string, page?: string) =>

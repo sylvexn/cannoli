@@ -139,6 +139,7 @@ export const leagueRoutes = new Elysia()
         rank: team.rank,
         showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
+        userId: team.userId,
         record: { wins, losses, differential },
         roster: enrichedRoster,
       };
