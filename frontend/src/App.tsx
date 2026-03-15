@@ -16,6 +16,7 @@ import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
 import { TradeBlockPage } from '@/pages/trade-block';
+import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
 import { ArchivePage } from '@/pages/archive';
@@ -28,6 +29,13 @@ const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ def
 const MatchupCenterPage = lazy(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazy(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
 
+// Draft board redesign previews — standalone canvas, no app shell
+const TestDraftIndexPage = lazy(() => import('./pages/test-draft').then(m => ({ default: m.TestDraftIndexPage })));
+const TestDraft1Page = lazy(() => import('./pages/test-draft/test1').then(m => ({ default: m.TestDraft1Page })));
+const TestDraft2Page = lazy(() => import('./pages/test-draft/test2').then(m => ({ default: m.TestDraft2Page })));
+const TestDraft3Page = lazy(() => import('./pages/test-draft/test3').then(m => ({ default: m.TestDraft3Page })));
+const TestDraft4Page = lazy(() => import('./pages/test-draft/test4').then(m => ({ default: m.TestDraft4Page })));
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -39,6 +47,13 @@ export default function App() {
             {/* Public routes — no sidebar */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
+
+            {/* Draft board redesign previews — standalone, no app shell */}
+            <Route path="/test-draft" element={<Suspense fallback={<PageLoadingSpinner />}><TestDraftIndexPage /></Suspense>} />
+            <Route path="/test-draft/1" element={<Suspense fallback={<PageLoadingSpinner />}><TestDraft1Page /></Suspense>} />
+            <Route path="/test-draft/2" element={<Suspense fallback={<PageLoadingSpinner />}><TestDraft2Page /></Suspense>} />
+            <Route path="/test-draft/3" element={<Suspense fallback={<PageLoadingSpinner />}><TestDraft3Page /></Suspense>} />
+            <Route path="/test-draft/4" element={<Suspense fallback={<PageLoadingSpinner />}><TestDraft4Page /></Suspense>} />
 
             {/* App shell (works for both guests and authenticated users) */}
             <Route element={<AppShell />}>
@@ -54,6 +69,7 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route path="draft" element={<Suspense fallback={<PageLoadingSpinner />}><DraftBoardPage /></Suspense>} />
                   <Route path="trades" element={<TradeBlockPage />} />
+                  <Route path="free-agents" element={<FreeAgentsPage />} />
                 </Route>
               </Route>
 

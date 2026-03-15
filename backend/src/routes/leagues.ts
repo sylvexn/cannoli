@@ -700,7 +700,7 @@ export const leagueRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
     const { teamId, pokemonName, dropPokemonName } = body as {
       teamId: string;
@@ -719,9 +719,18 @@ export const leagueRoutes = new Elysia()
       .get();
     if (!team) { set.status = 404; return { error: 'Team not found in league' }; }
 
-    // Verify pokemon exists and is available
+    // Authorization: staff can pick up onto any team; otherwise the caller must
+    // own the target team (and can only act on their own team).
+    if (!isStaff(user) && team.userId !== parseInt(user.id)) {
+      set.status = 403;
+      return { error: 'Not your team' };
+    }
+
+    // Verify pokemon exists, is draftable (tier > 0), and isn't banned
     const pkmn = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
     if (!pkmn) { set.status = 404; return { error: 'Pokemon not found' }; }
+    if (pkmn.tier <= 0) { set.status = 400; return { error: `${pokemonName} is not draftable` }; }
+    if (pkmn.banned) { set.status = 400; return { error: `${pokemonName} is banned` }; }
 
     const alreadyRostered = db.select().from(schema.rosters)
       .where(eq(schema.rosters.pokemonName, pokemonName))
