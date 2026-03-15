@@ -412,6 +412,100 @@ export const adminRoutes = new Elysia()
     return { id: teamId };
   })
 
+  // ─── Team update ──────────────────────────────────────────────────
+
+  .put('/api/teams/:teamId', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = body as Record<string, unknown>;
+
+    const updates: Record<string, unknown> = {};
+    if (typeof coachName === 'string' && coachName.trim()) updates.coachName = coachName.trim();
+    if (typeof teamName === 'string' && teamName.trim()) updates.teamName = teamName.trim();
+    if (typeof teamAbbrev === 'string' && teamAbbrev.trim()) updates.teamAbbrev = teamAbbrev.trim();
+    if (typeof teamColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(teamColor)) updates.teamColor = teamColor;
+    if (userId === null) updates.userId = null;
+    else if (typeof userId === 'number') updates.userId = userId;
+    if (showdownUsername === null) updates.showdownUsername = null;
+    else if (typeof showdownUsername === 'string') updates.showdownUsername = showdownUsername.trim() || null;
+
+    if (Object.keys(updates).length === 0) {
+      set.status = 400; return { error: 'No valid fields to update' };
+    }
+
+    tx(() => {
+      db.update(schema.teams).set(updates).where(eq(schema.teams.id, params.teamId)).run();
+      db.insert(schema.activityLog).values({
+        type: 'team_updated',
+        category: 'admin',
+        actor: user.username,
+        leagueId: team.leagueId,
+        description: `Updated team ${team.teamAbbrev}: ${Object.keys(updates).join(', ')}`,
+        metadata: JSON.stringify({ teamId: params.teamId, updates }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
+  // ─── Team delete (with safety: forbid if has roster/picks/match-results) ─
+
+  .delete('/api/teams/:teamId', ({ params, query, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const force = query.force === '1' || query.force === 'true';
+
+    const rosterCount = db.select({ c: sql<number>`COUNT(*)` })
+      .from(schema.rosters).where(eq(schema.rosters.teamId, params.teamId)).get()?.c ?? 0;
+    const matchPokemonCount = db.select({ c: sql<number>`COUNT(*)` })
+      .from(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, params.teamId)).get()?.c ?? 0;
+    const matchCount = db.select({ c: sql<number>`COUNT(*)` })
+      .from(schema.matches)
+      .where(sql`(${schema.matches.homeTeamId} = ${params.teamId} OR ${schema.matches.awayTeamId} = ${params.teamId}) AND ${schema.matches.homeScore} IS NOT NULL`)
+      .get()?.c ?? 0;
+
+    if (!force && (rosterCount > 0 || matchPokemonCount > 0 || matchCount > 0)) {
+      set.status = 409;
+      return {
+        error: `Team has ${rosterCount} roster entries, ${matchPokemonCount} match stats, ${matchCount} completed matches. Pass ?force=1 to delete anyway.`,
+        code: 'TEAM_HAS_DATA',
+        rosterCount,
+        matchPokemonCount,
+        matchCount,
+      };
+    }
+
+    tx(() => {
+      // Cascade clean up team-scoped rows. Don't touch matches with other live teams.
+      db.delete(schema.rosters).where(eq(schema.rosters.teamId, params.teamId)).run();
+      db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, params.teamId)).run();
+      db.delete(schema.draftPicks).where(eq(schema.draftPicks.teamId, params.teamId)).run();
+      db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.teamId, params.teamId)).run();
+      db.delete(schema.playerAvailability).where(eq(schema.playerAvailability.teamId, params.teamId)).run();
+      db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.teamId, params.teamId)).run();
+      // Drop matches mentioning this team (other team's record loses those rows too — necessary for a clean delete)
+      db.delete(schema.matches).where(sql`${schema.matches.homeTeamId} = ${params.teamId} OR ${schema.matches.awayTeamId} = ${params.teamId}`).run();
+      db.delete(schema.transactions).where(sql`${schema.transactions.teamId} = ${params.teamId} OR ${schema.transactions.otherTeamId} = ${params.teamId}`).run();
+      db.delete(schema.trades).where(sql`${schema.trades.proposerId} = ${params.teamId} OR ${schema.trades.recipientId} = ${params.teamId}`).run();
+      db.delete(schema.teams).where(eq(schema.teams.id, params.teamId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'team_deleted',
+        category: 'admin',
+        actor: user.username,
+        leagueId: team.leagueId,
+        description: `Deleted team ${team.teamName} (${team.teamAbbrev})${force ? ' [forced]' : ''}`,
+        metadata: JSON.stringify({ teamId: params.teamId, force, rosterCount, matchPokemonCount, matchCount }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
   // ─── Team logo upload ──────────────────────────────────────────────
 
   .post('/api/teams/:teamId/logo', async ({ params, request, user, set }) => {
