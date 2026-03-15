@@ -1,20 +1,73 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+  DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '@/components/ui/select';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
-import type { ApiTeam } from '@/lib/api';
+import type { ApiTeam, ApiAuthUser } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { toast } from 'sonner';
-import { Upload, ImageIcon } from 'lucide-react';
+import {
+  Upload, ImageIcon, Plus, Pencil, Trash2,
+  UserCog, Gamepad2, Palette,
+} from 'lucide-react';
+
+const QUICK_COLORS = [
+  '#ee8130', '#6390f0', '#7ac74c', '#a33ea1',
+  '#e2bf65', '#96d9d6', '#c22e28', '#a98ff3',
+  '#f95587', '#b6a136', '#735797', '#b7b7ce',
+];
+
+interface TeamFormState {
+  coachName: string;
+  teamName: string;
+  teamAbbrev: string;
+  teamColor: string;
+  userId: number | null;
+  showdownUsername: string;
+}
+
+function emptyForm(): TeamFormState {
+  return {
+    coachName: '',
+    teamName: '',
+    teamAbbrev: '',
+    teamColor: QUICK_COLORS[0],
+    userId: null,
+    showdownUsername: '',
+  };
+}
 
 export function AdminTeams() {
   const { leagues } = useAppData();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
+  const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Dialog state
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
+  const [formLeagueId, setFormLeagueId] = useState<string>('');
+  const [formTeamId, setFormTeamId] = useState<string | null>(null);
+  const [form, setForm] = useState<TeamFormState>(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Delete dialog
+  const [deletingTeam, setDeletingTeam] = useState<ApiTeam | null>(null);
+  const [deleteForce, setDeleteForce] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function loadTeams() {
     if (leagues.length === 0) return;
+    setLoading(true);
     Promise.all(
       leagues.map(l => api.getTeams(l.id).then(teams => [l.id, teams] as const))
     ).then(results => {
@@ -24,6 +77,87 @@ export function AdminTeams() {
   }
 
   useEffect(loadTeams, [leagues]);
+
+  useEffect(() => {
+    api.getUsers().then(setUsers).catch(() => {});
+  }, []);
+
+  function openCreate(leagueId: string) {
+    setFormMode('create');
+    setFormLeagueId(leagueId);
+    setFormTeamId(null);
+    setForm(emptyForm());
+    setFormOpen(true);
+  }
+
+  function openEdit(team: ApiTeam, leagueId: string) {
+    setFormMode('edit');
+    setFormLeagueId(leagueId);
+    setFormTeamId(team.id);
+    setForm({
+      coachName: team.name || '',
+      teamName: team.teamName,
+      teamAbbrev: team.teamAbbrev,
+      teamColor: team.teamColor,
+      userId: team.userId ?? null,
+      showdownUsername: team.showdownUsername ?? '',
+    });
+    setFormOpen(true);
+  }
+
+  async function submitForm() {
+    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = form;
+    if (!coachName.trim() || !teamName.trim() || !teamAbbrev.trim()) {
+      toast.error('Coach, team name, and abbreviation are required');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      if (formMode === 'create') {
+        await api.createTeam(formLeagueId, {
+          coachName: coachName.trim(),
+          teamName: teamName.trim(),
+          teamAbbrev: teamAbbrev.trim().toUpperCase(),
+          teamColor,
+          userId: userId ?? null,
+          showdownUsername: showdownUsername.trim() || null,
+        });
+        toast.success(`Created ${teamName}`);
+      } else if (formTeamId) {
+        await api.updateTeam(formTeamId, {
+          coachName: coachName.trim(),
+          teamName: teamName.trim(),
+          teamAbbrev: teamAbbrev.trim().toUpperCase(),
+          teamColor,
+          userId: userId ?? null,
+          showdownUsername: showdownUsername.trim() || null,
+        });
+        toast.success(`Updated ${teamName}`);
+      }
+      setFormOpen(false);
+      loadTeams();
+    } catch (err: any) {
+      toast.error(err.message || 'Save failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deletingTeam) return;
+    setDeleting(true);
+    try {
+      await api.deleteTeam(deletingTeam.id, { force: deleteForce });
+      toast.success(`Deleted ${deletingTeam.teamName}`);
+      setDeletingTeam(null);
+      setDeleteForce(false);
+      loadTeams();
+    } catch (err: any) {
+      toast.error(err.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function handleLogoUpload(teamId: string, file: File) {
     if (!file.type.startsWith('image/')) {
@@ -36,7 +170,6 @@ export function AdminTeams() {
     }
     try {
       const result = await api.uploadTeamLogo(teamId, file);
-      // Append cache-buster so the new image renders immediately
       const cacheBust = `?v=${Date.now()}`;
       setTeamsPerLeague(prev => {
         const next: Record<string, ApiTeam[]> = {};
@@ -57,67 +190,251 @@ export function AdminTeams() {
 
   const allTeams = Object.values(teamsPerLeague).flat();
   const logoCount = allTeams.filter(t => !!t.logoPath).length;
+  const managedCount = allTeams.filter(t => t.userId != null).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-4 text-sm">
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Total Teams:</span>
-          <span className="text-text-primary font-medium font-mono">
-            {allTeams.length}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Logos Set:</span>
-          <span className="text-win font-medium font-mono">{logoCount}</span>
-        </div>
+      {/* Stats strip */}
+      <div className="flex flex-wrap gap-4 text-sm">
+        <Stat label="Total Teams" value={allTeams.length} />
+        <Stat label="Managers Assigned" value={`${managedCount}/${allTeams.length}`} accent={managedCount === allTeams.length ? 'win' : 'draw'} />
+        <Stat label="Logos Set" value={`${logoCount}/${allTeams.length}`} accent={logoCount === allTeams.length ? 'win' : 'draw'} />
       </div>
 
+      {/* Per-league sections */}
       {leagues.map(league => {
         const teams = teamsPerLeague[league.id] || [];
-        if (teams.length === 0) return null;
-
         return (
           <Card key={league.id}>
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: league.color }} />
-                {league.name}
-                <Badge variant="outline" className="text-[10px] ml-auto">{teams.length} teams</Badge>
-              </CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: league.color }} />
+                  {league.name}
+                  <Badge variant="outline" className="text-[10px]">{teams.length} teams</Badge>
+                </CardTitle>
+                <Button
+                  size="sm"
+                  onClick={() => openCreate(league.id)}
+                  className="bg-neon text-surface-base hover:bg-neon/90"
+                >
+                  <Plus size={14} />
+                  Add Team
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {teams.map(team => (
-                  <TeamLogoCard
-                    key={team.id}
-                    team={team}
-                    onUpload={(file) => handleLogoUpload(team.id, file)}
-                  />
-                ))}
-              </div>
+              {teams.length === 0 ? (
+                <div className="text-center py-6 text-sm text-text-muted">
+                  No teams yet. Click "Add Team" to create one.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                  {teams.map(team => (
+                    <TeamRow
+                      key={team.id}
+                      team={team}
+                      manager={users.find(u => String(u.id) === String(team.userId))}
+                      onUpload={(file) => handleLogoUpload(team.id, file)}
+                      onEdit={() => openEdit(team, league.id)}
+                      onDelete={() => { setDeletingTeam(team); setDeleteForce(false); }}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         );
       })}
+
+      {/* Create/Edit dialog */}
+      <Dialog open={formOpen} onOpenChange={v => { if (!v) setFormOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{formMode === 'create' ? 'New Team' : `Edit ${form.teamAbbrev}`}</DialogTitle>
+            <DialogDescription>
+              {formMode === 'create'
+                ? `Add a team to ${leagues.find(l => l.id === formLeagueId)?.name ?? 'this league'}.`
+                : 'Update team metadata. The team ID stays fixed.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <FormField label="Coach Name">
+                <Input
+                  value={form.coachName}
+                  onChange={e => setForm(f => ({ ...f, coachName: e.target.value }))}
+                  placeholder="e.g. Sylvex"
+                />
+              </FormField>
+              <FormField label="Abbreviation">
+                <Input
+                  value={form.teamAbbrev}
+                  onChange={e => setForm(f => ({ ...f, teamAbbrev: e.target.value.toUpperCase() }))}
+                  placeholder="SAS"
+                  maxLength={5}
+                  disabled={formMode === 'edit'}
+                />
+              </FormField>
+            </div>
+            <FormField label="Team Name">
+              <Input
+                value={form.teamName}
+                onChange={e => setForm(f => ({ ...f, teamName: e.target.value }))}
+                placeholder="e.g. Sapphire Sentinels"
+              />
+            </FormField>
+
+            <FormField label="Team Color" icon={<Palette size={11} />}>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_COLORS.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, teamColor: c }))}
+                      className={`w-6 h-6 rounded-full border-2 transition-transform ${form.teamColor === c ? 'border-text-primary scale-110' : 'border-transparent hover:scale-110'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+                <Input
+                  value={form.teamColor}
+                  onChange={e => setForm(f => ({ ...f, teamColor: e.target.value }))}
+                  className="w-24 h-8 text-[11px] font-mono"
+                  maxLength={7}
+                />
+              </div>
+            </FormField>
+
+            <FormField label="Manager (User Account)" icon={<UserCog size={11} />}>
+              <Select
+                value={form.userId == null ? 'none' : String(form.userId)}
+                onValueChange={(v: string | null) => setForm(f => ({ ...f, userId: !v || v === 'none' ? null : parseInt(v) }))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {users
+                    .filter(u => u.active)
+                    .sort((a, b) => a.username.localeCompare(b.username))
+                    .map(u => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.username} <span className="text-text-muted">({u.role})</span>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+
+            <FormField label="Showdown Username" icon={<Gamepad2 size={11} />}>
+              <Input
+                value={form.showdownUsername}
+                onChange={e => setForm(f => ({ ...f, showdownUsername: e.target.value }))}
+                placeholder="(optional, used by live battle bot)"
+              />
+            </FormField>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={submitForm}
+              disabled={submitting}
+              className="bg-neon text-surface-base hover:bg-neon/90"
+            >
+              {submitting ? 'Saving…' : formMode === 'create' ? 'Create' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog open={!!deletingTeam} onOpenChange={v => { if (!v) setDeletingTeam(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {deletingTeam?.teamName}?</DialogTitle>
+            <DialogDescription>
+              This removes the team and all associated rosters, draft picks, matches, and trades.
+              Cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={deleteForce}
+              onChange={e => setDeleteForce(e.target.checked)}
+            />
+            Force-delete even if the team has rosters or completed matches
+          </label>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingTeam(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-loss text-surface-base hover:bg-loss/90"
+            >
+              <Trash2 size={14} />
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function TeamLogoCard({ team, onUpload }: {
+function Stat({ label, value, accent }: { label: string; value: string | number; accent?: 'win' | 'draw' | 'loss' }) {
+  const valueColor =
+    accent === 'win' ? 'text-win' :
+    accent === 'draw' ? 'text-draw' :
+    accent === 'loss' ? 'text-loss' :
+    'text-text-primary';
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-text-muted">{label}:</span>
+      <span className={`${valueColor} font-medium font-mono`}>{value}</span>
+    </div>
+  );
+}
+
+function FormField({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-text-muted flex items-center gap-1">
+        {icon}
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function TeamRow({ team, manager, onUpload, onEdit, onDelete }: {
   team: ApiTeam;
+  manager: ApiAuthUser | undefined;
   onUpload: (file: File) => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-border-default transition-colors">
-      {/* Current logo or placeholder */}
+      {/* Logo with hover-to-upload overlay */}
       <div className="relative shrink-0 group">
         <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" logoPath={team.logoPath} />
         <button
           onClick={() => fileRef.current?.click()}
-          className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Upload logo"
         >
           <Upload size={14} className="text-white" />
         </button>
@@ -136,25 +453,51 @@ function TeamLogoCard({ team, onUpload }: {
 
       {/* Team info */}
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-text-primary truncate">{team.teamName}</div>
-        <div className="text-[10px] text-text-muted">
-          {team.teamAbbrev} · {team.name}
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-text-primary truncate">{team.teamName}</span>
+          <Badge variant="outline" className="text-[10px] px-1.5">{team.teamAbbrev}</Badge>
+        </div>
+        <div className="text-[10px] text-text-muted flex items-center gap-2 mt-0.5">
+          <span className="truncate">{team.name || 'No coach'}</span>
+          {manager ? (
+            <span className="flex items-center gap-1 text-text-secondary">
+              <UserCog size={9} />
+              {manager.username}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-loss/70">
+              <UserCog size={9} />
+              No manager
+            </span>
+          )}
+          {team.showdownUsername && (
+            <span className="flex items-center gap-1 text-text-secondary truncate">
+              <Gamepad2 size={9} />
+              {team.showdownUsername}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Photo upload */}
-      <label className="cursor-pointer text-[10px] text-text-muted hover:text-neon transition-colors flex items-center gap-1">
-        <Upload size={12} />
-        <span>Photo</span>
-        <input type="file" accept="image/*" className="hidden" onChange={() => toast.info('Team photo upload coming soon')} />
-      </label>
-
-      {/* Status */}
+      {/* Status icons */}
       {team.logoPath ? (
         <ImageIcon size={14} className="text-win shrink-0" />
       ) : (
         <span className="text-[10px] text-text-muted/40 shrink-0">No logo</span>
       )}
+
+      {/* Actions */}
+      <Button size="xs" variant="outline" onClick={onEdit} className="shrink-0">
+        <Pencil size={11} />
+      </Button>
+      <Button
+        size="xs"
+        variant="outline"
+        onClick={onDelete}
+        className="shrink-0 text-loss border-loss/30 hover:bg-loss/10"
+      >
+        <Trash2 size={11} />
+      </Button>
     </div>
   );
 }
