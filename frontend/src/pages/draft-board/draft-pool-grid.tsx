@@ -3,9 +3,11 @@ import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { PokemonCompactCard } from './pokemon-compact-card';
 import type { TierEntry } from '@/data/tier-list';
+import { TERA_BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { findPickConflict, isMegaForm, type ConflictInputRoster } from '@/lib/draft-rules';
 
 interface DraftPoolGridProps {
   poolByTier: [number, TierEntry[]][];
@@ -18,6 +20,10 @@ interface DraftPoolGridProps {
   showTierBadges?: boolean;
   /** User's remaining budget — cards above this are unaffordable */
   userBudgetRemaining?: number;
+  /** User's roster info — used to surface dup-species + mega-cap conflicts */
+  userConflictRoster?: ConflictInputRoster;
+  /** Point cap (for conflict detection) */
+  pointCap?: number;
   /** Draft queue for showing queue indicators on cards */
   draftQueue?: string[];
   onCardClick: (name: string) => void;
@@ -34,6 +40,8 @@ export function DraftPoolGrid({
   isUserPickable,
   showTierBadges,
   userBudgetRemaining,
+  userConflictRoster,
+  pointCap = 110,
   draftQueue = [],
   onCardClick,
   onCardHoverStart,
@@ -52,9 +60,12 @@ export function DraftPoolGrid({
       {poolByTier.map(([tier, entries]) => {
         const ownedCount = entries.filter(e => ownershipMap.has(e.name)).length;
         const freeCount = entries.length - ownedCount;
+        const affordableCount = userBudgetRemaining != null
+          ? entries.filter(e => !ownershipMap.has(e.name) && e.tier <= userBudgetRemaining).length
+          : 0;
 
         return (
-          <div key={tier} className="group/tier">
+          <div key={tier} className="group/tier" data-tier={tier}>
             {/* Tier header — sticky */}
             <div className={cn(
               'sticky top-0 z-10 flex items-center gap-2.5 px-2 py-1.5',
@@ -68,12 +79,17 @@ export function DraftPoolGrid({
                 <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-border-subtle text-text-muted font-mono">
                   {entries.length}
                 </Badge>
-                {ownedCount > 0 && (
+                {showTierBadges && affordableCount > 0 && (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-neon/30 text-neon font-mono">
+                    {affordableCount} fits
+                  </Badge>
+                )}
+                {ownedCount > 0 && (
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-border-subtle text-text-muted font-mono">
                     {ownedCount} owned
                   </Badge>
                 )}
-                {freeCount > 0 && (
+                {freeCount > 0 && !showTierBadges && (
                   <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-border-subtle text-text-muted font-mono">
                     {freeCount} FA
                   </Badge>
@@ -95,6 +111,19 @@ export function DraftPoolGrid({
                 const qIdx = draftQueue.indexOf(entry.name);
                 const queuePosition = qIdx >= 0 ? qIdx + 1 : undefined;
 
+                // Conflict detection — only meaningful when there's a user roster context
+                let conflictKind: 'duplicate-species' | 'mega-cap' | null = null;
+                if (showTierBadges && !ownership && userConflictRoster) {
+                  const c = findPickConflict(entry.name, entry.tier, userConflictRoster, pointCap);
+                  if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap')) {
+                    conflictKind = c.kind;
+                  }
+                }
+
+                const isMega = isMegaForm(entry.name);
+                const isTeraBanned = TERA_BANNED.includes(entry.name);
+                const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9;
+
                 return (
                   <PokemonCompactCard
                     key={entry.name}
@@ -102,12 +131,17 @@ export function DraftPoolGrid({
                     types={types}
                     tier={entry.tier}
                     owner={owner}
+                    ownerTraded={ownership?.acquisition.method === 'traded'}
                     isHighlighted={isHighlighted}
                     isUserPickable={isUserPickable && !ownership}
                     dimmed={dimmed}
                     unaffordable={unaffordable}
                     showTier={showTierBadges}
                     queuePosition={queuePosition}
+                    conflictKind={conflictKind}
+                    isMega={isMega}
+                    isTeraBanned={isTeraBanned}
+                    isCaptainEligible={isCaptainEligible}
                     onClick={onCardClick}
                     onHoverStart={onCardHoverStart}
                     onHoverEnd={onCardHoverEnd}

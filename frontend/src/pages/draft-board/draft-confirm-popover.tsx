@@ -5,11 +5,12 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Info, ListOrdered } from 'lucide-react';
+import { Sparkles, Info, ListOrdered, AlertTriangle } from 'lucide-react';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
+import { findPickConflict, describeConflict, type ConflictInputRoster } from '@/lib/draft-rules';
 
 interface DraftConfirmPopoverProps {
   /** Pokemon name to draft, or null if hidden */
@@ -29,6 +30,10 @@ interface DraftConfirmPopoverProps {
   queueFull?: boolean;
   /** Whether it's the user's turn right now */
   isUserTurn?: boolean;
+  /** User's roster info — used to surface conflicts inline (mega cap, dup species). */
+  userConflictRoster?: ConflictInputRoster;
+  /** Point cap (for conflict detection) */
+  pointCap?: number;
 }
 
 export function DraftConfirmPopover({
@@ -43,6 +48,8 @@ export function DraftConfirmPopover({
   isQueued,
   queueFull,
   isUserTurn,
+  userConflictRoster,
+  pointCap = 110,
 }: DraftConfirmPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -103,6 +110,12 @@ export function DraftConfirmPopover({
   const types: PokemonType[] | undefined = rosterMon?.types ?? pokeData?.types;
   const stats = rosterMon?.stats ?? pokeData?.stats;
   const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
+
+  // Conflict pre-flight (mega cap / dupe species / over budget).
+  const conflict = tierEntry && userConflictRoster
+    ? findPickConflict(name, tierEntry.tier, userConflictRoster, pointCap)
+    : null;
+  const blocked = !!conflict;
 
   // Position: above the card, centered. Fall back to below if near top.
   const popoverWidth = 220;
@@ -167,15 +180,24 @@ export function DraftConfirmPopover({
           </div>
         )}
 
+        {/* Conflict warning (mega cap / dup species / over budget) */}
+        {conflict && (
+          <div className="mt-2 px-2 py-1.5 rounded border border-loss/30 bg-loss/[0.06] text-[10px] font-mono text-loss flex items-start gap-1.5">
+            <AlertTriangle size={11} className="shrink-0 mt-px" />
+            <span className="leading-snug">{describeConflict(conflict)}</span>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-1.5 mt-2.5">
           {isUserTurn ? (
             <Button
               onClick={handleConfirm}
-              className="flex-1 h-8 text-xs font-bold bg-neon hover:bg-neon/90 text-surface gap-1"
+              disabled={blocked}
+              className="flex-1 h-8 text-xs font-bold bg-neon hover:bg-neon/90 text-surface gap-1 disabled:opacity-40"
             >
               <Sparkles size={12} />
-              Draft
+              {blocked ? 'Blocked' : 'Draft'}
             </Button>
           ) : onQueue && !isQueued && !queueFull ? (
             <Button
