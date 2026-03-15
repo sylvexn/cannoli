@@ -57,7 +57,7 @@ export function DraftBoardPage() {
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
-    userConflictRoster,
+    userMaxAffordableCost, userConflictRoster,
     draftTimerEnabled, draftDemoVisible,
   } = useDraftState();
 
@@ -88,11 +88,12 @@ export function DraftBoardPage() {
   const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
 
   const handleCardClick = useCallback((name: string) => {
-    // During draft, show popover for free agents (for drafting or queueing)
+    // During draft, show popover for free agents (for drafting or queueing).
+    // Open the popover even if the pick has a conflict so the user can read why.
     if (isLiveMode && !ownershipMap.has(name)) {
       const tierEntry = getTierEntry(name);
-      const affordable = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
-      if (affordable || !isUserTurn) {
+      const fitsRawBudget = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
+      if (fitsRawBudget || !isUserTurn) {
         const rect = cardRectsRef.current.get(name);
         if (rect) {
           setConfirmPopover({ name, rect });
@@ -119,17 +120,20 @@ export function DraftBoardPage() {
   }, []);
 
   const handleQueueAdd = useCallback((name: string) => {
-    // Prevent queueing Pokemon user can't afford
-    if (userBudgetRemaining != null) {
+    // Block queueing Pokemon that wouldn't fit even ignoring conflicts.
+    // We compare to userMaxAffordableCost so a t10 mon with 8pt headroom (because
+    // 2pt is reserved for the remaining slot) is also blocked.
+    const cap = userMaxAffordableCost ?? userBudgetRemaining;
+    if (cap != null) {
       const entry = TIER_LIST.find(e => e.name === name);
-      if (entry && entry.tier > userBudgetRemaining) {
-        toast.error(`Can't queue ${name} — costs ${entry.tier}pt, only ${userBudgetRemaining}pt remaining`);
+      if (entry && entry.tier > cap) {
+        toast.error(`Can't queue ${name} — costs ${entry.tier}pt, only ${cap}pt available after reserving for remaining picks`);
         return;
       }
     }
     dispatch({ type: 'QUEUE_ADD', name });
     toast.info(`${name} added to queue`);
-  }, [dispatch, userBudgetRemaining]);
+  }, [dispatch, userBudgetRemaining, userMaxAffordableCost]);
 
   const handleQueueRemove = useCallback((name: string) => {
     dispatch({ type: 'QUEUE_REMOVE', name });
@@ -332,7 +336,7 @@ export function DraftBoardPage() {
               selectedTeamId={state.selectedTeamId}
               isUserPickable={isUserTurn}
               showTierBadges={isLiveMode}
-              userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+              userMaxAffordableCost={isLiveMode ? userMaxAffordableCost : undefined}
               userConflictRoster={isLiveMode ? userConflictRoster : undefined}
               pointCap={state.pointCap}
               draftQueue={isLiveMode ? state.draftQueue : undefined}
@@ -349,7 +353,7 @@ export function DraftBoardPage() {
                 rosterLookup={rosterLookup}
                 selectedTeamId={state.selectedTeamId}
                 showTierBadges={isLiveMode}
-                userBudgetRemaining={isLiveMode ? userBudgetRemaining : undefined}
+                userMaxAffordableCost={isLiveMode ? userMaxAffordableCost : undefined}
                 onRowClick={handleCardClick}
               />
             </div>

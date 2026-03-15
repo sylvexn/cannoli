@@ -63,6 +63,9 @@ export function generateSnakeOrder(teamOrder: string[], rounds: number): SnakePi
 
 // ─── Pick Validation ────────────────────────────────────────────────────────
 
+/** Cheapest mon — used to reserve budget for remaining roster slots. */
+const MIN_PICK_COST = 1;
+
 /**
  * Validate whether a team can draft a specific Pokemon.
  * Returns { valid: true } or { valid: false, error: '...' }.
@@ -118,10 +121,36 @@ export function validatePick(
     return { valid: false, error: `Max 1 Mega per team — already have one` };
   }
 
-  // 4. Point cap check
+  // 4. Point cap check (raw)
   const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
   if (usedPoints + poke.tier > pointCap) {
     return { valid: false, error: `Would exceed point cap (${usedPoints} + ${poke.tier} > ${pointCap})` };
+  }
+
+  // 5. Roster reservation: must leave (picksLeft - 1) × MIN_PICK_COST for remaining
+  // snake slots assigned to this team. Skips when we can't compute picksLeft (e.g.
+  // FA pickup paths reusing this function).
+  const state = db.select().from(schema.draftState)
+    .where(eq(schema.draftState.leagueId, leagueId))
+    .get();
+  const league = db.select().from(schema.leagues)
+    .where(eq(schema.leagues.id, leagueId))
+    .get();
+  if (state && state.status === 'in_progress' && league?.draftOrder) {
+    const teamOrder: string[] = JSON.parse(league.draftOrder);
+    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const futureSlots = snakeOrder
+      .slice(state.currentPickIndex + 1)
+      .filter(s => s.teamId === teamId).length;
+    const reserve = futureSlots * MIN_PICK_COST;
+    const remainingAfter = pointCap - usedPoints - poke.tier;
+    if (remainingAfter < reserve) {
+      const maxAffordable = pointCap - usedPoints - reserve;
+      return {
+        valid: false,
+        error: `${poke.tier}pt would leave too little for ${futureSlots} remaining pick${futureSlots === 1 ? '' : 's'} (max ${maxAffordable}pt now)`,
+      };
+    }
   }
 
   return { valid: true };
@@ -163,6 +192,24 @@ export function getAutoPick(
     .all();
   const drafted = new Set(allPicks.map(p => p.name));
 
+  // Reserve budget for remaining snake slots so auto-pick can't strand a team
+  // with picks they can't afford.
+  const state = db.select().from(schema.draftState)
+    .where(eq(schema.draftState.leagueId, leagueId))
+    .get();
+  const league = db.select().from(schema.leagues)
+    .where(eq(schema.leagues.id, leagueId))
+    .get();
+  let maxAffordable = remaining;
+  if (state && state.status === 'in_progress' && league?.draftOrder) {
+    const teamOrder: string[] = JSON.parse(league.draftOrder);
+    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const futureSlots = snakeOrder
+      .slice(state.currentPickIndex + 1)
+      .filter(s => s.teamId === teamId).length;
+    maxAffordable = Math.max(0, remaining - futureSlots * MIN_PICK_COST);
+  }
+
   // Find available pokemon sorted by tier descending
   const available = db.select()
     .from(schema.pokemon)
@@ -170,7 +217,7 @@ export function getAutoPick(
     .all()
     .filter(p => {
       if (drafted.has(p.name)) return false;
-      if (p.tier <= 0 || p.tier > remaining) return false;
+      if (p.tier <= 0 || p.tier > maxAffordable) return false;
       if (teamSpecies.has(getBaseFormName(p.name))) return false;
       if (teamHasMega && p.formCategory === 'mega') return false;
       return true;

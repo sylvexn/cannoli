@@ -18,9 +18,13 @@ interface DraftPoolGridProps {
   isUserPickable?: boolean;
   /** Show tier cost badges on cards (draft mode) */
   showTierBadges?: boolean;
-  /** User's remaining budget — cards above this are unaffordable */
-  userBudgetRemaining?: number;
-  /** User's roster info — used to surface dup-species + mega-cap conflicts */
+  /**
+   * Highest tier the user can pick right now after reserving for remaining
+   * picks (×1pt each) and captain markup. Cards over this are flagged
+   * unaffordable. Falls back to userConflictRoster's raw remaining when omitted.
+   */
+  userMaxAffordableCost?: number;
+  /** User's roster info — used to surface dup-species, mega-cap, reserve conflicts */
   userConflictRoster?: ConflictInputRoster;
   /** Point cap (for conflict detection) */
   pointCap?: number;
@@ -39,7 +43,7 @@ export function DraftPoolGrid({
   selectedTeamId,
   isUserPickable,
   showTierBadges,
-  userBudgetRemaining,
+  userMaxAffordableCost,
   userConflictRoster,
   pointCap = 110,
   draftQueue = [],
@@ -60,8 +64,8 @@ export function DraftPoolGrid({
       {poolByTier.map(([tier, entries]) => {
         const ownedCount = entries.filter(e => ownershipMap.has(e.name)).length;
         const freeCount = entries.length - ownedCount;
-        const affordableCount = userBudgetRemaining != null
-          ? entries.filter(e => !ownershipMap.has(e.name) && e.tier <= userBudgetRemaining).length
+        const affordableCount = userMaxAffordableCost != null
+          ? entries.filter(e => !ownershipMap.has(e.name) && e.tier <= userMaxAffordableCost).length
           : 0;
 
         return (
@@ -107,15 +111,16 @@ export function DraftPoolGrid({
                 const types = rosterMon?.types ?? pokeData?.types;
                 const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
                 const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
-                const unaffordable = showTierBadges && !ownership && userBudgetRemaining != null && entry.tier > userBudgetRemaining;
+                const unaffordable = showTierBadges && !ownership && userMaxAffordableCost != null && entry.tier > userMaxAffordableCost;
                 const qIdx = draftQueue.indexOf(entry.name);
                 const queuePosition = qIdx >= 0 ? qIdx + 1 : undefined;
 
-                // Conflict detection — only meaningful when there's a user roster context
-                let conflictKind: 'duplicate-species' | 'mega-cap' | null = null;
+                // Hard conflict (illegal pick): dup species, mega cap, roster reserve.
+                // Captain reserve is a soft warning shown in the popover, not on cards.
+                let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
                 if (showTierBadges && !ownership && userConflictRoster) {
                   const c = findPickConflict(entry.name, entry.tier, userConflictRoster, pointCap);
-                  if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap')) {
+                  if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
                     conflictKind = c.kind;
                   }
                 }

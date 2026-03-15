@@ -26,8 +26,8 @@ interface DraftPoolTableProps {
   selectedTeamId: string | null;
   /** Show tier cost badges (draft mode) */
   showTierBadges?: boolean;
-  /** User's remaining budget — rows above this are unaffordable */
-  userBudgetRemaining?: number;
+  /** Highest tier the user can pick now after reserving for remaining slots */
+  userMaxAffordableCost?: number;
   onRowClick: (name: string) => void;
 }
 
@@ -38,7 +38,7 @@ export function DraftPoolTable({
   rosterLookup,
   selectedTeamId,
   showTierBadges,
-  userBudgetRemaining,
+  userMaxAffordableCost,
   onRowClick,
 }: DraftPoolTableProps) {
   return (
@@ -65,7 +65,7 @@ export function DraftPoolTable({
           const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
           const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
           const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
-          const unaffordable = showTierBadges && !ownership && userBudgetRemaining != null && entry.tier > userBudgetRemaining;
+          const unaffordable = showTierBadges && !ownership && userMaxAffordableCost != null && entry.tier > userMaxAffordableCost;
           const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
           return (
