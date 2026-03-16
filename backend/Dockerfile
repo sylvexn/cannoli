@@ -14,4 +14,4 @@ RUN mkdir -p backend/data
 WORKDIR /app/backend
 EXPOSE 3001
 
-CMD ["sh", "-c", "bun run scripts/seed.ts && bun run src/index.ts"]
+CMD ["bun", "run", "src/index.ts"]
