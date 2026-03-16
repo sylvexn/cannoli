@@ -1,0 +1,55 @@
+# Coolify-managed compose stack for the MOCK environment (mock.cannoli.live).
+# - frontend (nginx) is the only public-facing service
+# - backend is reachable only inside the shared `coolify` docker network
+# - SQLite lives on a named volume so deploys don't wipe data
+#
+# Cross-stack DNS: services join the host-wide `coolify` network as their default
+# network, with explicit aliases that match the historical container names so the
+# showdown stack can target `cannoli-backend-mock` (or `cannoli-backend-live`)
+# without code changes.
+#
+# Build context is the repo root; this file lives in deploy/.
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      CANNOLI_MODE: mock
+      NODE_ENV: production
+    volumes:
+      - cannoli-mock-data:/app/backend/data
+    expose:
+      - "3001"
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - cannoli-backend-mock
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    environment:
+      BACKEND_HOST: cannoli-backend-mock
+    expose:
+      - "80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - coolify.fqdn=https://mock.cannoli.live
+    networks:
+      default:
+        aliases:
+          - cannoli-frontend-mock
+
+volumes:
+  cannoli-mock-data:
+
+networks:
+  default:
+    name: coolify
+    external: true

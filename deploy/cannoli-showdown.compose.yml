@@ -1,0 +1,61 @@
+# Coolify-managed compose stack for the Pokemon Showdown sim (sim.cannoli.live).
+#
+# This stack is INTENDED to be flippable between the mock and live cannoli
+# backends. To swap targets:
+#   1. Update the two env vars on this Coolify application:
+#        PS_LOGIN_HOST          (used by ps-client nginx for action.php proxy)
+#        PS_LOGIN_SERVER_URL    (used by ps-server for RSA-signed assertions)
+#   2. Redeploy.
+#
+# Both targets are aliases on the shared `coolify` docker network, so DNS
+# resolves regardless of which one is selected:
+#   mock → cannoli-backend-mock     (PS_LOGIN_SERVER_URL=http://cannoli-backend-mock:3001/api/ps/)
+#   live → cannoli-backend-live     (PS_LOGIN_SERVER_URL=http://cannoli-backend-live:3001/api/ps/)
+
+services:
+  ps-server:
+    build:
+      context: ..
+      dockerfile: showdown/Dockerfile.server
+    environment:
+      PS_LOGIN_SERVER_URL: ${PS_LOGIN_SERVER_URL}
+      PS_KEY_ID: ${PS_KEY_ID}
+      PS_RSA_PUBLIC_KEY: ${PS_RSA_PUBLIC_KEY}
+    volumes:
+      - ps-logs:/ps/logs
+      - ps-databases:/ps/databases
+    expose:
+      - "8000"
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - cannoli-ps-server
+
+  ps-client:
+    build:
+      context: ..
+      dockerfile: showdown/Dockerfile.client
+    environment:
+      PS_SERVER_HOST: cannoli-ps-server
+      PS_LOGIN_HOST: ${PS_LOGIN_HOST}
+    expose:
+      - "80"
+    restart: unless-stopped
+    depends_on:
+      - ps-server
+    labels:
+      - coolify.fqdn=https://sim.cannoli.live
+    networks:
+      default:
+        aliases:
+          - cannoli-ps-client
+
+volumes:
+  ps-logs:
+  ps-databases:
+
+networks:
+  default:
+    name: coolify
+    external: true

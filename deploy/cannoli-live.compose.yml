@@ -1,0 +1,46 @@
+# Coolify-managed compose stack for the LIVE environment (cannoli.live).
+# Mirror of cannoli-mock.compose.yml with CANNOLI_MODE=live and live aliases.
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      CANNOLI_MODE: live
+      NODE_ENV: production
+    volumes:
+      - cannoli-live-data:/app/backend/data
+    expose:
+      - "3001"
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - cannoli-backend-live
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+    environment:
+      BACKEND_HOST: cannoli-backend-live
+    expose:
+      - "80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+    labels:
+      - coolify.fqdn=https://cannoli.live
+    networks:
+      default:
+        aliases:
+          - cannoli-frontend-live
+
+volumes:
+  cannoli-live-data:
+
+networks:
+  default:
+    name: coolify
+    external: true
