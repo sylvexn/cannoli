@@ -83,12 +83,27 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
           mode: 'demo',
           allPicks: [],
           currentPickIndex: 0,
+          snakeOrder: [],
           isPlaying: false,
           timerSeconds: state.timerDuration,
           demoStarted: false,
         };
       }
-      return { ...state, mode: action.mode };
+      // Live: clear any demo-mode draft state so we don't render a stale snake
+      // order or pick log between the mode switch and the first LIVE_SYNC from
+      // the WS / state fetch.
+      return {
+        ...state,
+        mode: 'live',
+        allPicks: [],
+        snakeOrder: [],
+        currentPickIndex: 0,
+        demoStarted: false,
+        isPlaying: false,
+        timerSeconds: state.timerDuration,
+        timerPaused: false,
+        draftQueue: [],
+      };
     }
 
     case 'SET_VIEW_MODE':

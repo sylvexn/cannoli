@@ -20,6 +20,9 @@ import {
   Circle, Eye,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { useLeague } from '@/lib/league-context';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 import { generateSnakeSlots } from './use-draft-state';
 import type { DraftState, DraftAction } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
@@ -52,9 +55,11 @@ export function DraftControlBar({
   timerEnabled = true,
 }: DraftControlBarProps) {
   const { isAdmin } = useAuth();
+  const league = useLeague();
   const [shiftHeld, setShiftHeld] = useState(false);
   const [forceStartOpen, setForceStartOpen] = useState(false);
   const [hoverOpen, setHoverOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
   const hoverRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -75,36 +80,66 @@ export function DraftControlBar({
   const adminSpecs = presence?.spectators.filter(s => s.role === 'dev' || s.role === 'admin') ?? [];
   const viewerSpecs = presence?.spectators.filter(s => s.role !== 'dev' && s.role !== 'admin') ?? [];
 
+  const startLiveDraft = useCallback(async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      // Backend persists state and we let the WS broadcast bring everyone (including us)
+      // back into 'in_progress' via LIVE_SYNC. Do NOT dispatch DEMO_START here — that
+      // would silently flip the local mode to 'demo' and run client-side AI for the
+      // other teams (the "single sided on mock" bug).
+      await api.startDraft(league.id, state.timerDuration || 120);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start draft');
+    } finally {
+      setStarting(false);
+    }
+  }, [starting, league.id, state.timerDuration]);
+
+  const startDemoDraft = useCallback(() => {
+    if (!state.userTeamId) return;
+    const teamIds = draftOrder.map(p => p.id);
+    const snakeOrder = generateSnakeSlots(teamIds, 10);
+    dispatch({
+      type: 'DEMO_START',
+      snakeOrder,
+      userTeamId: state.userTeamId,
+      timerDuration: state.timerDuration || 30,
+      pointCap: 110,
+    });
+  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
+
   const handleStartClick = useCallback((e: React.MouseEvent) => {
+    if (state.mode === 'live') {
+      // Admin-only on the backend; show the connection panel before forcing.
+      if (!isAdmin) {
+        toast.error('Only admins can start a live draft');
+        return;
+      }
+      if (e.shiftKey && !allConnected) {
+        setForceStartOpen(true);
+        return;
+      }
+      void startLiveDraft();
+      return;
+    }
+    // Demo mode (or any other client-side path)
     if (!state.userTeamId) return;
     if (e.shiftKey && !allConnected) {
       setForceStartOpen(true);
       return;
     }
-    const teamIds = draftOrder.map(p => p.id);
-    const snakeOrder = generateSnakeSlots(teamIds, 10);
-    dispatch({
-      type: 'DEMO_START',
-      snakeOrder,
-      userTeamId: state.userTeamId,
-      timerDuration: state.timerDuration || 30,
-      pointCap: 110,
-    });
-  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch, allConnected]);
+    startDemoDraft();
+  }, [state.mode, state.userTeamId, isAdmin, allConnected, startLiveDraft, startDemoDraft]);
 
   const handleForceStart = useCallback(() => {
-    if (!state.userTeamId) return;
-    const teamIds = draftOrder.map(p => p.id);
-    const snakeOrder = generateSnakeSlots(teamIds, 10);
-    dispatch({
-      type: 'DEMO_START',
-      snakeOrder,
-      userTeamId: state.userTeamId,
-      timerDuration: state.timerDuration || 30,
-      pointCap: 110,
-    });
+    if (state.mode === 'live') {
+      void startLiveDraft();
+    } else {
+      startDemoDraft();
+    }
     setForceStartOpen(false);
-  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
+  }, [state.mode, startLiveDraft, startDemoDraft]);
 
   // ─── Pre-start configuration ──────────────────────────────────────────────
   if (!state.demoStarted) {
@@ -187,7 +222,10 @@ export function DraftControlBar({
               <Button
                 ref={buttonRef}
                 onClick={handleStartClick}
-                disabled={!state.userTeamId}
+                disabled={
+                  starting
+                  || (state.mode === 'live' ? !isAdmin : !state.userTeamId)
+                }
                 className={cn(
                   'h-8 px-4 text-xs font-bold gap-1.5 transition-all',
                   shiftHeld && !allConnected
@@ -195,6 +233,11 @@ export function DraftControlBar({
                     : 'bg-neon/10 text-neon border border-neon/30 hover:bg-neon/20',
                   'disabled:opacity-30',
                 )}
+                title={
+                  state.mode === 'live' && !isAdmin
+                    ? 'Only admins can start a live draft'
+                    : undefined
+                }
               >
                 {shiftHeld && !allConnected ? (
                   <>
@@ -204,7 +247,7 @@ export function DraftControlBar({
                 ) : (
                   <>
                     <Play size={14} />
-                    Start Draft
+                    {starting ? 'Starting…' : 'Start Draft'}
                   </>
                 )}
               </Button>

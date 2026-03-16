@@ -17,6 +17,19 @@ const leaguePresence = new Map<string, Map</* ws id */ object, DraftPresence>>()
 // Store a reference to a ws instance for server-side broadcasting from HTTP endpoints
 let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
 
+/**
+ * Push the current draft snapshot to every subscriber on this league's WS topic.
+ * Use after any HTTP mutation (start, pause, resume, etc.) so connected clients
+ * don't drift — without this, a client that started in 'live' but never reconnects
+ * stays stuck on the pre-start screen even though the backend already advanced.
+ */
+function broadcastDraftState(leagueId: string) {
+  if (!broadcastWs) return;
+  const snapshot = getDraftSnapshot(leagueId);
+  if (!snapshot) return;
+  broadcastWs.publish(`draft:${leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
+}
+
 // Chat rate limiting: track last 3 message timestamps per ws
 const chatRateLimit = new WeakMap<object, number[]>();
 
@@ -50,6 +63,7 @@ export const draftRoutes = new Elysia()
     const { timerDuration } = (body as { timerDuration?: number }) ?? {};
     const result = startDraft(params.leagueId, timerDuration ?? 120, user.username);
     if (!result.success) { set.status = 400; return { error: result.error }; }
+    broadcastDraftState(params.leagueId);
     return getDraftSnapshot(params.leagueId);
   })
 
@@ -99,6 +113,7 @@ export const draftRoutes = new Elysia()
       metadata: JSON.stringify({}),
     }).run();
 
+    broadcastDraftState(params.leagueId);
     return { success: true };
   })
 
@@ -117,6 +132,7 @@ export const draftRoutes = new Elysia()
       metadata: JSON.stringify({}),
     }).run();
 
+    broadcastDraftState(params.leagueId);
     return getDraftSnapshot(params.leagueId);
   })
 
@@ -131,12 +147,7 @@ export const draftRoutes = new Elysia()
     }
     if (!result) { set.status = 400; return { error: 'Cannot auto-pick' }; }
 
-    // Broadcast updated state to all WS subscribers
-    const snapshot = getDraftSnapshot(params.leagueId);
-    if (broadcastWs && snapshot) {
-      broadcastWs.publish(`draft:${params.leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
-    }
-
+    broadcastDraftState(params.leagueId);
     return result;
   })
 
@@ -145,12 +156,7 @@ export const draftRoutes = new Elysia()
     const result = skipPick(params.leagueId, user.username);
     if (!result.success) { set.status = 400; return { error: (result as any).error }; }
 
-    // Broadcast updated state to all WS subscribers
-    const snapshot = getDraftSnapshot(params.leagueId);
-    if (broadcastWs && snapshot) {
-      broadcastWs.publish(`draft:${params.leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
-    }
-
+    broadcastDraftState(params.leagueId);
     return result;
   })
 
