@@ -38,6 +38,11 @@ export function useDraftWebSocket({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [connected, setConnected] = useState(false);
   const pendingIdentifyRef = useRef<{ teamId: string | null; username: string; role: string } | null>(null);
+  // Latest desired-enabled flag, used by onclose to decide whether to reconnect.
+  // Plain ref instead of closure capture so a fast enable→disable→close sequence
+  // doesn't get the stale value and re-open a socket we already tore down.
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   // Stable callback refs
   const onStateRef = useRef(onState);
@@ -93,8 +98,10 @@ export function useDraftWebSocket({
     ws.onclose = () => {
       setConnected(false);
       wsRef.current = null;
-      // Reconnect after 2 seconds
-      if (enabled) {
+      // Only reconnect if we still want to be connected. Reading the ref (not the
+      // closure-captured `enabled`) guarantees a clean disable→close sequence
+      // doesn't trigger a phantom reconnect.
+      if (enabledRef.current) {
         reconnectTimerRef.current = setTimeout(connect, 2000);
       }
     };
@@ -102,7 +109,7 @@ export function useDraftWebSocket({
     ws.onerror = () => {
       ws.close();
     };
-  }, [leagueId, enabled]);
+  }, [leagueId]);
 
   // Connect/disconnect based on enabled flag
   useEffect(() => {
