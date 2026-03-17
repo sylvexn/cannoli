@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>cannoli — under construction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      --fg: #e4e4e7;
+      --muted: #71717a;
+      --accent: #a855f7;
+      --accent-2: #06b6d4;
+      --grid: rgba(168, 85, 247, 0.06);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 32px 32px;
+      background-position: -1px -1px;
+    }
+    .stage {
+      text-align: center;
+      padding: 2rem;
+      max-width: 540px;
+    }
+    .eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+    h1 {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      letter-spacing: -0.02em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+    .accent { color: var(--accent); }
+    .accent-2 { color: var(--accent-2); }
+    .pulse {
+      display: inline-block;
+      width: 0.6rem;
+      height: 0.6rem;
+      background: var(--accent-2);
+      border-radius: 50%;
+      margin-right: 0.6rem;
+      box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.6);
+      animation: pulse 1.8s ease-out infinite;
+      vertical-align: middle;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.6); }
+      70% { box-shadow: 0 0 0 18px rgba(6, 182, 212, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+    }
+    p {
+      color: var(--muted);
+      margin-top: 1.5rem;
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+    .meta {
+      margin-top: 2.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+    .meta span { color: var(--fg); }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <div class="eyebrow"><span class="pulse"></span>under construction</div>
+    <h1><span class="accent">cannoli</span><span class="accent-2">.live</span></h1>
+    <p>
+      The live league is still being prepared. Drafting, scouting, and the
+      battle hub will be online when the season opens.
+    </p>
+    <div class="meta">status: <span>building</span></div>
+  </main>
+</body>
+</html>
