@@ -713,11 +713,18 @@ export const leagueRoutes = new Elysia()
       return { error: 'teamId and pokemonName required' };
     }
 
-    // Verify team exists in league
+    // Resolve target team (whichever teamId was supplied — including a staff
+    // override). Always assert the resolved team belongs to the path league
+    // before mutating rosters/transactions, even though staff may override
+    // `teamId` in the body.
     const team = db.select().from(schema.teams)
-      .where(and(eq(schema.teams.id, teamId), eq(schema.teams.leagueId, params.leagueId)))
+      .where(eq(schema.teams.id, teamId))
       .get();
-    if (!team) { set.status = 404; return { error: 'Team not found in league' }; }
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    if (team.leagueId !== params.leagueId) {
+      set.status = 400;
+      return { error: 'Team does not belong to this league', code: 'team_league_mismatch' };
+    }
 
     // Authorization: staff can pick up onto any team; otherwise the caller must
     // own the target team (and can only act on their own team).
