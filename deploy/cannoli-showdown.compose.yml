@@ -15,7 +15,7 @@
 services:
   ps-server:
     build:
-      context: ..
+      context: .
       dockerfile: showdown/Dockerfile.server
     environment:
       PS_LOGIN_SERVER_URL: ${PS_LOGIN_SERVER_URL}
@@ -34,7 +34,7 @@ services:
 
   ps-client:
     build:
-      context: ..
+      context: .
       dockerfile: showdown/Dockerfile.client
     environment:
       PS_SERVER_HOST: cannoli-ps-server

@@ -7,7 +7,7 @@
 services:
   web:
     build:
-      context: ./maintenance
+      context: ./deploy/maintenance
       dockerfile: Dockerfile
     expose:
       - "80"

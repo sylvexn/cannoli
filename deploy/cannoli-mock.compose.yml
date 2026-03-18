@@ -13,7 +13,7 @@
 services:
   backend:
     build:
-      context: ..
+      context: .
       dockerfile: backend/Dockerfile
     environment:
       CANNOLI_MODE: mock
@@ -30,7 +30,7 @@ services:
 
   frontend:
     build:
-      context: ..
+      context: .
       dockerfile: frontend/Dockerfile
     environment:
       BACKEND_HOST: cannoli-backend-mock
