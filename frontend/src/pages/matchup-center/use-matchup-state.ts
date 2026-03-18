@@ -78,6 +78,8 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
           ivs: 31,
           nature: 'positive',
           boosts: 0,
+          scarf: false,
+          stickyWeb: false,
         }],
       };
     case 'REMOVE_SPEED_SLOT':
