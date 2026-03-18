@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
 import { ArrowRightLeft, Swords, Sparkles, X } from 'lucide-react';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { getTierEntry } from '@/data/tier-list';
@@ -108,8 +109,10 @@ export function PokemonDetailSheet({
                   <PokemonSprite name={name} size="xl" />
                 </div>
                 <div className="flex-1 min-w-0 pt-1">
-                  <h2 className="text-lg font-heading font-bold text-text-primary leading-tight">
-                    {name}
+                  <h2 className="text-lg font-heading font-bold leading-tight">
+                    <Link to={pokemonRoute(name)} className="text-text-primary hover:text-neon hover:underline transition-colors">
+                      {name}
+                    </Link>
                   </h2>
 
                   <div className="flex items-center gap-2 mt-1.5">

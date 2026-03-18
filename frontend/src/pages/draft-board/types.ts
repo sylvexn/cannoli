@@ -110,6 +110,8 @@ export interface DraftState {
   draftQueue: string[];
   /** Auto-draft the first available queued Pokemon when it's user's turn */
   autoDraftQueue: boolean;
+  /** Live mode only: server-broadcast deadline (ISO). UI derives countdown from this. */
+  liveTimerExpiresAt: string | null;
 }
 
 export type DraftAction =

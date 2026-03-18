@@ -103,6 +103,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         timerSeconds: state.timerDuration,
         timerPaused: false,
         draftQueue: [],
+        liveTimerExpiresAt: null,
       };
     }
 
@@ -237,6 +238,7 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
         currentPickIndex: snap.currentPickIndex,
         timerDuration: snap.timerDuration,
         timerSeconds,
+        liveTimerExpiresAt: snap.timerExpiresAt ?? null,
         demoStarted: snap.status === 'in_progress' || snap.status === 'completed',
         isPlaying: snap.status === 'in_progress',
         pointCap: 110,
@@ -353,6 +355,7 @@ export function useDraftState() {
     pointCap: 110,
     draftQueue: [],
     autoDraftQueue: false,
+    liveTimerExpiresAt: null,
   };
 
   const [state, dispatch] = useReducer(draftReducer, initialState);
@@ -441,19 +444,29 @@ export function useDraftState() {
     return () => clearInterval(demoTimerRef.current);
   }, [demoTimerActive]);
 
-  // Timer tick for live mode (decrement client-side between WS syncs)
+  // Live mode: timer is server-driven. We re-derive seconds-remaining each tick
+  // from the last LIVE_SYNC's timerExpiresAt so we display, not drive, the deadline.
+  // We don't mutate state via DEMO_TICK (that's demo-only); instead we force a
+  // re-render at 1Hz so the derived countdown advances visibly between syncs.
+  const [liveNow, setLiveNow] = useState(() => Date.now());
   const liveTimerActive = state.mode === 'live' && state.demoStarted && !state.timerPaused
     && state.currentPickIndex < state.snakeOrder.length;
 
   useEffect(() => {
     if (!liveTimerActive) return;
-
-    const interval = setInterval(() => {
-      dispatch({ type: 'DEMO_TICK' }); // Reuse same tick action
-    }, 1000);
-
+    const interval = setInterval(() => setLiveNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [liveTimerActive]);
+
+  // Display value: clamped seconds-remaining computed from server deadline.
+  const liveTimerSeconds = useMemo(() => {
+    if (state.mode !== 'live' || !state.liveTimerExpiresAt) return state.timerSeconds;
+    const ms = new Date(state.liveTimerExpiresAt).getTime() - liveNow;
+    return Math.max(0, Math.floor(ms / 1000));
+  }, [state.mode, state.liveTimerExpiresAt, state.timerSeconds, liveNow]);
+
+  // Effective timerSeconds for UI: live mode uses server-derived value, else state.
+  const displayTimerSeconds = state.mode === 'live' ? liveTimerSeconds : state.timerSeconds;
 
   // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
   const currentSlot = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted
@@ -561,9 +574,17 @@ export function useDraftState() {
     onPresence: useCallback((data: DraftPresenceData) => {
       setPresence(data);
     }, []),
-    onError: useCallback((error: string) => {
-      console.error('[Draft WS]', error);
-      toast.error('Draft connection lost');
+    onError: useCallback((error: string, meta) => {
+      console.error('[Draft WS]', error, meta);
+      // 'pending_send' is informational (we'll replay on reconnect), not a hard failure.
+      if (meta?.code === 'pending_send') {
+        toast.info(error);
+        return;
+      }
+      // Pick-validation errors come back with structured codes — surface the
+      // server's human message so the user understands why their pick was
+      // rejected (dup_natdex, captain_reserve_violation, etc.).
+      toast.error(error);
     }, []),
   });
 
@@ -844,6 +865,12 @@ export function useDraftState() {
     userConflictRoster,
     draftTimerEnabled,
     draftDemoVisible,
+    /**
+     * Seconds-remaining to display in UI. In live mode, derived from the server
+     * deadline (state.liveTimerExpiresAt) every second. In demo, the reducer
+     * decrements state.timerSeconds directly.
+     */
+    displayTimerSeconds,
   };
 }
 

@@ -1,6 +1,12 @@
 /**
  * WebSocket hook for live draft connection.
  * Connects to /ws/draft/:leagueId, handles reconnection, and dispatches state updates.
+ *
+ * Pick send flow:
+ * 1. Caller calls sendPick(name, teamId) → returns a clientRequestId (uuid).
+ * 2. We cache the request locally so a flaky reconnect can re-send with the
+ *    same id (server dedupes; see backend draft.ts idempotency map).
+ * 3. On 'pick_made' or 'error' for that requestId, the cache entry is dropped.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -12,18 +18,35 @@ export interface DraftPresenceData {
 }
 
 export interface DraftWSMessage {
-  type: 'draft_state' | 'pick_made' | 'presence' | 'error';
+  type: 'draft_state' | 'pick_made' | 'auto_pick' | 'presence' | 'error';
   data?: any;
   error?: string;
+  code?: string;
+  clientRequestId?: string;
+  idempotent?: boolean;
 }
 
 interface UseDraftWebSocketOptions {
   leagueId: string;
   enabled: boolean;
   onState: (state: ApiDraftState) => void;
-  onPickMade: (data: { pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number }; snapshot: ApiDraftState }) => void;
+  onPickMade: (
+    data: { pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number }; snapshot: ApiDraftState },
+    meta?: { clientRequestId?: string; idempotent?: boolean },
+  ) => void;
   onPresence: (data: DraftPresenceData) => void;
-  onError: (error: string) => void;
+  onError: (error: string, meta?: { code?: string; clientRequestId?: string }) => void;
+}
+
+interface PendingPick {
+  pokemonName: string;
+  teamId: string;
+  username: string;
+}
+
+function uuid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function useDraftWebSocket({
@@ -38,9 +61,9 @@ export function useDraftWebSocket({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [connected, setConnected] = useState(false);
   const pendingIdentifyRef = useRef<{ teamId: string | null; username: string; role: string } | null>(null);
+  // In-flight picks awaiting server confirmation; replayed verbatim on reconnect.
+  const pendingPicksRef = useRef<Map<string, PendingPick>>(new Map());
   // Latest desired-enabled flag, used by onclose to decide whether to reconnect.
-  // Plain ref instead of closure capture so a fast enable→disable→close sequence
-  // doesn't get the stale value and re-open a socket we already tore down.
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
@@ -71,6 +94,12 @@ export function useDraftWebSocket({
       if (pendingIdentifyRef.current && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'identify', ...pendingIdentifyRef.current }));
       }
+      // Re-send any in-flight picks with their original clientRequestId. The
+      // server dedupes via idempotency map, so this is safe even if the
+      // original send made it through before the disconnect.
+      for (const [reqId, pp] of pendingPicksRef.current) {
+        ws.send(JSON.stringify({ type: 'pick', clientRequestId: reqId, ...pp }));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -81,13 +110,25 @@ export function useDraftWebSocket({
             onStateRef.current(msg.data);
             break;
           case 'pick_made':
-            onPickMadeRef.current(msg.data);
+            // Drop in-flight cache for this request — server confirmed.
+            if (msg.clientRequestId) pendingPicksRef.current.delete(msg.clientRequestId);
+            onPickMadeRef.current(msg.data, { clientRequestId: msg.clientRequestId, idempotent: msg.idempotent });
+            break;
+          case 'auto_pick':
+            // Server-driven auto-pick (timer expired). Treat as a pick_made;
+            // snapshot is broadcast separately as draft_state.
+            onPickMadeRef.current(
+              { pick: msg.data.pick, snapshot: undefined as unknown as ApiDraftState },
+              { clientRequestId: undefined, idempotent: false },
+            );
             break;
           case 'presence':
             onPresenceRef.current(msg.data);
             break;
           case 'error':
-            onErrorRef.current(msg.error ?? 'Unknown error');
+            // Drop in-flight on terminal errors so we don't replay forever.
+            if (msg.clientRequestId) pendingPicksRef.current.delete(msg.clientRequestId);
+            onErrorRef.current(msg.error ?? 'Unknown error', { code: msg.code, clientRequestId: msg.clientRequestId });
             break;
         }
       } catch {
@@ -98,9 +139,6 @@ export function useDraftWebSocket({
     ws.onclose = () => {
       setConnected(false);
       wsRef.current = null;
-      // Only reconnect if we still want to be connected. Reading the ref (not the
-      // closure-captured `enabled`) guarantees a clean disable→close sequence
-      // doesn't trigger a phantom reconnect.
       if (enabledRef.current) {
         reconnectTimerRef.current = setTimeout(connect, 2000);
       }
@@ -122,6 +160,8 @@ export function useDraftWebSocket({
         wsRef.current = null;
       }
       setConnected(false);
+      // Drop in-flight picks when leaving live mode — they're not relevant anymore.
+      pendingPicksRef.current.clear();
     }
 
     return () => {
@@ -141,13 +181,25 @@ export function useDraftWebSocket({
     }
   }, []);
 
-  // Send a pick via WebSocket
-  const sendPick = useCallback((pokemonName: string, teamId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      onErrorRef.current('Not connected to draft server');
-      return;
+  /**
+   * Send a pick over the WS, returning the clientRequestId so the caller can
+   * correlate confirmations / errors. If the socket isn't open, the pick is
+   * still queued and re-sent on reconnect (same request id → server dedupes).
+   */
+  const sendPick = useCallback((pokemonName: string, teamId: string, username = teamId): string => {
+    const clientRequestId = uuid();
+    const pending: PendingPick = { pokemonName, teamId, username };
+    pendingPicksRef.current.set(clientRequestId, pending);
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'pick', clientRequestId, ...pending }));
+    } else {
+      // Socket not open — onopen will replay from pendingPicksRef.
+      onErrorRef.current('Reconnecting — your pick will be sent automatically', {
+        code: 'pending_send', clientRequestId,
+      });
     }
-    wsRef.current.send(JSON.stringify({ type: 'pick', pokemonName, teamId }));
+    return clientRequestId;
   }, []);
 
   return { connected, sendPick, identify };

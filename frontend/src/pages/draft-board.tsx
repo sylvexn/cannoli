@@ -59,6 +59,7 @@ export function DraftBoardPage() {
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
     userMaxAffordableCost, userConflictRoster,
     draftTimerEnabled, draftDemoVisible,
+    displayTimerSeconds,
   } = useDraftState();
 
   // Mobile viewport detection
@@ -312,7 +313,7 @@ export function DraftBoardPage() {
                 <DraftOnTheClock
                   pick={currentPick}
                   player={drafter}
-                  timerSeconds={state.timerSeconds}
+                  timerSeconds={displayTimerSeconds}
                   timerDuration={state.timerDuration}
                   isUserTurn={isUserTurn}
                   totalPicks={state.snakeOrder.length}

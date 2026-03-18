@@ -1,8 +1,10 @@
 import { useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TeamLogo } from '@/components/team-logo';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import type { Player } from '@/lib/types';
 import type { DraftPickEntry } from './types';
 
@@ -71,12 +73,15 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
               <PokemonSprite name={pick.pokemonName} size="xs" />
 
               {/* Name + tier */}
-              <span className={cn(
-                'text-[10px] font-medium truncate max-w-[72px]',
-                isLatest ? 'text-text-primary' : 'text-text-secondary',
-              )}>
+              <Link
+                to={pokemonRoute(pick.pokemonName)}
+                className={cn(
+                  'text-[10px] font-medium truncate max-w-[72px] hover:text-neon hover:underline transition-colors',
+                  isLatest ? 'text-text-primary' : 'text-text-secondary',
+                )}
+              >
                 {pick.pokemonName}
-              </span>
+              </Link>
 
               <TierBadge points={pick.tier} />
             </div>
