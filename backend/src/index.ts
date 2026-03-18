@@ -1,6 +1,9 @@
 import { Elysia } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { parseSessionToken, validateSession } from './lib/auth';
+import {
+  parseSessionToken, validateSession,
+  csrfTokenForSession, parseCsrfCookie,
+} from './lib/auth';
 import type { AuthUser } from './middleware/auth';
 
 import { authRoutes } from './routes/auth';
@@ -73,6 +76,54 @@ const app = new Elysia()
     const token = parseSessionToken(cookieHeader);
     const user = token ? validateSession(token) : null;
     return { user: user as AuthUser | null, sessionToken: token };
+  })
+
+  // ── Auth guards on state-changing requests ─────────────────────────────────
+  // Two checks fire on the same set of requests (POST/PUT/PATCH/DELETE under
+  // /api), in order:
+  //   1. CSRF double-submit token: header X-CSRF-Token must match csrf_token
+  //      cookie. The cookie is set by /api/auth/login + /api/auth/me; its
+  //      value is HMAC(sessionToken, secret). Login itself is exempt.
+  //   2. mustChangePassword guard: a user flagged for forced password reset
+  //      can only hit /api/auth/change-password, /api/auth/logout, /api/auth/me.
+  //
+  // Reads (GET/HEAD) and unauthenticated requests pass through both guards;
+  // CSRF only matters when there's a session cookie attached.
+  .onBeforeHandle(({ request, user, sessionToken, set }) => {
+    const method = request.method.toUpperCase();
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
+
+    const url = new URL(request.url);
+    const path = url.pathname;
+    if (!path.startsWith('/api/')) return;
+
+    // ── CSRF double-submit ──
+    // Exempt login itself (no session yet). Exempt the PS action.php proxy
+    // path because Showdown's testclient does not participate in our CSRF
+    // scheme; that endpoint has its own auth (sid cookie + signed assertion).
+    const csrfExempt = path === '/api/auth/login' || path === '/api/ps/action.php';
+    if (!csrfExempt && sessionToken) {
+      const cookieHeader = request.headers.get('cookie') ?? undefined;
+      const cookieToken = parseCsrfCookie(cookieHeader);
+      const headerToken = request.headers.get('x-csrf-token');
+      const expected = csrfTokenForSession(sessionToken);
+      if (!cookieToken || !headerToken || cookieToken !== expected || headerToken !== expected) {
+        set.status = 403;
+        return { error: 'CSRF token missing or invalid', code: 'csrf_failed' };
+      }
+    }
+
+    // ── Force password change ──
+    if (user?.mustChangePassword) {
+      const allowed =
+        path === '/api/auth/change-password' ||
+        path === '/api/auth/logout' ||
+        path === '/api/auth/me';
+      if (!allowed) {
+        set.status = 403;
+        return { error: 'Password change required', code: 'must_change_password' };
+      }
+    }
   })
 
   .get('/', () => ({ message: 'cannoli api' }))

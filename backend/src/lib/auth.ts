@@ -3,7 +3,7 @@
  */
 
 import { compareSync, hashSync } from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
 import { db, schema } from '../db';
 import { eq, and, gt } from 'drizzle-orm';
 
@@ -115,5 +115,51 @@ export function isStaffOrTeamOwner(
 export function parseSessionToken(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/);
+  return match ? match[1] : null;
+}
+
+// ─── CSRF (double-submit token tied to session) ─────────────────────────────
+// Token is derived deterministically from the session token via HMAC, so we
+// don't need a DB column. Anyone holding the cookie can compute it; the point
+// is that a cross-site attacker cannot read the cookie value (httpOnly
+// session is unreadable, and we don't accept CORS credentialed requests from
+// untrusted origins) so they can't echo it back in the X-CSRF-Token header.
+
+const CSRF_SECRET = process.env.CANNOLI_CSRF_SECRET
+  || process.env.CANNOLI_SESSION_SECRET
+  || 'cannoli-dev-csrf-secret-change-in-prod';
+
+export function csrfTokenForSession(sessionToken: string): string {
+  return createHmac('sha256', CSRF_SECRET).update(sessionToken).digest('hex');
+}
+
+export function csrfCookieString(token: string): string {
+  // httpOnly: false so the frontend JS can read it and echo into the header.
+  const parts = [
+    `csrf_token=${token}`,
+    'Path=/',
+    'SameSite=Lax',
+    `Max-Age=${SESSION_TTL_MS / 1000}`,
+  ];
+  if (COOKIE_DOMAIN) parts.push(`Domain=${COOKIE_DOMAIN}`);
+  if (IS_PROD) parts.push('Secure');
+  return parts.join('; ');
+}
+
+export function clearCsrfCookieString(): string {
+  const parts = [
+    'csrf_token=',
+    'Path=/',
+    'SameSite=Lax',
+    'Max-Age=0',
+  ];
+  if (COOKIE_DOMAIN) parts.push(`Domain=${COOKIE_DOMAIN}`);
+  if (IS_PROD) parts.push('Secure');
+  return parts.join('; ');
+}
+
+export function parseCsrfCookie(cookieHeader: string | undefined): string | null {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.match(/(?:^|;\s*)csrf_token=([^;]+)/);
   return match ? match[1] : null;
 }
