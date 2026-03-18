@@ -7,9 +7,17 @@ import { tx } from '../lib/tx';
 function loadTradeContext(tradeId: number) {
   const trade = db.select().from(schema.trades).where(eq(schema.trades.id, tradeId)).get();
   if (!trade) return null;
+  // Both proposer and recipient teams must belong to the trade's league.
+  // Otherwise treat the trade as not-found to avoid leaking existence and
+  // to block cross-league actions on a crafted tradeId.
+  const proposerTeam = db.select().from(schema.teams).where(eq(schema.teams.id, trade.proposerId)).get();
+  const recipientTeam = db.select().from(schema.teams).where(eq(schema.teams.id, trade.recipientId)).get();
+  if (!proposerTeam || !recipientTeam) return null;
+  if (proposerTeam.leagueId !== trade.leagueId) return null;
+  if (recipientTeam.leagueId !== trade.leagueId) return null;
   const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, trade.leagueId)).get();
   const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
-  return { trade, league, season };
+  return { trade, league, season, proposerTeam, recipientTeam };
 }
 
 function deadlinePassed(season: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined): boolean {
@@ -120,15 +128,14 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
-    const { trade, season } = ctx;
+    const { trade, season, recipientTeam } = ctx;
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
 
     const { action, reason } = body as { action: 'accept' | 'reject'; reason?: string };
     if (action !== 'accept' && action !== 'reject') { set.status = 400; return { error: 'action must be accept or reject' }; }
 
     // Authorization: counterparty manager (owner of recipient team) or staff
-    const recipientTeam = db.select().from(schema.teams).where(eq(schema.teams.id, trade.recipientId)).get();
-    const isOwner = recipientTeam?.userId != null && recipientTeam.userId === parseInt(user.id);
+    const isOwner = recipientTeam.userId != null && recipientTeam.userId === parseInt(user.id);
     if (!isOwner && !isStaff(user)) { set.status = 403; return { error: 'Not your trade to respond to' }; }
 
     if (action === 'accept' && deadlinePassed(season)) {
@@ -230,8 +237,9 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const { reason } = (body || {}) as { reason?: string };
 
-    const trade = db.select().from(schema.trades).where(eq(schema.trades.id, tradeId)).get();
-    if (!trade) { set.status = 404; return { error: 'Trade not found' }; }
+    const ctx = loadTradeContext(tradeId);
+    if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
+    const { trade } = ctx;
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
     }
