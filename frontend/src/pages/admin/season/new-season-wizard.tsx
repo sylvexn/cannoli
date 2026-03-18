@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
-import { Sparkles, Plus, X, Check, Calendar, AlertTriangle } from 'lucide-react';
+import { Sparkles, Plus, X, Check } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -12,8 +12,12 @@ import {
 import type { EditableLeague } from './phase-config';
 import { api } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
+import { ProvisionTeamsStep, type LeagueTeamsState, type TeamRow } from './provision-teams-step';
+import { OverlapConfirmDialog } from './overlap-confirm-dialog';
+import { ScheduleDatesStep } from './schedule-dates-step';
+import { ConfirmStep } from './confirm-step';
 
-type WizardStep = 'source' | 'leagues' | 'settings' | 'schedule' | 'confirm';
+type WizardStep = 'source' | 'leagues' | 'settings' | 'teams' | 'schedule' | 'confirm';
 
 interface WizardLeague {
   id: string;
@@ -33,6 +37,7 @@ interface NewSeasonConfig {
   maxTeams: number;
   rosterSize: number;
   weekDates: Record<string, string>;
+  teamsByLeague: LeagueTeamsState[];
 }
 
 function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
@@ -47,118 +52,45 @@ function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
     maxTeams: 12,
     rosterSize: 11,
     weekDates: {},
+    teamsByLeague: [],
   };
 }
 
-function addDays(iso: string, days: number): string {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+function emptyTeamRow(): TeamRow {
+  return { teamName: '', teamAbbrev: '', teamColor: '#888888', managerUsername: '', coachName: '' };
 }
 
-function formatShortDate(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function ScheduleDatesStep({
-  totalWeeks,
-  weekDates,
-  setWeekDates,
-}: {
-  totalWeeks: number;
-  weekDates: Record<string, string>;
-  setWeekDates: (next: Record<string, string>) => void;
-}) {
-  const week1 = weekDates['1'] ?? '';
-
-  function setWeek(week: number, date: string) {
-    const next = { ...weekDates };
-    if (date) next[String(week)] = date;
-    else delete next[String(week)];
-    setWeekDates(next);
-  }
-
-  function fillRest() {
-    if (!week1) return;
-    const next: Record<string, string> = { '1': week1 };
-    for (let w = 2; w <= totalWeeks; w++) {
-      next[String(w)] = addDays(week1, (w - 1) * 7);
+/**
+ * Sync teamsByLeague with currently-included leagues + maxTeams.
+ * - Adds new entries for newly included leagues.
+ * - Drops entries for de-selected leagues.
+ * - Adjusts row counts when maxTeams changes (preserves existing rows).
+ */
+function syncTeamsByLeague(
+  prev: LeagueTeamsState[],
+  included: { id: string; name: string; color: string }[],
+  maxTeams: number,
+): LeagueTeamsState[] {
+  const byId = new Map(prev.map(p => [p.leagueId, p]));
+  return included.map(l => {
+    const existing = byId.get(l.id);
+    const targetCount = existing?.count ?? maxTeams;
+    let rows = existing?.rows ?? [];
+    if (rows.length < targetCount) {
+      rows = [...rows, ...Array.from({ length: targetCount - rows.length }, emptyTeamRow)];
+    } else if (rows.length > targetCount) {
+      rows = rows.slice(0, targetCount);
     }
-    setWeekDates(next);
-  }
-
-  function clearAll() {
-    setWeekDates({});
-  }
-
-  const filledCount = Object.keys(weekDates).filter(k => weekDates[k]).length;
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-text-secondary">
-        Set the date each week ends. Auto-forfeit and auto-week-advance jobs use these to fire on time.
-      </p>
-
-      {/* Autofill row */}
-      <div className="rounded-lg border border-border bg-surface-overlay p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <Calendar size={14} className="text-pink shrink-0" />
-          <label className="text-xs text-text-muted shrink-0">Week 1 date</label>
-          <input
-            type="date"
-            value={week1}
-            onChange={e => setWeek(1, e.target.value)}
-            className="flex h-8 rounded-md border border-border bg-surface-base px-2 py-1 text-xs text-text-primary outline-none transition-colors focus:border-pink/60 [color-scheme:dark]"
-          />
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={fillRest}
-            disabled={!week1}
-            className="ml-auto"
-          >
-            Fill rest weekly
-          </Button>
-        </div>
-        <p className="text-[10px] text-text-muted">
-          Click "Fill rest weekly" to auto-populate weeks 2–{totalWeeks} as +7 day increments. You can edit any week after.
-        </p>
-      </div>
-
-      {/* Per-week list */}
-      <div className="max-h-64 overflow-y-auto pr-1 space-y-1">
-        {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(week => {
-          const value = weekDates[String(week)] ?? '';
-          return (
-            <div key={week} className="flex items-center gap-3 px-2 py-1.5 rounded border border-border-subtle">
-              <span className="text-xs font-mono text-text-muted w-12 shrink-0">W{week}</span>
-              <input
-                type="date"
-                value={value}
-                onChange={e => setWeek(week, e.target.value)}
-                className="flex h-7 flex-1 rounded-md border border-border bg-surface-base px-2 py-1 text-xs text-text-primary outline-none transition-colors focus:border-pink/60 [color-scheme:dark]"
-              />
-              <span className="text-[10px] text-text-muted w-16 text-right">
-                {value ? formatShortDate(value) : '—'}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex items-center justify-between text-[10px] text-text-muted">
-        <span>{filledCount} of {totalWeeks} weeks set</span>
-        {filledCount > 0 && (
-          <button onClick={clearAll} className="hover:text-loss transition-colors">Clear all</button>
-        )}
-      </div>
-    </div>
-  );
+    return {
+      leagueId: l.id,
+      leagueName: l.name,
+      leagueColor: l.color,
+      count: targetCount,
+      rows,
+      cloneSourceSeasonId: existing?.cloneSourceSeasonId ?? null,
+      cloneSourceLeagueId: existing?.cloneSourceLeagueId ?? null,
+    };
+  });
 }
 
 export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onClose: () => void; leagues: EditableLeague[] }) {
@@ -172,11 +104,78 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('#9333ea');
 
+  // Overlap-season confirmation
+  const [overlapPrompt, setOverlapPrompt] = useState<{ priorSeasonNumber: number; priorPhase: string } | null>(null);
+
   function handleClose() {
     setStep('source');
     setConfig(makeInitialConfig(leagues));
     setAddingLeague(false);
+    setOverlapPrompt(null);
     onClose();
+  }
+
+  function buildPayload(includedList: WizardLeague[], overlapOverride: boolean) {
+    const filledWeekDates = Object.fromEntries(
+      Object.entries(config.weekDates).filter(([, v]) => !!v)
+    );
+    return {
+      seasonNumber: config.seasonNumber,
+      totalWeeks: config.totalWeeks,
+      pointCap: config.pointCap,
+      teraCaptainSlots: config.teraCaptainSlots,
+      weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
+      overlapOverride,
+      leagues: includedList.map(l => {
+        const teamState = config.teamsByLeague.find(t => t.leagueId === l.id);
+        const teams = (teamState?.rows ?? [])
+          .filter(r => r.teamName.trim() && r.teamAbbrev.trim())
+          .map(r => ({
+            teamName: r.teamName.trim(),
+            teamAbbrev: r.teamAbbrev.trim(),
+            teamColor: r.teamColor,
+            managerUsername: r.managerUsername.trim() || null,
+            coachName: r.coachName.trim() || undefined,
+          }));
+        return { id: l.id, name: l.name, color: l.color, teams };
+      }),
+    };
+  }
+
+  async function postCreate(includedList: WizardLeague[], overlapOverride: boolean) {
+    setCreating(true);
+    try {
+      const result = await api.createSeason(buildPayload(includedList, overlapOverride));
+      const teamMsg = result.teamsCreated > 0 ? `, ${result.teamsCreated} teams` : '';
+      toast.success(`Season ${config.seasonNumber} created for ${includedList.length} league(s)${teamMsg}`);
+      if (result.unresolvedManagers && result.unresolvedManagers.length > 0) {
+        toast.warning(`Unresolved managers (assign in Teams tab): ${result.unresolvedManagers.join(', ')}`);
+      }
+      refreshLeagues();
+      handleClose();
+    } catch (err: any) {
+      // Detect overlap error and pop confirmation. Backend returns either:
+      //   message text "prior_season_active" (current postJson behavior — only `error` is surfaced)
+      const msg = err?.message || '';
+      if (msg === 'prior_season_active') {
+        // Look up active season number client-side since postJson swallowed extra fields.
+        try {
+          const seasons = await api.getSeasons();
+          const active = seasons.find(s => s.phase !== 'offseason');
+          if (active) {
+            setOverlapPrompt({ priorSeasonNumber: active.seasonNumber, priorPhase: active.phase });
+          } else {
+            toast.error('Backend reported overlap but no active season found');
+          }
+        } catch {
+          toast.error('Overlap detected — could not load prior season info');
+        }
+      } else {
+        toast.error(msg || 'Failed to create season');
+      }
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleCreate() {
@@ -188,31 +187,16 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       toast.error('Select at least one league');
       return;
     }
-    setCreating(true);
-    try {
-      const filledWeekDates = Object.fromEntries(
-        Object.entries(config.weekDates).filter(([, v]) => !!v)
-      );
-      await api.createSeason({
-        seasonNumber: config.seasonNumber,
-        totalWeeks: config.totalWeeks,
-        pointCap: config.pointCap,
-        teraCaptainSlots: config.teraCaptainSlots,
-        weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
-        leagues: included.map(l => ({
-          id: l.id,
-          name: l.name,
-          color: l.color,
-        })),
-      });
-      toast.success(`Season ${config.seasonNumber} created for ${included.length} league(s)`);
-      refreshLeagues();
-      handleClose();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create season');
-    } finally {
-      setCreating(false);
-    }
+    await postCreate(included, false);
+  }
+
+  async function handleOverlapConfirm() {
+    const included = [
+      ...config.leagues.filter(l => l.included),
+      ...config.newLeagues.filter(l => l.included),
+    ];
+    setOverlapPrompt(null);
+    await postCreate(included, true);
   }
 
   function toggleLeague(id: string, isNew: boolean) {
@@ -256,14 +240,23 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   const allLeagues = [...config.leagues, ...config.newLeagues];
   const selectedCount = allLeagues.filter(l => l.included).length;
 
-  const steps: WizardStep[] = ['source', 'leagues', 'settings', 'schedule', 'confirm'];
+  const steps: WizardStep[] = ['source', 'leagues', 'settings', 'teams', 'schedule', 'confirm'];
   const stepIdx = steps.indexOf(step);
+
+  function goToStep(target: WizardStep) {
+    // When entering Teams step, sync teamsByLeague with currently-included leagues.
+    if (target === 'teams') {
+      const included = allLeagues.filter(l => l.included).map(l => ({ id: l.id, name: l.name, color: l.color }));
+      setConfig(p => ({ ...p, teamsByLeague: syncTeamsByLeague(p.teamsByLeague, included, p.maxTeams) }));
+    }
+    setStep(target);
+  }
 
   const QUICK_COLORS = ['#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#be185d', '#4f46e5', '#059669'];
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={step === 'teams' ? 'max-w-3xl' : 'max-w-lg'}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={16} className="text-pink" />
@@ -473,7 +466,16 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
           </div>
         )}
 
-        {/* Step 4: Schedule dates */}
+        {/* Step 4: Provision Teams */}
+        {step === 'teams' && (
+          <ProvisionTeamsStep
+            state={config.teamsByLeague}
+            setState={next => setConfig(p => ({ ...p, teamsByLeague: next }))}
+            defaultMaxTeams={config.maxTeams}
+          />
+        )}
+
+        {/* Step 5: Schedule dates */}
         {step === 'schedule' && (
           <ScheduleDatesStep
             totalWeeks={config.totalWeeks}
@@ -482,95 +484,36 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
           />
         )}
 
-        {/* Step 5: Confirm */}
+        {/* Step 6: Confirm */}
         {step === 'confirm' && (
-          <div className="space-y-3">
-            <p className="text-sm text-text-secondary">Review and confirm your new season setup.</p>
-            <div className="bg-surface-overlay rounded-lg p-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-text-muted">Season</span>
-                <span className="text-text-primary font-mono">{config.seasonNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Source</span>
-                <span className="text-text-primary">{config.copyPrevious ? 'Copied from S10' : 'Fresh setup'}</span>
-              </div>
-              <div className="flex justify-between items-start">
-                <span className="text-text-muted">Leagues</span>
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {allLeagues.filter(l => l.included).map(l => (
-                    <Badge key={l.id} variant="outline" className="text-[10px]" style={{
-                      borderColor: `${l.color}40`, color: l.color, backgroundColor: `${l.color}10`,
-                    }}>
-                      {l.name.replace(' League', '')}
-                      {config.newLeagues.some(nl => nl.id === l.id) && ' (new)'}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="border-t border-border-subtle pt-2 mt-2 space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Weeks</span>
-                  <span className="font-mono">{config.totalWeeks}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Point Cap</span>
-                  <span className="font-mono">{config.pointCap}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Tera Captains</span>
-                  <span className="font-mono">{config.teraCaptainSlots}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Max Teams</span>
-                  <span className="font-mono">{config.maxTeams}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-muted">Roster Size</span>
-                  <span className="font-mono">{config.rosterSize}</span>
-                </div>
-              </div>
-              {(() => {
-                const filled = Object.entries(config.weekDates).filter(([, v]) => !!v);
-                if (filled.length === 0) return null;
-                const sorted = filled.sort((a, b) => Number(a[0]) - Number(b[0]));
-                const first = sorted[0];
-                const last = sorted[sorted.length - 1];
-                return (
-                  <div className="border-t border-border-subtle pt-2 mt-2">
-                    <div className="flex justify-between">
-                      <span className="text-text-muted">Schedule</span>
-                      <span className="font-mono text-xs">
-                        W{first[0]} {formatShortDate(first[1])}
-                        {sorted.length > 1 ? ` – W${last[0]} ${formatShortDate(last[1])}` : ''}
-                        <span className="text-text-muted ml-1">({sorted.length}/{config.totalWeeks})</span>
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            {Object.values(config.weekDates).filter(Boolean).length === 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-draw/30 bg-draw/5 p-3 text-xs text-text-secondary">
-                <AlertTriangle size={14} className="text-draw shrink-0 mt-0.5" />
-                <span>
-                  No schedule dates set. Auto-forfeit and auto-week-advance jobs won't fire until you set
-                  weekly dates in league settings later.
-                </span>
-              </div>
-            )}
-          </div>
+          <ConfirmStep
+            seasonNumber={config.seasonNumber}
+            copyPrevious={config.copyPrevious}
+            totalWeeks={config.totalWeeks}
+            pointCap={config.pointCap}
+            teraCaptainSlots={config.teraCaptainSlots}
+            maxTeams={config.maxTeams}
+            rosterSize={config.rosterSize}
+            weekDates={config.weekDates}
+            teamsByLeague={config.teamsByLeague}
+            includedLeagues={allLeagues.filter(l => l.included).map(l => ({
+              id: l.id,
+              name: l.name,
+              color: l.color,
+              isNew: config.newLeagues.some(nl => nl.id === l.id),
+            }))}
+          />
         )}
 
         <DialogFooter>
           {stepIdx > 0 ? (
-            <Button variant="outline" onClick={() => setStep(steps[stepIdx - 1])}>Back</Button>
+            <Button variant="outline" onClick={() => goToStep(steps[stepIdx - 1]!)}>Back</Button>
           ) : (
             <Button variant="outline" onClick={handleClose}>Cancel</Button>
           )}
           {stepIdx < steps.length - 1 ? (
             <Button
-              onClick={() => setStep(steps[stepIdx + 1])}
+              onClick={() => goToStep(steps[stepIdx + 1]!)}
               disabled={step === 'leagues' && selectedCount === 0}
               className="bg-pink text-surface-base hover:bg-pink/90"
             >
@@ -584,6 +527,17 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
           )}
         </DialogFooter>
       </DialogContent>
+
+      {overlapPrompt && (
+        <OverlapConfirmDialog
+          open={!!overlapPrompt}
+          onClose={() => setOverlapPrompt(null)}
+          priorSeasonNumber={overlapPrompt.priorSeasonNumber}
+          priorPhase={overlapPrompt.priorPhase}
+          newSeasonNumber={config.seasonNumber}
+          onConfirm={handleOverlapConfirm}
+        />
+      )}
     </Dialog>
   );
 }

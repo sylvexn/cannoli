@@ -261,21 +261,62 @@ export const adminRoutes = new Elysia()
     const id = name.trim().toLowerCase().replace(/\s+/g, '-');
     const maxSort = db.select({ max: sql<number>`MAX(sort_order)` }).from(schema.moveCategories).get()?.max || 0;
 
-    db.insert(schema.moveCategories).values({ id, name: name.trim(), sortOrder: maxSort + 1 }).run();
+    tx(() => {
+      db.insert(schema.moveCategories).values({ id, name: name.trim(), sortOrder: maxSort + 1 }).run();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_created',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Created move category "${name.trim()}"`,
+        metadata: JSON.stringify({ categoryId: id, name: name.trim() }),
+      }).run();
+    });
     return { id, name: name.trim() };
   })
 
   .put('/api/move-categories/:id', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name } = body as { name: string };
-    db.update(schema.moveCategories).set({ name }).where(eq(schema.moveCategories.id, params.id)).run();
+    if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
+    const existing = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
+    if (!existing) { set.status = 404; return { error: 'Category not found' }; }
+
+    tx(() => {
+      db.update(schema.moveCategories).set({ name: name.trim() }).where(eq(schema.moveCategories.id, params.id)).run();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_updated',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Renamed move category "${existing.name}" → "${name.trim()}"`,
+        metadata: JSON.stringify({ categoryId: params.id, oldName: existing.name, newName: name.trim() }),
+      }).run();
+    });
     return { success: true };
   })
 
   .delete('/api/move-categories/:id', ({ params, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.categoryId, params.id)).run();
-    db.delete(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).run();
+    const existing = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
+    if (!existing) { set.status = 404; return { error: 'Category not found' }; }
+    const entryCount = db.select({ c: sql<number>`COUNT(*)` })
+      .from(schema.moveCategoryEntries)
+      .where(eq(schema.moveCategoryEntries.categoryId, params.id))
+      .get()?.c ?? 0;
+
+    tx(() => {
+      db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.categoryId, params.id)).run();
+      db.delete(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).run();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_deleted',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Deleted move category "${existing.name}" (${entryCount} entries)`,
+        metadata: JSON.stringify({ categoryId: params.id, name: existing.name, entryCount }),
+      }).run();
+    });
     return { success: true };
   })
 
@@ -283,20 +324,85 @@ export const adminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, isAbility } = body as { name: string; isAbility?: boolean };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
+    const cat = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
+    if (!cat) { set.status = 404; return { error: 'Category not found' }; }
 
     const moveId = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    db.insert(schema.moveCategoryEntries).values({
-      categoryId: params.id,
-      name: name.trim(),
-      moveId,
-      isAbility: isAbility || false,
-    }).run();
+    const entryId = tx(() => {
+      const row = db.insert(schema.moveCategoryEntries).values({
+        categoryId: params.id,
+        name: name.trim(),
+        moveId,
+        isAbility: isAbility || false,
+      }).returning().get();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_entry_added',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Added ${isAbility ? 'ability' : 'move'} "${name.trim()}" to "${cat.name}"`,
+        metadata: JSON.stringify({ categoryId: params.id, categoryName: cat.name, entryId: row.id, name: name.trim(), isAbility: !!isAbility }),
+      }).run();
+      return row.id;
+    });
+    return { success: true, id: entryId };
+  })
+
+  .put('/api/move-category-entries/:id', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const id = parseInt(params.id);
+    const { name, isAbility } = body as { name?: string; isAbility?: boolean };
+    const existing = db.select().from(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, id)).get();
+    if (!existing) { set.status = 404; return { error: 'Entry not found' }; }
+
+    const updates: Record<string, unknown> = {};
+    if (typeof name === 'string' && name.trim()) {
+      updates.name = name.trim();
+      updates.moveId = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+    if (typeof isAbility === 'boolean') updates.isAbility = isAbility;
+    if (Object.keys(updates).length === 0) {
+      set.status = 400; return { error: 'No valid fields to update' };
+    }
+
+    const cat = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, existing.categoryId)).get();
+    tx(() => {
+      db.update(schema.moveCategoryEntries).set(updates).where(eq(schema.moveCategoryEntries.id, id)).run();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_entry_updated',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Updated entry "${existing.name}"${updates.name && updates.name !== existing.name ? ` → "${updates.name}"` : ''} in "${cat?.name ?? existing.categoryId}"`,
+        metadata: JSON.stringify({
+          entryId: id,
+          categoryId: existing.categoryId,
+          before: { name: existing.name, isAbility: existing.isAbility },
+          after: { name: updates.name ?? existing.name, isAbility: updates.isAbility ?? existing.isAbility },
+        }),
+      }).run();
+    });
     return { success: true };
   })
 
   .delete('/api/move-category-entries/:id', ({ params, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, parseInt(params.id))).run();
+    const id = parseInt(params.id);
+    const existing = db.select().from(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, id)).get();
+    if (!existing) { set.status = 404; return { error: 'Entry not found' }; }
+    const cat = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, existing.categoryId)).get();
+
+    tx(() => {
+      db.delete(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, id)).run();
+      db.insert(schema.activityLog).values({
+        type: 'move_category_entry_deleted',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Removed ${existing.isAbility ? 'ability' : 'move'} "${existing.name}" from "${cat?.name ?? existing.categoryId}"`,
+        metadata: JSON.stringify({ entryId: id, categoryId: existing.categoryId, name: existing.name, isAbility: existing.isAbility }),
+      }).run();
+    });
     return { success: true };
   })
 
@@ -313,6 +419,7 @@ export const adminRoutes = new Elysia()
       forfeitPolicy = 'double_forfeit',
       weekDates = null,
       leagues: leaguePayloads = [],
+      overlapOverride = false,
     } = body as {
       seasonNumber: number;
       totalWeeks?: number;
@@ -321,7 +428,20 @@ export const adminRoutes = new Elysia()
       tradeDeadlineWeek?: number;
       forfeitPolicy?: 'double_forfeit' | 'admin_review';
       weekDates?: Record<string, string> | null;
-      leagues?: { id: string; name: string; color: string; draftDate?: string | null }[];
+      leagues?: {
+        id: string;
+        name: string;
+        color: string;
+        draftDate?: string | null;
+        teams?: {
+          coachName?: string;
+          teamName: string;
+          teamAbbrev: string;
+          teamColor?: string;
+          managerUsername?: string | null;
+        }[];
+      }[];
+      overlapOverride?: boolean;
     };
 
     if (!seasonNumber || typeof seasonNumber !== 'number') {
@@ -330,42 +450,132 @@ export const adminRoutes = new Elysia()
     const dup = db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, seasonNumber)).get();
     if (dup) { set.status = 409; return { error: `Season ${seasonNumber} already exists` }; }
 
-    const seasonId = tx(() => {
-      const row = db.insert(schema.seasons).values({
-        seasonNumber,
-        phase: 'predraft',
-        currentWeek: 0,
-        totalWeeks,
-        pointCap,
-        teraCaptainSlots,
-        tradeDeadlineWeek,
-        forfeitPolicy,
-        weekDates: weekDates ? JSON.stringify(weekDates) : null,
-      }).returning().get();
+    // Overlap guard: block if any season is in a non-offseason phase, unless override flag set.
+    const active = db.select().from(schema.seasons)
+      .where(sql`${schema.seasons.phase} != 'offseason'`)
+      .orderBy(desc(schema.seasons.seasonNumber))
+      .get();
+    if (active && !overlapOverride) {
+      set.status = 409;
+      return {
+        error: 'prior_season_active',
+        priorSeasonNumber: active.seasonNumber,
+        priorPhase: active.phase,
+      };
+    }
 
-      for (const lg of leaguePayloads) {
-        db.insert(schema.leagues).values({
-          id: lg.id,
-          name: lg.name,
-          color: lg.color,
-          seasonId: row.id,
-          draftDate: lg.draftDate ?? null,
-        }).run();
+    // Pre-resolve manager usernames -> userIds (avoid resolving inside tx)
+    const managerLookup = new Map<string, number>();
+    for (const lg of leaguePayloads) {
+      for (const t of lg.teams ?? []) {
+        const u = (t.managerUsername ?? '').trim().toLowerCase();
+        if (!u || managerLookup.has(u)) continue;
+        const userRow = db.select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.username, u))
+          .get();
+        if (userRow) managerLookup.set(u, userRow.id);
       }
+    }
 
-      db.insert(schema.activityLog).values({
-        type: 'season_created',
-        category: 'config',
-        actor: user.username,
-        leagueId: null,
-        description: `Created Season ${seasonNumber} (${leaguePayloads.length} leagues)`,
-        metadata: JSON.stringify({ seasonNumber, leagues: leaguePayloads.map(l => l.id), pointCap, teraCaptainSlots }),
-      }).run();
+    let teamsCreated = 0;
+    try {
+      const seasonId = tx(() => {
+        const row = db.insert(schema.seasons).values({
+          seasonNumber,
+          phase: 'predraft',
+          currentWeek: 0,
+          totalWeeks,
+          pointCap,
+          teraCaptainSlots,
+          tradeDeadlineWeek,
+          forfeitPolicy,
+          weekDates: weekDates ? JSON.stringify(weekDates) : null,
+        }).returning().get();
 
-      return row.id;
-    });
+        for (const lg of leaguePayloads) {
+          db.insert(schema.leagues).values({
+            id: lg.id,
+            name: lg.name,
+            color: lg.color,
+            seasonId: row.id,
+            draftDate: lg.draftDate ?? null,
+          }).run();
 
-    return { id: seasonId, seasonNumber };
+          for (const t of lg.teams ?? []) {
+            const teamName = (t.teamName ?? '').trim();
+            const teamAbbrev = (t.teamAbbrev ?? '').trim();
+            if (!teamName || !teamAbbrev) {
+              throw new Error(`Team in league ${lg.id} missing name/abbrev`);
+            }
+            const teamId = `${lg.id}-${teamAbbrev.toLowerCase()}`;
+            const lookupKey = (t.managerUsername ?? '').trim().toLowerCase();
+            const userId = lookupKey ? managerLookup.get(lookupKey) ?? null : null;
+            const coachName = (t.coachName?.trim()) || lookupKey || teamName;
+            db.insert(schema.teams).values({
+              id: teamId,
+              leagueId: lg.id,
+              userId,
+              coachName,
+              teamName,
+              teamAbbrev,
+              teamColor: t.teamColor ?? '#888888',
+              showdownUsername: null,
+            }).run();
+            db.insert(schema.activityLog).values({
+              type: 'team_created',
+              category: 'admin',
+              actor: user.username,
+              leagueId: lg.id,
+              description: `Created team ${teamName} (${teamAbbrev})`,
+              metadata: JSON.stringify({ teamId, userId, coachName, viaWizard: true }),
+            }).run();
+            teamsCreated++;
+          }
+        }
+
+        db.insert(schema.activityLog).values({
+          type: 'season_created',
+          category: 'config',
+          actor: user.username,
+          leagueId: null,
+          description: `Created Season ${seasonNumber} (${leaguePayloads.length} leagues, ${teamsCreated} teams)`,
+          metadata: JSON.stringify({
+            seasonNumber,
+            leagues: leaguePayloads.map(l => l.id),
+            pointCap,
+            teraCaptainSlots,
+            teamsCreated,
+            overlapOverride,
+          }),
+        }).run();
+
+        return row.id;
+      });
+
+      return {
+        id: seasonId,
+        seasonNumber,
+        teamsCreated,
+        unresolvedManagers: Array.from(
+          new Set(
+            leaguePayloads.flatMap(l =>
+              (l.teams ?? [])
+                .map(t => (t.managerUsername ?? '').trim().toLowerCase())
+                .filter(u => u && !managerLookup.has(u)),
+            ),
+          ),
+        ),
+      };
+    } catch (err: any) {
+      set.status = 500;
+      return {
+        error: 'partial_provision_failure',
+        message: err?.message ?? String(err),
+        teamsCreated,
+        hint: 'Transaction rolled back. Inspect server logs and retry.',
+      };
+    }
   })
 
   // ─── Team creation (per-league) ────────────────────────────────────
