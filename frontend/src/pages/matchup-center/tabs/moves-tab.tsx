@@ -47,8 +47,6 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
     );
   }
 
-  const totalCols = teamA.length + teamB.length;
-
   return (
     <div className="border border-border-default rounded-lg w-full">
       {/* Sticky sprite header */}

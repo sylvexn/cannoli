@@ -74,7 +74,7 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
   const [searchLoading, setSearchLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [addingToSlot, setAddingToSlot] = useState<number | null>(null);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const filledCount = slots.filter(Boolean).length;
 

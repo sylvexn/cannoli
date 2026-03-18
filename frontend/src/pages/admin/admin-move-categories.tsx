@@ -111,7 +111,7 @@ export function AdminMoveCategories() {
 
   async function executeDelete() {
     if (!deleteTarget) return;
-    const { catId, entryId, entryIdx } = deleteTarget;
+    const { catId, entryId } = deleteTarget;
 
     try {
       if (entryId === undefined) {

@@ -56,7 +56,7 @@ interface AvailabilityPanelProps {
 export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
   const league = useLeague();
   const { players } = useLeagueData();
-  const { user, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [entries, setEntries] = useState<AvailEntry[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
 
