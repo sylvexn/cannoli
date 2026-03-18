@@ -24,6 +24,7 @@ import { useLeague } from '@/lib/league-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { generateSnakeSlots } from './use-draft-state';
+import { DraftAdminOverrides } from './draft-admin-overrides';
 import type { DraftState, DraftAction } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
 
@@ -426,6 +427,15 @@ export function DraftControlBar({
               <span className="text-[9px] font-mono text-draw animate-pulse">PAUSED</span>
             )}
           </>
+        )}
+
+        {/* Staff overrides — live only, while draft is active */}
+        {isAdmin && state.mode === 'live' && !isDemoComplete && (
+          <DraftAdminOverrides
+            draftOrder={draftOrder}
+            draftedNames={new Set(state.allPicks.map(p => p.pokemonName))}
+            canUndo={state.allPicks.length > 0}
+          />
         )}
 
         <button
