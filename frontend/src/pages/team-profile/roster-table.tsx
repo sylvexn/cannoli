@@ -12,9 +12,11 @@ import { StatBar } from '@/components/stat-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { TYPE_ABBR } from './utils';
 import type { SwapEntry } from './utils';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 
 type SortKey = 'tier' | 'kills' | 'deaths' | 'kpg' | 'spe';
 
@@ -123,11 +125,16 @@ export function RosterTable({
                     <td className="px-3 py-2.5">
                       <Tooltip>
                         <TooltipTrigger>
-                          <div className="flex items-center gap-2 cursor-pointer" onClick={() => openSideCard(mon.name)}>
-                            <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
-                            <span className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} group-hover:text-neon transition-colors`}>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => openSideCard(mon.name)} className="shrink-0 cursor-pointer">
+                              <PokemonSprite name={mon.name} size="sm" />
+                            </button>
+                            <Link
+                              to={pokemonRoute(mon.name)}
+                              className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} hover:text-neon hover:underline transition-colors`}
+                            >
                               {mon.name}
-                            </span>
+                            </Link>
                             {mon.isTeraCaptain && (
                               <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
                             )}

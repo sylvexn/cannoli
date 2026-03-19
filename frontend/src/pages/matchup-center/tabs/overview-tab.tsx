@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { AbilityChip } from '@/components/ability-chip';
@@ -6,6 +7,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 
@@ -43,7 +45,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               <div>
                 {pokemon.side === 'a' && (
                   <div className="flex items-center gap-1 justify-end whitespace-nowrap">
-                    <span className="text-[11px] font-mono text-text-primary">{pokemon.name}</span>
+                    <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
                     <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
                   </div>
                 )}
@@ -58,7 +60,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
                 {pokemon.side === 'b' && (
                   <div className="flex items-center gap-1 whitespace-nowrap">
                     <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
-                    <span className="text-[11px] font-mono text-text-primary">{pokemon.name}</span>
+                    <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
                   </div>
                 )}
               </div>
@@ -112,6 +114,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                   isTeraCaptain={pokemon.isTeraCaptain}
                   teraTypes={pokemon.teraTypes as PokemonType[] | undefined}
                   className="text-sm font-mono font-medium"
+                  asLink
                 />
               </TableCell>
               <TableCell className="py-1">

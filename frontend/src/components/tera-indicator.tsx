@@ -1,7 +1,9 @@
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import type { PokemonType } from '@/lib/pokemon';
 import { TYPE_COLORS } from '@/lib/constants';
+import { pokemonRoute } from '@/lib/pokemon-route';
 
 interface TeraIndicatorProps {
   /** Pokemon display name — rendered in pink when tera captain */
@@ -9,6 +11,8 @@ interface TeraIndicatorProps {
   isTeraCaptain: boolean;
   teraTypes?: PokemonType[];
   className?: string;
+  /** When true, the name becomes a Link to /pokemon/:name */
+  asLink?: boolean;
 }
 
 
@@ -17,14 +21,37 @@ interface TeraIndicatorProps {
  * - Tera captains: name in pink + "T" badge that shows tera types on hover
  * - Non-captains: name in default color, no badge
  */
-export function TeraIndicator({ name, isTeraCaptain, teraTypes, className }: TeraIndicatorProps) {
+export function TeraIndicator({ name, isTeraCaptain, teraTypes, className, asLink }: TeraIndicatorProps) {
   if (!isTeraCaptain) {
+    if (asLink) {
+      return (
+        <Link
+          to={pokemonRoute(name)}
+          onClick={e => e.stopPropagation()}
+          className={cn('text-text-primary hover:text-neon hover:underline transition-colors', className)}
+        >
+          {name}
+        </Link>
+      );
+    }
     return <span className={cn('text-text-primary', className)}>{name}</span>;
   }
 
+  const nameNode = asLink ? (
+    <Link
+      to={pokemonRoute(name)}
+      onClick={e => e.stopPropagation()}
+      className="text-pink hover:underline transition-colors"
+    >
+      {name}
+    </Link>
+  ) : (
+    <span className="text-pink">{name}</span>
+  );
+
   return (
     <span className={cn('inline-flex items-center gap-1', className)}>
-      <span className="text-pink">{name}</span>
+      {nameNode}
       <Tooltip>
         <TooltipTrigger
           className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black leading-none border border-pink/40 cursor-default hover:bg-pink/30 transition-colors"

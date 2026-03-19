@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { ArrowLeftRight, UserPlus, Check, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { toast } from 'sonner';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
@@ -132,9 +133,9 @@ export function CompactTradeCard({
           )}
           <div className="space-y-0.5">
             {trade.offering.map(name => (
-              <div key={name} className="flex items-center gap-1.5 cursor-pointer hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors" onClick={() => openSideCard(name)}>
-                <PokemonSprite name={name} size="xs" />
-                <span className="text-xs font-mono text-text-primary truncate hover:text-neon transition-colors">{name}</span>
+              <div key={name} className="flex items-center gap-1.5 hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors">
+                <button type="button" onClick={() => openSideCard(name)} className="shrink-0 cursor-pointer"><PokemonSprite name={name} size="xs" /></button>
+                <Link to={pokemonRoute(name)} className="text-xs font-mono text-text-primary truncate hover:text-neon hover:underline transition-colors">{name}</Link>
                 {findTier(name, trade.proposer) > 0 && <TierBadge points={findTier(name, trade.proposer)} />}
               </div>
             ))}
@@ -163,9 +164,9 @@ export function CompactTradeCard({
           ) : null}
           <div className="space-y-0.5">
             {trade.requesting.map(name => (
-              <div key={name} className="flex items-center gap-1.5 cursor-pointer hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors" onClick={() => openSideCard(name)}>
-                <PokemonSprite name={name} size="xs" />
-                <span className="text-xs font-mono text-text-primary truncate hover:text-neon transition-colors">{name}</span>
+              <div key={name} className="flex items-center gap-1.5 hover:bg-surface-overlay/30 rounded px-0.5 -mx-0.5 transition-colors">
+                <button type="button" onClick={() => openSideCard(name)} className="shrink-0 cursor-pointer"><PokemonSprite name={name} size="xs" /></button>
+                <Link to={pokemonRoute(name)} className="text-xs font-mono text-text-primary truncate hover:text-neon hover:underline transition-colors">{name}</Link>
                 {!isFreeAgent && findTier(name, trade.recipient) > 0 && (
                   <TierBadge points={findTier(name, trade.recipient)} />
                 )}

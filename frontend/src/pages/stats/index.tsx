@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatsTableSkeleton } from '@/components/skeletons';
 import { StatsFilterBar, defaultFilters, type StatsFilters } from './stats-filter-bar';
@@ -162,12 +163,12 @@ export function StatsPage() {
                   <PokemonSprite name={stat.name} size="md" />
                 </div>
                 {/* Name */}
-                <button
-                  onClick={() => openSideCard(stat.name)}
-                  className="text-xs font-medium text-text-primary hover:text-neon transition-colors leading-tight truncate w-full text-center cursor-pointer"
+                <Link
+                  to={pokemonRoute(stat.name)}
+                  className="text-xs font-medium text-text-primary hover:text-neon hover:underline transition-colors leading-tight truncate w-full text-center"
                 >
                   {stat.name}
-                </button>
+                </Link>
                 {/* Team */}
                 {team && (
                   <Link to={leagueUrl(`/teams/${team.id}`)} className="flex items-center gap-1 group/team">
@@ -246,13 +247,13 @@ export function StatsPage() {
                       <td className="px-2 py-1.5">
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
-                            <button
-                              onClick={() => openSideCard(stat.name)}
-                              className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block text-left cursor-pointer"
+                            <Link
+                              to={pokemonRoute(stat.name)}
+                              className="text-sm font-medium text-text-primary hover:text-neon hover:underline transition-colors truncate block text-left"
                             >
                               {stat.name}
                               {stat.isTeraCaptain && <span className="text-text-muted ml-1 text-[10px]">(T)</span>}
-                            </button>
+                            </Link>
                             {team && (
                               <Link
                                 to={leagueUrl(`/teams/${team.id}`)}
