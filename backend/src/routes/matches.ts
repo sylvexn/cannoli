@@ -250,10 +250,221 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
+  // ─── Void match result (clear scores + per-pokemon, back to scheduled) ────
+
+  .post('/api/matches/:matchId/void', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const match = db.select().from(schema.matches)
+      .where(eq(schema.matches.id, params.matchId))
+      .get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    tx(() => {
+      db.delete(schema.matchPokemon)
+        .where(eq(schema.matchPokemon.matchId, params.matchId))
+        .run();
+
+      db.update(schema.matches).set({
+        homeScore: null,
+        awayScore: null,
+        status: 'scheduled',
+        completedAt: null,
+        startedAt: null,
+        replayUrl: null,
+        replayLog: null,
+        warnings: null,
+        forfeitedBy: null,
+        readyHome: false,
+        readyAway: false,
+      }).where(eq(schema.matches.id, params.matchId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'match_voided',
+        category: 'admin',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Voided result for ${match.homeTeamId} vs ${match.awayTeamId} (W${match.week}) — was ${match.homeScore ?? '-'}-${match.awayScore ?? '-'}`,
+        metadata: JSON.stringify({
+          matchId: params.matchId,
+          previousStatus: match.status,
+          previousHomeScore: match.homeScore,
+          previousAwayScore: match.awayScore,
+        }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
+  // ─── Move match (week / deadline) ───────────────────────────────────────
+
+  .patch('/api/matches/:matchId', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const match = db.select().from(schema.matches)
+      .where(eq(schema.matches.id, params.matchId))
+      .get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    const { week, deadline } = (body || {}) as { week?: number; deadline?: string | null };
+
+    const updates: Record<string, unknown> = {};
+    if (week !== undefined) {
+      if (!Number.isInteger(week) || week < 1) {
+        set.status = 400;
+        return { error: 'week must be a positive integer' };
+      }
+      updates.week = week;
+    }
+    if (deadline !== undefined) {
+      updates.deadline = deadline; // string | null
+    }
+    if (Object.keys(updates).length === 0) {
+      set.status = 400;
+      return { error: 'No fields to update (week, deadline)' };
+    }
+
+    db.update(schema.matches).set(updates).where(eq(schema.matches.id, params.matchId)).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'match_rescheduled',
+      category: 'admin',
+      actor: user.username,
+      leagueId: match.leagueId,
+      description: `Moved ${match.homeTeamId} vs ${match.awayTeamId}${week !== undefined ? ` from W${match.week} → W${week}` : ''}`,
+      metadata: JSON.stringify({
+        matchId: params.matchId,
+        oldWeek: match.week,
+        newWeek: week ?? match.week,
+        oldDeadline: match.deadline,
+        newDeadline: deadline === undefined ? match.deadline : deadline,
+      }),
+    }).run();
+
+    return { success: true };
+  })
+
+  // ─── Delete match ────────────────────────────────────────────────────
+
+  .delete('/api/matches/:matchId', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const match = db.select().from(schema.matches)
+      .where(eq(schema.matches.id, params.matchId))
+      .get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    // Guard: don't allow deletion of completed playoff matches when a downstream
+    // round already references the winner — that would orphan the bracket.
+    if (match.phase === 'playoffs' && match.status === 'completed' && match.playoffRound) {
+      const downstreamRounds = match.playoffRound === 'qf'
+        ? ['sf', 'f']
+        : match.playoffRound === 'sf'
+          ? ['f']
+          : [];
+      if (downstreamRounds.length > 0) {
+        const winnerId = (match.homeScore ?? 0) > (match.awayScore ?? 0)
+          ? match.homeTeamId
+          : match.awayTeamId;
+        const downstream = db.select().from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, match.leagueId),
+            eq(schema.matches.phase, 'playoffs'),
+          ))
+          .all()
+          .filter(m => downstreamRounds.includes(m.playoffRound ?? '')
+            && (m.homeTeamId === winnerId || m.awayTeamId === winnerId));
+        if (downstream.length > 0) {
+          set.status = 409;
+          return {
+            error: `Cannot delete completed playoff match — downstream rounds depend on its winner. Void the dependent matches first.`,
+            code: 'playoff_chain_locked',
+          };
+        }
+      }
+    }
+
+    tx(() => {
+      db.delete(schema.matchPokemon)
+        .where(eq(schema.matchPokemon.matchId, params.matchId))
+        .run();
+      db.delete(schema.matches)
+        .where(eq(schema.matches.id, params.matchId))
+        .run();
+
+      db.insert(schema.activityLog).values({
+        type: 'match_deleted',
+        category: 'admin',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Deleted match ${match.homeTeamId} vs ${match.awayTeamId} (W${match.week})`,
+        metadata: JSON.stringify({
+          matchId: params.matchId,
+          week: match.week,
+          phase: match.phase,
+          previousStatus: match.status,
+          previousHomeScore: match.homeScore,
+          previousAwayScore: match.awayScore,
+        }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
   // ─── Schedule generation ─────────────────────────────────────────────
 
-  .post('/api/leagues/:leagueId/schedule/generate', ({ params, user, set }) => {
+  .post('/api/leagues/:leagueId/schedule/generate', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+
+    const { force, confirmName } = (body || {}) as { force?: boolean; confirmName?: string };
+
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, params.leagueId))
+      .get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+    const season = db.select().from(schema.seasons)
+      .where(eq(schema.seasons.id, league.seasonId))
+      .get();
+
+    // Safety lock: refuse to nuke an in-flight regular season or playoffs
+    // unless the caller forces AND types the league name verbatim.
+    const phase = season?.phase;
+    const locked = phase === 'regular' || phase === 'playoffs';
+    if (locked) {
+      if (!force) {
+        set.status = 409;
+        return {
+          error: `League is in ${phase} phase — regenerating will delete all matches and results. Pass { force: true, confirmName } to override.`,
+          code: 'regeneration_locked',
+          phase,
+          leagueName: league.name,
+        };
+      }
+      if (typeof confirmName !== 'string' || confirmName.trim() !== league.name) {
+        set.status = 409;
+        return {
+          error: `confirmName must match the league name exactly ("${league.name}") to force regeneration.`,
+          code: 'regeneration_locked',
+          phase,
+          leagueName: league.name,
+        };
+      }
+    }
+
+    // Snapshot what we're about to destroy for the activity log
+    const existingMatches = db.select({ count: sql<number>`COUNT(*)` })
+      .from(schema.matches)
+      .where(eq(schema.matches.leagueId, params.leagueId))
+      .get()?.count ?? 0;
+    const completedMatches = db.select({ count: sql<number>`COUNT(*)` })
+      .from(schema.matches)
+      .where(and(
+        eq(schema.matches.leagueId, params.leagueId),
+        sql`home_score IS NOT NULL AND away_score IS NOT NULL`,
+      ))
+      .get()?.count ?? 0;
 
     const result = generateLeagueSchedule(params.leagueId);
     if (!result.success) {
@@ -262,13 +473,22 @@ export const matchRoutes = new Elysia()
     }
 
     // Activity log
+    const destructive = locked || completedMatches > 0;
     db.insert(schema.activityLog).values({
-      type: 'schedule_generated',
+      type: destructive ? 'schedule_regenerated_forced' : 'schedule_generated',
       category: 'match',
       actor: user.username,
       leagueId: params.leagueId,
-      description: `Generated round-robin schedule (${result.matchCount} matches)`,
-      metadata: JSON.stringify({ matchCount: result.matchCount }),
+      description: destructive
+        ? `Forced schedule regeneration in ${phase} phase — destroyed ${existingMatches} matches (${completedMatches} with results), created ${result.matchCount}`
+        : `Generated round-robin schedule (${result.matchCount} matches)`,
+      metadata: JSON.stringify({
+        matchCount: result.matchCount,
+        destroyedMatches: existingMatches,
+        destroyedCompleted: completedMatches,
+        phase,
+        forced: !!force,
+      }),
     }).run();
 
     return { success: true, matchCount: result.matchCount };

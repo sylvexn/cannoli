@@ -10,6 +10,10 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { api } from '@/lib/api';
 import type { ApiAdminMatch } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
@@ -19,7 +23,8 @@ import { NumberInput } from '@/components/ui/number-input';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import {
   AlertTriangle, CheckCircle2, Clock, Swords, Shield,
-  ChevronDown, ChevronUp, Plus, Trash2,
+  ChevronDown, ChevronUp, Plus, Trash2, MoreVertical,
+  Eraser, ArrowRightLeft,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
@@ -57,6 +62,85 @@ export function AdminMatches() {
   const emptyEntry = (): PokemonEntry => ({ name: '', kills: 0, deaths: 0, teraUsed: false, teraType: '' });
   const [homePokemon, setHomePokemon] = useState<PokemonEntry[]>([]);
   const [awayPokemon, setAwayPokemon] = useState<PokemonEntry[]>([]);
+
+  // Void / Delete / Move-Week dialogs
+  const [voidTarget, setVoidTarget] = useState<ApiAdminMatch | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ApiAdminMatch | null>(null);
+  const [moveTarget, setMoveTarget] = useState<ApiAdminMatch | null>(null);
+  const [moveWeek, setMoveWeek] = useState(1);
+  const [moveDeadline, setMoveDeadline] = useState('');
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+
+  function openVoid(match: ApiAdminMatch) { setVoidTarget(match); }
+  function openDelete(match: ApiAdminMatch) { setDeleteTarget(match); }
+  function openMove(match: ApiAdminMatch) {
+    setMoveTarget(match);
+    setMoveWeek(match.week);
+    setMoveDeadline('');
+  }
+
+  async function executeVoid() {
+    if (!voidTarget) return;
+    setActionSubmitting(true);
+    try {
+      await api.voidMatch(voidTarget.id);
+      toast.success('Match result voided');
+      setVoidTarget(null);
+      fetchMatches();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  }
+
+  async function executeDelete() {
+    if (!deleteTarget) return;
+    setActionSubmitting(true);
+    try {
+      await api.deleteMatch(deleteTarget.id);
+      toast.success('Match deleted');
+      setDeleteTarget(null);
+      fetchMatches();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  }
+
+  async function executeMove() {
+    if (!moveTarget) return;
+    if (!Number.isInteger(moveWeek) || moveWeek < 1) {
+      toast.error('Week must be a positive integer');
+      return;
+    }
+    setActionSubmitting(true);
+    try {
+      const payload: { week?: number; deadline?: string | null } = {};
+      if (moveWeek !== moveTarget.week) payload.week = moveWeek;
+      if (moveDeadline.trim()) {
+        // Accept either ISO datetime or YYYY-MM-DD; normalise the date-only form to end-of-day UTC
+        const d = moveDeadline.trim();
+        payload.deadline = /^\d{4}-\d{2}-\d{2}$/.test(d)
+          ? new Date(`${d}T23:59:59Z`).toISOString()
+          : d;
+      }
+      if (Object.keys(payload).length === 0) {
+        toast.error('No changes');
+        setActionSubmitting(false);
+        return;
+      }
+      await api.updateMatch(moveTarget.id, payload);
+      toast.success('Match updated');
+      setMoveTarget(null);
+      fetchMatches();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setActionSubmitting(false);
+    }
+  }
 
   function fetchMatches() {
     setLoading(true);
@@ -311,6 +395,39 @@ export function AdminMatches() {
                                 Dismiss
                               </Button>
                             )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                aria-label="Match actions"
+                                className="p-1 rounded hover:bg-surface-overlay/40 text-text-muted hover:text-text-primary transition-colors outline-none"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <MoreVertical size={12} />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="text-xs min-w-[180px]">
+                                <DropdownMenuItem
+                                  onClick={() => openMove(match)}
+                                  disabled={match.phase === 'playoffs'}
+                                >
+                                  <ArrowRightLeft size={12} />
+                                  Move Week / Deadline
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => openVoid(match)}
+                                  disabled={match.homeScore === null && match.awayScore === null && match.status === 'scheduled'}
+                                >
+                                  <Eraser size={12} />
+                                  Void Result
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => openDelete(match)}
+                                >
+                                  <Trash2 size={12} />
+                                  Delete Match
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
 
                           {isExpanded ? <ChevronUp size={12} className="text-text-muted" /> : <ChevronDown size={12} className="text-text-muted" />}
@@ -461,6 +578,103 @@ export function AdminMatches() {
               onClick={submitResult}
             >
               {submitting ? 'Saving...' : 'Save Result'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Result Confirmation */}
+      <Dialog open={!!voidTarget} onOpenChange={(o) => { if (!o) setVoidTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eraser size={16} className="text-draw" />
+              Void Match Result
+            </DialogTitle>
+            <DialogDescription>
+              {voidTarget && `Clear scores and per-Pokemon data for ${voidTarget.homeTeamId} vs ${voidTarget.awayTeamId} (W${voidTarget.week}). Status returns to scheduled. Activity log will record the change.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVoidTarget(null)}>Cancel</Button>
+            <Button
+              disabled={actionSubmitting}
+              className="bg-draw text-surface-base hover:bg-draw/90"
+              onClick={executeVoid}
+            >
+              {actionSubmitting ? 'Voiding...' : 'Void Result'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Match Confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-loss" />
+              Delete Match
+            </DialogTitle>
+            <DialogDescription>
+              {deleteTarget && (
+                <>
+                  Permanently delete <strong>{deleteTarget.homeTeamId} vs {deleteTarget.awayTeamId}</strong> (W{deleteTarget.week})?
+                  Per-Pokemon data is removed. This cannot be undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={actionSubmitting}
+              onClick={executeDelete}
+            >
+              {actionSubmitting ? 'Deleting...' : 'Delete Match'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move Week / Deadline */}
+      <Dialog open={!!moveTarget} onOpenChange={(o) => { if (!o) setMoveTarget(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft size={16} className="text-neon" />
+              Move Match
+            </DialogTitle>
+            <DialogDescription>
+              {moveTarget && `${moveTarget.homeTeamId} vs ${moveTarget.awayTeamId} — currently W${moveTarget.week}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Week</label>
+              <NumberInput value={moveWeek} onChange={setMoveWeek} min={1} max={30} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                Deadline (optional, YYYY-MM-DD or ISO)
+              </label>
+              <Input
+                value={moveDeadline}
+                onChange={e => setMoveDeadline(e.target.value)}
+                placeholder="2026-05-14"
+                className="h-8 text-xs bg-surface-overlay"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveTarget(null)}>Cancel</Button>
+            <Button
+              disabled={actionSubmitting}
+              className="bg-neon text-surface-base hover:bg-neon/90"
+              onClick={executeMove}
+            >
+              {actionSubmitting ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

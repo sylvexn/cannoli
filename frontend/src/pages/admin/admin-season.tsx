@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { PHASES, phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
 import { NewSeasonWizard } from './season/new-season-wizard';
@@ -75,6 +76,51 @@ export function AdminSeason() {
   // Delete league confirmation
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  // Regenerate schedule confirmation (in-season nuclear option)
+  const [regenOpen, setRegenOpen] = useState(false);
+  const [regenTarget, setRegenTarget] = useState<{ id: string; name: string; phase: Phase } | null>(null);
+  const [regenConfirmText, setRegenConfirmText] = useState('');
+  const [regenSubmitting, setRegenSubmitting] = useState(false);
+
+  async function handleGenerateSchedule(league: EditableLeague) {
+    const state = leagueStates[league.id];
+    const phase = state?.phase as Phase | undefined;
+    if (phase === 'regular' || phase === 'playoffs') {
+      setRegenTarget({ id: league.id, name: league.name, phase });
+      setRegenConfirmText('');
+      setRegenOpen(true);
+      return;
+    }
+    try {
+      const result = await api.generateSchedule(league.id);
+      toast.success(`Generated ${result.matchCount} matches`);
+      refreshLeagues?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  }
+
+  async function executeForcedRegen() {
+    if (!regenTarget) return;
+    if (regenConfirmText.trim() !== regenTarget.name) {
+      toast.error(`Type the league name exactly to confirm: "${regenTarget.name}"`);
+      return;
+    }
+    setRegenSubmitting(true);
+    try {
+      await api.generateSchedule(regenTarget.id, { force: true, confirmName: regenConfirmText.trim() });
+      toast.success(`Schedule regenerated for ${regenTarget.name}`);
+      refreshLeagues?.();
+      setRegenOpen(false);
+      setRegenTarget(null);
+      setRegenConfirmText('');
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setRegenSubmitting(false);
+    }
+  }
 
   function confirmAdvance(league: EditableLeague) {
     const state = leagueStates[league.id];
@@ -394,17 +440,11 @@ export function AdminSeason() {
                       <Button
                         size="xs"
                         variant="outline"
-                        onClick={async () => {
-                          try {
-                            const result = await api.generateSchedule(league.id);
-                            toast.success(`Generated ${result.matchCount} matches`);
-                            refreshLeagues?.();
-                          } catch (err: any) { toast.error(err.message); }
-                        }}
+                        onClick={() => handleGenerateSchedule(league)}
                         className="text-draw border-draw/30 hover:bg-draw/10"
                       >
                         <Sparkles size={12} />
-                        Generate Schedule
+                        Regenerate Schedule
                       </Button>
                       <Button
                         size="xs"
@@ -619,6 +659,43 @@ export function AdminSeason() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={executeDeleteLeague}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Force Regenerate Schedule Confirmation */}
+      <Dialog open={regenOpen} onOpenChange={(o) => { if (!o) { setRegenOpen(false); setRegenConfirmText(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={16} className="text-loss" />
+              Regenerate Schedule (Destructive)
+            </DialogTitle>
+            <DialogDescription>
+              {regenTarget?.name} is in <strong>{regenTarget?.phase}</strong> phase.
+              Regenerating will delete every match, including ones with results recorded.
+              Standings will be reset.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-xs text-text-secondary">
+            Type the league name <span className="font-mono text-text-primary">{regenTarget?.name}</span> to confirm.
+          </div>
+          <Input
+            value={regenConfirmText}
+            onChange={(e) => setRegenConfirmText(e.target.value)}
+            placeholder={regenTarget?.name ?? ''}
+            className="bg-surface-overlay"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegenOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={regenSubmitting || regenConfirmText.trim() !== regenTarget?.name}
+              onClick={executeForcedRegen}
+            >
+              {regenSubmitting ? 'Regenerating...' : 'Force Regenerate'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
