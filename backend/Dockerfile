@@ -9,9 +9,11 @@ RUN cd backend && bun install --frozen-lockfile
 
 COPY backend/ backend/
 
-RUN mkdir -p backend/data
+RUN mkdir -p backend/data && chmod +x backend/entrypoint.sh
 
 WORKDIR /app/backend
 EXPOSE 3001
 
-CMD ["bun", "run", "src/index.ts"]
+ENV NODE_ENV=production
+
+CMD ["./entrypoint.sh"]
