@@ -163,16 +163,32 @@ export function AdminMoveCategories() {
 
     try {
       if (editEntryIdx !== null && editEntryId !== null) {
-        // Edit = delete old + add new (no update endpoint)
-        await api.deleteMoveCategoryEntry(editEntryId);
-        await api.addMoveCategoryEntry(editEntryCatId, name, entryIsAbility || undefined);
+        // In-place update — preserves entry id
+        await api.updateMoveCategoryEntry(editEntryId, { name, isAbility: entryIsAbility });
+        setCategories(prev => prev.map(c => {
+          if (c.id !== editEntryCatId) return c;
+          return {
+            ...c,
+            entries: c.entries.map(e =>
+              e.id === editEntryId ? { ...e, name, isAbility: entryIsAbility } : e
+            ),
+          };
+        }));
         toast.success(`Updated "${name}"`);
       } else {
-        await api.addMoveCategoryEntry(editEntryCatId, name, entryIsAbility || undefined);
+        const result = await api.addMoveCategoryEntry(editEntryCatId, name, entryIsAbility || undefined);
+        setCategories(prev => prev.map(c => {
+          if (c.id !== editEntryCatId) return c;
+          return {
+            ...c,
+            entries: [
+              ...c.entries,
+              { id: result.id, name, moveId: name.toLowerCase().replace(/[^a-z0-9]/g, ''), isAbility: entryIsAbility },
+            ],
+          };
+        }));
         toast.success(`Added "${name}"`);
       }
-      // Refetch to get new entry IDs
-      await fetchCategories();
     } catch (err: any) {
       toast.error(err.message || 'Failed to save entry');
     }
