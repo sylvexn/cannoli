@@ -19,7 +19,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 import {
   Search, Filter, X, UserPlus, KeyRound, ShieldCheck, UserX, LogIn,
   Settings, Play, Trophy, ArrowLeftRight, Check, Swords, Star,
-  Sparkles, ChevronDown,
+  Sparkles, ChevronDown, FolderPlus, FolderPen, FolderX, Plus, Pencil, Minus,
 } from 'lucide-react';
 
 const CATEGORY_COLORS: Record<EventCategory, string> = {
@@ -52,6 +52,12 @@ const EVENT_ICONS: Record<string, typeof UserPlus> = {
   match_reported: Swords,
   tera_captain_set: Star,
   tera_types_changed: Star,
+  move_category_created: FolderPlus,
+  move_category_updated: FolderPen,
+  move_category_deleted: FolderX,
+  move_category_entry_added: Plus,
+  move_category_entry_updated: Pencil,
+  move_category_entry_deleted: Minus,
 };
 
 const PAGE_SIZE = 15;
