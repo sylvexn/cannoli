@@ -279,13 +279,16 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
             {/* Roster table */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
               {player.roster.map(mon => (
-                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0 cursor-pointer hover:bg-surface-overlay/30 rounded px-1 -mx-1 transition-colors" onClick={() => openSideCard(mon.name)}>
-                  <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
+                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0 hover:bg-surface-overlay/30 rounded px-1 -mx-1 transition-colors">
+                  <button type="button" onClick={() => openSideCard(mon.name)} className="shrink-0 cursor-pointer">
+                    <PokemonSprite name={mon.name} size="xs" />
+                  </button>
                   <TeraIndicator
                     name={mon.name}
                     isTeraCaptain={mon.isTeraCaptain}
                     teraTypes={mon.teraTypes}
                     className="text-xs font-medium truncate flex-1"
+                    asLink
                   />
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />

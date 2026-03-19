@@ -23,6 +23,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { CompactTradeCard } from './compact-trade-card';
 import { TradeProposeDialog } from './trade-propose-dialog';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { TradeBlockSkeleton } from '@/components/skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -208,7 +209,7 @@ export function TradeBlockPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <button onClick={() => openSideCard(mon.name)} className="text-sm font-mono font-medium text-text-primary hover:text-neon transition-colors cursor-pointer">{mon.name}</button>
+                          <Link to={pokemonRoute(mon.name)} className="text-sm font-mono font-medium text-text-primary hover:text-neon hover:underline transition-colors">{mon.name}</Link>
                           <TierBadge points={mon.tier} />
                         </div>
                         <div className="flex items-center gap-1.5 mt-1">

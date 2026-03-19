@@ -16,7 +16,9 @@ import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { Search, UserPlus, X, ArrowDown, AlertCircle, ShieldAlert, Star } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { BudgetBar, EmptyState } from './budget-bar';
 
 interface FreeAgent {
@@ -345,12 +347,12 @@ export function FreeAgentsPage() {
                         >
                           <PokemonSprite name={p.name} size="xs" />
                         </button>
-                        <button
-                          onClick={() => openSideCard(p.name)}
-                          className="text-xs font-medium text-text-primary w-32 truncate text-left hover:text-neon transition-colors"
+                        <Link
+                          to={pokemonRoute(p.name)}
+                          className="text-xs font-medium text-text-primary w-32 truncate text-left hover:text-neon hover:underline transition-colors"
                         >
                           {p.name}
-                        </button>
+                        </Link>
                         <TierBadge points={p.tier} />
                         <TypeChip
                           types={[p.type1.toLowerCase() as PokemonType, ...(p.type2 ? [p.type2.toLowerCase() as PokemonType] : [])]}
@@ -409,7 +411,7 @@ export function FreeAgentsPage() {
                   <div className="flex items-center gap-2 p-2 rounded-md bg-neon/5 border border-neon/20">
                     <PokemonSprite name={selected.name} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-text-primary truncate">{selected.name}</div>
+                      <Link to={pokemonRoute(selected.name)} className="text-sm font-semibold text-text-primary truncate hover:text-neon hover:underline transition-colors block">{selected.name}</Link>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <TierBadge points={selected.tier} />
                         <TypeChip
@@ -519,13 +521,13 @@ export function FreeAgentsPage() {
                         >
                           <PokemonSprite name={r.name} size="xs" />
                         </button>
-                        <button
-                          onClick={() => openSideCard(r.name)}
-                          className="text-xs text-text-primary truncate flex-1 text-left hover:text-neon transition-colors"
+                        <Link
+                          to={pokemonRoute(r.name)}
+                          className="text-xs text-text-primary truncate flex-1 text-left hover:text-neon hover:underline transition-colors"
                         >
                           {r.name}
                           {r.isTeraCaptain && <Star size={9} className="inline ml-1 text-yellow-400 fill-yellow-400" />}
-                        </button>
+                        </Link>
                         <TierBadge points={cost} />
                         {selected && (
                           <button

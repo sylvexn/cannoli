@@ -5,6 +5,18 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+/**
+ * Read the csrf_token cookie set by the backend on login + /me.
+ * This is the JS-readable companion to the httpOnly session cookie; we echo
+ * its value into the X-CSRF-Token header on writes so the backend can
+ * verify the double-submit.
+ */
+function readCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+  return m ? decodeURIComponent(m[1]!) : null;
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
@@ -12,9 +24,14 @@ async function fetchJson<T>(path: string): Promise<T> {
 }
 
 async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const csrf = readCsrfToken();
+  if (csrf) headers['X-CSRF-Token'] = csrf;
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    headers,
     credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -346,6 +363,27 @@ export const api = {
   // League data
   getLeagues: () => fetchJson<ApiLeague[]>('/api/leagues'),
 
+  getSeasons: () => fetchJson<{
+    id: number;
+    seasonNumber: number;
+    phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
+    currentWeek: number;
+    totalWeeks: number;
+  }[]>('/api/seasons'),
+
+  getSeasonLeagues: (seasonId: number) => fetchJson<{
+    id: string;
+    name: string;
+    color: string;
+    teams: {
+      id: string;
+      coachName: string;
+      teamName: string;
+      teamAbbrev: string;
+      teamColor: string;
+    }[];
+  }[]>(`/api/seasons/${seasonId}/leagues`),
+
   getTeams: (leagueId: string) => fetchJson<ApiTeam[]>(`/api/leagues/${leagueId}/teams`),
 
   getSchedule: (leagueId: string) => fetchJson<ApiMatch[]>(`/api/leagues/${leagueId}/schedule`),
@@ -405,7 +443,10 @@ export const api = {
     deleteJson<{ success: boolean }>(`/api/move-categories/${id}`),
 
   addMoveCategoryEntry: (catId: string, name: string, isAbility?: boolean) =>
-    postJson<{ success: boolean }>(`/api/move-categories/${catId}/entries`, { name, isAbility }),
+    postJson<{ success: boolean; id: number }>(`/api/move-categories/${catId}/entries`, { name, isAbility }),
+
+  updateMoveCategoryEntry: (entryId: number, data: { name?: string; isAbility?: boolean }) =>
+    putJson<{ success: boolean }>(`/api/move-category-entries/${entryId}`, data),
 
   deleteMoveCategoryEntry: (entryId: number) =>
     deleteJson<{ success: boolean }>(`/api/move-category-entries/${entryId}`),
@@ -440,8 +481,22 @@ export const api = {
   resumeDraft: (leagueId: string) =>
     postJson<ApiDraftState>(`/api/leagues/${leagueId}/draft/resume`),
 
-  generateSchedule: (leagueId: string) =>
-    postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`),
+  forceDraftPick: (leagueId: string, teamId: string, pokemonName: string) =>
+    postJson<{ success: boolean; pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number } }>(
+      `/api/leagues/${leagueId}/draft/force-pick`,
+      { teamId, pokemonName },
+    ),
+
+  skipDraftPick: (leagueId: string) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/skip`),
+
+  undoDraftPick: (leagueId: string) =>
+    postJson<{ success: boolean; undonePick: { teamId: string; pokemonName: string; tier: number; pickNumber: number } }>(
+      `/api/leagues/${leagueId}/draft/undo`,
+    ),
+
+  generateSchedule: (leagueId: string, opts?: { force?: boolean; confirmName?: string }) =>
+    postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`, opts ?? {}),
 
   approveTrade: (tradeId: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`),
@@ -469,9 +524,11 @@ export const api = {
   uploadAvatar: async (file: File) => {
     const fd = new FormData();
     fd.append('avatar', file);
+    const csrf = readCsrfToken();
     const res = await fetch(`${API_BASE}/api/users/me/avatar`, {
       method: 'POST',
       credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
       body: fd,
     });
     if (!res.ok) {
@@ -503,9 +560,11 @@ export const api = {
   uploadTeamLogo: async (teamId: string, file: File) => {
     const fd = new FormData();
     fd.append('logo', file);
+    const csrf = readCsrfToken();
     const res = await fetch(`${API_BASE}/api/teams/${teamId}/logo`, {
       method: 'POST',
       credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
       body: fd,
     });
     if (!res.ok) {
@@ -519,9 +578,11 @@ export const api = {
   uploadTeamBanner: async (teamId: string, file: File) => {
     const fd = new FormData();
     fd.append('banner', file);
+    const csrf = readCsrfToken();
     const res = await fetch(`${API_BASE}/api/teams/${teamId}/banner`, {
       method: 'POST',
       credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
       body: fd,
     });
     if (!res.ok) {
@@ -540,8 +601,26 @@ export const api = {
     tradeDeadlineWeek?: number;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     weekDates?: Record<string, string> | null;
-    leagues?: { id: string; name: string; color: string; draftDate?: string | null }[];
-  }) => postJson<{ id: number; seasonNumber: number }>('/api/seasons', data),
+    leagues?: {
+      id: string;
+      name: string;
+      color: string;
+      draftDate?: string | null;
+      teams?: {
+        coachName?: string;
+        teamName: string;
+        teamAbbrev: string;
+        teamColor?: string;
+        managerUsername?: string | null;
+      }[];
+    }[];
+    overlapOverride?: boolean;
+  }) => postJson<{
+    id: number;
+    seasonNumber: number;
+    teamsCreated: number;
+    unresolvedManagers: string[];
+  }>('/api/seasons', data),
 
   createTeam: (leagueId: string, data: {
     id?: string;
@@ -597,6 +676,15 @@ export const api = {
 
   dismissMatchWarnings: (matchId: string) =>
     postJson<{ success: boolean }>(`/api/matches/${matchId}/dismiss-warnings`),
+
+  voidMatch: (matchId: string) =>
+    postJson<{ success: boolean }>(`/api/matches/${matchId}/void`),
+
+  updateMatch: (matchId: string, data: { week?: number; deadline?: string | null }) =>
+    mutateJson<{ success: boolean }>('PATCH', `/api/matches/${matchId}`, data),
+
+  deleteMatch: (matchId: string) =>
+    deleteJson<{ success: boolean }>(`/api/matches/${matchId}`),
 
   // Tera captain management
   saveTerraCaptains: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
