@@ -1,14 +1,11 @@
 # Temporary stack: serves an "under construction" page at cannoli.live while
 # the real live environment is on hold. When the live stack is ready, delete
 # this Coolify application and create one from deploy/cannoli-live.compose.yml.
-#
-# Mock continues to be the active dev environment at mock.cannoli.live.
 
 services:
   web:
-    build:
-      context: ./deploy/maintenance
-      dockerfile: Dockerfile
+    image: ghcr.io/sylvexn/cannoli-maintenance:latest
+    pull_policy: always
     expose:
       - "80"
     restart: unless-stopped
