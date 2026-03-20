@@ -1,0 +1,1 @@
+ALTER TABLE `site_settings` ADD `trade_expiry_days` integer DEFAULT 7 NOT NULL;

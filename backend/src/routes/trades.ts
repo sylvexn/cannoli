@@ -1,8 +1,96 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
+
+/**
+ * Validate that a proposed trade would leave both rosters legal:
+ *   - point cap not exceeded (using costAtDraft, captain markup not modeled
+ *     because tera captain status is cleared on transfer)
+ *   - max 1 mega per team
+ *   - no duplicate national-dex on either team
+ *
+ * Returns null if valid, or an error message string.
+ */
+function validateProposedTrade(opts: {
+  proposerId: string;
+  recipientId: string;
+  offering: string[];
+  requesting: string[];
+  pointCap: number;
+}): string | null {
+  const { proposerId, recipientId, offering, requesting, pointCap } = opts;
+
+  if (offering.length === 0) return 'Must offer at least one Pokemon';
+  if (requesting.length === 0) return 'Must request at least one Pokemon';
+
+  // Pull rosters
+  const proposerRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, proposerId)).all();
+  const recipientRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, recipientId)).all();
+
+  // Verify ownership
+  for (const name of offering) {
+    if (!proposerRoster.some(r => r.pokemonName === name)) {
+      return `Proposer no longer has ${name}`;
+    }
+  }
+  for (const name of requesting) {
+    if (!recipientRoster.some(r => r.pokemonName === name)) {
+      return `Recipient no longer has ${name}`;
+    }
+  }
+
+  // Pull pokemon metadata for offered + requested + every roster mon (for natdex/mega)
+  const allNames = new Set<string>([
+    ...proposerRoster.map(r => r.pokemonName),
+    ...recipientRoster.map(r => r.pokemonName),
+  ]);
+  const pokemonRows = db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, [...allNames])).all();
+  const pokeByName = new Map(pokemonRows.map(p => [p.name, p]));
+
+  // Build post-trade rosters
+  const postProposer = [
+    ...proposerRoster.filter(r => !offering.includes(r.pokemonName)),
+    ...recipientRoster.filter(r => requesting.includes(r.pokemonName)),
+  ];
+  const postRecipient = [
+    ...recipientRoster.filter(r => !requesting.includes(r.pokemonName)),
+    ...proposerRoster.filter(r => offering.includes(r.pokemonName)),
+  ];
+
+  for (const [side, roster] of [['Proposer', postProposer], ['Recipient', postRecipient]] as const) {
+    // Point cap (use costAtDraft as the canonical points; captain markup cleared on transfer)
+    const total = roster.reduce((s, r) => s + (r.costAtDraft || r.tier || 0), 0);
+    if (total > pointCap) {
+      return `${side} would exceed point cap (${total} > ${pointCap})`;
+    }
+
+    // Mega cap
+    let megaCount = 0;
+    for (const r of roster) {
+      const p = pokeByName.get(r.pokemonName);
+      if (p?.formCategory === 'mega') megaCount++;
+    }
+    if (megaCount > 1) {
+      return `${side} would have ${megaCount} megas (max 1)`;
+    }
+
+    // Duplicate national dex
+    const dexSeen = new Map<number, string>();
+    for (const r of roster) {
+      const p = pokeByName.get(r.pokemonName);
+      if (p?.nationalDexNumber == null) continue;
+      const prev = dexSeen.get(p.nationalDexNumber);
+      if (prev) {
+        return `${side} would have duplicate dex#${p.nationalDexNumber} (${prev} + ${r.pokemonName})`;
+      }
+      dexSeen.set(p.nationalDexNumber, r.pokemonName);
+    }
+  }
+
+  return null;
+}
 
 function loadTradeContext(tradeId: number) {
   const trade = db.select().from(schema.trades).where(eq(schema.trades.id, tradeId)).get();
@@ -198,6 +286,15 @@ export const tradeRoutes = new Elysia()
     const offering = JSON.parse(trade.offering) as string[];
     const requesting = JSON.parse(trade.requesting) as string[];
 
+    // Re-validate at approval time — rosters may have shifted (other accepted trades/FA) since proposal.
+    const approveErr = validateProposedTrade({
+      proposerId: trade.proposerId,
+      recipientId: trade.recipientId,
+      offering, requesting,
+      pointCap: season?.pointCap ?? 110,
+    });
+    if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
+
     try {
       tx(() => {
         executeRosterSwap({
@@ -328,6 +425,17 @@ export const tradeRoutes = new Elysia()
     if (!recipientId) { set.status = 400; return { error: 'Recipient required' }; }
     if (!offering?.length) { set.status = 400; return { error: 'Must offer at least one Pokemon' }; }
     if (!requesting?.length) { set.status = 400; return { error: 'Must request at least one Pokemon' }; }
+    if (recipientId === proposerId) { set.status = 400; return { error: 'Cannot trade with yourself' }; }
+
+    // Both teams must belong to the trade's league
+    const proposerTeamRow = db.select().from(schema.teams).where(eq(schema.teams.id, proposerId)).get();
+    const recipientTeamRow = db.select().from(schema.teams).where(eq(schema.teams.id, recipientId)).get();
+    if (!proposerTeamRow || proposerTeamRow.leagueId !== params.leagueId) {
+      set.status = 400; return { error: 'Proposer team is not in this league' };
+    }
+    if (!recipientTeamRow || recipientTeamRow.leagueId !== params.leagueId) {
+      set.status = 400; return { error: 'Recipient team is not in this league' };
+    }
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
@@ -337,6 +445,13 @@ export const tradeRoutes = new Elysia()
       set.status = 400;
       return { error: `Trade deadline has passed (Week ${season!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
+
+    // Roster legality (point cap + mega + dex)
+    const validationErr = validateProposedTrade({
+      proposerId, recipientId, offering, requesting,
+      pointCap: season?.pointCap ?? 110,
+    });
+    if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
     const tradeId = tx(() => {
       const result = db.insert(schema.trades).values({
