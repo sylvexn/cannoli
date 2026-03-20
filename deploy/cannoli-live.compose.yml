@@ -9,6 +9,14 @@ services:
     environment:
       CANNOLI_MODE: live
       NODE_ENV: production
+      GITHUB_REPO: ${GITHUB_REPO}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      PS_SERVER_WS_URL: ${PS_SERVER_WS_URL}
+      PS_HOSTNAME: ${PS_HOSTNAME}
+      PS_KEY_ID: ${PS_KEY_ID}
+      BOT_USERNAME: ${BOT_USERNAME}
+      BOT_PASSWORD: ${BOT_PASSWORD}
+      PS_RSA_PRIVATE_KEY: ${PS_RSA_PRIVATE_KEY}
     volumes:
       - cannoli-live-data:/app/backend/data
     expose:
