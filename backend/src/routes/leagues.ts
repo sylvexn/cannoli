@@ -4,6 +4,7 @@ import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { effectiveCost } from '../lib/tera-cost';
+import { computeStandings, type TeamStandingRow } from '../lib/standings';
 
 export const leagueRoutes = new Elysia()
 
@@ -42,49 +43,28 @@ export const leagueRoutes = new Elysia()
   // ─── Teams (with rosters + computed records) ─────────────────────────
 
   .get('/api/leagues/:leagueId/teams', ({ params }) => {
-    const teams = db.select().from(schema.teams)
-      .where(eq(schema.teams.leagueId, params.leagueId))
-      .orderBy(asc(schema.teams.rank))
-      .all();
+    // Compute standings using the documented tiebreaker hierarchy.
+    // Use 'all' phase here so playoff-era views still render correct W-L; the
+    // playoff-seeding endpoint scopes to 'regular' separately.
+    const standings = computeStandings(params.leagueId, { phase: 'all' });
+    const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
 
-    return teams.map(team => {
+    // Fetch teams keyed by id, then return them in the order standings dictates.
+    const teamRows = db.select().from(schema.teams)
+      .where(eq(schema.teams.leagueId, params.leagueId))
+      .all();
+    const teamById = new Map(teamRows.map(t => [t.id, t]));
+    const orderedTeams = standings.map(s => teamById.get(s.id)).filter((t): t is NonNullable<typeof t> => !!t);
+
+    return orderedTeams.map(team => {
+      const standing = standingsById.get(team.id)!;
       const roster = db.select().from(schema.rosters)
         .where(eq(schema.rosters.teamId, team.id))
         .all();
 
-      const homeWins = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score > away_score`))
-        .get()?.count || 0;
-
-      const awayWins = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score > home_score`))
-        .get()?.count || 0;
-
-      const homeLosses = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score < away_score`))
-        .get()?.count || 0;
-
-      const awayLosses = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score < home_score`))
-        .get()?.count || 0;
-
-      const homeDiff = db.select({ diff: sql<number>`COALESCE(SUM(home_score - away_score), 0)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score IS NOT NULL`))
-        .get()?.diff || 0;
-
-      const awayDiff = db.select({ diff: sql<number>`COALESCE(SUM(away_score - home_score), 0)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score IS NOT NULL`))
-        .get()?.diff || 0;
-
-      const wins = homeWins + awayWins;
-      const losses = homeLosses + awayLosses;
-      const differential = homeDiff + awayDiff;
+      const wins = standing.wins;
+      const losses = standing.losses;
+      const differential = standing.differential;
 
       const pokemonStats = db.select({
         pokemonName: schema.matchPokemon.pokemonName,
@@ -107,7 +87,9 @@ export const leagueRoutes = new Elysia()
         return {
           name: r.pokemonName,
           types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
-          tier: r.tier,
+          // Surface the snapshotted cost (what the team actually paid) so totals
+          // don't shift when admins re-tier a Pokemon mid-season.
+          tier: r.costAtDraft || r.tier,
           isTeraCaptain: r.isTeraCaptain,
           teraTypes: r.isTeraCaptain
             ? [r.teraType1, r.teraType2, r.teraType3].filter(Boolean).map(t => t!.toLowerCase())
@@ -140,7 +122,14 @@ export const leagueRoutes = new Elysia()
         showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
         userId: team.userId,
-        record: { wins, losses, differential },
+        record: {
+          wins,
+          losses,
+          differential,
+          kills: standing.kills,
+          deaths: standing.deaths,
+        },
+        tiebreaker: standing.tiebreaker,
         roster: enrichedRoster,
       };
     });
@@ -347,36 +336,18 @@ export const leagueRoutes = new Elysia()
       .all();
 
     return leagues.map(l => {
-      const teams = db.select().from(schema.teams)
+      const standings = computeStandings(l.id, { phase: 'all' });
+      const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
+      const teamRows = db.select().from(schema.teams)
         .where(eq(schema.teams.leagueId, l.id))
-        .orderBy(asc(schema.teams.rank))
-        .all()
-        .map(team => {
-          const homeWins = db.select({ count: sql<number>`count(*)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score > away_score`))
-            .get()?.count || 0;
-          const awayWins = db.select({ count: sql<number>`count(*)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score > home_score`))
-            .get()?.count || 0;
-          const homeLosses = db.select({ count: sql<number>`count(*)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score < away_score`))
-            .get()?.count || 0;
-          const awayLosses = db.select({ count: sql<number>`count(*)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score < home_score`))
-            .get()?.count || 0;
-          const homeDiff = db.select({ diff: sql<number>`COALESCE(SUM(home_score - away_score), 0)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score IS NOT NULL`))
-            .get()?.diff || 0;
-          const awayDiff = db.select({ diff: sql<number>`COALESCE(SUM(away_score - home_score), 0)` })
-            .from(schema.matches)
-            .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score IS NOT NULL`))
-            .get()?.diff || 0;
+        .all();
+      const teamRowById = new Map(teamRows.map(t => [t.id, t]));
 
+      const teams = standings
+        .map(s => teamRowById.get(s.id))
+        .filter((t): t is NonNullable<typeof t> => !!t)
+        .map(team => {
+          const standing = standingsById.get(team.id)!;
           const roster = db.select().from(schema.rosters)
             .where(eq(schema.rosters.teamId, team.id))
             .all()
@@ -386,7 +357,8 @@ export const leagueRoutes = new Elysia()
                 .get();
               return {
                 name: r.pokemonName,
-                tier: r.tier,
+                // costAtDraft snapshot — see /api/leagues/:leagueId/teams.
+                tier: r.costAtDraft || r.tier,
                 types: poke ? [poke.type1, poke.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
                 isTeraCaptain: r.isTeraCaptain,
               };
@@ -401,10 +373,13 @@ export const leagueRoutes = new Elysia()
             rank: team.rank,
             roster,
             record: {
-              wins: homeWins + awayWins,
-              losses: homeLosses + awayLosses,
-              differential: homeDiff + awayDiff,
+              wins: standing.wins,
+              losses: standing.losses,
+              differential: standing.differential,
+              kills: standing.kills,
+              deaths: standing.deaths,
             },
+            tiebreaker: standing.tiebreaker,
           };
         });
 
@@ -447,7 +422,7 @@ export const leagueRoutes = new Elysia()
         id: l.id,
         name: l.name,
         color: l.color,
-        teams: teams.sort((a, b) => b.record.wins - a.record.wins || b.record.differential - a.record.differential),
+        teams,
         playoffs,
         champion,
         mvps: mvps.map(m => ({
@@ -478,6 +453,8 @@ export const leagueRoutes = new Elysia()
       defaultUserPassword: row.defaultUserPassword,
       draftTimerEnabled: row.draftTimerEnabled ?? true,
       draftDemoVisible: row.draftDemoVisible ?? true,
+      faDeadlineWeek: row.faDeadlineWeek ?? 7,
+      defaultPlayoffTeamCount: row.defaultPlayoffTeamCount ?? 6,
     };
   })
 
@@ -533,6 +510,19 @@ export const leagueRoutes = new Elysia()
     // Get season config for captain slot limit
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+
+    // Phase gate: captain assignments lock once the season enters regular play.
+    // Allowed during predraft (pre-draft prep) and draft (live drafting); rejected
+    // for regular/playoffs/offseason. Staff can't override — locking is league-wide.
+    if (season && (season.phase === 'regular' || season.phase === 'playoffs' || season.phase === 'offseason')) {
+      set.status = 409;
+      return {
+        error: `Tera captains are locked once the draft ends (current phase: ${season.phase})`,
+        code: 'captains_locked',
+        phase: season.phase,
+      };
+    }
+
     const maxCaptains = season?.teraCaptainSlots ?? 2;
 
     if (captains.length > maxCaptains) {
@@ -563,8 +553,10 @@ export const leagueRoutes = new Elysia()
       .where(eq(schema.rosters.teamId, params.teamId))
       .all();
     const captainSet = new Set(captains.map(c => c.pokemonName));
+    // Use costAtDraft (snapshot) so admin tier-list edits between draft end and
+    // captain reassignment don't unexpectedly bust the point cap.
     const totalCost = roster.reduce(
-      (sum, r) => sum + effectiveCost(r.tier, captainSet.has(r.pokemonName)),
+      (sum, r) => sum + effectiveCost(r.costAtDraft || r.tier, captainSet.has(r.pokemonName)),
       0,
     );
     const cap = season?.pointCap ?? 110;
@@ -752,6 +744,31 @@ export const leagueRoutes = new Elysia()
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = season?.currentWeek ?? 0;
 
+    // ── Phase / deadline gate ──
+    // - predraft / draft / offseason: drafting is the pickup mechanism; if hit,
+    //   allow (no-op gate, explicit per spec).
+    // - regular: blocked once currentWeek > faDeadlineWeek (site setting).
+    // - playoffs: always blocked, no FA in playoffs.
+    if (season) {
+      if (season.phase === 'playoffs') {
+        set.status = 409;
+        return { error: 'Free agent pickups are closed during playoffs', code: 'fa_playoffs_closed' };
+      }
+      if (season.phase === 'regular') {
+        const settings = db.select().from(schema.siteSettings).get();
+        const faDeadline = settings?.faDeadlineWeek ?? 7;
+        if (week > faDeadline) {
+          set.status = 409;
+          return {
+            error: `Free agent deadline has passed (week ${faDeadline}, current week ${week})`,
+            code: 'fa_deadline_passed',
+            faDeadlineWeek: faDeadline,
+            currentWeek: week,
+          };
+        }
+      }
+    }
+
     return tx(() => {
       // Drop pokemon if specified
       if (dropPokemonName) {
@@ -760,11 +777,13 @@ export const leagueRoutes = new Elysia()
           .run();
       }
 
-      // Add new pokemon to roster
+      // Add new pokemon to roster — snapshot costAtDraft so later admin
+      // tier-list edits don't retroactively rewrite this team's point total.
       db.insert(schema.rosters).values({
         teamId,
         pokemonName,
         tier: pkmn.tier,
+        costAtDraft: pkmn.tier,
         acquiredVia: 'fa',
         acquiredWeek: week,
       }).run();

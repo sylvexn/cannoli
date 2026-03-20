@@ -29,9 +29,18 @@ const STATUS_CONFIG: Record<BanStatus, { label: string; color: string; bg: strin
   banned:        { label: 'Banned',       color: 'text-loss', bg: 'bg-loss/10', border: 'border-loss/30', next: 'available' },
 };
 
+interface ActiveLeague { id: string; name: string; phase: string }
+
 export function AdminTierList() {
   const [pool, setPool] = useState<PoolEntry[]>([]);
   const [, setLoading] = useState(true);
+  /**
+   * Leagues currently in regular/playoffs phase. When non-empty the backend
+   * rejects unforced PUT /api/tier-list/:name calls with 409 tier_list_locked,
+   * so we surface a warning banner and prompt for a typed league-name confirm
+   * before re-attempting with { force: true, confirmLeague }.
+   */
+  const [activeLeagues, setActiveLeagues] = useState<ActiveLeague[]>([]);
 
   useEffect(() => {
     api.getTierList()
@@ -47,6 +56,49 @@ export function AdminTierList() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    api.getLeagues()
+      .then(leagues => {
+        setActiveLeagues(
+          leagues
+            .filter(l => l.season?.phase === 'regular' || l.season?.phase === 'playoffs')
+            .map(l => ({ id: l.id, name: l.name, phase: l.season!.phase })),
+        );
+      })
+      .catch(() => {});
+  }, []);
+
+  /**
+   * Wrap api.updateTierListEntry with an interactive force/confirm path. When
+   * the backend rejects with code tier_list_locked / tier_list_confirm_required,
+   * we prompt the admin to type an active league name before retrying.
+   */
+  const sendTierUpdate = useCallback(async (
+    name: string,
+    data: { tier?: number; status?: string },
+  ) => {
+    try {
+      await api.updateTierListEntry(name, data);
+    } catch (err: any) {
+      const code = err?.body?.code ?? err?.code;
+      if (code === 'tier_list_locked' || code === 'tier_list_confirm_required') {
+        const names = (err.body?.activeLeagues ?? activeLeagues).map((l: ActiveLeague) => l.name).join(' / ');
+        const confirmLeague = window.prompt(
+          `Tier list edits affect leagues currently in regular/playoffs (${names}).\n\nType the league name to force this edit:`,
+        );
+        if (!confirmLeague) {
+          toast.error('Force edit cancelled');
+          throw err;
+        }
+        await api.updateTierListEntry(name, { ...data, force: true, confirmLeague });
+        toast.warning(`Forced tier-list edit during active league (${confirmLeague})`);
+      } else {
+        toast.error(err.message || 'Failed to update tier list');
+        throw err;
+      }
+    }
+  }, [activeLeagues]);
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -100,14 +152,16 @@ export function AdminTierList() {
   }, [pool]);
 
   const cycleStatus = useCallback((name: string) => {
-    setPool(prev => prev.map(e => {
-      if (e.name !== name) return e;
-      const next = STATUS_CONFIG[e.status].next;
-      api.updateTierListEntry(name, { status: next }).catch(err => toast.error(err.message));
-      toast.success(`${name}: ${STATUS_CONFIG[next].label}`);
-      return { ...e, status: next, modified: true };
-    }));
-  }, []);
+    const current = pool.find(e => e.name === name);
+    if (!current) return;
+    const next = STATUS_CONFIG[current.status].next;
+    sendTierUpdate(name, { status: next })
+      .then(() => {
+        setPool(prev => prev.map(e => e.name === name ? { ...e, status: next, modified: true } : e));
+        toast.success(`${name}: ${STATUS_CONFIG[next].label}`);
+      })
+      .catch(() => {});
+  }, [pool, sendTierUpdate]);
 
   const startEditTier = useCallback((name: string) => {
     const entry = poolMap.get(name);
@@ -118,14 +172,18 @@ export function AdminTierList() {
 
   const saveTier = useCallback(() => {
     if (!editingName) return;
-    api.updateTierListEntry(editingName, { tier: editTierValue }).catch(err => toast.error(err.message));
-    setPool(prev => prev.map(e => {
-      if (e.name !== editingName) return e;
-      return { ...e, tier: editTierValue, modified: editTierValue !== e.baseTier };
-    }));
-    toast.success(`${editingName} → Tier ${editTierValue}`);
-    setEditingName(null);
-  }, [editingName, editTierValue]);
+    const target = editingName;
+    sendTierUpdate(target, { tier: editTierValue })
+      .then(() => {
+        setPool(prev => prev.map(e => {
+          if (e.name !== target) return e;
+          return { ...e, tier: editTierValue, modified: editTierValue !== e.baseTier };
+        }));
+        toast.success(`${target} → Tier ${editTierValue}`);
+        setEditingName(null);
+      })
+      .catch(() => {});
+  }, [editingName, editTierValue, sendTierUpdate]);
 
   const cancelEdit = useCallback(() => setEditingName(null), []);
 
@@ -135,6 +193,20 @@ export function AdminTierList() {
 
   return (
     <div className="space-y-4">
+      {/* Active-league warning — surfaces backend phase gate */}
+      {activeLeagues.length > 0 && (
+        <div className="rounded-md border border-loss/30 bg-loss/5 px-3 py-2 text-xs text-loss/90 flex items-center gap-2">
+          <span className="font-bold uppercase tracking-wider text-[10px]">Locked</span>
+          <span>
+            {activeLeagues.length === 1 ? 'A league is' : `${activeLeagues.length} leagues are`} past draft —
+            tier-list edits will require typing the league name to force.
+          </span>
+          <span className="ml-auto font-mono text-[10px] text-loss/70">
+            {activeLeagues.map(l => `${l.name} [${l.phase}]`).join(' · ')}
+          </span>
+        </div>
+      )}
+
       {/* Stats strip */}
       <div className="flex flex-wrap gap-4 text-sm items-center">
         <div className="flex items-center gap-1.5">

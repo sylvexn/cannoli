@@ -37,7 +37,14 @@ async function mutateJson<T>(method: string, path: string, body?: unknown): Prom
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error: ${res.status}`);
+    // Preserve body fields (e.g. `code`, `activeLeagues`) on the thrown Error so
+    // callers can branch on structured error codes without re-fetching.
+    const e: Error & { body?: any; status?: number; code?: string } =
+      new Error(err.error || `API error: ${res.status}`);
+    e.body = err;
+    e.status = res.status;
+    if (err && typeof err === 'object' && 'code' in err) e.code = err.code;
+    throw e;
   }
   return res.json();
 }
@@ -430,8 +437,11 @@ export const api = {
   saveSiteSettings: (settings: Record<string, unknown>) =>
     putJson<{ success: boolean }>('/api/site-settings', settings),
 
-  updateTierListEntry: (name: string, data: { tier?: number; status?: string }) =>
-    putJson<{ success: boolean }>(`/api/tier-list/${encodeURIComponent(name)}`, data),
+  updateTierListEntry: (
+    name: string,
+    data: { tier?: number; status?: string; force?: boolean; confirmLeague?: string },
+  ) =>
+    putJson<{ success: boolean; forced?: boolean }>(`/api/tier-list/${encodeURIComponent(name)}`, data),
 
   createMoveCategory: (name: string) =>
     postJson<{ id: string; name: string }>('/api/move-categories', { name }),
