@@ -1,11 +1,11 @@
 # Coolify-managed compose stack for the LIVE environment (cannoli.live).
-# Mirror of cannoli-mock.compose.yml with CANNOLI_MODE=live and live aliases.
+# Currently NOT deployed — cannoli-maintenance owns cannoli.live until launch.
+# When ready: delete cannoli-maintenance Coolify app, create one from this file.
 
 services:
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: ghcr.io/sylvexn/cannoli-backend:latest
+    pull_policy: always
     environment:
       CANNOLI_MODE: live
       NODE_ENV: production
@@ -20,9 +20,8 @@ services:
           - cannoli-backend-live
 
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: ghcr.io/sylvexn/cannoli-frontend:latest
+    pull_policy: always
     environment:
       BACKEND_HOST: cannoli-backend-live
     expose:

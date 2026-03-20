@@ -1,0 +1,209 @@
+# Build → push → deploy pipeline.
+#
+# Builds each cannoli service image on a GitHub-hosted runner (so the vps
+# never sees build CPU), pushes to ghcr.io, then triggers the matching
+# Coolify Docker Compose application to pull-and-restart.
+#
+# Path filters keep us honest: only services whose source changed are rebuilt.
+# Override with workflow_dispatch + rebuild_all=true for a forced full rebuild.
+
+name: build-and-deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: "Build every image regardless of path filters"
+        required: false
+        default: "false"
+
+concurrency:
+  group: build-and-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: sylvexn
+
+jobs:
+  detect:
+    name: detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend }}
+      ps-server: ${{ steps.filter.outputs.ps-server }}
+      ps-client: ${{ steps.filter.outputs.ps-client }}
+      maintenance: ${{ steps.filter.outputs.maintenance }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'package.json'
+              - 'bun.lock'
+            backend:
+              - 'backend/**'
+              - 'package.json'
+              - 'bun.lock'
+            ps-server:
+              - 'showdown/Dockerfile.server'
+              - 'showdown/ps-client-config.js'
+              - 'showdown/ps-testclient-key.js'
+              - 'ps/**'
+            ps-client:
+              - 'showdown/Dockerfile.client'
+              - 'showdown/nginx.conf'
+              - 'showdown/ps-client-config.js'
+              - 'showdown/ps-testclient-key.js'
+            maintenance:
+              - 'deploy/maintenance/**'
+
+  build:
+    name: build ${{ matrix.service }}
+    needs: detect
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: .
+            dockerfile: frontend/Dockerfile
+            changed: ${{ needs.detect.outputs.frontend }}
+          - service: backend
+            context: .
+            dockerfile: backend/Dockerfile
+            changed: ${{ needs.detect.outputs.backend }}
+          - service: ps-server
+            context: .
+            dockerfile: showdown/Dockerfile.server
+            changed: ${{ needs.detect.outputs.ps-server }}
+          - service: ps-client
+            context: .
+            dockerfile: showdown/Dockerfile.client
+            changed: ${{ needs.detect.outputs.ps-client }}
+          - service: maintenance
+            context: deploy/maintenance
+            dockerfile: deploy/maintenance/Dockerfile
+            changed: ${{ needs.detect.outputs.maintenance }}
+    if: ${{ needs.detect.outputs.frontend == 'true' || needs.detect.outputs.backend == 'true' || needs.detect.outputs.ps-server == 'true' || needs.detect.outputs.ps-client == 'true' || needs.detect.outputs.maintenance == 'true' || github.event.inputs.rebuild_all == 'true' }}
+    steps:
+      - name: skip if unchanged
+        if: ${{ matrix.changed != 'true' && github.event.inputs.rebuild_all != 'true' }}
+        run: echo "${{ matrix.service }} unchanged — skipping" && exit 0
+
+      - uses: actions/checkout@v4
+        if: ${{ matrix.changed == 'true' || github.event.inputs.rebuild_all == 'true' }}
+
+      - name: docker buildx
+        if: ${{ matrix.changed == 'true' || github.event.inputs.rebuild_all == 'true' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: ghcr login
+        if: ${{ matrix.changed == 'true' || github.event.inputs.rebuild_all == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: image metadata
+        if: ${{ matrix.changed == 'true' || github.event.inputs.rebuild_all == 'true' }}
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/cannoli-${{ matrix.service }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: build & push
+        if: ${{ matrix.changed == 'true' || github.event.inputs.rebuild_all == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          provenance: false
+
+  deploy:
+    name: trigger Coolify
+    needs: [detect, build]
+    runs-on: ubuntu-latest
+    if: ${{ always() && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    env:
+      COOLIFY_URL: https://cool.syl.rest
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_DEPLOY_TOKEN }}
+      # Coolify app UUIDs per stack. These are not secrets.
+      # Update via repo Variables → Actions when stacks are recreated.
+      APP_MOCK: ${{ vars.COOLIFY_APP_MOCK }}
+      APP_LIVE: ${{ vars.COOLIFY_APP_LIVE }}
+      APP_SHOWDOWN: ${{ vars.COOLIFY_APP_SHOWDOWN }}
+      APP_MAINTENANCE: ${{ vars.COOLIFY_APP_MAINTENANCE }}
+    steps:
+      - name: redeploy affected stacks
+        run: |
+          set -e
+          fired=()
+
+          fire() {
+            local name="$1" uuid="$2"
+            if [ -z "$uuid" ]; then
+              echo "::warning::no uuid configured for $name — skipping"
+              return
+            fi
+            echo "→ triggering $name ($uuid)"
+            curl -fsS -X GET "$COOLIFY_URL/api/v1/deploy?uuid=$uuid" \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" || {
+                echo "::error::deploy trigger failed for $name"
+                exit 1
+              }
+            echo
+            fired+=("$name")
+          }
+
+          mock_changed=false
+          live_changed=false
+          showdown_changed=false
+          maintenance_changed=false
+
+          # frontend or backend image change → redeploy mock + live (live may not exist yet)
+          if [ "${{ needs.detect.outputs.frontend }}" = "true" ] || [ "${{ needs.detect.outputs.backend }}" = "true" ] || [ "${{ github.event.inputs.rebuild_all }}" = "true" ]; then
+            mock_changed=true
+            live_changed=true
+          fi
+
+          # ps-server or ps-client change → redeploy showdown
+          if [ "${{ needs.detect.outputs.ps-server }}" = "true" ] || [ "${{ needs.detect.outputs.ps-client }}" = "true" ] || [ "${{ github.event.inputs.rebuild_all }}" = "true" ]; then
+            showdown_changed=true
+          fi
+
+          # maintenance change → redeploy maintenance
+          if [ "${{ needs.detect.outputs.maintenance }}" = "true" ] || [ "${{ github.event.inputs.rebuild_all }}" = "true" ]; then
+            maintenance_changed=true
+          fi
+
+          [ "$mock_changed" = "true" ] && fire "cannoli-mock" "$APP_MOCK"
+          [ "$live_changed" = "true" ] && fire "cannoli-live" "$APP_LIVE"
+          [ "$showdown_changed" = "true" ] && fire "cannoli-showdown" "$APP_SHOWDOWN"
+          [ "$maintenance_changed" = "true" ] && fire "cannoli-maintenance" "$APP_MAINTENANCE"
+
+          if [ ${#fired[@]} -eq 0 ]; then
+            echo "no deploy triggers required"
+          else
+            echo "deployed: ${fired[*]}"
+          fi
