@@ -11,7 +11,7 @@ pokemon draft tournament league platform — replaces the google sheets + discor
 | runtime | bun |
 | frontend | react · vite · tailwind · shadcn/ui |
 | backend | elysia · sqlite · drizzle orm |
-| auth | httponly cookies · role-based (dev/admin/user/guest) |
+| auth | httponly cookies · role-based (dev/admin/user) |
 | deploy | coolify on vps · dual mode (`live` / `mock`) |
 
 ## features
