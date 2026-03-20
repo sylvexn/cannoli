@@ -144,7 +144,7 @@ export function DraftAdminOverrides({
               <label className="text-[10px] font-mono uppercase tracking-widest text-text-muted block mb-1">
                 Team
               </label>
-              <Select value={forceTeamId} onValueChange={setForceTeamId}>
+              <Select value={forceTeamId} onValueChange={v => setForceTeamId(v ?? '')}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Choose team..." />
                 </SelectTrigger>
@@ -171,7 +171,7 @@ export function DraftAdminOverrides({
                 onChange={e => setForceSearch(e.target.value)}
                 className="h-8 text-xs mb-1.5"
               />
-              <Select value={forcePokemon} onValueChange={setForcePokemon}>
+              <Select value={forcePokemon} onValueChange={v => setForcePokemon(v ?? '')}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Choose Pokemon..." />
                 </SelectTrigger>
