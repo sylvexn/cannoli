@@ -8,6 +8,8 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "seed": "bun run scripts/seed.ts",
     "seed:fresh": "rm -f data/cannoli.db data/cannoli.db-shm data/cannoli.db-wal && bun run scripts/seed.ts",
+    "seed:s11": "CANNOLI_SEED_SEASON=11 bun run scripts/seed.ts",
+    "seed:s11:fresh": "rm -f data/cannoli.db data/cannoli.db-shm data/cannoli.db-wal && CANNOLI_SEED_SEASON=11 bun run scripts/seed.ts",
     "test": "bun test tests/"
   },
   "dependencies": {
