@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -12,12 +12,14 @@ import { TeamLogo } from '@/components/team-logo';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { ArrowRightLeft, Check, Send } from 'lucide-react';
+import { ArrowRightLeft, Check, Send, AlertCircle } from 'lucide-react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
+import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import type { Player } from '@/lib/types';
+import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
+import type { Player, RosterPokemon } from '@/lib/types';
 
 interface TradeProposeDialogProps {
   open: boolean;
@@ -26,35 +28,107 @@ interface TradeProposeDialogProps {
   recipientTeamId?: string | null;
 }
 
+interface ValidationIssue {
+  side: 'offering' | 'requesting';
+  message: string;
+}
+
+/**
+ * Validate post-trade rosters against:
+ *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft)
+ *   - max 1 mega per team
+ *   - no duplicate species (proxy for national-dex check; backend re-verifies)
+ *
+ * Returns one issue per failed rule per side. Empty array = legal.
+ */
+function validateTrade(opts: {
+  proposer: Player;
+  recipient: Player;
+  offering: Set<string>;
+  requesting: Set<string>;
+  pointCap: number;
+}): ValidationIssue[] {
+  const { proposer, recipient, offering, requesting, pointCap } = opts;
+  const issues: ValidationIssue[] = [];
+
+  if (offering.size === 0 || requesting.size === 0) return issues;
+
+  const offered = proposer.roster.filter(m => offering.has(m.name));
+  const requested = recipient.roster.filter(m => requesting.has(m.name));
+
+  // Build post-trade rosters
+  const postProposer: RosterPokemon[] = [
+    ...proposer.roster.filter(m => !offering.has(m.name)),
+    ...requested,
+  ];
+  const postRecipient: RosterPokemon[] = [
+    ...recipient.roster.filter(m => !requesting.has(m.name)),
+    ...offered,
+  ];
+
+  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[]) {
+    const total = roster.reduce((s, m) => s + (m.tier || 0), 0);
+    if (total > pointCap) {
+      issues.push({ side, message: `${label} would exceed point cap (${total} > ${pointCap})` });
+    }
+
+    const megas = roster.filter(m => isMegaForm(m.name));
+    if (megas.length > 1) {
+      issues.push({ side, message: `${label} would have ${megas.length} megas (${megas.map(m => m.name).join(', ')}) — max 1` });
+    }
+
+    const baseSeen = new Map<string, string>();
+    for (const m of roster) {
+      const base = getBaseFormName(m.name);
+      const prev = baseSeen.get(base);
+      if (prev && prev !== m.name) {
+        issues.push({ side, message: `${label} would have duplicate species: ${prev} + ${m.name}` });
+        break;
+      }
+      baseSeen.set(base, m.name);
+    }
+  }
+
+  check('offering', 'Your team', postProposer);
+  check('requesting', recipient.teamAbbrev, postRecipient);
+
+  return issues;
+}
+
 export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProposeDialogProps) {
   const league = useLeague();
+  const { user } = useAuth();
   const { players } = useLeagueData();
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
+  const pointCap = league.season.pointCap ?? 110;
 
-  const [proposerTeamId, setProposerTeamId] = useState<string | null>(null);
+  // Default to the current user's team in this league, if any
+  const myTeam = useMemo(
+    () => players.find(p => user?.id != null && p.userId === parseInt(user.id)) ?? null,
+    [players, user?.id],
+  );
+
+  const [proposerTeamId, setProposerTeamId] = useState<string | null>(myTeam?.id ?? null);
   const [recipientId, setRecipientId] = useState<string | null>(recipientTeamId ?? null);
   const [offering, setOffering] = useState<Set<string>>(new Set());
   const [requesting, setRequesting] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Reset state when dialog opens
+  // Reset state when dialog opens (or pre-selection changes)
+  useEffect(() => {
+    if (open) {
+      setOffering(new Set());
+      setRequesting(new Set());
+      setProposerTeamId(myTeam?.id ?? null);
+      setRecipientId(recipientTeamId ?? null);
+      setSubmitError(null);
+    }
+  }, [open, recipientTeamId, myTeam?.id]);
+
   const handleOpenChange = (isOpen: boolean) => {
-    if (!isOpen) {
-      onClose();
-      return;
-    }
-    setOffering(new Set());
-    setRequesting(new Set());
-    setRecipientId(recipientTeamId ?? null);
-    setProposerTeamId(null);
+    if (!isOpen) onClose();
   };
-
-  // When dialog opens with recipient pre-set, auto-fill
-  useMemo(() => {
-    if (open && recipientTeamId) {
-      setRecipientId(recipientTeamId);
-    }
-  }, [open, recipientTeamId]);
 
   const proposerTeam = (proposerTeamId ? playerMap.get(proposerTeamId) : null) ?? null;
   const recipientTeam = (recipientId ? playerMap.get(recipientId) : null) ?? null;
@@ -69,11 +143,24 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
     [players, proposerTeamId],
   );
 
-  const canSubmit = proposerTeamId && recipientId && offering.size > 0 && requesting.size > 0 && !submitting;
+  // Live validation (non-blocking until user actually has selections on both sides)
+  const validationIssues = useMemo(() => {
+    if (!proposerTeam || !recipientTeam) return [];
+    return validateTrade({
+      proposer: proposerTeam,
+      recipient: recipientTeam,
+      offering, requesting, pointCap,
+    });
+  }, [proposerTeam, recipientTeam, offering, requesting, pointCap]);
+
+  const isLegal = validationIssues.length === 0;
+  const hasSelections = !!proposerTeamId && !!recipientId && offering.size > 0 && requesting.size > 0;
+  const canSubmit = hasSelections && isLegal && !submitting;
 
   async function handleSubmit() {
     if (!proposerTeamId || !recipientId || offering.size === 0 || requesting.size === 0) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await api.proposeTrade(league.id, {
         recipientId,
@@ -84,7 +171,9 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
       toast.success('Trade proposal sent!');
       onClose();
     } catch (err: any) {
-      toast.error(err.message);
+      const msg = err?.message || 'Failed to send proposal';
+      setSubmitError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -207,6 +296,27 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
               </div>
             </div>
           )}
+
+          {/* Inline validation feedback */}
+          {hasSelections && !isLegal && (
+            <div className="rounded-md border border-loss/30 bg-loss/10 p-2.5 space-y-1">
+              {validationIssues.map((issue, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px] text-loss">
+                  <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                  <span>{issue.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {submitError && (
+            <div className="rounded-md border border-loss/30 bg-loss/10 p-2.5">
+              <div className="flex items-start gap-2 text-[11px] text-loss">
+                <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                <span>{submitError}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -225,7 +335,7 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
   );
 }
 
-/** Selectable roster grid for one team */
+/** Selectable roster grid for one team. Shows full sprite + name + tier. */
 function RosterPicker({ label, labelColor, team, selected, onToggle }: {
   label: string;
   labelColor: string;
@@ -253,7 +363,10 @@ function RosterPicker({ label, labelColor, team, selected, onToggle }: {
           </Badge>
         )}
       </div>
-      <div className="rounded-md border border-border-subtle max-h-[200px] overflow-y-auto">
+      <div className="rounded-md border border-border-subtle max-h-[240px] overflow-y-auto">
+        {team.roster.length === 0 && (
+          <div className="px-3 py-4 text-center text-[10px] text-text-muted">No Pokemon on roster</div>
+        )}
         {team.roster.map(mon => {
           const isSelected = selected.has(mon.name);
           return (
@@ -274,6 +387,9 @@ function RosterPicker({ label, labelColor, team, selected, onToggle }: {
               </div>
               <PokemonSprite name={mon.name} size="xs" />
               <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
+              {isMegaForm(mon.name) && (
+                <Badge variant="outline" className="text-[8px] px-1 py-0 text-purple-400 border-purple-400/30">M</Badge>
+              )}
               <TierBadge points={mon.tier} />
             </button>
           );
