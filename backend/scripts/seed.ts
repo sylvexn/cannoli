@@ -4,23 +4,50 @@
  * Usage: bun run scripts/seed.ts
  *
  * Reads CANNOLI_MODE env var:
- *   - 'mock' (default): Full S10 data + mock users, trades, activity log, trade block
- *   - 'live': S10+S9 historical data, minimal accounts (syl + root only)
+ *   - 'mock' (default): Full primary-season data + mock users, trades, activity log, trade block
+ *   - 'live': primary + S9 historical data, minimal accounts (syl + root only)
+ *
+ * Reads CANNOLI_SEED_SEASON env var to pick which season config drives the primary import:
+ *   - '10' (default): use S10_CONFIG — current shipped season with full data
+ *   - '11': use S11_CONFIG — drop the 3 S11 XLSX files in backend/imports/ first
+ *
+ * The default points at whichever season currently has imports/ files committed; bump it
+ * when S11 becomes the active season.
  */
 
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
 import { hashSync } from 'bcryptjs';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import * as schema from '../src/db/schema';
-import { importSeason, S10_CONFIG, S9_CONFIG } from './import-xlsx';
+import { importSeason, S9_CONFIG, S10_CONFIG, S11_CONFIG, IMPORTS_DIR } from './import-xlsx';
 
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 const DRIZZLE_DIR = resolve(import.meta.dir, '../drizzle');
 const MODE = process.env.CANNOLI_MODE || 'mock';
+const SEASON = process.env.CANNOLI_SEED_SEASON || '10';
 
-console.log(`Seeding database in ${MODE} mode...`);
+const SEASON_CONFIGS = { '10': S10_CONFIG, '11': S11_CONFIG } as const;
+const PRIMARY_CONFIG = SEASON_CONFIGS[SEASON as keyof typeof SEASON_CONFIGS];
+if (!PRIMARY_CONFIG) {
+  console.error(`Unknown CANNOLI_SEED_SEASON='${SEASON}'. Valid values: ${Object.keys(SEASON_CONFIGS).join(', ')}`);
+  process.exit(1);
+}
+
+// Verify expected XLSX files exist before touching the DB
+const missingFiles = PRIMARY_CONFIG.files
+  .map((f) => f.file)
+  .filter((f) => !existsSync(resolve(IMPORTS_DIR, f)));
+if (missingFiles.length > 0) {
+  console.error(`\nCannot seed Season ${PRIMARY_CONFIG.seasonNumber}: missing XLSX file(s) in ${IMPORTS_DIR}`);
+  for (const f of missingFiles) console.error(`  - ${f}`);
+  console.error(`\nDrop the file(s) into backend/imports/ and re-run.`);
+  process.exit(1);
+}
+
+console.log(`Seeding database in ${MODE} mode (Season ${PRIMARY_CONFIG.seasonNumber})...`);
 console.log(`Database: ${DB_PATH}`);
 
 // ─── Init DB ────────────────────────────────────────────────────────────────
@@ -404,17 +431,24 @@ if (seasonCount > 0) {
 // System accounts first (before import, which references them)
 seedSystemAccounts();
 
-// Import S10 data (both modes)
-console.log('\n── Importing Season 10 ──');
-const { coachTeamIds } = importSeason(sqlite, S10_CONFIG, {
+// Import primary season data (both modes)
+console.log(`\n── Importing Season ${PRIMARY_CONFIG.seasonNumber} ──`);
+const { coachTeamIds } = importSeason(sqlite, PRIMARY_CONFIG, {
   createUsers: true,
   clearExisting: false,
 });
 
-// Live mode: also import S9
+// Live mode: also import S9 historical data (only if S9 XLSX files are present)
 if (MODE === 'live') {
-  console.log('\n── Importing Season 9 ──');
-  importSeason(sqlite, S9_CONFIG, { createUsers: false, clearExisting: false });
+  const s9Missing = S9_CONFIG.files
+    .map((f) => f.file)
+    .filter((f) => !existsSync(resolve(IMPORTS_DIR, f)));
+  if (s9Missing.length === 0) {
+    console.log('\n── Importing Season 9 ──');
+    importSeason(sqlite, S9_CONFIG, { createUsers: false, clearExisting: false });
+  } else {
+    console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
+  }
 }
 
 // Seed supplementary data (both modes)

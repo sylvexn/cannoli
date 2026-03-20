@@ -80,6 +80,18 @@ export const S10_CONFIG: SeasonConfig = {
   ],
 };
 
+export const S11_CONFIG: SeasonConfig = {
+  seasonNumber: 11,
+  phase: 'draft',
+  currentWeek: 0,
+  totalWeeks: 11,
+  files: [
+    { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 11.xlsx' },
+    { id: 'ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 11.xlsx' },
+    { id: 'emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 11.xlsx' },
+  ],
+};
+
 export const S9_CONFIG: SeasonConfig = {
   seasonNumber: 9,
   phase: 'offseason',
