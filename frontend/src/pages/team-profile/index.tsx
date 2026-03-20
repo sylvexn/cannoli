@@ -554,6 +554,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           config={config}
           theorycraftMode={theorycraftMode}
           canEdit={theorycraftMode || isAdmin}
+          seasonPhase={season?.phase ?? null}
           teraEdits={teraEdits}
           teraEditingIndex={teraEditingIndex}
           pointsUsed={pointsUsed}

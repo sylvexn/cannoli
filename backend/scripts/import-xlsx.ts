@@ -385,6 +385,7 @@ export function importSeason(
           teamId,
           pokemonName: cleanName,
           tier,
+          costAtDraft: tier,
           isTeraCaptain: isTera,
           teraType1,
           teraType2,

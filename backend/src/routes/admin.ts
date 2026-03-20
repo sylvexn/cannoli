@@ -68,6 +68,16 @@ export const adminRoutes = new Elysia()
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
 
+    // If overwriting a previously-recorded result, snapshot prior K/D rows so
+    // history isn't silently destroyed. Activity log metadata is the system of
+    // record (no separate history table).
+    const isOverwrite = match.status === 'completed' || match.status === 'disputed';
+    const priorPokemon = isOverwrite
+      ? db.select().from(schema.matchPokemon)
+          .where(eq(schema.matchPokemon.matchId, params.matchId))
+          .all()
+      : [];
+
     tx(() => {
       db.update(schema.matches).set({
         status: 'completed',
@@ -77,6 +87,24 @@ export const adminRoutes = new Elysia()
         completedAt: new Date().toISOString(),
         warnings: null,
       }).where(eq(schema.matches.id, params.matchId)).run();
+
+      if (isOverwrite) {
+        db.insert(schema.activityLog).values({
+          type: 'match_result_overwritten',
+          category: 'admin',
+          actor: user.username,
+          leagueId: match.leagueId,
+          description: `Overwrote prior result for ${params.matchId}: was ${match.homeScore ?? '-'}-${match.awayScore ?? '-'}, now ${homeScore}-${awayScore}`,
+          metadata: JSON.stringify({
+            matchId: params.matchId,
+            previous: priorPokemon,
+            new: [],
+            priorScore: { home: match.homeScore, away: match.awayScore },
+            newScore: { home: homeScore, away: awayScore },
+            by: user.username,
+          }),
+        }).run();
+      }
 
       db.insert(schema.activityLog).values({
         type: 'match_force_result',
@@ -228,8 +256,11 @@ export const adminRoutes = new Elysia()
       defaultRosterSize: (s.defaultRosterSize as number) ?? 10,
       defaultMaxTeams: (s.defaultMaxTeams as number) ?? 12,
       defaultUserPassword: (s.defaultUserPassword as string) ?? 'password',
+      tradeExpiryDays: (s.tradeExpiryDays as number) ?? 7,
       draftTimerEnabled: s.draftTimerEnabled !== undefined ? !!s.draftTimerEnabled : true,
       draftDemoVisible: s.draftDemoVisible !== undefined ? !!s.draftDemoVisible : true,
+      faDeadlineWeek: (s.faDeadlineWeek as number) ?? 7,
+      defaultPlayoffTeamCount: (s.defaultPlayoffTeamCount as number) ?? 6,
     }).where(eq(schema.siteSettings.id, 1)).run();
 
     return { success: true };
@@ -239,7 +270,51 @@ export const adminRoutes = new Elysia()
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { tier, status } = body as { tier?: number; status?: string };
+    const { tier, status, force, confirmLeague } = body as {
+      tier?: number;
+      status?: string;
+      /** Acknowledge that this edit will affect a league past draft — required when active leagues exist */
+      force?: boolean;
+      /** Must match the active (regular/playoffs) league's name when force=true */
+      confirmLeague?: string;
+    };
+
+    // Phase gate: refuse mid-season tier moves unless the caller explicitly
+    // confirms via { force: true, confirmLeague: <league name> }. Roster cost
+    // totals are snapshotted via rosters.costAtDraft, but tier-list edits still
+    // affect future FA cost validation, captain eligibility, etc., so we
+    // surface the risk to admins instead of silently letting it through.
+    const activeLeagues = db.select({
+      id: schema.leagues.id,
+      name: schema.leagues.name,
+      phase: schema.seasons.phase,
+    }).from(schema.leagues)
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(sql`${schema.seasons.phase} IN ('regular', 'playoffs')`)
+      .all();
+
+    if (activeLeagues.length > 0) {
+      if (!force) {
+        set.status = 409;
+        return {
+          error: `Cannot edit tier list while leagues are in regular/playoffs phase`,
+          code: 'tier_list_locked',
+          activeLeagues: activeLeagues.map(l => ({ id: l.id, name: l.name, phase: l.phase })),
+        };
+      }
+      const expectedNames = new Set(activeLeagues.map(l => l.name.toLowerCase()));
+      if (!confirmLeague || !expectedNames.has(confirmLeague.trim().toLowerCase())) {
+        set.status = 409;
+        return {
+          error: `Force edit requires confirmLeague to match an active league name`,
+          code: 'tier_list_confirm_required',
+          activeLeagues: activeLeagues.map(l => ({ id: l.id, name: l.name, phase: l.phase })),
+        };
+      }
+    }
+
+    const existing = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, params.name)).get();
+    if (!existing) { set.status = 404; return { error: 'Pokemon not found' }; }
 
     const updates: Record<string, unknown> = {};
     if (tier !== undefined) updates.tier = tier;
@@ -247,8 +322,32 @@ export const adminRoutes = new Elysia()
     else if (status === 'tera-banned') { updates.teraBanned = true; updates.banned = false; }
     else if (status === 'available') { updates.banned = false; updates.teraBanned = false; }
 
-    db.update(schema.pokemon).set(updates).where(eq(schema.pokemon.name, params.name)).run();
-    return { success: true };
+    tx(() => {
+      db.update(schema.pokemon).set(updates).where(eq(schema.pokemon.name, params.name)).run();
+
+      // Force-edits during regular/playoffs are flagged with a distinct activity
+      // type so they're easy to filter in the audit view.
+      const isForced = activeLeagues.length > 0;
+      db.insert(schema.activityLog).values({
+        type: isForced ? 'tier_list_forced_edit' : 'tier_list_edit',
+        category: 'config',
+        actor: user!.username,
+        leagueId: null,
+        description: isForced
+          ? `FORCED tier-list edit: ${params.name} (during ${activeLeagues.map(l => l.name).join(', ')}) — confirmed: "${confirmLeague}"`
+          : `Tier-list edit: ${params.name}${tier !== undefined ? ` → tier ${tier}` : ''}${status ? ` [${status}]` : ''}`,
+        metadata: JSON.stringify({
+          pokemon: params.name,
+          before: { tier: existing.tier, banned: existing.banned, teraBanned: existing.teraBanned },
+          after: updates,
+          forced: isForced,
+          confirmLeague: confirmLeague ?? null,
+          activeLeagues: activeLeagues.map(l => l.id),
+        }),
+      }).run();
+    });
+
+    return { success: true, forced: activeLeagues.length > 0 };
   })
 
   // ─── Move Categories CRUD ──────────────────────────────────────────

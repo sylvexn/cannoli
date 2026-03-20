@@ -471,11 +471,13 @@ export function executePick(
       tier: poke.tier,
     }).run();
 
-    // Also add to roster
+    // Also add to roster — snapshot costAtDraft = current pokemon.tier so later
+    // admin tier-list edits don't retroactively shift point totals.
     db.insert(schema.rosters).values({
       teamId,
       pokemonName,
       tier: poke.tier,
+      costAtDraft: poke.tier,
       acquiredVia: 'draft',
     }).run();
 

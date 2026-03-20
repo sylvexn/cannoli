@@ -63,6 +63,8 @@ export const leagues = sqliteTable('leagues', {
   draftOrder: text('draft_order'),
   /** ISO datetime for the league's draft date/time */
   draftDate: text('draft_date'),
+  /** Bracket size for this league's playoffs (2/4/6/8). */
+  playoffTeamCount: integer('playoff_team_count').notNull().default(6),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -118,6 +120,15 @@ export const rosters = sqliteTable('rosters', {
   teamId: text('team_id').notNull().references(() => teams.id),
   pokemonName: text('pokemon_name').notNull(),
   tier: integer('tier').notNull(),
+  /**
+   * Raw tier-cost snapshot at acquisition time (draft pick / FA pickup / trade).
+   * Decouples team-cost aggregation from later admin tier-list edits — once a
+   * Pokemon is on a roster, changing pokemon.tier in the tier list does NOT
+   * retroactively shift point totals or break point-cap math.
+   * Captain markup is NOT included here — apply effectiveCost(costAtDraft, isTeraCaptain)
+   * at read time. Preserved across trades.
+   */
+  costAtDraft: integer('cost_at_draft').notNull().default(0),
   isTeraCaptain: integer('is_tera_captain', { mode: 'boolean' }).notNull().default(false),
   teraType1: text('tera_type1'),
   teraType2: text('tera_type2'),
@@ -271,10 +282,18 @@ export const siteSettings = sqliteTable('site_settings', {
   defaultRosterSize: integer('default_roster_size').default(10),
   defaultMaxTeams: integer('default_max_teams').default(12),
   defaultUserPassword: text('default_user_password').default('password'),
+  /** Days a pending/awaiting_admin trade lives before auto-expiry */
+  tradeExpiryDays: integer('trade_expiry_days').notNull().default(7),
   /** Whether the draft pick timer is enabled */
   draftTimerEnabled: integer('draft_timer_enabled', { mode: 'boolean' }).notNull().default(true),
   /** Whether the demo mode is visible on the draft board */
   draftDemoVisible: integer('draft_demo_visible', { mode: 'boolean' }).notNull().default(true),
+  /** Last regular-season week during which free agent pickups are allowed.
+   *  Pickups blocked once season.currentWeek > this value during 'regular',
+   *  and always blocked during 'playoffs'. */
+  faDeadlineWeek: integer('fa_deadline_week').notNull().default(7),
+  /** Default playoff bracket size for newly-generated brackets (2/4/6/8). */
+  defaultPlayoffTeamCount: integer('default_playoff_team_count').notNull().default(6),
 });
 
 // ─── Draft State (tracks active/completed drafts per league) ────────────────

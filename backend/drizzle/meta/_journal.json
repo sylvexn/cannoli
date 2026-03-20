@@ -92,6 +92,27 @@
       "when": 1778190578118,
       "tag": "0012_profile_redesign",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1778208434922,
+      "tag": "0013_trade_expiry",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1778208443568,
+      "tag": "0014_roster_cost_at_draft",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1778460000000,
+      "tag": "0015_fa_deadline_bracket_size",
+      "breakpoints": true
     }
   ]
 }
