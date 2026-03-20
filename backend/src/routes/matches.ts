@@ -4,6 +4,8 @@ import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
+import { advancePlayoffWinner } from '../lib/playoff-advance';
+import { computeStandings } from '../lib/standings';
 
 export const matchRoutes = new Elysia()
 
@@ -158,65 +160,13 @@ export const matchRoutes = new Elysia()
       const winnerId = homeScore > awayScore ? match.homeTeamId : match.awayTeamId;
       const winnerSeed = homeScore > awayScore ? match.homeSeed : match.awaySeed;
 
-      // Determine which next-round match + slot this winner fills
-      const round = match.playoffRound;
-      // Extract match number from ID: e.g. "sapphire-pqf1" → 1, "sapphire-pqf2" → 2
-      const matchNumStr = params.matchId.replace(/.*p(qf|sf|f)/, '');
-      const matchNum = parseInt(matchNumStr) || 0;
-
-      let nextRound: string | null = null;
-      let nextMatchOffset = 0; // which match within the next round (0-based)
-      let fillHome = false;
-
-      if (round === 'qf') {
-        nextRound = 'sf';
-        // QF match 1 winner → SF match 1 away; QF match 2 winner → SF match 2 away
-        // QF1 is matchNum from bracket gen: positions 1,2; SF are positions 3,4
-        nextMatchOffset = matchNum <= 1 ? 0 : 1;
-        fillHome = false; // QF winners fill away slot in SF (home is the bye seed)
-      } else if (round === 'sf') {
-        nextRound = 'f';
-        nextMatchOffset = 0; // only one finals match
-        // First SF winner fills home, second fills away
-        // Get all SF matches to determine ordering
-        const sfMatches = db.select().from(schema.matches)
-          .where(and(
-            eq(schema.matches.leagueId, match.leagueId),
-            eq(schema.matches.phase, 'playoffs'),
-            eq(schema.matches.playoffRound, 'sf'),
-          ))
-          .orderBy(asc(schema.matches.id))
-          .all();
-        const sfIndex = sfMatches.findIndex(m => m.id === params.matchId);
-        fillHome = sfIndex === 0;
-      }
-
-      if (nextRound) {
-        // Find the next round match with TBD
-        const nextMatches = db.select().from(schema.matches)
-          .where(and(
-            eq(schema.matches.leagueId, match.leagueId),
-            eq(schema.matches.phase, 'playoffs'),
-            eq(schema.matches.playoffRound, nextRound),
-          ))
-          .orderBy(asc(schema.matches.id))
-          .all();
-
-        const target = nextMatches[nextMatchOffset];
-        if (target) {
-          const updateData: Record<string, any> = {};
-          if (fillHome && target.homeTeamId === 'TBD') {
-            updateData.homeTeamId = winnerId;
-            updateData.homeSeed = winnerSeed;
-          } else if (!fillHome && target.awayTeamId === 'TBD') {
-            updateData.awayTeamId = winnerId;
-            updateData.awaySeed = winnerSeed;
-          }
-          if (Object.keys(updateData).length > 0) {
-            db.update(schema.matches).set(updateData).where(eq(schema.matches.id, target.id)).run();
-          }
-        }
-      }
+      advancePlayoffWinner({
+        matchId: params.matchId,
+        leagueId: match.leagueId,
+        playoffRound: match.playoffRound,
+        winnerId,
+        winnerSeed,
+      });
     }
 
     return { success: true };
@@ -500,52 +450,20 @@ export const matchRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
 
     const { topN } = (body || {}) as { topN?: number };
-    const seedCount = topN ?? 6;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    // Get teams sorted by W-L-Diff
-    const teams = db.select().from(schema.teams)
-      .where(eq(schema.teams.leagueId, params.leagueId))
-      .all();
+    // Bracket size: explicit override > league config > default 6
+    const requested = topN ?? league.playoffTeamCount ?? 6;
+    if (![2, 4, 6, 8].includes(requested)) {
+      set.status = 400;
+      return { error: `playoffTeamCount must be one of 2, 4, 6, 8 (got ${requested})`, code: 'invalid_bracket_size' };
+    }
+    const seedCount = requested;
 
-    const teamRecords = teams.map(team => {
-      const homeWins = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score > away_score`, eq(schema.matches.phase, 'regular')))
-        .get()?.count || 0;
-      const awayWins = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score > home_score`, eq(schema.matches.phase, 'regular')))
-        .get()?.count || 0;
-      const homeLosses = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score < away_score`, eq(schema.matches.phase, 'regular')))
-        .get()?.count || 0;
-      const awayLosses = db.select({ count: sql<number>`count(*)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score < home_score`, eq(schema.matches.phase, 'regular')))
-        .get()?.count || 0;
-      const homeDiff = db.select({ diff: sql<number>`COALESCE(SUM(home_score - away_score), 0)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.homeTeamId, team.id), sql`home_score IS NOT NULL`, eq(schema.matches.phase, 'regular')))
-        .get()?.diff || 0;
-      const awayDiff = db.select({ diff: sql<number>`COALESCE(SUM(away_score - home_score), 0)` })
-        .from(schema.matches)
-        .where(and(eq(schema.matches.awayTeamId, team.id), sql`away_score IS NOT NULL`, eq(schema.matches.phase, 'regular')))
-        .get()?.diff || 0;
-
-      return {
-        id: team.id,
-        wins: homeWins + awayWins,
-        losses: homeLosses + awayLosses,
-        differential: homeDiff + awayDiff,
-      };
-    });
-
-    // Sort: wins desc, then differential desc
-    teamRecords.sort((a, b) => b.wins - a.wins || b.differential - a.differential);
+    // Sort using shared standings hierarchy (wins → H2H → diff → kills → id)
+    const teamRecords = computeStandings(params.leagueId, { phase: 'regular' });
     const seeded = teamRecords.slice(0, seedCount);
 
     return tx(() => {
@@ -560,11 +478,23 @@ export const matchRoutes = new Elysia()
       .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'regular')))
       .get()?.max || 0;
 
-    // Generate standard bracket: 6-team → QF(3v6, 4v5), SF(1vQF1, 2vQF2), F
+    // Generate bracket per configured size:
+    //   2 → F only
+    //   4 → SF (1v4, 2v3) + F
+    //   6 → QF (3v6, 4v5) + SF (1 + 2 with QF winners) + F  [top 2 bye]
+    //   8 → QF (1v8, 2v7, 3v6, 4v5) + SF + F
     const matchups: { round: string; homeSeed: number; awaySeed: number; week: number }[] = [];
 
-    if (seedCount >= 6) {
-      // Quarterfinals: #3 vs #6, #4 vs #5
+    if (seedCount === 8) {
+      matchups.push({ round: 'qf', homeSeed: 1, awaySeed: 8, week: maxWeek + 1 });
+      matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
+      matchups.push({ round: 'qf', homeSeed: 2, awaySeed: 7, week: maxWeek + 1 });
+      matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
+      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
+    } else if (seedCount === 6) {
+      // Quarterfinals: #3 vs #6, #4 vs #5; #1 and #2 receive byes into SF
       matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
       matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
       // Semifinals: #1 vs winner(3v6), #2 vs winner(4v5)
@@ -576,6 +506,8 @@ export const matchRoutes = new Elysia()
       matchups.push({ round: 'sf', homeSeed: 1, awaySeed: 4, week: maxWeek + 1 });
       matchups.push({ round: 'sf', homeSeed: 2, awaySeed: 3, week: maxWeek + 1 });
       matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+    } else if (seedCount === 2) {
+      matchups.push({ round: 'f', homeSeed: 1, awaySeed: 2, week: maxWeek + 1 });
     }
 
     let matchNum = 0;

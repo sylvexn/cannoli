@@ -18,6 +18,7 @@ import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
 import { startBot } from './lib/ps-bot';
 import { startSchedulers } from './lib/scheduler';
+import { sqlite } from './db';
 
 // ─── Boot-time env guards ───────────────────────────────────────────────────
 // Catch foot-guns before they cause silent corruption / silent auth failure.
@@ -128,6 +129,24 @@ const app = new Elysia()
 
   .get('/', () => ({ message: 'cannoli api' }))
   .get('/health', () => ({ status: 'ok' }))
+
+  // Ops health probe — uptime, mode, db connectivity. Mounted before all
+  // route modules so it's reachable even if a feature route throws on boot.
+  .get('/api/health', () => {
+    let dbOk = false;
+    try {
+      sqlite.query('SELECT 1').get();
+      dbOk = true;
+    } catch {
+      dbOk = false;
+    }
+    return {
+      status: dbOk ? 'ok' : 'degraded',
+      mode: MODE,
+      db: dbOk ? 'connected' : 'disconnected',
+      uptime: Math.round(process.uptime()),
+    };
+  })
 
   .use(authRoutes)
   .use(userRoutes)

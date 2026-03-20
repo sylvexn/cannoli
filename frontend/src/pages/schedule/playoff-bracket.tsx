@@ -12,6 +12,14 @@ interface BracketMatch {
   winner: string | null;
 }
 
+type RoundKey = 'qf' | 'sf' | 'f';
+
+const ROUND_LABEL: Record<RoundKey, string> = {
+  qf: 'Quarter Finals',
+  sf: 'Semi Finals',
+  f: 'Finals',
+};
+
 export function PlayoffBracket() {
   const { matches, players } = useLeagueData();
 
@@ -23,9 +31,9 @@ export function PlayoffBracket() {
   );
 
   const byRound = useMemo(() => {
-    const groups: Record<string, BracketMatch[]> = { qf: [], sf: [], f: [] };
+    const groups: Record<RoundKey, BracketMatch[]> = { qf: [], sf: [], f: [] };
     for (const m of playoffMatches) {
-      const round = m.playoffRound || 'qf';
+      const round = (m.playoffRound || 'qf') as RoundKey;
       const home = playerMap.get(m.homePlayer) || null;
       const away = playerMap.get(m.awayPlayer) || null;
       const winner = m.homeScore != null && m.awayScore != null
@@ -33,12 +41,21 @@ export function PlayoffBracket() {
         : null;
       groups[round]?.push({ match: m, home, away, winner });
     }
-    // Sort by seed
-    for (const round of Object.keys(groups)) {
-      groups[round].sort((a, b) => (a.match?.homeSeed ?? 99) - (b.match?.homeSeed ?? 99));
+    // Sort by match id (preserves generation order: qf1, qf2, …, sf1, sf2, …)
+    for (const round of Object.keys(groups) as RoundKey[]) {
+      groups[round].sort((a, b) => (a.match?.id ?? '').localeCompare(b.match?.id ?? ''));
     }
     return groups;
   }, [playoffMatches, playerMap]);
+
+  // Only show rounds that actually exist. Bracket size:
+  //   2 → F
+  //   4 → SF + F
+  //   6 → QF (top 2 bye) + SF + F
+  //   8 → QF (full) + SF + F
+  const presentRounds: RoundKey[] = (['qf', 'sf', 'f'] as RoundKey[]).filter(
+    r => byRound[r].length > 0,
+  );
 
   if (playoffMatches.length === 0) {
     return (
@@ -48,57 +65,34 @@ export function PlayoffBracket() {
     );
   }
 
+  const finalsWinnerId = byRound.f[0]?.winner ?? null;
+
   return (
     <div className="space-y-6">
-      {/* Bracket grid */}
       <div className="flex gap-6 items-start overflow-x-auto pb-4">
-        {/* Quarter Finals */}
-        <BracketColumn
-          label="Quarter Finals"
-          matches={byRound.qf}
-
-          spacing="normal"
-        />
-
-        {/* Connectors */}
-        <div className="flex flex-col justify-around self-stretch py-8">
-          {[0, 1].map(i => (
-            <div key={i} className="flex flex-col items-center" style={{ height: '50%' }}>
-              <div className="w-6 border-t border-r border-border-subtle h-1/2" />
-              <div className="w-6 border-b border-r border-border-subtle h-1/2" />
-            </div>
-          ))}
-        </div>
-
-        {/* Semi Finals */}
-        <BracketColumn
-          label="Semi Finals"
-          matches={byRound.sf}
-
-          spacing="wide"
-        />
-
-        {/* Connectors */}
-        <div className="flex flex-col justify-center self-stretch">
-          <div className="w-6 border-t border-r border-border-subtle h-1/4" />
-          <div className="w-6 border-b border-r border-border-subtle h-1/4" />
-        </div>
-
-        {/* Finals */}
-        <BracketColumn
-          label="Finals"
-          matches={byRound.f}
-
-          spacing="center"
-        />
+        {presentRounds.map((round, i) => {
+          const isLast = i === presentRounds.length - 1;
+          const spacing: 'normal' | 'wide' | 'center' =
+            round === 'qf' ? 'normal' : round === 'sf' ? 'wide' : 'center';
+          return (
+            <RoundColumnWithConnector
+              key={round}
+              label={ROUND_LABEL[round]}
+              matches={byRound[round]}
+              spacing={spacing}
+              showConnector={!isLast}
+              connectorRound={round}
+            />
+          );
+        })}
 
         {/* Champion */}
-        {byRound.f.length > 0 && byRound.f[0].winner && (
+        {finalsWinnerId && (
           <div className="flex flex-col items-center justify-center self-stretch gap-2 px-4">
             <Trophy size={20} className="text-draw" />
             <span className="text-xs font-heading font-bold text-draw uppercase tracking-wider">Champion</span>
             {(() => {
-              const champ = playerMap.get(byRound.f[0].winner);
+              const champ = playerMap.get(finalsWinnerId);
               if (!champ) return null;
               return (
                 <div className="flex items-center gap-2">
@@ -111,6 +105,34 @@ export function PlayoffBracket() {
         )}
       </div>
     </div>
+  );
+}
+
+function RoundColumnWithConnector({ label, matches, spacing, showConnector, connectorRound }: {
+  label: string;
+  matches: BracketMatch[];
+  spacing: 'normal' | 'wide' | 'center';
+  showConnector: boolean;
+  connectorRound: RoundKey;
+}) {
+  return (
+    <>
+      <BracketColumn label={label} matches={matches} spacing={spacing} />
+      {showConnector && (
+        <div className="flex flex-col justify-around self-stretch py-8">
+          {Array.from({ length: Math.max(1, Math.ceil(matches.length / 2)) }).map((_, i) => (
+            <div
+              key={`${connectorRound}-${i}`}
+              className="flex flex-col items-center"
+              style={{ height: matches.length > 1 ? `${100 / Math.ceil(matches.length / 2)}%` : '50%' }}
+            >
+              <div className="w-6 border-t border-r border-border-subtle h-1/2" />
+              <div className="w-6 border-b border-r border-border-subtle h-1/2" />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -150,7 +172,6 @@ function BracketMatchCard({ bm }: { bm: BracketMatch }) {
 
   return (
     <div className="rounded-lg border border-border-default bg-surface-raised overflow-hidden">
-      {/* Home team */}
       <BracketTeamRow
         player={home}
         seed={match.homeSeed}
@@ -160,7 +181,6 @@ function BracketMatchCard({ bm }: { bm: BracketMatch }) {
         hasResult={hasResult}
       />
       <div className="h-px bg-border-subtle" />
-      {/* Away team */}
       <BracketTeamRow
         player={away}
         seed={match.awaySeed}
@@ -195,7 +215,6 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
       isWinner && 'bg-win/5',
       isLoser && 'opacity-50',
     )}>
-      {/* Seed */}
       <span className={cn(
         'text-[10px] font-bold font-mono w-4 text-center shrink-0',
         isWinner ? 'text-win' : 'text-text-muted',
@@ -203,7 +222,6 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
         {seed}
       </span>
 
-      {/* Team */}
       <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
       <span className={cn(
         'text-xs font-medium flex-1 min-w-0 truncate',
@@ -212,7 +230,6 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
         {player.teamAbbrev}
       </span>
 
-      {/* Score */}
       {hasResult && (
         <span className={cn(
           'text-sm font-bold font-mono tabular-nums shrink-0',
@@ -222,7 +239,6 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
         </span>
       )}
 
-      {/* Winner indicator */}
       {isWinner && (
         <div className="w-1 h-4 rounded-full bg-win shrink-0" />
       )}
