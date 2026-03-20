@@ -70,7 +70,7 @@ export function StatsPage() {
   const allStats = useMemo(() => computeLeagueStats(players), [players]);
   const [filters, setFilters] = useState<StatsFilters>(defaultFilters);
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
-  const { openSideCard } = usePokemonSideCard();
+  usePokemonSideCard();
 
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
