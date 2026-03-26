@@ -4,7 +4,7 @@
  *
  * Two expiry triggers:
  *   1. Age-based: proposedAt older than siteSettings.tradeExpiryDays (default 7)
- *   2. Deadline-based: league's currentWeek >= season.tradeDeadlineWeek
+ *   2. Deadline-based: league's currentWeek >= league.tradeDeadlineWeek
  *
  * Idempotent — driven entirely by DB state. Mutations are wrapped in tx().
  */
@@ -31,7 +31,7 @@ export function runExpireTrades() {
     ))
     .all();
 
-  // 2) Deadline-based candidates: trades whose league's season has currentWeek >= tradeDeadlineWeek
+  // 2) Deadline-based candidates: trades whose league has currentWeek >= tradeDeadlineWeek
   // Filter by status in JS after the join read; small N, simple is fine.
   const liveTrades = db.select().from(schema.trades)
     .where(inArray(schema.trades.status, ['pending', 'awaiting_admin']))
@@ -40,10 +40,8 @@ export function runExpireTrades() {
   const deadlineRows = liveTrades.filter(t => {
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, t.leagueId)).get();
     if (!league) return false;
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-    if (!season) return false;
-    if (season.tradeDeadlineWeek <= 0) return false;
-    return season.currentWeek >= season.tradeDeadlineWeek;
+    if (league.tradeDeadlineWeek <= 0) return false;
+    return league.currentWeek >= league.tradeDeadlineWeek;
   });
 
   // De-dupe by id

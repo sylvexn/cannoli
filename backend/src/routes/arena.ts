@@ -124,14 +124,13 @@ function getUserTeam(userId: number): { teamId: string; leagueId: string } | nul
 function getCurrentMatch(teamId: string, leagueId: string) {
   const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
   if (!league) return null;
-  const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-  if (!season || season.phase !== 'regular') return null;
+  if (league.phase !== 'regular') return null;
 
   // Find the match for this team in the current week
   const match = db.select().from(schema.matches).where(
     and(
       eq(schema.matches.leagueId, leagueId),
-      eq(schema.matches.week, season.currentWeek),
+      eq(schema.matches.week, league.currentWeek),
     ),
   ).all().find(m =>
     (m.homeTeamId === teamId || m.awayTeamId === teamId) &&

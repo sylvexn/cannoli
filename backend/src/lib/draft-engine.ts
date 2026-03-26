@@ -492,10 +492,11 @@ export function executePick(
       completedAt: isComplete ? new Date().toISOString() : null,
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-    // If complete, update season phase
+    // If complete, advance THIS league into the regular season. Phase + week
+    // are per-league now, so the other leagues in the same season are unaffected.
     if (isComplete) {
-      db.update(schema.seasons).set({ phase: 'regular', currentWeek: 1 })
-        .where(eq(schema.seasons.id, league.seasonId)).run();
+      db.update(schema.leagues).set({ phase: 'regular', currentWeek: 1 })
+        .where(eq(schema.leagues.id, leagueId)).run();
     }
 
     db.insert(schema.activityLog).values({
@@ -532,11 +533,7 @@ export function startDraft(leagueId: string, timerDuration = 120, actor?: string
     .get();
   if (!league) return { success: false, error: 'League not found' };
 
-  const season = db.select().from(schema.seasons)
-    .where(eq(schema.seasons.id, league.seasonId))
-    .get();
-  if (!season) return { success: false, error: 'Season not found' };
-  if (season.phase !== 'draft') return { success: false, error: `Season is in ${season.phase} phase, not draft` };
+  if (league.phase !== 'draft') return { success: false, error: `League is in ${league.phase} phase, not draft` };
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
   if (teamOrder.length < 2) return { success: false, error: 'Need at least 2 teams in draft order' };
@@ -705,13 +702,8 @@ export function skipPick(
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
     if (isComplete) {
-      const season = db.select().from(schema.seasons)
-        .where(eq(schema.seasons.id, league.seasonId))
-        .get();
-      if (season) {
-        db.update(schema.seasons).set({ phase: 'regular', currentWeek: 1 })
-          .where(eq(schema.seasons.id, season.id)).run();
-      }
+      db.update(schema.leagues).set({ phase: 'regular', currentWeek: 1 })
+        .where(eq(schema.leagues.id, leagueId)).run();
     }
 
     db.insert(schema.activityLog).values({
@@ -784,13 +776,8 @@ export function undoLastPick(
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
     if (wasComplete) {
-      const league = db.select().from(schema.leagues)
-        .where(eq(schema.leagues.id, leagueId))
-        .get();
-      if (league) {
-        db.update(schema.seasons).set({ phase: 'draft', currentWeek: 0 })
-          .where(eq(schema.seasons.id, league.seasonId)).run();
-      }
+      db.update(schema.leagues).set({ phase: 'draft', currentWeek: 0 })
+        .where(eq(schema.leagues.id, leagueId)).run();
     }
 
     db.insert(schema.activityLog).values({

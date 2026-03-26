@@ -24,18 +24,22 @@ export const leagueRoutes = new Elysia()
       color: l.color,
       draftDate: l.draftDate,
       draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
+      // Lifecycle fields are per-league (3 leagues run independently per
+      // season). Surfaced under `season` for backwards-compat with all
+      // existing frontend readers; the underlying source of truth is the
+      // league row.
       season: season ? {
         id: `s${season.seasonNumber}`,
         seasonNumber: season.seasonNumber,
-        phase: season.phase,
-        currentWeek: season.currentWeek,
-        totalWeeks: season.totalWeeks,
+        phase: l.phase,
+        currentWeek: l.currentWeek,
+        totalWeeks: l.totalWeeks,
         pointCap: season.pointCap,
         teraCaptainSlots: season.teraCaptainSlots,
-        tradeDeadlineWeek: season.tradeDeadlineWeek,
-        forfeitPolicy: season.forfeitPolicy,
-        paused: season.paused,
-        weekDates: season.weekDates ? JSON.parse(season.weekDates) : null,
+        tradeDeadlineWeek: l.tradeDeadlineWeek,
+        forfeitPolicy: l.forfeitPolicy,
+        paused: l.paused,
+        weekDates: l.weekDates ? JSON.parse(l.weekDates) : null,
       } : null,
     }));
   })
@@ -317,16 +321,40 @@ export const leagueRoutes = new Elysia()
   // ─── Archive (multi-season) ──────────────────────────────────────────
 
   .get('/api/seasons', () => {
-    return db.select().from(schema.seasons)
+    // Lifecycle fields now live per-league. Surface a per-season summary by
+    // aggregating from the leagues table: phase = the "least advanced" phase
+    // across the season's leagues (so the UI's archive picker can tell at a
+    // glance whether all leagues have wrapped); currentWeek/totalWeeks fall
+    // back to the max of any league's value (best-effort summary only —
+    // schedule pages should read per-league via /api/leagues).
+    const phaseOrder: Record<string, number> = {
+      predraft: 0, draft: 1, regular: 2, playoffs: 3, offseason: 4,
+    };
+    const seasons = db.select().from(schema.seasons)
       .orderBy(desc(schema.seasons.seasonNumber))
-      .all()
-      .map(s => ({
+      .all();
+    return seasons.map(s => {
+      const lgs = db.select().from(schema.leagues)
+        .where(eq(schema.leagues.seasonId, s.id))
+        .all();
+      let summaryPhase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason' = 'offseason';
+      let currentWeek = 0;
+      let totalWeeks = 0;
+      if (lgs.length > 0) {
+        summaryPhase = lgs.reduce((acc, lg) => (
+          phaseOrder[lg.phase] < phaseOrder[acc] ? lg.phase as typeof acc : acc
+        ), lgs[0].phase as typeof summaryPhase);
+        currentWeek = Math.max(...lgs.map(lg => lg.currentWeek));
+        totalWeeks = Math.max(...lgs.map(lg => lg.totalWeeks));
+      }
+      return {
         id: s.id,
         seasonNumber: s.seasonNumber,
-        phase: s.phase,
-        currentWeek: s.currentWeek,
-        totalWeeks: s.totalWeeks,
-      }));
+        phase: summaryPhase,
+        currentWeek,
+        totalWeeks,
+      };
+    });
   })
 
   .get('/api/seasons/:seasonId/leagues', ({ params }) => {
@@ -507,19 +535,19 @@ export const leagueRoutes = new Elysia()
       return { error: 'captains array required' };
     }
 
-    // Get season config for captain slot limit
+    // Get league + season config (phase lives on league; captain slot limit lives on season).
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
 
-    // Phase gate: captain assignments lock once the season enters regular play.
+    // Phase gate: captain assignments lock once the league enters regular play.
     // Allowed during predraft (pre-draft prep) and draft (live drafting); rejected
-    // for regular/playoffs/offseason. Staff can't override — locking is league-wide.
-    if (season && (season.phase === 'regular' || season.phase === 'playoffs' || season.phase === 'offseason')) {
+    // for regular/playoffs/offseason. Locking is per-league.
+    if (league && (league.phase === 'regular' || league.phase === 'playoffs' || league.phase === 'offseason')) {
       set.status = 409;
       return {
-        error: `Tera captains are locked once the draft ends (current phase: ${season.phase})`,
+        error: `Tera captains are locked once the draft ends (current phase: ${league.phase})`,
         code: 'captains_locked',
-        phase: season.phase,
+        phase: league.phase,
       };
     }
 
@@ -589,7 +617,7 @@ export const leagueRoutes = new Elysia()
 
       // Log tera change transaction
       if (league) {
-        const week = season?.currentWeek ?? 0;
+        const week = league.currentWeek ?? 0;
         for (const c of captains) {
           db.insert(schema.transactions).values({
             leagueId: team.leagueId,
@@ -742,19 +770,19 @@ export const leagueRoutes = new Elysia()
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
-    const week = season?.currentWeek ?? 0;
+    const week = league?.currentWeek ?? 0;
 
     // ── Phase / deadline gate ──
     // - predraft / draft / offseason: drafting is the pickup mechanism; if hit,
     //   allow (no-op gate, explicit per spec).
     // - regular: blocked once currentWeek > faDeadlineWeek (site setting).
     // - playoffs: always blocked, no FA in playoffs.
-    if (season) {
-      if (season.phase === 'playoffs') {
+    if (league) {
+      if (league.phase === 'playoffs') {
         set.status = 409;
         return { error: 'Free agent pickups are closed during playoffs', code: 'fa_playoffs_closed' };
       }
-      if (season.phase === 'regular') {
+      if (league.phase === 'regular') {
         const settings = db.select().from(schema.siteSettings).get();
         const faDeadline = settings?.faDeadlineWeek ?? 7;
         if (week > faDeadline) {

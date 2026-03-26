@@ -287,10 +287,9 @@ export const adminRoutes = new Elysia()
     const activeLeagues = db.select({
       id: schema.leagues.id,
       name: schema.leagues.name,
-      phase: schema.seasons.phase,
+      phase: schema.leagues.phase,
     }).from(schema.leagues)
-      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
-      .where(sql`${schema.seasons.phase} IN ('regular', 'playoffs')`)
+      .where(sql`${schema.leagues.phase} IN ('regular', 'playoffs')`)
       .all();
 
     if (activeLeagues.length > 0) {
@@ -549,9 +548,16 @@ export const adminRoutes = new Elysia()
     const dup = db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, seasonNumber)).get();
     if (dup) { set.status = 409; return { error: `Season ${seasonNumber} already exists` }; }
 
-    // Overlap guard: block if any season is in a non-offseason phase, unless override flag set.
-    const active = db.select().from(schema.seasons)
-      .where(sql`${schema.seasons.phase} != 'offseason'`)
+    // Overlap guard: block if any league in any prior season is still in a
+    // non-offseason phase, unless override flag set. (Phase now lives on the
+    // league row — surface the worst-offending league's phase to the caller.)
+    const active = db.select({
+      seasonNumber: schema.seasons.seasonNumber,
+      phase: schema.leagues.phase,
+    })
+      .from(schema.leagues)
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(sql`${schema.leagues.phase} != 'offseason'`)
       .orderBy(desc(schema.seasons.seasonNumber))
       .get();
     if (active && !overlapOverride) {
@@ -577,19 +583,15 @@ export const adminRoutes = new Elysia()
       }
     }
 
+    const weekDatesJson = weekDates ? JSON.stringify(weekDates) : null;
+
     let teamsCreated = 0;
     try {
       const seasonId = tx(() => {
         const row = db.insert(schema.seasons).values({
           seasonNumber,
-          phase: 'predraft',
-          currentWeek: 0,
-          totalWeeks,
           pointCap,
           teraCaptainSlots,
-          tradeDeadlineWeek,
-          forfeitPolicy,
-          weekDates: weekDates ? JSON.stringify(weekDates) : null,
         }).returning().get();
 
         for (const lg of leaguePayloads) {
@@ -599,6 +601,15 @@ export const adminRoutes = new Elysia()
             color: lg.color,
             seasonId: row.id,
             draftDate: lg.draftDate ?? null,
+            // Per-league lifecycle defaults — wizard inputs supply the same
+            // values to every league at creation; admins tune individually
+            // afterwards via PUT /api/leagues/:id.
+            phase: 'predraft',
+            currentWeek: 0,
+            totalWeeks,
+            weekDates: weekDatesJson,
+            tradeDeadlineWeek,
+            forfeitPolicy,
           }).run();
 
           for (const t of lg.teams ?? []) {
@@ -925,32 +936,32 @@ export const adminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize: _rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
 
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
     if (color) leagueUpdates.color = color;
     if (draftDate !== undefined) leagueUpdates.draftDate = draftDate;
+    if (tradeDeadlineWeek !== undefined) leagueUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
+    if (weekDates !== undefined) leagueUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
+    if (paused !== undefined) leagueUpdates.paused = !!paused;
+    if (forfeitPolicy !== undefined) leagueUpdates.forfeitPolicy = forfeitPolicy;
 
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
-    if (!league) { set.status = 404; return { error: 'League not found' }; }
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-
-    // Phase-aware locks
+    // Phase-aware locks (phase now lives on the league row)
     const draftStarted = !!db.select().from(schema.draftState)
       .where(and(eq(schema.draftState.leagueId, params.leagueId), sql`current_pick_index > 0`)).get();
     if (pointCap !== undefined && draftStarted) {
       set.status = 400; return { error: 'Cannot change point cap once draft has begun' };
     }
-    if (teraCaptainSlots !== undefined && season && season.phase !== 'predraft' && season.phase !== 'draft') {
-      set.status = 400; return { error: `Cannot change tera captain slots in ${season.phase} phase` };
+    if (teraCaptainSlots !== undefined && league.phase !== 'predraft' && league.phase !== 'draft') {
+      set.status = 400; return { error: `Cannot change tera captain slots in ${league.phase} phase` };
     }
 
+    // pointCap and teraCaptainSlots remain season-wide settings.
     const seasonUpdates: Record<string, unknown> = {};
     if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
     if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
-    if (tradeDeadlineWeek !== undefined) seasonUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
-    if (weekDates !== undefined) seasonUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
-    if (paused !== undefined) seasonUpdates.paused = !!paused;
-    if (forfeitPolicy !== undefined) seasonUpdates.forfeitPolicy = forfeitPolicy;
 
     tx(() => {
       if (Object.keys(leagueUpdates).length > 0) {
@@ -1019,9 +1030,9 @@ export const adminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-    if (!season) { set.status = 404; return { error: 'Season not found' }; }
-    const previousPhase = season.phase;
+    // Phase now lives on the league — advancing one league no longer drags
+    // the others in the same season along with it.
+    const previousPhase = league.phase;
 
     // ─── Phase transition preconditions ────────────────────────────────
     const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all();
@@ -1069,11 +1080,11 @@ export const adminRoutes = new Elysia()
 
     let scheduleGenerated = false;
     tx(() => {
-      const seasonUpdates: Record<string, unknown> = { phase: phase as any };
+      const leagueUpdates: Record<string, unknown> = { phase: phase as any };
       if (phase === 'regular' && previousPhase !== 'regular') {
-        seasonUpdates.currentWeek = 1;
+        leagueUpdates.currentWeek = 1;
       }
-      db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
+      db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
 
       // Auto-generate schedule when advancing from draft → regular
       if (previousPhase === 'draft' && phase === 'regular') {
@@ -1099,19 +1110,16 @@ export const adminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-    if (!season) { set.status = 404; return { error: 'Season not found' }; }
-
-    const newWeek = season.currentWeek + 1;
+    const newWeek = league.currentWeek + 1;
     tx(() => {
-      db.update(schema.seasons).set({ currentWeek: newWeek }).where(eq(schema.seasons.id, season.id)).run();
+      db.update(schema.leagues).set({ currentWeek: newWeek }).where(eq(schema.leagues.id, params.leagueId)).run();
       db.insert(schema.activityLog).values({
         type: 'week_advanced',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
-        description: `Week ${season.currentWeek} → ${newWeek}`,
-        metadata: JSON.stringify({ from: season.currentWeek, to: newWeek }),
+        description: `Week ${league.currentWeek} → ${newWeek}`,
+        metadata: JSON.stringify({ from: league.currentWeek, to: newWeek }),
       }).run();
     });
     return { success: true, week: newWeek };
@@ -1123,10 +1131,9 @@ export const adminRoutes = new Elysia()
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
     // Lock once we're past draft phase
-    if (season && season.phase !== 'predraft' && season.phase !== 'draft') {
-      set.status = 400; return { error: `Cannot change draft order in ${season.phase} phase` };
+    if (league.phase !== 'predraft' && league.phase !== 'draft') {
+      set.status = 400; return { error: `Cannot change draft order in ${league.phase} phase` };
     }
     // Lock once the draft has begun (any picks made)
     const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
