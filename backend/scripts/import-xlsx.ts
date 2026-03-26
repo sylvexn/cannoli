@@ -149,14 +149,15 @@ export function importSeason(
   console.log(`Creating season ${config.seasonNumber}...`);
   const seasonRow = db.insert(schema.seasons).values({
     seasonNumber: config.seasonNumber,
-    phase: config.phase || 'regular',
-    currentWeek: config.currentWeek ?? 11,
-    totalWeeks: config.totalWeeks ?? 11,
     pointCap: 110,
     teraCaptainSlots: 2,
-    tradeDeadlineWeek: 7,
   }).returning().get();
   const seasonId = seasonRow.id;
+  // Lifecycle defaults applied per league below — phase/currentWeek/totalWeeks
+  // moved off `seasons`.
+  const leaguePhase = config.phase || 'regular';
+  const leagueCurrentWeek = config.currentWeek ?? 11;
+  const leagueTotalWeeks = config.totalWeeks ?? 11;
 
   // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
 
@@ -231,12 +232,16 @@ export function importSeason(
     console.log(`\nImporting ${league.name}...`);
     const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
 
-    // Create league
+    // Create league (lifecycle fields are per-league now)
     db.insert(schema.leagues).values({
       id: league.id,
       name: league.name,
       color: league.color,
       seasonId,
+      phase: leaguePhase,
+      currentWeek: leagueCurrentWeek,
+      totalWeeks: leagueTotalWeeks,
+      tradeDeadlineWeek: 7,
     }).run();
 
     // ─── Teams from Standings sheet ──────────────────────────────────────
