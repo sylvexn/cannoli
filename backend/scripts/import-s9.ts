@@ -47,16 +47,17 @@ export function importS9(db: Database) {
   // ─── Season 9 ──────────────────────────────────────────────────────────
 
   console.log('Creating Season 9...');
-  const seasonRow = db.prepare(`INSERT INTO seasons (season_number, phase, current_week, total_weeks, point_cap, tera_captain_slots, trade_deadline_week)
-    VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`).get(9, 'offseason', 11, 11, 110, 2, 7) as any;
+  const seasonRow = db.prepare(`INSERT INTO seasons (season_number, point_cap, tera_captain_slots)
+    VALUES (?, ?, ?) RETURNING id`).get(9, 110, 2) as any;
   const seasonId = seasonRow.id;
 
   for (const league of LEAGUES) {
     console.log(`\nImporting ${league.name} (S9)...`);
     const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
 
-    // Create league
-    db.prepare('INSERT INTO leagues (id, name, color, season_id) VALUES (?, ?, ?, ?)').run(
+    // Create league (lifecycle fields per-league now)
+    db.prepare(`INSERT INTO leagues (id, name, color, season_id, phase, current_week, total_weeks, trade_deadline_week)
+      VALUES (?, ?, ?, ?, 'offseason', 11, 11, 7)`).run(
       league.id, league.name, league.color, seasonId
     );
 
