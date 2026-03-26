@@ -108,10 +108,11 @@ function loadTradeContext(tradeId: number) {
   return { trade, league, season, proposerTeam, recipientTeam };
 }
 
-function deadlinePassed(season: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined): boolean {
-  if (!season) return false;
-  if (season.tradeDeadlineWeek <= 0) return false;
-  return season.currentWeek >= season.tradeDeadlineWeek;
+/** Deadline check now scopes to the league's own currentWeek + tradeDeadlineWeek. */
+function deadlinePassed(league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined): boolean {
+  if (!league) return false;
+  if (league.tradeDeadlineWeek <= 0) return false;
+  return league.currentWeek >= league.tradeDeadlineWeek;
 }
 
 /** Move pokemon between two team rosters atomically. Caller must already be inside tx(). */
@@ -216,7 +217,7 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
-    const { trade, season, recipientTeam } = ctx;
+    const { trade, league, recipientTeam } = ctx;
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
 
     const { action, reason } = body as { action: 'accept' | 'reject'; reason?: string };
@@ -226,9 +227,9 @@ export const tradeRoutes = new Elysia()
     const isOwner = recipientTeam.userId != null && recipientTeam.userId === parseInt(user.id);
     if (!isOwner && !isStaff(user)) { set.status = 403; return { error: 'Not your trade to respond to' }; }
 
-    if (action === 'accept' && deadlinePassed(season)) {
+    if (action === 'accept' && deadlinePassed(league)) {
       set.status = 400;
-      return { error: `Trade deadline has passed (Week ${season!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+      return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
 
     return tx(() => {
@@ -273,14 +274,14 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
-    const { trade, season } = ctx;
+    const { trade, league, season } = ctx;
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
     }
 
-    if (deadlinePassed(season)) {
+    if (deadlinePassed(league)) {
       set.status = 400;
-      return { error: `Trade deadline has passed (Week ${season!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+      return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
 
     const offering = JSON.parse(trade.offering) as string[];
@@ -302,7 +303,7 @@ export const tradeRoutes = new Elysia()
           recipientId: trade.recipientId,
           offering,
           requesting,
-          week: season?.currentWeek ?? trade.week,
+          week: league?.currentWeek ?? trade.week,
           leagueId: trade.leagueId,
         });
 
@@ -439,11 +440,11 @@ export const tradeRoutes = new Elysia()
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
-    const week = season?.currentWeek || 0;
+    const week = league?.currentWeek || 0;
 
-    if (deadlinePassed(season)) {
+    if (deadlinePassed(league)) {
       set.status = 400;
-      return { error: `Trade deadline has passed (Week ${season!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+      return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
 
     // Roster legality (point cap + mega + dex)

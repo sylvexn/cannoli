@@ -45,12 +45,11 @@ export function runAutoForfeit() {
   const broadcaster = getArenaBroadcaster();
 
   for (const match of due) {
-    // Look up season for this league to determine policy + paused
+    // Look up the league to determine policy + paused (both per-league now).
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, match.leagueId)).get();
-    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
-    if (!season || season.paused) continue;
+    if (!league || league.paused) continue;
 
-    const policy = season.forfeitPolicy;
+    const policy = league.forfeitPolicy;
     const isPlayoff = match.phase === 'playoffs';
 
     tx(() => {

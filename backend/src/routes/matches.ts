@@ -374,13 +374,10 @@ export const matchRoutes = new Elysia()
       .where(eq(schema.leagues.id, params.leagueId))
       .get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
-    const season = db.select().from(schema.seasons)
-      .where(eq(schema.seasons.id, league.seasonId))
-      .get();
 
     // Safety lock: refuse to nuke an in-flight regular season or playoffs
     // unless the caller forces AND types the league name verbatim.
-    const phase = season?.phase;
+    const phase = league.phase;
     const locked = phase === 'regular' || phase === 'playoffs';
     if (locked) {
       if (!force) {
