@@ -37,19 +37,9 @@ export const sessions = sqliteTable('sessions', {
 export const seasons = sqliteTable('seasons', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   seasonNumber: integer('season_number').notNull(),
-  phase: text('phase', { enum: ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] }).notNull(),
-  currentWeek: integer('current_week').notNull().default(0),
-  totalWeeks: integer('total_weeks').notNull().default(11),
   pointCap: integer('point_cap').notNull().default(110),
   teraCaptainSlots: integer('tera_captain_slots').notNull().default(2),
-  tradeDeadlineWeek: integer('trade_deadline_week').notNull().default(7),
   scheduleType: text('schedule_type', { enum: ['round_robin', 'manual'] }).default('round_robin'),
-  /** JSON object mapping week number to ISO date string, e.g. {"1":"2026-04-14","2":"2026-04-21"} */
-  weekDates: text('week_dates'),
-  /** When 1, scheduler skips auto-advance + auto-forfeit for this season */
-  paused: integer('paused', { mode: 'boolean' }).notNull().default(false),
-  /** What happens when a match deadline passes without a result */
-  forfeitPolicy: text('forfeit_policy', { enum: ['double_forfeit', 'admin_review'] }).notNull().default('double_forfeit'),
 });
 
 // ─── Leagues ─────────────────────────────────────────────────────────────────
@@ -65,6 +55,20 @@ export const leagues = sqliteTable('leagues', {
   draftDate: text('draft_date'),
   /** Bracket size for this league's playoffs (2/4/6/8). */
   playoffTeamCount: integer('playoff_team_count').notNull().default(6),
+  /** Lifecycle phase for THIS league (3 leagues per season run independently). */
+  phase: text('phase', { enum: ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] }).notNull().default('predraft'),
+  /** Current regular-season week for this league (0 outside regular play). */
+  currentWeek: integer('current_week').notNull().default(0),
+  /** Schedule length for this league. Set when the schedule is generated. */
+  totalWeeks: integer('total_weeks').notNull().default(11),
+  /** JSON object mapping week number to ISO date string, e.g. {"1":"2026-04-14"} */
+  weekDates: text('week_dates'),
+  /** When 1, scheduler skips auto-advance + auto-forfeit for THIS league only. */
+  paused: integer('paused', { mode: 'boolean' }).notNull().default(false),
+  /** What happens when a match deadline passes without a result. */
+  forfeitPolicy: text('forfeit_policy', { enum: ['double_forfeit', 'admin_review'] }).notNull().default('double_forfeit'),
+  /** Last week trades may be accepted (0 = no deadline). */
+  tradeDeadlineWeek: integer('trade_deadline_week').notNull().default(7),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────
@@ -289,7 +293,7 @@ export const siteSettings = sqliteTable('site_settings', {
   /** Whether the demo mode is visible on the draft board */
   draftDemoVisible: integer('draft_demo_visible', { mode: 'boolean' }).notNull().default(true),
   /** Last regular-season week during which free agent pickups are allowed.
-   *  Pickups blocked once season.currentWeek > this value during 'regular',
+   *  Pickups blocked once league.currentWeek > this value during 'regular',
    *  and always blocked during 'playoffs'. */
   faDeadlineWeek: integer('fa_deadline_week').notNull().default(7),
   /** Default playoff bracket size for newly-generated brackets (2/4/6/8). */
