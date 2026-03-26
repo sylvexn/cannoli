@@ -93,6 +93,17 @@ export interface DraftPick {
   isTeraCaptain: boolean;
 }
 
+/**
+ * Per-league season summary surfaced on the League object.
+ *
+ * Lifecycle fields (phase, currentWeek, totalWeeks, weekDates, paused,
+ * forfeitPolicy, tradeDeadlineWeek) live on the league row in the backend —
+ * Cannoli runs 3 concurrent leagues per season and they advance independently.
+ * `seasonNumber` and `pointCap` / `teraCaptainSlots` remain truly season-wide.
+ *
+ * The shape is preserved on the wire under `season` for backwards-compat with
+ * existing consumers; treat reads of these fields as "the league's value of …".
+ */
 export interface LeagueSeason {
   id: string;
   seasonNumber: number;
