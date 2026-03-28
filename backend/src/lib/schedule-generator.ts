@@ -77,11 +77,10 @@ export function generateLeagueSchedule(leagueId: string): { success: boolean; ma
       .where(eq(schema.matches.leagueId, leagueId))
       .run();
 
-    // Insert new matches; populate deadline from season weekDates if available
-    const season = db.select().from(schema.seasons)
-      .where(eq(schema.seasons.id, league.seasonId))
-      .get();
-    const weekDates: Record<string, string> = season?.weekDates ? JSON.parse(season.weekDates) : {};
+    // Insert new matches; populate deadline from THIS league's weekDates.
+    // (weekDates moved off `seasons` so regenerating one league's schedule
+    // no longer overwrites totalWeeks/weekDates for sibling leagues.)
+    const weekDates: Record<string, string> = league.weekDates ? JSON.parse(league.weekDates) : {};
 
     const matchCountPerWeek = new Map<number, number>();
     for (const f of fixtures) {
@@ -101,14 +100,12 @@ export function generateLeagueSchedule(leagueId: string): { success: boolean; ma
       }).run();
     }
 
-    // Update season total weeks to match schedule length
-    if (season) {
-      const totalWeeks = Math.max(...fixtures.map(f => f.week));
-      db.update(schema.seasons)
-        .set({ totalWeeks })
-        .where(eq(schema.seasons.id, season.id))
-        .run();
-    }
+    // Update THIS league's total weeks to match the generated schedule.
+    const totalWeeks = Math.max(...fixtures.map(f => f.week));
+    db.update(schema.leagues)
+      .set({ totalWeeks })
+      .where(eq(schema.leagues.id, leagueId))
+      .run();
 
     return { success: true, matchCount: fixtures.length };
   });
