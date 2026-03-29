@@ -10,6 +10,21 @@
 
 const BOT_USERID = 'cannolibot';
 
+/**
+ * Send a synthetic PM line directly to the bot's connection.
+ * Format: |pm|SENDER|RECEIVER|MESSAGE — what the bot would normally see when
+ * a real user PM'd it. We use this as an in-band signal channel so the bot
+ * deterministically learns about new battles without polling.
+ */
+function pmBot(message: string) {
+	const bot = Users.get(BOT_USERID);
+	if (!bot || !bot.connected) return false;
+	// `~Cannoli` is a system identity (group=`~` admin, name=`Cannoli`) so the
+	// bot can recognise the source as authoritative and not a spoofed user.
+	bot.send(`|pm|~Cannoli|${bot.getIdentity()}|${message}`);
+	return true;
+}
+
 export const commands: Chat.Commands = {
 	/**
 	 * /cannoli-battle player1, player2, format
@@ -17,6 +32,9 @@ export const commands: Chat.Commands = {
 	 * Creates a battle room and places both players in it.
 	 * Used by CannoliBot when both players ready up in the Arena lobby.
 	 * Players must have a team saved for the format in their teambuilder.
+	 *
+	 * On success, sends a PM back to the bot with the new battle's room id
+	 * so the bot can join and observe the battle for result recording.
 	 */
 	'cannoli-battle'(target, room, user) {
 		if (user.id !== BOT_USERID) {
@@ -56,24 +74,35 @@ export const commands: Chat.Commands = {
 		// Create the battle — both players are placed in it automatically.
 		// They must have a team saved for this format in their teambuilder.
 		// If they don't, PS will show them the team selection screen.
-		Rooms.createBattle({
+		const battleRoom = Rooms.createBattle({
 			format,
-			p1: {
-				user: user1,
-				team: user1.battleSettings.team || '',
-				hidden: false,
-				inviteOnly: false,
-			},
-			p2: {
-				user: user2,
-				team: user2.battleSettings.team || '',
-				hidden: false,
-				inviteOnly: false,
-			},
+			players: [
+				{
+					user: user1,
+					team: user1.battleSettings.team || '',
+					hidden: false,
+					inviteOnly: false,
+				},
+				{
+					user: user2,
+					team: user2.battleSettings.team || '',
+					hidden: false,
+					inviteOnly: false,
+				},
+			],
 			rated: 0,
 		});
 
-		this.sendReply(`Battle created: ${user1.name} vs ${user2.name} [${format}]`);
+		if (!battleRoom) {
+			return this.errorReply(`Failed to create battle (server may be in lockdown).`);
+		}
+
+		// PM the bot the new room id so it can join and observe.
+		// Format: cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>
+		// roomid already includes the `battle-` prefix.
+		pmBot(`cannoli-battle-created|${battleRoom.roomid}|${user1.id}|${user2.id}|${format}`);
+
+		this.sendReply(`Battle created: ${user1.name} vs ${user2.name} [${format}] (${battleRoom.roomid})`);
 	},
 
 	/**
