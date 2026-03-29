@@ -23,6 +23,16 @@ const PS_SERVER_URL = process.env.PS_SERVER_WS_URL || 'ws://localhost:8000/showd
 const BOT_USERNAME = process.env.BOT_USERNAME || 'CannoliBot';
 const BOT_PASSWORD = process.env.BOT_PASSWORD || 'cannolibot';
 
+/**
+ * Public host for the PS sim/replay viewer (no scheme/path).
+ * Used to build replay URLs that resolve to the actual Showdown viewer at
+ * `https://{host}/{roomId}` instead of a Cannoli-relative `/replay/...` path
+ * that would 404 against the wrong origin.
+ */
+const PS_PUBLIC_HOST =
+  (process.env.PS_PUBLIC_URL || process.env.SHOWDOWN_URL || 'https://sim.cannoli.live')
+    .replace(/\/+$/, '');
+
 // ─── State ──────────────────────────────────────────────────────────────────
 
 interface MonitoredBattle {
@@ -245,6 +255,20 @@ function handleGlobalLine(line: string) {
     case 'formats': {
       // Formats list received — bot is ready
       console.log('[PS Bot] Received formats, bot is ready');
+      // Re-attach to any in-progress battles whose results were lost when the
+      // bot was offline. Without this, a mid-battle crash never sees |win|.
+      rejoinInProgressBattles();
+      break;
+    }
+
+    case 'pm': {
+      // |pm|SENDER|RECEIVER|MESSAGE
+      // The chat plugin signals new battles via:
+      //   cannoli-battle-created|<roomid>|<p1>|<p2>|<format>
+      // Sender will be `~Cannoli` (system identity from cannoli.ts).
+      const sender = parts[2] || '';
+      const message = parts.slice(4).join('|');
+      handleBotPm(sender, message);
       break;
     }
 
@@ -258,15 +282,92 @@ function handleGlobalLine(line: string) {
   }
 }
 
+/**
+ * Handle a PM directed at the bot. Currently only listens for the
+ * `cannoli-battle-created` signal from our chat plugin.
+ */
+function handleBotPm(sender: string, message: string) {
+  // Sender is in `±name` form (group prefix + identity). Strip the prefix.
+  const senderId = toUserid(sender);
+  // Only honour signals from the system identity injected by cannoli.ts.
+  if (senderId !== 'cannoli') return;
+
+  if (!message.startsWith('cannoli-battle-created|')) return;
+
+  const [, roomId, p1, p2, format] = message.split('|');
+  if (!roomId) return;
+
+  // Pre-register the battle so handleBattleLine has state when |init| arrives.
+  if (!monitoredBattles.has(roomId)) {
+    const entry: MonitoredBattle = {
+      roomId,
+      matchId: null,
+      p1: toUserid(p1 || ''),
+      p2: toUserid(p2 || ''),
+      format: format || '',
+      parser: new ReplayParser(),
+      lines: [],
+      isOfficial: false,
+    };
+    monitoredBattles.set(roomId, entry);
+    // Set matchId immediately so live-stats broadcasting starts as soon as the
+    // first protocol lines arrive (gating only on `|player|` would lose the
+    // opening few turns of telemetry).
+    if (entry.p1 && entry.p2) checkForOfficialMatch(entry);
+  }
+
+  // Join the battle room so PS routes its protocol lines to us.
+  console.log(`[PS Bot] Joining ${roomId} (signalled by chat plugin)`);
+  sendToPs(`|/join ${roomId}`);
+}
+
+/**
+ * On bot reconnect, re-join any battle rooms we were observing before the
+ * disconnect. Matches stuck in `in_progress` with a known psRoomId can be
+ * rescued; matches in `ready` without a psRoomId have to time out and retry.
+ */
+function rejoinInProgressBattles() {
+  const open = db.select().from(schema.matches)
+    .where(eq(schema.matches.status, 'in_progress'))
+    .all()
+    .filter(m => !!m.psRoomId);
+
+  for (const match of open) {
+    const roomId = match.psRoomId!;
+    if (monitoredBattles.has(roomId)) continue;
+
+    // Restore state. The replay parser starts blank — we won't recover anything
+    // that happened while the bot was offline, but we can still record |win|.
+    const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
+    const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+    const p1 = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : '';
+    const p2 = awayTeam?.showdownUsername ? toUserid(awayTeam.showdownUsername) : '';
+
+    monitoredBattles.set(roomId, {
+      roomId,
+      matchId: match.id,
+      p1, p2,
+      format: '',
+      parser: new ReplayParser(),
+      lines: [],
+      isOfficial: true,
+    });
+
+    console.log(`[PS Bot] Rejoining ${roomId} for match ${match.id}`);
+    sendToPs(`|/join ${roomId}`);
+  }
+}
+
 function handleBattleLine(room: string, line: string) {
   const parts = line.split('|');
   const cmd = parts[1];
 
-  // Check if this is a new battle we should monitor
+  // Check if this is a new battle we should monitor.
+  // For league matches, the chat plugin pre-registers via PM before we get
+  // here — don't clobber that state. For ad-hoc battles (e.g. scrims that
+  // happen to share the lobby), still set up a fallback entry.
   if (cmd === 'init' && parts[2] === 'battle') {
-    // We'll get player info shortly, start tracking
     if (!monitoredBattles.has(room)) {
-      // Don't monitor yet — wait for |player| lines to determine if it's a league match
       monitoredBattles.set(room, {
         roomId: room,
         matchId: null,
@@ -419,7 +520,11 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           awayScore,
           completedAt: new Date().toISOString(),
           replayLog: battle.lines.join('\n'),
-          replayUrl: `/replay/${battle.roomId.replace('battle-', '')}`,
+          // Build an absolute URL that resolves to the public sim host's
+          // replay viewer. PS exposes battle rooms at `https://{host}/{roomId}`
+          // — this works whether or not the room was explicitly /savereplay'd
+          // because the live battle URL persists for spectators.
+          replayUrl: `${PS_PUBLIC_HOST}/${battle.roomId}`,
         })
         .where(eq(schema.matches.id, battle.matchId))
         .run();
