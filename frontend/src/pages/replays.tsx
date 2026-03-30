@@ -94,9 +94,20 @@ export function ReplaysPage() {
     });
   }
 
-  // Check if a replay URL is a local file (can be iframed)
+  // Check if a replay URL can be safely iframed.
+  // Includes both relative `/replay…` paths (legacy) and the configured PS
+  // sim host (which sets `frame-ancestors 'self' https://cannoli.live` per
+  // showdown/nginx.conf).
   function isLocalReplay(url: string) {
-    return url.startsWith('/replays/') || url.startsWith('/replay');
+    if (url.startsWith('/replays/') || url.startsWith('/replay')) return true;
+    const psUrl = (import.meta.env.VITE_SHOWDOWN_URL as string | undefined) || 'https://sim.cannoli.live';
+    try {
+      const psHost = new URL(psUrl).host;
+      const u = new URL(url);
+      return u.host === psHost;
+    } catch {
+      return false;
+    }
   }
 
   return (
