@@ -37,6 +37,10 @@ COPY ps/config-example.js config/config.js
 # Cannoli /cannoli-battle chat plugin
 COPY ps/cannoli.ts server/chat-plugins/cannoli.ts
 
+# Apply Cannoli league banlist to [Gen 9] NatDex Draft (idempotent patch).
+COPY ps/patch-natdex-draft.js /tmp/patch-natdex-draft.js
+RUN node /tmp/patch-natdex-draft.js config/formats.ts && rm /tmp/patch-natdex-draft.js
+
 # CannoliBot gets global voice (+) so it can use /cannoli-battle in any room
 RUN echo "cannolibot,+" >> config/usergroups.csv
 

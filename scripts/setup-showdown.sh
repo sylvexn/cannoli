@@ -79,6 +79,11 @@ CONFIGEOF
 echo "Installing cannoli.ts chat plugin..."
 cp "$CANNOLI_DIR/ps/cannoli.ts" "$SHOWDOWN_DIR/server/server/chat-plugins/cannoli.ts"
 
+# Patch formats.ts to add Cannoli league banlist to [Gen 9] NatDex Draft.
+# Idempotent — re-running setup is safe.
+echo "Patching [Gen 9] NatDex Draft banlist..."
+node "$CANNOLI_DIR/ps/patch-natdex-draft.js" "$SHOWDOWN_DIR/server/config/formats.ts"
+
 # ─── Configure PS client ──────────────────────────────────────────────────
 
 echo "Configuring PS client..."
