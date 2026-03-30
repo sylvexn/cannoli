@@ -105,12 +105,24 @@ export function clearReadyTimerForMatch(matchId: string) {
   clearReadyTimer(matchId);
 }
 
-// Reference for broadcasting from external code (e.g., bot result handler)
+// Reference for broadcasting from external code (e.g., bot result handler).
+// Captured once on the first WS connection — Elysia's `ws` instance is shared
+// across connections, so reassigning per-open would race in flight.
 let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
 
 export function getArenaBroadcaster() {
   return broadcastWs;
 }
+
+/**
+ * Pending unready actions, keyed by client `userId|teamId`. When a player's
+ * WS disconnects we DON'T immediately mark them unready — frontend page
+ * navigations tear down the WS for a few seconds. Hold the action and only
+ * commit if they don't reconnect inside the grace window.
+ */
+const UNREADY_GRACE_MS = parseInt(process.env.UNREADY_GRACE_MS || '8000');
+const pendingUnready = new Map<string, NodeJS.Timeout>();
+function clientKey(userId: number, teamId: string) { return `${userId}|${teamId}`; }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -289,7 +301,11 @@ export const arenaRoutes = new Elysia()
 
   .ws('/ws/arena', {
     open(ws) {
-      broadcastWs = ws;
+      // Capture the broadcaster once. Elysia's `ws.publish` is bound to the
+      // app's pub/sub instance, not the individual connection — overwriting
+      // it on every open created an unnecessary reassignment race when a
+      // result/timeout fired during a reconnect storm.
+      if (!broadcastWs) broadcastWs = ws;
       ws.subscribe('arena:global');
 
       // Auto-authenticate from cookie on the upgrade request
@@ -307,6 +323,16 @@ export const arenaRoutes = new Elysia()
           leagueId: team?.leagueId ?? null,
         };
         arenaClients.set(ws, client);
+
+        // Cancel any pending unready (player navigated, didn't drop)
+        if (team) {
+          const key = clientKey(client.userId, team.teamId);
+          const pending = pendingUnready.get(key);
+          if (pending) {
+            clearTimeout(pending);
+            pendingUnready.delete(key);
+          }
+        }
 
         // Subscribe to their match if they have one
         if (team) {
@@ -573,27 +599,41 @@ export const arenaRoutes = new Elysia()
     close(ws) {
       const client = arenaClients.get(ws);
       if (client?.teamId && client.leagueId) {
-        // Disconnect → unready for any pending match
-        const match = getCurrentMatch(client.teamId, client.leagueId);
-        if (match && (match.status === 'scheduled' || match.status === 'ready')) {
-          const isHome = match.homeTeamId === client.teamId;
+        // Don't unready immediately — frontend page navigation tears down the
+        // WS for a few seconds. Hold the action; cancel it if they reconnect.
+        const teamId = client.teamId;
+        const leagueId = client.leagueId;
+        const userId = client.userId;
+        const key = clientKey(userId, teamId);
+
+        // Replace any existing pending timer (e.g. flapping connection)
+        const existing = pendingUnready.get(key);
+        if (existing) clearTimeout(existing);
+
+        const handle = setTimeout(() => {
+          pendingUnready.delete(key);
+          const match = getCurrentMatch(teamId, leagueId);
+          if (!match) return;
+          if (match.status !== 'scheduled' && match.status !== 'ready') return;
+
+          const isHome = match.homeTeamId === teamId;
           const wasReady = isHome ? match.readyHome : match.readyAway;
+          if (!wasReady) return;
 
-          if (wasReady) {
-            const updateField = isHome ? { readyHome: false } : { readyAway: false };
-            db.update(schema.matches)
-              .set({ ...updateField, status: 'scheduled' })
-              .where(eq(schema.matches.id, match.id)).run();
+          const updateField = isHome ? { readyHome: false } : { readyAway: false };
+          db.update(schema.matches)
+            .set({ ...updateField, status: 'scheduled' })
+            .where(eq(schema.matches.id, match.id)).run();
 
-            db.insert(schema.matchReadyLog).values({
-              matchId: match.id,
-              teamId: client.teamId,
-              event: 'disconnect',
-            }).run();
+          db.insert(schema.matchReadyLog).values({
+            matchId: match.id,
+            teamId,
+            event: 'disconnect',
+          }).run();
 
-            broadcastMatchState(match.id, ws);
-          }
-        }
+          broadcastMatchState(match.id);
+        }, UNREADY_GRACE_MS);
+        pendingUnready.set(key, handle);
 
         // Clean up scrim lobbies the player was in
         for (const [lobbyId, lobby] of scrimLobbies) {
