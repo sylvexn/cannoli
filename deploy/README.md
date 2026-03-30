@@ -1,8 +1,50 @@
 # Cannoli deployment
 
 Coolify on `cool.syl.rest` orchestrates 7 dockerfile-buildpack apps in the
-`cannoli` project. Builds run on the `construct` build server (over SSH);
-the production vps only pulls the resulting layer and runs containers.
+`cannoli` project. Builds run on the `construct` build server; the
+production vps only pulls finished images from a registry and runs them.
+
+## Network topology
+
+```
+                                                        ┌─────────────────────┐
+   git push (master)  ──►  github webhook  ──►  Coolify │  cool.syl.rest      │
+                                                        │  (Coolify control)  │
+                                                        └──────────┬──────────┘
+                                                                   │
+                            ssh build job                          │ ssh deploy job
+                                  ▼                                ▼
+                       ┌───────────────────┐              ┌───────────────────┐
+                       │  construct        │              │  vps              │
+                       │  100.126.76.123   │              │  Tailscale: vps   │
+                       │  (build server)   │              │  prod containers  │
+                       │                   │              │                   │
+                       │  docker build     │              │  docker pull      │
+                       │  docker push  ────┼──► ghcr/dockerhub ◄── docker pull│
+                       │  sylvexnn/c-*     │  registry    │  (rolling restart)│
+                       └───────────────────┘              └───────────────────┘
+                                                                   │
+                                                                   │ all 7 containers
+                                                                   ▼
+                                                          ┌─────────────────────┐
+                                                          │ docker bridge       │
+                                                          │ network: `coolify`  │
+                                                          │ 10.0.1.0/24         │
+                                                          │                     │
+                                                          │ network aliases:    │
+                                                          │   cannoli-backend-mock
+                                                          │   cannoli-backend-live
+                                                          │   cannoli-frontend-*
+                                                          │   cannoli-ps-server │
+                                                          │   cannoli-ps-client │
+                                                          │   cannoli-maintenance
+                                                          └─────────────────────┘
+```
+
+- **Public ingress** is Coolify's Traefik on the vps, routing FQDNs to the right container.
+- **Cross-app traffic** uses the shared `coolify` docker network with stable aliases
+  (e.g. nginx in `cannoli-frontend-mock` proxies `/api` → `http://cannoli-backend-mock:3001`).
+- **Aliases never change** even if a container is recreated, so config can hard-code them.
 
 ## Apps
 
@@ -19,12 +61,33 @@ the production vps only pulls the resulting layer and runs containers.
 ## Deploy flow
 
 1. Push to `master`.
-2. Coolify webhook fires; `watch_paths` filters which apps redeploy.
-3. Coolify SSHes to `construct`, builds the image there.
-4. Image transferred to vps via `docker save | docker load` over SSH.
-5. Container restarted on vps.
+2. Coolify GitHub webhook fires; `watch_paths` filters which apps redeploy.
+3. For each affected app: Coolify SSHes to `construct`, runs `docker build`,
+   then `docker push sylvexnn/c-<service>:<commit-sha>` to Docker Hub.
+4. Coolify SSHes to vps, runs `docker pull sylvexnn/c-<service>:<commit-sha>`.
+5. Coolify rolling-restarts the container on vps.
 
-vps does **zero** build CPU.
+vps does **zero** build CPU. construct handles all builds; the registry
+(Docker Hub `sylvexnn` org) is the transfer medium.
+
+### Why this shape (history)
+
+We tried two architectures before settling here:
+
+- **Docker Compose stacks** (consolidated 4-service mock+live+showdown): Coolify
+  v4's compose buildpack does **not** support build servers (gated in the source:
+  `@if ($buildPack !== 'dockercompose')`, see [discussion #3221](https://github.com/coollabsio/coolify/discussions/3221)).
+  Builds had to run on vps; the bun + vite + rolldown chain crashed it under
+  Coolify's default `concurrent_builds=2` cascade.
+- **GitHub Actions → ghcr.io → Coolify pull**: works for the build-offload, but
+  Coolify v4 has no "Private Docker Registries" UI for external registries
+  (issue [#6364](https://github.com/coollabsio/coolify/issues/6364)). Pull auth
+  for private ghcr images was the blocker — host-level `docker login` doesn't
+  propagate into Coolify's helper container.
+
+Per-service Dockerfile apps + Coolify-native build server + Docker Hub
+(authenticated registry already wired into Coolify on this instance) is the
+combo that stays inside Coolify's golden path.
 
 ## Going live (the swap)
 
