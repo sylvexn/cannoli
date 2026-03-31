@@ -84,7 +84,7 @@ function tickTimers() {
       .where(eq(schema.leagues.id, s.leagueId)).get();
     if (!league?.draftOrder) continue;
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
     const slot = snakeOrder[s.currentPickIndex];
     if (!slot) continue;
 

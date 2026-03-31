@@ -216,7 +216,7 @@ export function validatePick(
 
   if (state && state.status === 'in_progress' && league?.draftOrder) {
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
     const futureSlots = snakeOrder
       .slice(state.currentPickIndex + 1)
       .filter(s => s.teamId === teamId).length;
@@ -307,7 +307,7 @@ export function getAutoPick(
   let maxAffordable = remaining;
   if (state && state.status === 'in_progress' && league?.draftOrder) {
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
     const futureSlots = snakeOrder
       .slice(state.currentPickIndex + 1)
       .filter(s => s.teamId === teamId).length;
@@ -369,7 +369,7 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
   if (!season) return null;
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const rounds = season.pointCap > 0 ? 10 : 10; // default 10 rounds
+  const rounds = league.rosterSize;
 
   const snakeOrder = generateSnakeOrder(teamOrder, rounds);
 
@@ -439,7 +439,7 @@ export function executePick(
     if (!season) return { success: false as const, error: 'Season not found', code: 'season_not_found' as const };
 
     const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
 
     // Check it's the right team's turn (skipped for staff-override force-picks)
     const currentSlot = snakeOrder[state.currentPickIndex];
@@ -609,7 +609,7 @@ export function handleTimerExpiry(leagueId: string): { paused: true; teamId: str
   if (!league) return null;
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const snakeOrder = generateSnakeOrder(teamOrder, 10);
+  const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
   const currentSlot = snakeOrder[state.currentPickIndex];
   if (!currentSlot) return null;
 
@@ -686,7 +686,7 @@ export function skipPick(
     if (!league) return { success: false as const, error: 'League not found' };
 
     const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-    const snakeOrder = generateSnakeOrder(teamOrder, 10);
+    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
 
     const currentSlot = snakeOrder[state.currentPickIndex];
     const skippedTeam = state.timerExpiredForTeam ?? currentSlot?.teamId ?? 'unknown';

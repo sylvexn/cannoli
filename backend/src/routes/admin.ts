@@ -514,6 +514,7 @@ export const adminRoutes = new Elysia()
       pointCap = 110,
       teraCaptainSlots = 2,
       tradeDeadlineWeek = 7,
+      rosterSize = 10,
       forfeitPolicy = 'double_forfeit',
       weekDates = null,
       leagues: leaguePayloads = [],
@@ -524,6 +525,7 @@ export const adminRoutes = new Elysia()
       pointCap?: number;
       teraCaptainSlots?: number;
       tradeDeadlineWeek?: number;
+      rosterSize?: number;
       forfeitPolicy?: 'double_forfeit' | 'admin_review';
       weekDates?: Record<string, string> | null;
       leagues?: {
@@ -609,6 +611,7 @@ export const adminRoutes = new Elysia()
             totalWeeks,
             weekDates: weekDatesJson,
             tradeDeadlineWeek,
+            rosterSize,
             forfeitPolicy,
           }).run();
 
@@ -934,7 +937,7 @@ export const adminRoutes = new Elysia()
 
   .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize: _rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
+    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -956,6 +959,20 @@ export const adminRoutes = new Elysia()
     }
     if (teraCaptainSlots !== undefined && league.phase !== 'predraft' && league.phase !== 'draft') {
       set.status = 400; return { error: `Cannot change tera captain slots in ${league.phase} phase` };
+    }
+    // rosterSize must be locked once any picks have been made — would invalidate
+    // the snake order. Editable until draft starts.
+    if (rosterSize !== undefined) {
+      if (draftStarted || (league.phase !== 'predraft' && league.phase !== 'draft')) {
+        set.status = 400;
+        return { error: `Cannot change roster size once draft has started (phase: ${league.phase})` };
+      }
+      const n = Number(rosterSize);
+      if (!Number.isInteger(n) || n < 2 || n > 20) {
+        set.status = 400;
+        return { error: 'rosterSize must be an integer between 2 and 20' };
+      }
+      leagueUpdates.rosterSize = n;
     }
 
     // pointCap and teraCaptainSlots remain season-wide settings.

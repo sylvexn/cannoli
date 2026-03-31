@@ -69,6 +69,11 @@ export const leagues = sqliteTable('leagues', {
   forfeitPolicy: text('forfeit_policy', { enum: ['double_forfeit', 'admin_review'] }).notNull().default('double_forfeit'),
   /** Last week trades may be accepted (0 = no deadline). */
   tradeDeadlineWeek: integer('trade_deadline_week').notNull().default(7),
+  /** Number of draft rounds (= per-team roster slots). Per-league config so
+   *  three concurrent leagues in a season can run different formats. Default
+   *  10 mirrors the historic hardcoded value. Surfaced in the season wizard
+   *  and per-league admin UI. */
+  rosterSize: integer('roster_size').notNull().default(10),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────

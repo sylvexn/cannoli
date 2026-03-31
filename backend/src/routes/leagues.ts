@@ -37,6 +37,7 @@ export const leagueRoutes = new Elysia()
         pointCap: season.pointCap,
         teraCaptainSlots: season.teraCaptainSlots,
         tradeDeadlineWeek: l.tradeDeadlineWeek,
+        rosterSize: l.rosterSize,
         forfeitPolicy: l.forfeitPolicy,
         paused: l.paused,
         weekDates: l.weekDates ? JSON.parse(l.weekDates) : null,

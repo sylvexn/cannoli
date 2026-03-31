@@ -124,6 +124,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       totalWeeks: config.totalWeeks,
       pointCap: config.pointCap,
       teraCaptainSlots: config.teraCaptainSlots,
+      rosterSize: config.rosterSize,
       weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
       overlapOverride,
       leagues: includedList.map(l => {
