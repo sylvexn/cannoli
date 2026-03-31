@@ -78,6 +78,7 @@ export interface ApiLeague {
     pointCap: number;
     teraCaptainSlots: number;
     tradeDeadlineWeek: number;
+    rosterSize: number;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     paused?: boolean;
     weekDates?: Record<string, string> | null;
@@ -609,6 +610,7 @@ export const api = {
     pointCap?: number;
     teraCaptainSlots?: number;
     tradeDeadlineWeek?: number;
+    rosterSize?: number;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     weekDates?: Record<string, string> | null;
     leagues?: {

@@ -120,6 +120,13 @@
       "when": 1778900000000,
       "tag": "0016_per_league_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1779000000000,
+      "tag": "0017_league_roster_size",
+      "breakpoints": true
     }
   ]
 }
