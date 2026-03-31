@@ -526,8 +526,21 @@ export function executePick(
   });
 }
 
-/** Start a draft for a league. Validates preconditions. */
-export function startDraft(leagueId: string, timerDuration = 120, actor?: string): { success: boolean; error?: string } {
+/**
+ * Start a draft for a league. Validates preconditions.
+ *
+ * Important: starting a draft wipes existing draft picks + draft-acquired
+ * roster entries for this league. We refuse to do that on a draft that's
+ * already `completed` or `paused` unless the caller passes `{ force: true }`,
+ * since the natural admin flow (start → pick → finish) shouldn't ever land
+ * back here, and an accidental call would silently destroy the entire draft.
+ */
+export function startDraft(
+  leagueId: string,
+  timerDuration = 120,
+  actor?: string,
+  opts?: { force?: boolean },
+): { success: boolean; error?: string; code?: 'completed_draft_requires_force' | 'paused_draft_requires_force' } {
   const league = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
     .get();
@@ -544,6 +557,23 @@ export function startDraft(leagueId: string, timerDuration = 120, actor?: string
     .get();
   if (existing && existing.status === 'in_progress') {
     return { success: false, error: 'Draft is already in progress' };
+  }
+
+  // A completed draft has full rosters + activity log entries — restarting
+  // would delete all of that. Force flag (admin-only) bypasses the guard.
+  if (existing && existing.status === 'completed' && !opts?.force) {
+    return {
+      success: false,
+      error: 'Draft has already completed for this league. Pass { force: true } to wipe rosters and restart.',
+      code: 'completed_draft_requires_force',
+    };
+  }
+  if (existing && existing.status === 'paused' && !opts?.force) {
+    return {
+      success: false,
+      error: 'Draft is paused. Use /resume to continue, or pass { force: true } to wipe rosters and restart.',
+      code: 'paused_draft_requires_force',
+    };
   }
 
   return tx(() => {

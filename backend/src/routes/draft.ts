@@ -171,9 +171,16 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/start', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { timerDuration } = (body as { timerDuration?: number }) ?? {};
-    const result = startDraft(params.leagueId, timerDuration ?? 120, user.username);
-    if (!result.success) { set.status = 400; return { error: result.error }; }
+    const { timerDuration, force } = (body as { timerDuration?: number; force?: boolean }) ?? {};
+    const result = startDraft(params.leagueId, timerDuration ?? 120, user.username, { force: !!force });
+    if (!result.success) {
+      // Re-running a completed/paused draft requires explicit force=true so
+      // an accidental call doesn't silently wipe rosters. Surface 409 with a
+      // structured code so the UI can prompt for confirmation.
+      const isConflict = result.code === 'completed_draft_requires_force' || result.code === 'paused_draft_requires_force';
+      set.status = isConflict ? 409 : 400;
+      return { error: result.error, code: result.code };
+    }
     broadcastDraftState(params.leagueId);
     return getDraftSnapshot(params.leagueId);
   })
