@@ -3,7 +3,7 @@ import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import {
   getDraftSnapshot, startDraft, executePick, executeAutoPick, skipPick,
-  undoLastPick, getAutoPick, generateSnakeOrder,
+  undoLastPick, generateSnakeOrder, handleTimerExpiry,
 } from '../lib/draft-engine';
 import type { PickErrorCode } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
@@ -79,7 +79,12 @@ function tickTimers() {
     const deadline = new Date(s.timerStartedAt).getTime() + s.timerDuration * 1000;
     if (now < deadline) continue;
 
-    // Timer expired — fire auto-pick. If no valid pick exists, skip.
+    // Timer expired — pause the draft and flag the team whose timer expired.
+    // Admins have explicit /auto-pick + /skip endpoints to resolve the pause
+    // (the `timerExpiredForTeam` flag is what gates POST /draft/auto-pick).
+    // Previously the scheduler called executePick directly, which made the
+    // admin auto-pick endpoint unreachable (paused-with-flag state never
+    // existed); see also lib/draft-engine.handleTimerExpiry.
     const league = db.select().from(schema.leagues)
       .where(eq(schema.leagues.id, s.leagueId)).get();
     if (!league?.draftOrder) continue;
@@ -88,26 +93,13 @@ function tickTimers() {
     const slot = snakeOrder[s.currentPickIndex];
     if (!slot) continue;
 
-    const season = db.select().from(schema.seasons)
-      .where(eq(schema.seasons.id, league.seasonId)).get();
-    if (!season) continue;
-
-    const auto = getAutoPick(slot.teamId, s.leagueId, season.pointCap);
-    if (auto) {
-      const result = executePick(s.leagueId, auto.name, slot.teamId, 'auto-pick (timer)');
-      if (result.success) {
-        broadcastDraftState(s.leagueId);
-        broadcastWs?.publish(`draft:${s.leagueId}`, JSON.stringify({
-          type: 'auto_pick',
-          data: { pick: { ...result.pick, playerId: result.pick.teamId }, reason: 'timer_expired' },
-        }));
-      } else {
-        skipPick(s.leagueId, 'auto-skip (timer)', { force: true });
-        broadcastDraftState(s.leagueId);
-      }
-    } else {
-      skipPick(s.leagueId, 'auto-skip (no valid pick)', { force: true });
+    const result = handleTimerExpiry(s.leagueId);
+    if (result?.paused) {
       broadcastDraftState(s.leagueId);
+      broadcastWs?.publish(`draft:${s.leagueId}`, JSON.stringify({
+        type: 'timer_expired',
+        data: { teamId: result.teamId },
+      }));
     }
   }
 }
@@ -325,6 +317,19 @@ export const draftRoutes = new Elysia()
     if (!result) { set.status = 400; return { error: 'Cannot auto-pick' }; }
 
     broadcastDraftState(params.leagueId);
+    if (result.success) {
+      // Include the post-pick snapshot so clients can apply it via LIVE_SYNC
+      // without waiting for the separately-broadcast draft_state. Reason
+      // distinguishes admin-triggered auto-pick from a future automatic flow.
+      broadcastWs?.publish(`draft:${params.leagueId}`, JSON.stringify({
+        type: 'auto_pick',
+        data: {
+          pick: { ...result.pick, playerId: result.pick.teamId },
+          reason: 'admin_auto_pick',
+          snapshot: getDraftSnapshot(params.leagueId),
+        },
+      }));
+    }
     return result;
   })
 

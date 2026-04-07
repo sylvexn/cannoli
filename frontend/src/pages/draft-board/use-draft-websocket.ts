@@ -18,7 +18,7 @@ export interface DraftPresenceData {
 }
 
 export interface DraftWSMessage {
-  type: 'draft_state' | 'pick_made' | 'auto_pick' | 'presence' | 'error';
+  type: 'draft_state' | 'pick_made' | 'auto_pick' | 'timer_expired' | 'presence' | 'error';
   data?: any;
   error?: string;
   code?: string;
@@ -115,12 +115,19 @@ export function useDraftWebSocket({
             onPickMadeRef.current(msg.data, { clientRequestId: msg.clientRequestId, idempotent: msg.idempotent });
             break;
           case 'auto_pick':
-            // Server-driven auto-pick (timer expired). Treat as a pick_made;
-            // snapshot is broadcast separately as draft_state.
+            // Admin-triggered auto-pick (the live scheduler now pauses on timer
+            // expiry; admin explicitly resolves it). Backend includes the
+            // post-pick snapshot so clients apply it via LIVE_SYNC without
+            // racing the separate draft_state broadcast.
             onPickMadeRef.current(
-              { pick: msg.data.pick, snapshot: undefined as unknown as ApiDraftState },
+              { pick: msg.data.pick, snapshot: msg.data.snapshot as ApiDraftState },
               { clientRequestId: undefined, idempotent: false },
             );
+            break;
+          case 'timer_expired':
+            // Scheduler paused the draft on timer expiry. The accompanying
+            // draft_state broadcast carries the new paused snapshot, so we
+            // don't need to do anything here beyond surface it as info.
             break;
           case 'presence':
             onPresenceRef.current(msg.data);
