@@ -95,6 +95,14 @@ export const teams = sqliteTable('teams', {
   bannerPath: text('banner_path'),
   /** Short team description — ≤ 280 chars enforced at API layer */
   bio: text('bio'),
+  /**
+   * Set true once the team owner (or staff) saves their tera captains for
+   * this draft cycle. Draft → regular advance is gated on every team in the
+   * league having this flag set. Reset to false on draft restart / undo of
+   * the last pick (which kicks the league back to phase=draft).
+   * `false` for teams in seasons predating this column (default).
+   */
+  captainsLocked: integer('captains_locked', { mode: 'boolean' }).notNull().default(false),
 });
 
 // ─── Pokemon (reference table — full national dex) ──────────────────────────

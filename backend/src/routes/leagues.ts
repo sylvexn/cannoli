@@ -127,6 +127,7 @@ export const leagueRoutes = new Elysia()
         showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
         userId: team.userId,
+        captainsLocked: !!team.captainsLocked,
         record: {
           wins,
           losses,
@@ -594,6 +595,19 @@ export const leagueRoutes = new Elysia()
       return { error: `Tera captain markup would exceed point cap (${totalCost} > ${cap})`, code: 'POINT_CAP_EXCEEDED' };
     }
 
+    // Determine whether this save should also LOCK captains (and potentially
+    // advance the league phase). Locking is triggered when:
+    //   1. The league is in phase=draft AND the draft itself has completed
+    //      (= the post-draft captain gate is open), AND
+    //   2. The team has saved exactly `teraCaptainSlots` captains (full set).
+    // Locking flips the `captainsLocked` flag on the team. Once every team in
+    // the league is locked, we advance phase → regular and currentWeek → 1.
+    const draftStateRow = db.select().from(schema.draftState)
+      .where(eq(schema.draftState.leagueId, team.leagueId))
+      .get();
+    const inCaptainGate = league?.phase === 'draft' && draftStateRow?.status === 'completed';
+    const willLock = inCaptainGate && captains.length === maxCaptains;
+
     return tx(() => {
       // Clear all existing tera captains for this team
       db.update(schema.rosters).set({
@@ -616,6 +630,38 @@ export const leagueRoutes = new Elysia()
         )).run();
       }
 
+      let phaseAdvanced = false;
+      if (willLock) {
+        db.update(schema.teams)
+          .set({ captainsLocked: true })
+          .where(eq(schema.teams.id, params.teamId))
+          .run();
+
+        // If every team in this league is now locked, transition to regular.
+        const remaining = db.select({ id: schema.teams.id })
+          .from(schema.teams)
+          .where(and(
+            eq(schema.teams.leagueId, team.leagueId),
+            eq(schema.teams.captainsLocked, false),
+          ))
+          .all();
+        if (remaining.length === 0) {
+          db.update(schema.leagues)
+            .set({ phase: 'regular', currentWeek: 1 })
+            .where(eq(schema.leagues.id, team.leagueId))
+            .run();
+          phaseAdvanced = true;
+          db.insert(schema.activityLog).values({
+            type: 'league_phase_advanced',
+            category: 'config',
+            actor: 'system',
+            leagueId: team.leagueId,
+            description: `${league!.name} advanced from draft → regular (all captains locked)`,
+            metadata: JSON.stringify({ leagueId: team.leagueId, fromPhase: 'draft', toPhase: 'regular' }),
+          }).run();
+        }
+      }
+
       // Log tera change transaction
       if (league) {
         const week = league.currentWeek ?? 0;
@@ -630,16 +676,22 @@ export const leagueRoutes = new Elysia()
         }
 
         db.insert(schema.activityLog).values({
-          type: 'tera_captains_updated',
+          type: willLock ? 'tera_captains_locked' : 'tera_captains_updated',
           category: 'team',
           actor: user.username,
           leagueId: team.leagueId,
-          description: `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
-          metadata: JSON.stringify({ teamId: params.teamId, captains }),
+          description: willLock
+            ? `Locked tera captains: ${captains.map(c => c.pokemonName).join(', ')}`
+            : `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
+          metadata: JSON.stringify({ teamId: params.teamId, captains, locked: willLock }),
         }).run();
       }
 
-      return { success: true };
+      return {
+        success: true,
+        captainsLocked: willLock,
+        phaseAdvanced,
+      };
     });
   })
 

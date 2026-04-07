@@ -845,6 +845,8 @@ export function useDraftState() {
   return {
     state,
     dispatch,
+    league,
+    players,
     ownershipMap,
     filteredPool,
     poolByTier,

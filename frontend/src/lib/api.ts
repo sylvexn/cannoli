@@ -95,6 +95,9 @@ export interface ApiTeam {
   showdownUsername: string | null;
   logoPath?: string | null;
   userId: number | null;
+  /** True once the team has saved a full captain set during the post-draft
+   *  captain gate. League advances to phase=regular once every team is locked. */
+  captainsLocked?: boolean;
   record: { wins: number; losses: number; differential: number };
   roster: ApiRosterPokemon[];
 }
@@ -700,7 +703,9 @@ export const api = {
 
   // Tera captain management
   saveTerraCaptains: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
-    putJson<{ success: boolean }>(`/api/teams/${teamId}/tera-captains`, { captains }),
+    putJson<{ success: boolean; captainsLocked?: boolean; phaseAdvanced?: boolean }>(
+      `/api/teams/${teamId}/tera-captains`, { captains },
+    ),
 
   toggleShiny: (teamId: string, pokemonName: string, isShiny: boolean) =>
     putJson<{ success: boolean }>(`/api/teams/${teamId}/shiny`, { pokemonName, isShiny }),

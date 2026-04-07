@@ -15,6 +15,7 @@ import { DraftControlBar } from './draft-board/draft-control-bar';
 import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftPickLog } from './draft-board/draft-pick-log';
 import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
+import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { TIER_LIST } from '@/data/tier-list';
 import { getTierEntry } from '@/data/tier-list';
 import { playCry } from '@/lib/pokemon';
@@ -53,6 +54,7 @@ function SegmentedToggle<T extends string>({
 export function DraftBoardPage() {
   const {
     state, dispatch,
+    league, players,
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDemoComplete,
@@ -61,6 +63,16 @@ export function DraftBoardPage() {
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
   } = useDraftState();
+
+  // Captain gate is open while every team has finished drafting (live mode +
+  // isDemoComplete) but the league is still in phase=draft (= some team
+  // hasn't locked captains yet). Once the last team locks, the backend flips
+  // phase → regular and a fresh /api/leagues fetch closes the gate.
+  const captainGateOpen = state.mode === 'live'
+    && isDemoComplete
+    && league.season?.phase === 'draft'
+    && players.length > 0
+    && !players.every(p => p.captainsLocked);
 
   // Mobile viewport detection
   const [isMobile, setIsMobile] = useState(false);
@@ -281,6 +293,18 @@ export function DraftBoardPage() {
           />
         </div>
       </div>
+
+      {/* Captain gate — surfaces between draft completion and league
+          advancing to regular play. The user's team profile is the canonical
+          place to actually pick captains; we just nudge them there. */}
+      {captainGateOpen && (
+        <DraftCaptainGate
+          players={players}
+          userTeamId={state.userTeamId}
+          leagueId={league.id}
+          teraCaptainSlots={league.season?.teraCaptainSlots ?? 2}
+        />
+      )}
 
       {/* Pick log — collapsible, only when toggled */}
       {pickLogExpanded && isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
