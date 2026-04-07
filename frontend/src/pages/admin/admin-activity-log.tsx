@@ -11,10 +11,10 @@ import type { ApiActivityEvent } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import type { EventCategory } from '@/lib/types';
 
-const EVENT_CATEGORIES: EventCategory[] = ['admin', 'auth', 'config', 'draft', 'trade', 'match', 'team'];
+const EVENT_CATEGORIES: EventCategory[] = ['admin', 'auth', 'config', 'draft', 'trade', 'fa', 'match', 'team'];
 const CATEGORY_LABELS: Record<string, string> = {
   admin: 'Admin', auth: 'Auth', config: 'Config', draft: 'Draft',
-  trade: 'Trade', match: 'Match', team: 'Team',
+  trade: 'Trade', fa: 'FA', match: 'Match', team: 'Team',
 };
 import {
   Search, Filter, X, UserPlus, KeyRound, ShieldCheck, UserX, LogIn,
@@ -28,6 +28,7 @@ const CATEGORY_COLORS: Record<EventCategory, string> = {
   config: 'border-neon/30 text-neon bg-neon/10',
   draft: 'border-draw/30 text-draw bg-draw/10',
   trade: 'border-purple-400/30 text-purple-400 bg-purple-400/10',
+  fa: 'border-cyan-400/30 text-cyan-400 bg-cyan-400/10',
   match: 'border-win/30 text-win bg-win/10',
   team: 'border-orange-400/30 text-orange-400 bg-orange-400/10',
   scrim: 'border-neon/30 text-neon bg-neon/10',
