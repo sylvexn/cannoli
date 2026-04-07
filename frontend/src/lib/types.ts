@@ -148,7 +148,7 @@ export interface League {
   hasData: boolean;
 }
 
-export type EventCategory = 'admin' | 'auth' | 'config' | 'draft' | 'trade' | 'match' | 'team' | 'scrim';
+export type EventCategory = 'admin' | 'auth' | 'config' | 'draft' | 'trade' | 'fa' | 'match' | 'team' | 'scrim';
 
 export interface ActivityEvent {
   id: string;

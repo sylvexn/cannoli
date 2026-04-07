@@ -526,6 +526,28 @@ export const api = {
   respondToTrade: (tradeId: string, action: 'accept' | 'reject', reason?: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/respond`, { action, reason }),
 
+  // Proposer-side withdraw of a pending trade
+  withdrawTrade: (tradeId: string) =>
+    postJson<{ success: boolean }>(`/api/trades/${tradeId}/withdraw`),
+
+  // Counter-proposal: closes the original and opens a new linked trade in the
+  // reverse direction. The body is the *counter* offering/requesting (from
+  // the original recipient's perspective: what THEY are now offering, and
+  // what they want from the original proposer).
+  counterTrade: (tradeId: string, data: { offering: string[]; requesting: string[] }) =>
+    postJson<{ id: string; originalId: string }>(`/api/trades/${tradeId}/counter`, data),
+
+  // Trade-block listings (user writes)
+  createTradeBlockListing: (leagueId: string, data: { pokemonName: string; note?: string; teamId?: string }) =>
+    postJson<{ id: number }>(`/api/leagues/${leagueId}/trade-block`, data),
+
+  deleteTradeBlockListing: (listingId: number) =>
+    deleteJson<{ success: boolean }>(`/api/trade-block-listings/${listingId}`),
+
+  // Standalone FA release (drop without pickup)
+  freeAgentRelease: (leagueId: string, data: { teamId: string; pokemonName: string }) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/free-agents/release`, data),
+
   // Profile colors
   updateMyColors: (colors: { primaryColor?: string | null; secondaryColor?: string | null; tertiaryColor?: string | null }) =>
     mutateJson<{ success: boolean }>('PATCH', '/api/users/me/colors', colors),
