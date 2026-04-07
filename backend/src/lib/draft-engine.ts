@@ -492,12 +492,10 @@ export function executePick(
       completedAt: isComplete ? new Date().toISOString() : null,
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-    // If complete, advance THIS league into the regular season. Phase + week
-    // are per-league now, so the other leagues in the same season are unaffected.
-    if (isComplete) {
-      db.update(schema.leagues).set({ phase: 'regular', currentWeek: 1 })
-        .where(eq(schema.leagues.id, leagueId)).run();
-    }
+    // Note: we do NOT advance the league phase here. Drafts now hold in
+    // phase='draft' (with draftState.status='completed') until every team has
+    // locked their tera captains. PUT /api/teams/:teamId/tera-captains
+    // performs the final transition once all teams are captainsLocked=true.
 
     db.insert(schema.activityLog).values({
       type: 'draft_pick',
@@ -580,7 +578,8 @@ export function startDraft(
     // Clear any previous draft picks for this league (fresh start)
     db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, leagueId)).run();
 
-    // Clear rosters acquired via draft for teams in this league
+    // Clear rosters acquired via draft for teams in this league + reset their
+    // captainsLocked flags so the post-draft captain gate runs fresh.
     const teams = db.select().from(schema.teams)
       .where(eq(schema.teams.leagueId, leagueId))
       .all();
@@ -590,6 +589,10 @@ export function startDraft(
         eq(schema.rosters.acquiredVia, 'draft'),
       )).run();
     }
+    db.update(schema.teams)
+      .set({ captainsLocked: false })
+      .where(eq(schema.teams.leagueId, leagueId))
+      .run();
 
     // Upsert draft state
     if (existing) {
@@ -731,10 +734,7 @@ export function skipPick(
       completedAt: isComplete ? new Date().toISOString() : null,
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-    if (isComplete) {
-      db.update(schema.leagues).set({ phase: 'regular', currentWeek: 1 })
-        .where(eq(schema.leagues.id, leagueId)).run();
-    }
+    // Phase advance is deferred to the captain-lock step (see executePick).
 
     db.insert(schema.activityLog).values({
       type: 'draft_pick_skipped',
@@ -806,8 +806,16 @@ export function undoLastPick(
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
     if (wasComplete) {
+      // Pre-captain-lock change: phase used to auto-advance on draft completion,
+      // so undo had to flip it back. Now phase only moves to 'regular' once
+      // every team in the league has captainsLocked=true. Defensive reset
+      // covers the (now unlikely) case that phase did get advanced.
       db.update(schema.leagues).set({ phase: 'draft', currentWeek: 0 })
         .where(eq(schema.leagues.id, leagueId)).run();
+      db.update(schema.teams)
+        .set({ captainsLocked: false })
+        .where(eq(schema.teams.leagueId, leagueId))
+        .run();
     }
 
     db.insert(schema.activityLog).values({

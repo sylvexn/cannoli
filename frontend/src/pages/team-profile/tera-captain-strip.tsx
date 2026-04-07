@@ -85,8 +85,18 @@ export function TeraCaptainStrip({
       .filter(m => m.isTeraCaptain)
       .map(m => ({ pokemonName: m.name, teraTypes: (m.teraTypes ?? []) as string[] }));
     try {
-      await api.saveTerraCaptains(playerId, caps);
-      toast.success('Tera captains saved');
+      const result = await api.saveTerraCaptains(playerId, caps) as {
+        success: boolean;
+        captainsLocked?: boolean;
+        phaseAdvanced?: boolean;
+      };
+      if (result.phaseAdvanced) {
+        toast.success('Captains locked — league advanced to regular season!');
+      } else if (result.captainsLocked) {
+        toast.success('Captains locked. Waiting on remaining teams to advance the league.');
+      } else {
+        toast.success('Tera captains saved');
+      }
       onTeraEditsClear();
     } catch (e: any) {
       toast.error(e.message || 'Failed to save');

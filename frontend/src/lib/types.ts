@@ -37,6 +37,8 @@ export interface Player {
   teamColor: string;
   /** Owner user id (null if no manager assigned) */
   userId?: number | null;
+  /** Set after the team locks its tera captains during the post-draft gate. */
+  captainsLocked?: boolean;
   record: { wins: number; losses: number; differential: number };
   roster: RosterPokemon[];
 }
