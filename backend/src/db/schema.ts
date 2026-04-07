@@ -335,7 +335,7 @@ export const draftState = sqliteTable('draft_state', {
 export const activityLog = sqliteTable('activity_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   type: text('type').notNull(),
-  category: text('category', { enum: ['admin', 'auth', 'config', 'draft', 'trade', 'match', 'team', 'scrim'] }).notNull(),
+  category: text('category', { enum: ['admin', 'auth', 'config', 'draft', 'trade', 'fa', 'match', 'team', 'scrim'] }).notNull(),
   actor: text('actor').notNull(),
   leagueId: text('league_id'),
   description: text('description').notNull(),
