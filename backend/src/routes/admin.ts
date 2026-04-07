@@ -279,24 +279,26 @@ export const adminRoutes = new Elysia()
       confirmLeague?: string;
     };
 
-    // Phase gate: refuse mid-season tier moves unless the caller explicitly
-    // confirms via { force: true, confirmLeague: <league name> }. Roster cost
-    // totals are snapshotted via rosters.costAtDraft, but tier-list edits still
-    // affect future FA cost validation, captain eligibility, etc., so we
-    // surface the risk to admins instead of silently letting it through.
+    // Phase gate: refuse mid-draft / mid-season tier moves unless the caller
+    // explicitly confirms via { force: true, confirmLeague: <league name> }.
+    // Roster cost totals are snapshotted via rosters.costAtDraft for completed
+    // picks, but a live draft snapshots the *current* tier on each pick — so a
+    // mid-draft tier move silently shifts point math for picks made after the
+    // edit. 'draft' is included alongside regular/playoffs to surface the
+    // risk to admins instead of letting it through.
     const activeLeagues = db.select({
       id: schema.leagues.id,
       name: schema.leagues.name,
       phase: schema.leagues.phase,
     }).from(schema.leagues)
-      .where(sql`${schema.leagues.phase} IN ('regular', 'playoffs')`)
+      .where(sql`${schema.leagues.phase} IN ('draft', 'regular', 'playoffs')`)
       .all();
 
     if (activeLeagues.length > 0) {
       if (!force) {
         set.status = 409;
         return {
-          error: `Cannot edit tier list while leagues are in regular/playoffs phase`,
+          error: `Cannot edit tier list while leagues are in draft/regular/playoffs phase`,
           code: 'tier_list_locked',
           activeLeagues: activeLeagues.map(l => ({ id: l.id, name: l.name, phase: l.phase })),
         };

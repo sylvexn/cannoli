@@ -260,8 +260,15 @@ export function validatePick(
 // ─── Auto-Pick ──────────────────────────────────────────────────────────────
 
 /**
- * Select a random valid Pokemon for auto-pick (timeout).
- * Picks the highest-tier Pokemon that fits within the remaining budget.
+ * Select a Pokemon for auto-pick (admin-triggered after a timer expiry pause).
+ * Currently picks the highest-tier Pokemon that fits within the remaining
+ * budget (with deterministic alphabetical tiebreaker for replay safety).
+ *
+ * TODO(post-v1): consult a per-team draft queue (see frontend
+ * use-draft-state.draftQueue) so auto-pick respects user intent — fall back
+ * to highest-tier only if the queue is empty or every queued mon is already
+ * drafted/over-budget. Requires persisting the queue server-side.
+ *
  * Returns null if no valid pick exists (shouldn't happen in practice).
  */
 export function getAutoPick(
