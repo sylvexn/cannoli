@@ -5,11 +5,26 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 
 /**
+ * Phase gate for trade actions. Trades may only be proposed, responded-to,
+ * or admin-approved while the league is in the 'regular' phase. Predraft/draft
+ * are pre-roster; playoffs/offseason lock rosters.
+ */
+function regularPhaseError(league: { phase: string; name?: string } | null | undefined): string | null {
+  if (!league) return 'League not found';
+  if (league.phase !== 'regular') {
+    return `Trades are only allowed during the regular season (current phase: ${league.phase})`;
+  }
+  return null;
+}
+
+/**
  * Validate that a proposed trade would leave both rosters legal:
  *   - point cap not exceeded (using costAtDraft, captain markup not modeled
  *     because tera captain status is cleared on transfer)
  *   - max 1 mega per team
  *   - no duplicate national-dex on either team
+ *   - roster size invariant: each team's post-trade roster size must equal
+ *     pre-trade size (= league.rosterSize). Asymmetric trades not supported.
  *
  * Returns null if valid, or an error message string.
  */
@@ -24,6 +39,13 @@ function validateProposedTrade(opts: {
 
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
+
+  // Roster-size invariant: trades must swap equal counts so neither team
+  // ends up below (or above) league.rosterSize. Asymmetric trades aren't
+  // supported — they'd leave the loser's roster short come matchday.
+  if (offering.length !== requesting.length) {
+    return `Trade must offer and request the same number of Pokemon (offered ${offering.length}, requested ${requesting.length})`;
+  }
 
   // Pull rosters
   const proposerRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, proposerId)).all();
@@ -171,6 +193,19 @@ function executeRosterSwap(opts: {
       pokemonOut: name, pointsOut: poke?.tier ?? null,
     }).run();
   }
+
+  // Drop any trade-block listings on EITHER side for any mon that just
+  // changed hands — the previous owner no longer has it, so the listing is
+  // stale; the new owner may re-list if they want. Same league only.
+  const allMoved = [...offering, ...requesting];
+  if (allMoved.length > 0) {
+    db.delete(schema.tradeBlockListings)
+      .where(and(
+        eq(schema.tradeBlockListings.leagueId, leagueId),
+        inArray(schema.tradeBlockListings.pokemonName, allMoved),
+      ))
+      .run();
+  }
 }
 
 export const tradeRoutes = new Elysia()
@@ -227,9 +262,19 @@ export const tradeRoutes = new Elysia()
     const isOwner = recipientTeam.userId != null && recipientTeam.userId === parseInt(user.id);
     if (!isOwner && !isStaff(user)) { set.status = 403; return { error: 'Not your trade to respond to' }; }
 
-    if (action === 'accept' && deadlinePassed(league)) {
-      set.status = 400;
-      return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+    // Phase gate: only allow accept/reject during the regular season. If the
+    // league has rolled into playoffs or back to predraft (rare, admin-driven),
+    // the trade can no longer execute even if accepted.
+    if (action === 'accept') {
+      const phaseErr = regularPhaseError(league);
+      if (phaseErr) {
+        set.status = 409;
+        return { error: phaseErr, code: 'TRADE_WRONG_PHASE', phase: league?.phase };
+      }
+      if (deadlinePassed(league)) {
+        set.status = 400;
+        return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+      }
     }
 
     return tx(() => {
@@ -277,6 +322,12 @@ export const tradeRoutes = new Elysia()
     const { trade, league, season } = ctx;
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
+    }
+
+    const phaseErr = regularPhaseError(league);
+    if (phaseErr) {
+      set.status = 409;
+      return { error: phaseErr, code: 'TRADE_WRONG_PHASE', phase: league?.phase };
     }
 
     if (deadlinePassed(league)) {
@@ -442,6 +493,13 @@ export const tradeRoutes = new Elysia()
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = league?.currentWeek || 0;
 
+    // Phase gate: trades can only be proposed during the regular season.
+    const phaseErr = regularPhaseError(league);
+    if (phaseErr) {
+      set.status = 409;
+      return { error: phaseErr, code: 'TRADE_WRONG_PHASE', phase: league?.phase };
+    }
+
     if (deadlinePassed(league)) {
       set.status = 400;
       return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
@@ -478,4 +536,132 @@ export const tradeRoutes = new Elysia()
     });
 
     return { id: String(tradeId) };
+  })
+
+  // ─── Withdraw (proposer cancels their own pending trade) ───────────────
+
+  .post('/api/trades/:id/withdraw', ({ params, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const tradeId = parseInt(params.id);
+    const ctx = loadTradeContext(tradeId);
+    if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
+    const { trade, proposerTeam } = ctx;
+
+    if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
+      set.status = 400; return { error: `Trade is ${trade.status}` };
+    }
+
+    // Authorization: proposer manager or staff. (Counterparty has reject;
+    // staff has admin reject.)
+    const isProposer = proposerTeam.userId != null && proposerTeam.userId === parseInt(user.id);
+    if (!isProposer && !isStaff(user)) {
+      set.status = 403; return { error: 'Only the proposer can withdraw a trade' };
+    }
+
+    return tx(() => {
+      db.update(schema.trades).set({
+        status: 'rejected',
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: user.username,
+        rejectReason: 'Withdrawn by proposer',
+      }).where(eq(schema.trades.id, tradeId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'trade_withdrawn',
+        category: 'trade',
+        actor: user.username,
+        leagueId: trade.leagueId,
+        description: `${user.username} withdrew their trade proposal`,
+        metadata: JSON.stringify({ tradeId, proposerId: trade.proposerId, recipientId: trade.recipientId }),
+      }).run();
+
+      return { success: true };
+    });
+  })
+
+  // ─── Counter-proposal ─────────────────────────────────────────────────
+  // Recipient counters with a different offering/requesting payload. The
+  // original trade is closed (status='rejected', reason='Countered') and a
+  // new trade is created in the *reverse* direction (the original recipient
+  // becomes the new proposer).
+  .post('/api/trades/:id/counter', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const tradeId = parseInt(params.id);
+    const ctx = loadTradeContext(tradeId);
+    if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
+    const { trade, league, season, recipientTeam } = ctx;
+
+    if (trade.status !== 'pending') {
+      set.status = 400; return { error: `Trade is ${trade.status}; only pending trades can be countered` };
+    }
+
+    // Authorization: original recipient manager (or staff override)
+    const isOwner = recipientTeam.userId != null && recipientTeam.userId === parseInt(user.id);
+    if (!isOwner && !isStaff(user)) { set.status = 403; return { error: 'Not your trade to counter' }; }
+
+    const phaseErr = regularPhaseError(league);
+    if (phaseErr) {
+      set.status = 409;
+      return { error: phaseErr, code: 'TRADE_WRONG_PHASE', phase: league?.phase };
+    }
+    if (deadlinePassed(league)) {
+      set.status = 400;
+      return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+    }
+
+    // Counter payload: from the *new proposer* (= original recipient) → original proposer.
+    const { offering, requesting } = body as { offering: string[]; requesting: string[] };
+    if (!Array.isArray(offering) || !offering.length) { set.status = 400; return { error: 'Counter must offer at least one Pokemon' }; }
+    if (!Array.isArray(requesting) || !requesting.length) { set.status = 400; return { error: 'Counter must request at least one Pokemon' }; }
+
+    const newProposerId = trade.recipientId;
+    const newRecipientId = trade.proposerId;
+
+    const validationErr = validateProposedTrade({
+      proposerId: newProposerId,
+      recipientId: newRecipientId,
+      offering,
+      requesting,
+      pointCap: season?.pointCap ?? 110,
+    });
+    if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
+
+    const newTradeId = tx(() => {
+      // Close the original
+      db.update(schema.trades).set({
+        status: 'rejected',
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: user.username,
+        rejectReason: 'Countered',
+      }).where(eq(schema.trades.id, tradeId)).run();
+
+      // Insert the counter
+      const inserted = db.insert(schema.trades).values({
+        leagueId: trade.leagueId,
+        week: league?.currentWeek || trade.week,
+        status: 'pending',
+        proposerId: newProposerId,
+        recipientId: newRecipientId,
+        offering: JSON.stringify(offering),
+        requesting: JSON.stringify(requesting),
+      }).returning().get();
+
+      db.insert(schema.activityLog).values({
+        type: 'trade_countered',
+        category: 'trade',
+        actor: user.username,
+        leagueId: trade.leagueId,
+        description: `${user.username} countered trade #${tradeId} → new trade #${inserted.id}`,
+        metadata: JSON.stringify({
+          originalTradeId: tradeId,
+          counterTradeId: inserted.id,
+          newProposerId, newRecipientId,
+          offering, requesting,
+        }),
+      }).run();
+
+      return inserted.id;
+    });
+
+    return { id: String(newTradeId), originalId: String(tradeId) };
   });
