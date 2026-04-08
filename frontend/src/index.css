@@ -564,3 +564,117 @@ aside {
     display: none;
   }
 }
+
+/* ─── Design pass primitives ───────────────────────────────────────────── */
+
+/* List entrance — applied to row maps for staggered fade-in.
+   Set `style={{ '--i': Math.min(i, 20) }}` on each item.   */
+@keyframes list-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger-item {
+  opacity: 0;
+  animation: list-enter 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+@media (prefers-reduced-motion) {
+  .stagger-item {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* Interactive card mixin — lift, accent border, glow on hover; press-down on click.
+   Defaults to neon accent; override `--card-accent` per surface (e.g. team color). */
+.card-interactive {
+  --card-accent: var(--color-neon, #22d3ee);
+  --card-glow: var(--color-neon-glow, rgba(34, 211, 238, 0.15));
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 200ms ease,
+              box-shadow 200ms ease;
+}
+
+.card-interactive:hover {
+  transform: translateY(-1px) scale(1.005);
+  border-color: color-mix(in oklab, var(--card-accent) 40%, transparent);
+  box-shadow: 0 4px 24px -8px var(--card-glow);
+}
+
+.card-interactive:active {
+  transform: translateY(0) scale(0.998);
+  transition-duration: 80ms;
+}
+
+@media (prefers-reduced-motion) {
+  .card-interactive,
+  .card-interactive:hover,
+  .card-interactive:active {
+    transform: none;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+}
+
+/* Pin glint — generalized version of .rank-badge glint sweep. Apply to any
+   circular badge to get a shine sweep on hover. */
+.pin-glint {
+  position: relative;
+  overflow: hidden;
+}
+
+.pin-glint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    -45deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(255, 255, 255, 0.32) 45%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0.32) 55%,
+    transparent 60%,
+    transparent 100%
+  );
+  transform: translateX(-180%) translateY(-180%) rotate(-45deg);
+  pointer-events: none;
+  transition: none;
+}
+
+.pin-glint:hover::after {
+  animation: glint 0.6s ease-out forwards;
+}
+
+@media (prefers-reduced-motion) {
+  .pin-glint:hover::after {
+    animation: none;
+  }
+}
+
+/* View Transitions — fade-through between routes. `app-shell` is given a
+   stable view-transition-name so the sidebar/header don't crossfade with
+   the main content area. */
+::view-transition-old(root) {
+  animation: 180ms cubic-bezier(0.16, 1, 0.3, 1) both vt-fade-out;
+}
+
+::view-transition-new(root) {
+  animation: 220ms cubic-bezier(0.16, 1, 0.3, 1) both vt-fade-in;
+}
+
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes vt-fade-in {
+  from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
