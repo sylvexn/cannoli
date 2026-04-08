@@ -14,7 +14,7 @@ import {
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { ArrowLeftRight, UserPlus, Check, X } from 'lucide-react';
+import { ArrowLeftRight, UserPlus, Check, X, AlertTriangle, Repeat } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
@@ -33,10 +33,13 @@ export function CompactTradeCard({
   trade,
   leagueUrl,
   onResponded,
+  onCounter,
 }: {
   trade: Trade;
   leagueUrl: (path: string) => string;
   onResponded?: () => void;
+  /** Open the propose dialog pre-filled with the counter-proposal payload. */
+  onCounter?: (trade: Trade) => void;
 }) {
   const { players } = useLeagueData();
   const { user } = useAuth();
@@ -55,7 +58,33 @@ export function CompactTradeCard({
     String(recipient.userId) === user.id
   );
 
-  const [submitting, setSubmitting] = useState<'accept' | 'reject' | null>(null);
+  // Proposer-side withdraw eligibility: pending/awaiting_admin + current user owns the proposer team
+  const canWithdraw = !!(
+    (trade.status === 'pending' || trade.status === 'awaiting_admin') &&
+    user &&
+    proposer &&
+    proposer.userId != null &&
+    String(proposer.userId) === user.id
+  );
+
+  // Stale-listing detection: render-side cheap pre-validation. Flags any
+  // pokemon in offering/requesting that the listed team no longer owns
+  // (e.g. they traded it away after this proposal landed).
+  function isStale(name: string, teamId: string): boolean {
+    const team = playerMap.get(teamId);
+    if (!team) return true;
+    return !team.roster.some(m => m.name === name);
+  }
+  const staleOffering = trade.offering.filter(n => isStale(n, trade.proposer));
+  const staleRequesting = !isFreeAgent
+    ? trade.requesting.filter(n => isStale(n, trade.recipient))
+    : [];
+  const isStaleProposal = (
+    (trade.status === 'pending' || trade.status === 'awaiting_admin') &&
+    (staleOffering.length > 0 || staleRequesting.length > 0)
+  );
+
+  const [submitting, setSubmitting] = useState<'accept' | 'reject' | 'withdraw' | null>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   // Track local optimistic status so the card updates immediately
@@ -98,6 +127,20 @@ export function CompactTradeCard({
     }
   }
 
+  async function handleWithdraw() {
+    setSubmitting('withdraw');
+    try {
+      await api.withdrawTrade(trade.id);
+      setLocalStatus('rejected');
+      toast.success('Trade withdrawn');
+      onResponded?.();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(null);
+    }
+  }
+
   return (
     <div className={cn(
       'rounded-lg border bg-surface-raised/50 overflow-hidden',
@@ -112,6 +155,19 @@ export function CompactTradeCard({
         {isFreeAgent && (
           <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-neon border-neon/30 bg-neon/10">
             FA
+          </Badge>
+        )}
+        {isStaleProposal && (
+          <Badge
+            variant="outline"
+            className="text-[9px] px-1.5 py-0 text-loss border-loss/40 bg-loss/10 gap-0.5"
+            title={[
+              ...staleOffering.map(n => `${proposer?.teamAbbrev ?? 'proposer'} no longer has ${n}`),
+              ...staleRequesting.map(n => `${recipient?.teamAbbrev ?? 'recipient'} no longer has ${n}`),
+            ].join(' · ')}
+          >
+            <AlertTriangle size={9} />
+            Stale
           </Badge>
         )}
         <span className="text-[9px] text-text-muted ml-auto">
@@ -189,6 +245,18 @@ export function CompactTradeCard({
             <X size={12} />
             Reject
           </Button>
+          {onCounter && (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => onCounter(trade)}
+              disabled={submitting !== null}
+              className="text-draw border-draw/30 hover:bg-draw/10"
+            >
+              <Repeat size={12} />
+              Counter
+            </Button>
+          )}
           <Button
             size="xs"
             onClick={handleAccept}
@@ -197,6 +265,22 @@ export function CompactTradeCard({
           >
             <Check size={12} />
             {submitting === 'accept' ? 'Accepting…' : 'Accept'}
+          </Button>
+        </div>
+      )}
+
+      {/* Proposer-side withdraw */}
+      {canWithdraw && localStatus == null && (
+        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle/30 bg-surface-overlay/20">
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={handleWithdraw}
+            disabled={submitting !== null}
+            className="text-loss border-loss/30 hover:bg-loss/10"
+          >
+            <X size={12} />
+            {submitting === 'withdraw' ? 'Withdrawing…' : 'Withdraw'}
           </Button>
         </div>
       )}
