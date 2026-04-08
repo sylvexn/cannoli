@@ -55,7 +55,7 @@ export function RosterTable({
   };
 
   return (
-    <Card className="xl:col-span-2 bg-surface-raised border-border-default flex flex-col">
+    <Card className="bg-surface-raised border-border-default flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold text-text-primary tracking-tight">Roster</CardTitle>
