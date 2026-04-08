@@ -86,7 +86,11 @@ export function TradeBlockPage() {
   }, [transactions, apiTrades]);
   const { openSideCard } = usePokemonSideCard();
   const [teamFilter, setTeamFilter] = useState<string | null>(null);
-  const [proposeOpen, setProposeOpen] = useState<{ teamId: string } | null>(null);
+  const [proposeOpen, setProposeOpen] = useState<{
+    teamId: string;
+    /** If set, the dialog opens pre-filled as a counter to this trade. */
+    counterTo?: Trade;
+  } | null>(null);
 
   const activeTrades = useMemo(
     () => trades.filter(t =>
@@ -275,7 +279,13 @@ export function TradeBlockPage() {
           <CardContent className="space-y-2 px-3 pb-3">
             {activeTrades.length > 0 ? (
               activeTrades.map(trade => (
-                <CompactTradeCard key={trade.id} trade={trade} leagueUrl={leagueUrl} onResponded={loadTrades} />
+                <CompactTradeCard
+                  key={trade.id}
+                  trade={trade}
+                  leagueUrl={leagueUrl}
+                  onResponded={loadTrades}
+                  onCounter={t => setProposeOpen({ teamId: t.proposer, counterTo: t })}
+                />
               ))
             ) : (
               <p className="text-sm text-text-muted text-center py-6">No active proposals</p>
@@ -388,11 +398,12 @@ export function TradeBlockPage() {
         </Card>
       </div>
 
-      {/* Propose Trade Dialog */}
+      {/* Propose Trade Dialog (also reused for counter-proposals) */}
       <TradeProposeDialog
         open={!!proposeOpen}
-        onClose={() => setProposeOpen(null)}
+        onClose={() => { setProposeOpen(null); loadTrades(); }}
         recipientTeamId={proposeOpen?.teamId}
+        counterTo={proposeOpen?.counterTo}
       />
     </div>
   );

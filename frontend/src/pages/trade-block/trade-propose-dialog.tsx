@@ -19,13 +19,22 @@ import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
-import type { Player, RosterPokemon } from '@/lib/types';
+import type { Player, RosterPokemon, Trade } from '@/lib/types';
 
 interface TradeProposeDialogProps {
   open: boolean;
   onClose: () => void;
   /** Pre-selected recipient team ID (from clicking a trade block listing) */
   recipientTeamId?: string | null;
+  /**
+   * If set, this dialog acts as a counter-proposal builder. Pre-fills:
+   *   - proposer = original recipient (i.e. the user countering)
+   *   - recipient = original proposer
+   *   - offering / requesting = swapped from the original (start as the
+   *     original requesting/offering) so the user can edit from a sensible
+   *     starting point. Submits via api.counterTrade(originalId, ...).
+   */
+  counterTo?: Trade | null;
 }
 
 interface ValidationIssue {
@@ -95,7 +104,7 @@ function validateTrade(opts: {
   return issues;
 }
 
-export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProposeDialogProps) {
+export function TradeProposeDialog({ open, onClose, recipientTeamId, counterTo }: TradeProposeDialogProps) {
   const league = useLeague();
   const { user } = useAuth();
   const { players } = useLeagueData();
@@ -118,13 +127,23 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
   // Reset state when dialog opens (or pre-selection changes)
   useEffect(() => {
     if (open) {
-      setOffering(new Set());
-      setRequesting(new Set());
-      setProposerTeamId(myTeam?.id ?? null);
-      setRecipientId(recipientTeamId ?? null);
+      if (counterTo) {
+        // Counter mode — user (= original recipient) becomes the new proposer.
+        // Pre-fill offering/requesting as a swap of the original so the user
+        // edits from a sensible baseline.
+        setProposerTeamId(counterTo.recipient);
+        setRecipientId(counterTo.proposer);
+        setOffering(new Set(counterTo.requesting));
+        setRequesting(new Set(counterTo.offering));
+      } else {
+        setProposerTeamId(myTeam?.id ?? null);
+        setRecipientId(recipientTeamId ?? null);
+        setOffering(new Set());
+        setRequesting(new Set());
+      }
       setSubmitError(null);
     }
-  }, [open, recipientTeamId, myTeam?.id]);
+  }, [open, recipientTeamId, myTeam?.id, counterTo]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) onClose();
@@ -162,13 +181,23 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await api.proposeTrade(league.id, {
-        recipientId,
-        offering: [...offering],
-        requesting: [...requesting],
-        proposerId: proposerTeamId,
-      });
-      toast.success('Trade proposal sent!');
+      if (counterTo) {
+        // Counter the original. Backend closes the original and creates a
+        // new linked trade in the reverse direction.
+        await api.counterTrade(counterTo.id, {
+          offering: [...offering],
+          requesting: [...requesting],
+        });
+        toast.success('Counter-proposal sent!');
+      } else {
+        await api.proposeTrade(league.id, {
+          recipientId,
+          offering: [...offering],
+          requesting: [...requesting],
+          proposerId: proposerTeamId,
+        });
+        toast.success('Trade proposal sent!');
+      }
       onClose();
     } catch (err: any) {
       const msg = err?.message || 'Failed to send proposal';
@@ -192,10 +221,12 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId }: TradeProp
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft size={16} className="text-neon" />
-            Propose Trade
+            {counterTo ? 'Counter Trade' : 'Propose Trade'}
           </DialogTitle>
           <DialogDescription>
-            Select Pokemon to offer and request. The proposal will need admin approval.
+            {counterTo
+              ? 'Edit the suggested swap and submit your counter. The original proposal will be closed.'
+              : 'Select Pokemon to offer and request. The proposal will need admin approval.'}
           </DialogDescription>
         </DialogHeader>
 
