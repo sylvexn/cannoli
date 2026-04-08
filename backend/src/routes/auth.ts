@@ -7,7 +7,7 @@ import {
   sessionCookieString, clearSessionCookieString,
   csrfTokenForSession, csrfCookieString, clearCsrfCookieString,
 } from '../lib/auth';
-import { createPsSession, psSidCookieString, clearPsSidCookieString } from '../lib/ps-login';
+import { createPsSession, destroyPsSession, parsePsSid, psSidCookieString, clearPsSidCookieString } from '../lib/ps-login';
 
 // ─── Login rate limiter ─────────────────────────────────────────────────────
 // In-memory, per-IP. Max 5 failed attempts per 15-minute window; once
@@ -128,8 +128,13 @@ export const authRoutes = new Elysia()
     }), { headers });
   })
 
-  .post('/api/auth/logout', ({ sessionToken }) => {
+  .post('/api/auth/logout', ({ sessionToken, request }) => {
     if (sessionToken) deleteSession(sessionToken);
+
+    // Invalidate the in-memory PS session too — clearing only the cookie left
+    // a valid server-side row that any leaked sid could continue to use.
+    const sid = parsePsSid(request.headers.get('cookie') ?? undefined);
+    if (sid) destroyPsSession(sid);
 
     const headers = new Headers();
     headers.append('Content-Type', 'application/json');
