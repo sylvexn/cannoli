@@ -28,6 +28,7 @@ export const leagueRoutes = new Elysia()
       // season). Surfaced under `season` for backwards-compat with all
       // existing frontend readers; the underlying source of truth is the
       // league row.
+      playoffTeamCount: l.playoffTeamCount,
       season: season ? {
         id: `s${season.seasonNumber}`,
         seasonNumber: season.seasonNumber,
@@ -40,6 +41,7 @@ export const leagueRoutes = new Elysia()
         forfeitPolicy: l.forfeitPolicy,
         paused: l.paused,
         weekDates: l.weekDates ? JSON.parse(l.weekDates) : null,
+        archived: !!season.archived,
       } : null,
     }));
   })
@@ -353,6 +355,7 @@ export const leagueRoutes = new Elysia()
         phase: summaryPhase,
         currentWeek,
         totalWeeks,
+        archived: !!s.archived,
       };
     });
   })
