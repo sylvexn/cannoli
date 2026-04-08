@@ -142,7 +142,7 @@ export const leagueRoutes = new Elysia()
   // ─── Schedule ────────────────────────────────────────────────────────
 
   .get('/api/leagues/:leagueId/schedule', ({ params }) => {
-    return db.select().from(schema.matches)
+    const matches = db.select().from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
       .orderBy(asc(schema.matches.week))
       .all()
@@ -160,6 +160,12 @@ export const leagueRoutes = new Elysia()
         homeSeed: m.homeSeed,
         awaySeed: m.awaySeed,
       }));
+    const byes = db.select().from(schema.byeWeeks)
+      .where(eq(schema.byeWeeks.leagueId, params.leagueId))
+      .orderBy(asc(schema.byeWeeks.week))
+      .all()
+      .map(b => ({ week: b.week, teamId: b.teamId }));
+    return { matches, byes };
   })
 
   // ─── Player Availability ─────────────────────────────────────────────
