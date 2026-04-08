@@ -32,6 +32,7 @@ import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
 import { SwapPicker, AddPicker } from './theorycraft-mode';
 import { TeraCaptainStrip } from './tera-captain-strip';
+import { RosterActions } from './roster-actions';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -581,18 +582,22 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       {/* ═══ MAIN CONTENT GRID ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
 
-        {/* ─── ROSTER TABLE (2 cols) ─── */}
-        <RosterTable
-          activeRoster={activeRoster}
-          sortedRoster={sortedRoster}
-          swaps={swaps}
-          config={config}
-          theorycraftMode={theorycraftMode}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          onResetAll={handleResetAll}
-        />
+        {/* ─── ROSTER TABLE + MANAGER ACTIONS (2 cols) ─── */}
+        <div className="xl:col-span-2 flex flex-col gap-4">
+          <RosterTable
+            activeRoster={activeRoster}
+            sortedRoster={sortedRoster}
+            swaps={swaps}
+            config={config}
+            theorycraftMode={theorycraftMode}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            onResetAll={handleResetAll}
+          />
+          {/* Owner-only: trade-block listings + release controls */}
+          {!theorycraftMode && <RosterActions player={player} />}
+        </div>
 
         {/* ─── RIGHT COLUMN — Tabbed, stretches to match roster ─── */}
         <Card className="bg-surface-raised border-border-default flex flex-col min-h-0">
