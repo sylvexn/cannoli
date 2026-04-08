@@ -1040,10 +1040,36 @@ export const adminRoutes = new Elysia()
     return { success: true };
   })
 
-  .delete('/api/leagues/:leagueId', ({ params, user, set }) => {
+  .delete('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    // Phase-aware destructive guard. A league mid-regular-season or in-playoffs
+    // has live trades, match results, standings — silent deletion would wipe
+    // all of that. Require ?force=1 + a typed-name confirm body, mirroring the
+    // schedule-regen pattern.
+    const force = query.force === '1' || query.force === 'true';
+    const isLive = league.phase === 'regular' || league.phase === 'playoffs';
+    if (isLive) {
+      const confirmName = (body as Record<string, unknown> | null)?.confirmName;
+      if (!force) {
+        set.status = 409;
+        return {
+          error: `League is in ${league.phase} phase — pass ?force=1 and { confirmName: "${league.name}" } to delete`,
+          code: 'league_active',
+          phase: league.phase,
+        };
+      }
+      if (typeof confirmName !== 'string' || confirmName.trim() !== league.name) {
+        set.status = 409;
+        return {
+          error: `Force-delete requires confirmName to exactly match league name "${league.name}"`,
+          code: 'league_confirm_required',
+          phase: league.phase,
+        };
+      }
+    }
 
     tx(() => {
       const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
@@ -1069,8 +1095,10 @@ export const adminRoutes = new Elysia()
         category: 'admin',
         actor: user.username,
         leagueId: null,
-        description: `Deleted league ${league.name}`,
-        metadata: JSON.stringify({ leagueId: params.leagueId }),
+        description: isLive
+          ? `FORCE-DELETED league ${league.name} (phase: ${league.phase})`
+          : `Deleted league ${league.name}`,
+        metadata: JSON.stringify({ leagueId: params.leagueId, phase: league.phase, forced: isLive }),
       }).run();
     });
 
@@ -1081,13 +1109,35 @@ export const adminRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { phase, override } = body as { phase: string; override?: boolean };
+    const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     // Phase now lives on the league — advancing one league no longer drags
     // the others in the same season along with it.
     const previousPhase = league.phase;
+
+    // ─── Monotonic guard ─────────────────────────────────────────────────
+    // Forward transitions (predraft → draft → regular → playoffs → offseason)
+    // are one-click. Backward transitions are destructive (e.g. playoffs → regular
+    // re-opens trade/FA gates, demotes brackets to draft state, etc.) so they
+    // must be explicitly acknowledged with `{ override: true, confirm: 'I understand' }`.
+    const phaseRank: Record<string, number> = {
+      predraft: 0, draft: 1, regular: 2, playoffs: 3, offseason: 4,
+    };
+    const fromRank = phaseRank[previousPhase] ?? -1;
+    const toRank = phaseRank[phase] ?? -1;
+    if (toRank < fromRank && previousPhase !== phase) {
+      if (!override || confirm !== 'I understand') {
+        set.status = 409;
+        return {
+          error: `Backward phase transition (${previousPhase} → ${phase}) requires explicit override`,
+          code: 'phase_backward_requires_override',
+          from: previousPhase,
+          to: phase,
+        };
+      }
+    }
 
     // ─── Phase transition preconditions ────────────────────────────────
     const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all();
@@ -1147,13 +1197,16 @@ export const adminRoutes = new Elysia()
         scheduleGenerated = result.success;
       }
 
+      const isBackward = toRank < fromRank;
       db.insert(schema.activityLog).values({
-        type: 'phase_advanced',
+        type: isBackward ? 'phase_reverted' : 'phase_advanced',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
-        description: `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
-        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, scheduleGenerated }),
+        description: isBackward
+          ? `REVERTED phase: ${previousPhase} → ${phase} (override)`
+          : `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated }),
       }).run();
     });
 
