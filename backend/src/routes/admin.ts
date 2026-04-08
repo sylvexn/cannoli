@@ -339,12 +339,17 @@ export const adminRoutes = new Elysia()
     // totals are snapshotted via rosters.costAtDraft, but tier-list edits still
     // affect future FA cost validation, captain eligibility, etc., so we
     // surface the risk to admins instead of silently letting it through.
+    //
+    // Archived-season leagues count as locked too, even at offseason phase —
+    // historical seasons should be read-only so old standings/rosters stay
+    // referentially valid.
     const activeLeagues = db.select({
       id: schema.leagues.id,
       name: schema.leagues.name,
       phase: schema.leagues.phase,
     }).from(schema.leagues)
-      .where(sql`${schema.leagues.phase} IN ('regular', 'playoffs')`)
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(sql`${schema.leagues.phase} IN ('regular', 'playoffs') OR ${schema.seasons.archived} = 1`)
       .all();
 
     if (activeLeagues.length > 0) {
@@ -987,12 +992,30 @@ export const adminRoutes = new Elysia()
     return { id };
   })
 
-  .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
+  .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize: _rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
+    const {
+      name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
+      weekDates, maxTeams: _maxTeams, rosterSize: _rosterSize, paused, forfeitPolicy,
+      playoffTeamCount, faDeadlineWeek: _faDeadlineWeek,
+    } = body as Record<string, unknown>;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    // Archived seasons are read-only by default. Writes to a league belonging
+    // to an archived season require ?force=1 (mirrors the schedule-regen and
+    // delete-league guards).
+    const force = query.force === '1' || query.force === 'true';
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+    if (season?.archived && !force) {
+      set.status = 409;
+      return {
+        error: `Season ${season.seasonNumber} is archived — pass ?force=1 to edit`,
+        code: 'season_archived',
+        seasonNumber: season.seasonNumber,
+      };
+    }
 
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
@@ -1002,6 +1025,23 @@ export const adminRoutes = new Elysia()
     if (weekDates !== undefined) leagueUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
     if (paused !== undefined) leagueUpdates.paused = !!paused;
     if (forfeitPolicy !== undefined) leagueUpdates.forfeitPolicy = forfeitPolicy;
+    if (playoffTeamCount !== undefined) {
+      const n = Number(playoffTeamCount);
+      if (![2, 4, 6, 8].includes(n)) {
+        set.status = 400; return { error: 'playoffTeamCount must be one of 2, 4, 6, 8' };
+      }
+      // Lock once the bracket has been generated (any playoff matches exist),
+      // otherwise editing here silently desyncs from the actual bracket.
+      const playoffMatches = db.select({ c: sql<number>`COUNT(*)` })
+        .from(schema.matches)
+        .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'playoffs')))
+        .get()?.c ?? 0;
+      if (playoffMatches > 0) {
+        set.status = 400;
+        return { error: 'Cannot change bracket size after playoffs have been generated', code: 'playoffs_locked' };
+      }
+      leagueUpdates.playoffTeamCount = n;
+    }
 
     // Phase-aware locks (phase now lives on the league row)
     const draftStarted = !!db.select().from(schema.draftState)
@@ -1099,6 +1139,36 @@ export const adminRoutes = new Elysia()
           ? `FORCE-DELETED league ${league.name} (phase: ${league.phase})`
           : `Deleted league ${league.name}`,
         metadata: JSON.stringify({ leagueId: params.leagueId, phase: league.phase, forced: isLive }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
+  // ─── Season archive toggle ──────────────────────────────────────────
+
+  .put('/api/seasons/:seasonId/archived', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const seasonId = parseInt(params.seasonId);
+    if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
+    const { archived } = body as { archived?: boolean };
+    if (typeof archived !== 'boolean') {
+      set.status = 400; return { error: 'archived (boolean) required' };
+    }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
+    if (!season) { set.status = 404; return { error: 'Season not found' }; }
+
+    tx(() => {
+      db.update(schema.seasons).set({ archived }).where(eq(schema.seasons.id, seasonId)).run();
+      db.insert(schema.activityLog).values({
+        type: archived ? 'season_archived' : 'season_unarchived',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: archived
+          ? `Archived Season ${season.seasonNumber} (writes now require force)`
+          : `Un-archived Season ${season.seasonNumber}`,
+        metadata: JSON.stringify({ seasonId, seasonNumber: season.seasonNumber, archived }),
       }).run();
     });
 
