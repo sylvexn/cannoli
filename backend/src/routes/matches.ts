@@ -438,7 +438,7 @@ export const matchRoutes = new Elysia()
       }),
     }).run();
 
-    return { success: true, matchCount: result.matchCount };
+    return { success: true, matchCount: result.matchCount, byeCount: result.byeCount };
   })
 
   // ─── Playoff bracket generation ──────────────────────────────────────

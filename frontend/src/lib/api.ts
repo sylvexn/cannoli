@@ -127,6 +127,16 @@ export interface ApiMatch {
   awaySeed: number | null;
 }
 
+export interface ApiByeWeek {
+  week: number;
+  teamId: string;
+}
+
+export interface ApiSchedule {
+  matches: ApiMatch[];
+  byes: ApiByeWeek[];
+}
+
 export interface ApiAdminMatch {
   id: string;
   leagueId: string;
@@ -393,7 +403,7 @@ export const api = {
 
   getTeams: (leagueId: string) => fetchJson<ApiTeam[]>(`/api/leagues/${leagueId}/teams`),
 
-  getSchedule: (leagueId: string) => fetchJson<ApiMatch[]>(`/api/leagues/${leagueId}/schedule`),
+  getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
   getMatchPokemon: (matchId: string) => fetchJson<{ home: ApiMatchPokemon[]; away: ApiMatchPokemon[] }>(`/api/matches/${matchId}/pokemon`),
 

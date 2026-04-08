@@ -41,7 +41,7 @@ export function useLeagueSchedule(leagueId: string) {
 
   useEffect(() => {
     setLoading(true);
-    api.getSchedule(leagueId).then(apiMatches => {
+    api.getSchedule(leagueId).then(({ matches: apiMatches }) => {
       setMatches(apiMatches.map(toMatch));
       setLoading(false);
     }).catch(() => setLoading(false));
