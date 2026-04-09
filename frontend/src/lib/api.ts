@@ -69,6 +69,7 @@ export interface ApiLeague {
   color: string;
   draftDate?: string | null;
   draftOrder?: string[] | null;
+  playoffTeamCount?: number;
   season: {
     id: string;
     seasonNumber: number;
@@ -80,6 +81,7 @@ export interface ApiLeague {
     tradeDeadlineWeek: number;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     paused?: boolean;
+    archived?: boolean;
     weekDates?: Record<string, string> | null;
   } | null;
 }
