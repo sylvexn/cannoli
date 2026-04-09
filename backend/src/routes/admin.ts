@@ -60,10 +60,13 @@ export const adminRoutes = new Elysia()
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { homeScore, awayScore, forfeitedBy, note } = body as {
+    const { homeScore, awayScore, forfeitedBy, note, pokemonData } = body as {
       homeScore: number; awayScore: number;
       forfeitedBy?: 'home' | 'away' | 'both' | null;
       note?: string;
+      /** Optional K/D rewrite — if provided, replaces existing match_pokemon
+       *  rows for this match. Snapshot of prior rows still goes to activity log. */
+      pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
     };
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
@@ -88,6 +91,24 @@ export const adminRoutes = new Elysia()
         warnings: null,
       }).where(eq(schema.matches.id, params.matchId)).run();
 
+      // Replace per-Pokemon K/D when caller supplies it. Otherwise leave the
+      // existing rows untouched (admins can adjust scores without rewriting K/D).
+      if (pokemonData && Array.isArray(pokemonData)) {
+        db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.matchId, params.matchId)).run();
+        for (const p of pokemonData) {
+          if (!p.pokemonName?.trim() || !p.teamId?.trim()) continue;
+          db.insert(schema.matchPokemon).values({
+            matchId: params.matchId,
+            teamId: p.teamId,
+            pokemonName: p.pokemonName.trim(),
+            kills: p.kills ?? 0,
+            deaths: p.deaths ?? 0,
+            teraUsed: !!p.teraUsed,
+            teraType: p.teraType ?? null,
+          }).run();
+        }
+      }
+
       if (isOverwrite) {
         db.insert(schema.activityLog).values({
           type: 'match_result_overwritten',
@@ -98,7 +119,7 @@ export const adminRoutes = new Elysia()
           metadata: JSON.stringify({
             matchId: params.matchId,
             previous: priorPokemon,
-            new: [],
+            new: pokemonData ?? [],
             priorScore: { home: match.homeScore, away: match.awayScore },
             newScore: { home: homeScore, away: awayScore },
             by: user.username,
@@ -112,7 +133,7 @@ export const adminRoutes = new Elysia()
         actor: user.username,
         leagueId: match.leagueId,
         description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${note ? ' — ' + note : ''}`,
-        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note }),
+        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note, pokemonRewritten: !!pokemonData }),
       }).run();
     });
 
