@@ -472,8 +472,18 @@ export const api = {
   deleteLeague: (id: string) =>
     deleteJson<{ success: boolean }>(`/api/leagues/${id}`),
 
-  advancePhase: (leagueId: string, phase: string) =>
-    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase }),
+  advancePhase: (leagueId: string, phase: string, opts?: { override?: boolean; confirm?: string }) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase, ...opts }),
+
+  generatePlayoffs: (leagueId: string, opts?: { topN?: number }) =>
+    postJson<{
+      success: boolean;
+      matchCount: number;
+      seedings: { seed: number; teamId: string }[];
+    }>(`/api/leagues/${leagueId}/playoffs/generate`, opts ?? {}),
+
+  archiveSeason: (seasonId: number, archived: boolean) =>
+    putJson<{ success: boolean }>(`/api/seasons/${seasonId}/archived`, { archived }),
 
   advanceWeek: (leagueId: string) =>
     postJson<{ success: boolean; week: number }>(`/api/leagues/${leagueId}/week`),
@@ -560,12 +570,26 @@ export const api = {
   getPublicProfile: (username: string) =>
     fetchJson<ApiPublicProfile>(`/api/users/${encodeURIComponent(username)}`),
 
+  // Health probe (used by admin shell to surface live/mock badge)
+  getHealth: () => fetchJson<{
+    status: 'ok' | 'degraded';
+    mode: 'live' | 'mock';
+    db: 'connected' | 'disconnected';
+    uptime: number;
+  }>('/api/health'),
+
   // PS Bot
   getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
 
   runJob: (name: string) => postJson<{ success: boolean }>(`/api/admin/jobs/${name}/run`),
 
-  forceMatchResult: (matchId: string, data: { homeScore: number; awayScore: number; forfeitedBy?: 'home' | 'away' | 'both' | null; note?: string }) =>
+  forceMatchResult: (matchId: string, data: {
+    homeScore: number;
+    awayScore: number;
+    forfeitedBy?: 'home' | 'away' | 'both' | null;
+    note?: string;
+    pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
+  }) =>
     postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
 
   // Team logo
