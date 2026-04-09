@@ -30,12 +30,92 @@ export interface TeamStandingRow {
   tiebreaker: { rule: TiebreakerRule; value: number | string } | null;
 }
 
-interface RawRecord {
+export interface RawRecord {
   id: string;
   wins: number;
   losses: number;
   pointsFor: number;   // total kills (sum of own scores)
   pointsAgainst: number; // total deaths (sum of opponent scores)
+}
+
+/**
+ * Pure ranking function — separated so tests can exercise the tiebreaker
+ * hierarchy without standing up a SQLite DB. `h2hLookup(tiedIds)` returns the
+ * head-to-head wins map for the given set of tied team IDs.
+ */
+export function orderRecords(
+  records: RawRecord[],
+  h2hLookup: (tiedIds: string[]) => Map<string, number>,
+): TeamStandingRow[] {
+  // Group by wins
+  const buckets = new Map<number, RawRecord[]>();
+  for (const r of records) {
+    const arr = buckets.get(r.wins) ?? [];
+    arr.push(r);
+    buckets.set(r.wins, arr);
+  }
+
+  const sortedWins = Array.from(buckets.keys()).sort((a, b) => b - a);
+  const out: TeamStandingRow[] = [];
+  for (const w of sortedWins) {
+    out.push(...resolveBucketPure(buckets.get(w)!, h2hLookup));
+  }
+  return out;
+}
+
+function resolveBucketPure(
+  bucket: RawRecord[],
+  h2hLookup: (tiedIds: string[]) => Map<string, number>,
+): TeamStandingRow[] {
+  if (bucket.length === 1) {
+    const r = bucket[0];
+    return [{
+      id: r.id,
+      wins: r.wins,
+      losses: r.losses,
+      differential: r.pointsFor - r.pointsAgainst,
+      kills: r.pointsFor,
+      deaths: r.pointsAgainst,
+      tiebreaker: null,
+    }];
+  }
+
+  const tiedIds = bucket.map(r => r.id);
+  const h2h = h2hLookup(tiedIds);
+
+  const enriched = bucket.map(r => ({
+    ...r,
+    differential: r.pointsFor - r.pointsAgainst,
+    h2hWins: h2h.get(r.id) ?? 0,
+  }));
+
+  enriched.sort((a, b) => {
+    if (b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
+    if (b.differential !== a.differential) return b.differential - a.differential;
+    if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
+    return a.id.localeCompare(b.id);
+  });
+
+  const allSameH2h = enriched.every(r => r.h2hWins === enriched[0].h2hWins);
+  const allSameDiff = enriched.every(r => r.differential === enriched[0].differential);
+  const allSameKills = enriched.every(r => r.pointsFor === enriched[0].pointsFor);
+
+  return enriched.map(r => {
+    let tb: TeamStandingRow['tiebreaker'];
+    if (!allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
+    else if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
+    else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
+    else tb = { rule: 'id', value: r.id };
+    return {
+      id: r.id,
+      wins: r.wins,
+      losses: r.losses,
+      differential: r.differential,
+      kills: r.pointsFor,
+      deaths: r.pointsAgainst,
+      tiebreaker: tb,
+    };
+  });
 }
 
 /**
@@ -131,70 +211,6 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
 }
 
 /**
- * Apply the tiebreaker hierarchy to teams that share the same `wins` value.
- * Returns rows in final order with `tiebreaker` field set when applicable.
- */
-function resolveBucket(
-  leagueId: string,
-  bucket: RawRecord[],
-): TeamStandingRow[] {
-  if (bucket.length === 1) {
-    const r = bucket[0];
-    return [{
-      id: r.id,
-      wins: r.wins,
-      losses: r.losses,
-      differential: r.pointsFor - r.pointsAgainst,
-      kills: r.pointsFor,
-      deaths: r.pointsAgainst,
-      tiebreaker: null,
-    }];
-  }
-
-  const tiedIds = bucket.map(r => r.id);
-  const h2h = headToHeadWins(leagueId, tiedIds);
-
-  const enriched = bucket.map(r => ({
-    ...r,
-    differential: r.pointsFor - r.pointsAgainst,
-    h2hWins: h2h.get(r.id) ?? 0,
-  }));
-
-  // Determine which rule actually disambiguates this bucket. We compare
-  // adjacent pairs after sorting by all rules in order.
-  enriched.sort((a, b) => {
-    if (b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
-    if (b.differential !== a.differential) return b.differential - a.differential;
-    if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
-    return a.id.localeCompare(b.id);
-  });
-
-  // Annotate per-row tiebreaker: pick the highest-priority rule on which this
-  // row differs from at least one other row in the bucket. That's the rule that
-  // earned (or lost) it position.
-  const allSameH2h = enriched.every(r => r.h2hWins === enriched[0].h2hWins);
-  const allSameDiff = enriched.every(r => r.differential === enriched[0].differential);
-  const allSameKills = enriched.every(r => r.pointsFor === enriched[0].pointsFor);
-
-  return enriched.map(r => {
-    let tb: TeamStandingRow['tiebreaker'];
-    if (!allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
-    else if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
-    else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
-    else tb = { rule: 'id', value: r.id };
-    return {
-      id: r.id,
-      wins: r.wins,
-      losses: r.losses,
-      differential: r.differential,
-      kills: r.pointsFor,
-      deaths: r.pointsAgainst,
-      tiebreaker: tb,
-    };
-  });
-}
-
-/**
  * Compute the fully sorted standings for a league using the documented
  * tiebreaker hierarchy. Deterministic and stable across calls.
  */
@@ -203,19 +219,5 @@ export function computeStandings(
   opts: { phase?: 'regular' | 'all' } = {},
 ): TeamStandingRow[] {
   const records = rawRecords(leagueId, opts);
-
-  // Group by wins
-  const buckets = new Map<number, RawRecord[]>();
-  for (const r of records) {
-    const arr = buckets.get(r.wins) ?? [];
-    arr.push(r);
-    buckets.set(r.wins, arr);
-  }
-
-  const sortedWins = Array.from(buckets.keys()).sort((a, b) => b - a);
-  const out: TeamStandingRow[] = [];
-  for (const w of sortedWins) {
-    out.push(...resolveBucket(leagueId, buckets.get(w)!));
-  }
-  return out;
+  return orderRecords(records, tiedIds => headToHeadWins(leagueId, tiedIds));
 }
