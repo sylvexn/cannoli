@@ -3,17 +3,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Save, Users, Calendar, Trophy, Swords, Lock } from 'lucide-react';
+import {
+  Save, Calendar, Trophy, Swords, Lock, Pause, AlertTriangle, Trophy as TrophyIcon,
+} from 'lucide-react';
 
 interface LeagueSettings {
   pointCap: number;
   teraCaptainSlots: number;
   tradeDeadlineWeek: number;
-  maxTeams: number;
   rosterSize: number;
+  playoffTeamCount: number;
+  paused: boolean;
+  forfeitPolicy: 'double_forfeit' | 'admin_review';
 }
 
 const phaseLabels: Record<string, { label: string; color: string }> = {
@@ -28,8 +35,8 @@ interface LockState {
   pointCap: boolean;
   teraCaptainSlots: boolean;
   tradeDeadlineWeek: boolean;
-  maxTeams: boolean;
   rosterSize: boolean;
+  playoffTeamCount: boolean;
 }
 
 function computeLocks(phase: string): LockState {
@@ -40,7 +47,9 @@ function computeLocks(phase: string): LockState {
     rosterSize: inOrPastDraft,
     teraCaptainSlots: phase === 'regular' || phase === 'playoffs' || phase === 'offseason',
     tradeDeadlineWeek: phase === 'playoffs' || phase === 'offseason',
-    maxTeams: phase !== 'predraft' && phase !== 'draft', // lock once we have teams
+    // playoffTeamCount lock is enforced server-side once a bracket exists, but
+    // we soft-lock here at offseason to discourage post-hoc edits.
+    playoffTeamCount: phase === 'offseason',
   };
 }
 
@@ -49,7 +58,9 @@ export function AdminLeagues() {
   const [settings, setSettings] = useState<Record<string, LeagueSettings>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
-  // Hydrate settings from real league/season data on first load
+  // Hydrate settings from real league/season data on first load.
+  // rosterSize: backend column was added by agent 3; if missing, we still
+  // surface the input and the PUT handler will accept once the merge lands.
   useEffect(() => {
     if (leagues.length === 0) return;
     setSettings(prev => {
@@ -60,15 +71,17 @@ export function AdminLeagues() {
           pointCap: l.season.pointCap ?? 110,
           teraCaptainSlots: l.season.teraCaptainSlots ?? 2,
           tradeDeadlineWeek: l.season.tradeDeadlineWeek ?? 7,
-          maxTeams: 12,
-          rosterSize: 11,
+          rosterSize: (l as any).rosterSize ?? 11,
+          playoffTeamCount: l.playoffTeamCount ?? 6,
+          paused: !!l.season.paused,
+          forfeitPolicy: l.season.forfeitPolicy ?? 'double_forfeit',
         };
       }
       return next;
     });
   }, [leagues]);
 
-  function updateSetting(leagueId: string, key: keyof LeagueSettings, value: number) {
+  function updateSetting<K extends keyof LeagueSettings>(leagueId: string, key: K, value: LeagueSettings[K]) {
     setSettings(prev => ({
       ...prev,
       [leagueId]: { ...prev[leagueId], [key]: value },
@@ -84,8 +97,10 @@ export function AdminLeagues() {
         pointCap: s.pointCap,
         teraCaptainSlots: s.teraCaptainSlots,
         tradeDeadlineWeek: s.tradeDeadlineWeek,
-        maxTeams: s.maxTeams,
         rosterSize: s.rosterSize,
+        playoffTeamCount: s.playoffTeamCount,
+        paused: s.paused,
+        forfeitPolicy: s.forfeitPolicy,
       });
       toast.success(`Saved settings for ${leagues.find(l => l.id === leagueId)?.name}`);
       refreshLeagues();
@@ -137,6 +152,12 @@ export function AdminLeagues() {
                     {league.name}
                   </CardTitle>
                   <div className="flex items-center gap-2">
+                    {s.paused && (
+                      <Badge variant="outline" className="text-draw border-draw/30 bg-draw/10">
+                        <Pause size={10} />
+                        Paused
+                      </Badge>
+                    )}
                     <Badge variant="outline" className={phase.color}>
                       {phase.label}
                     </Badge>
@@ -148,7 +169,7 @@ export function AdminLeagues() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-3">
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <SettingField
                     label="Point Cap"
@@ -179,16 +200,6 @@ export function AdminLeagues() {
                     lockReason="Locked after regular season"
                   />
                   <SettingField
-                    label="Max Teams"
-                    icon={<Users size={10} />}
-                    value={s.maxTeams}
-                    onChange={v => updateSetting(league.id, 'maxTeams', v)}
-                    min={2}
-                    max={20}
-                    locked={locks.maxTeams}
-                    lockReason="Locked once teams exist"
-                  />
-                  <SettingField
                     label="Roster Size"
                     value={s.rosterSize}
                     onChange={v => updateSetting(league.id, 'rosterSize', v)}
@@ -197,11 +208,64 @@ export function AdminLeagues() {
                     locked={locks.rosterSize}
                     lockReason="Locked once draft has begun"
                   />
+                  <SettingField
+                    label="Bracket Size"
+                    icon={<TrophyIcon size={10} />}
+                    value={s.playoffTeamCount}
+                    onChange={v => updateSetting(league.id, 'playoffTeamCount', v)}
+                    min={2}
+                    max={8}
+                    step={2}
+                    allowed={[2, 4, 6, 8]}
+                    locked={locks.playoffTeamCount}
+                    lockReason="Locked after season ends"
+                  />
                 </div>
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-subtle">
+
+                {/* Operational toggles — paused + forfeit policy */}
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border-subtle">
+                  <div className="space-y-1">
+                    <label className="text-xs text-text-muted flex items-center gap-1">
+                      <Pause size={10} />
+                      Paused (skip auto jobs)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => updateSetting(league.id, 'paused', !s.paused)}
+                      className={`w-full px-2 py-1 rounded border text-xs transition-colors ${
+                        s.paused
+                          ? 'border-draw/30 bg-draw/10 text-draw'
+                          : 'border-border-default bg-surface-overlay text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      {s.paused ? 'Paused' : 'Active'}
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-text-muted flex items-center gap-1">
+                      <AlertTriangle size={10} />
+                      Forfeit Policy
+                    </label>
+                    <Select
+                      value={s.forfeitPolicy}
+                      onValueChange={(v) => updateSetting(league.id, 'forfeitPolicy', (v as 'double_forfeit' | 'admin_review') ?? 'double_forfeit')}
+                    >
+                      <SelectTrigger className="h-7 text-xs bg-surface-overlay">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="double_forfeit" className="text-xs">Double forfeit</SelectItem>
+                        <SelectItem value="admin_review" className="text-xs">Admin review</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
                   <div className="text-xs text-text-muted">
                     {league.players.length} players registered
                     {!league.hasData && ' · No data yet'}
+                    {league.season.archived && ' · ARCHIVED'}
                   </div>
                   <Button
                     size="sm"
@@ -223,7 +287,7 @@ export function AdminLeagues() {
 }
 
 function SettingField({
-  label, icon, value, onChange, min, max, locked, lockReason,
+  label, icon, value, onChange, min, max, step, allowed, locked, lockReason,
 }: {
   label: string;
   icon?: React.ReactNode;
@@ -231,9 +295,13 @@ function SettingField({
   onChange: (v: number) => void;
   min?: number;
   max?: number;
+  step?: number;
+  /** Whitelist of valid values; out-of-list values are accepted but flagged on save. */
+  allowed?: number[];
   locked: boolean;
   lockReason: string;
 }) {
+  const isInvalid = allowed && !allowed.includes(value);
   return (
     <div className="space-y-1">
       <label className="text-xs text-text-muted flex items-center gap-1">
@@ -250,8 +318,13 @@ function SettingField({
         onChange={onChange}
         min={min}
         max={max}
+        step={step}
         disabled={locked}
+        className={isInvalid ? 'border-loss/50' : ''}
       />
+      {allowed && (
+        <div className="text-[9px] text-text-muted">Allowed: {allowed.join(', ')}</div>
+      )}
     </div>
   );
 }
