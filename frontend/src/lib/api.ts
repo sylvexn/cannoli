@@ -469,8 +469,14 @@ export const api = {
   updateLeague: (id: string, data: Record<string, unknown>) =>
     putJson<{ success: boolean }>(`/api/leagues/${id}`, data),
 
-  deleteLeague: (id: string) =>
-    deleteJson<{ success: boolean }>(`/api/leagues/${id}`),
+  deleteLeague: (id: string, opts?: { force?: boolean; confirmName?: string }) => {
+    const q = opts?.force ? '?force=1' : '';
+    return mutateJson<{ success: boolean }>(
+      'DELETE',
+      `/api/leagues/${id}${q}`,
+      opts?.confirmName ? { confirmName: opts.confirmName } : undefined,
+    );
+  },
 
   advancePhase: (leagueId: string, phase: string, opts?: { override?: boolean; confirm?: string }) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase, ...opts }),
