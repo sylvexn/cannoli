@@ -25,7 +25,7 @@ import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
 import { getArenaBroadcaster } from '../../routes/arena';
-import { advancePlayoffWinner } from '../playoff-advance';
+import { advancePlayoffWinner, decidePlayoffForfeit } from '../playoff-advance';
 
 export function runAutoForfeit() {
   const now = new Date().toISOString();
@@ -105,28 +105,12 @@ export function runAutoForfeit() {
       }
 
       // Playoffs: pick a survivor. A double-forfeit would orphan the bracket.
-      const homeReady = match.readyHome;
-      const awayReady = match.readyAway;
-      let forfeiter: 'home' | 'away';
-      let forfeitReason: 'ready_asymmetry' | 'higher_seed_default';
-
-      if (homeReady && !awayReady) {
-        forfeiter = 'away';
-        forfeitReason = 'ready_asymmetry';
-      } else if (!homeReady && awayReady) {
-        forfeiter = 'home';
-        forfeitReason = 'ready_asymmetry';
-      } else {
-        // Neither (or both) ready — defer to seeding. Lower seed number = better.
-        const homeSeed = match.homeSeed ?? Number.POSITIVE_INFINITY;
-        const awaySeed = match.awaySeed ?? Number.POSITIVE_INFINITY;
-        if (homeSeed <= awaySeed) {
-          forfeiter = 'away';
-        } else {
-          forfeiter = 'home';
-        }
-        forfeitReason = 'higher_seed_default';
-      }
+      const { forfeiter, reason: forfeitReason } = decidePlayoffForfeit({
+        readyHome: match.readyHome,
+        readyAway: match.readyAway,
+        homeSeed: match.homeSeed,
+        awaySeed: match.awaySeed,
+      });
 
       const winnerIsHome = forfeiter === 'away';
       const winnerId = winnerIsHome ? match.homeTeamId : match.awayTeamId;
