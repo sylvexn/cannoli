@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { rosterPointsUsed } from '@/lib/roster';
-import type { Player, Trade } from '@/lib/types';
+import { getStandingsNarrative, type StandingsChip } from '@/lib/standings-narrative';
+import type { Player, Trade, Match, LeagueSeason } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
@@ -20,6 +21,10 @@ import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
+
+// Playoff cut size — kept in sync with the "Top N qualify" footer below.
+// TODO: surface league.playoffTeamCount on the wire and use it dynamically.
+const PLAYOFF_SIZE = 8;
 
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
@@ -90,10 +95,17 @@ export function StandingsPage() {
           </CardHeader>
           <CardContent className="p-0">
             {standings.map((player, i) => (
-              <StandingsRow key={player.id} player={player} rank={i + 1} leagueUrl={leagueUrl} />
+              <StandingsRow
+                key={player.id}
+                player={player}
+                rank={i + 1}
+                leagueUrl={leagueUrl}
+                standings={standings}
+                season={currentSeason}
+              />
             ))}
             <div className="px-4 py-1.5 text-[10px] text-text-muted uppercase tracking-wider border-t border-border-subtle">
-              Top 8 qualify for playoffs
+              Top {PLAYOFF_SIZE} qualify for playoffs
             </div>
           </CardContent>
         </Card>
@@ -194,15 +206,35 @@ export function StandingsPage() {
   );
 }
 
-function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: number; leagueUrl: (p: string) => string }) {
+function StandingsRow({
+  player, rank, leagueUrl, standings, season,
+}: {
+  player: Player;
+  rank: number;
+  leagueUrl: (p: string) => string;
+  standings: Player[];
+  season: LeagueSeason;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const { getTeamTrades } = useLeagueData();
+  const { getTeamTrades, getTeamMatches } = useLeagueData();
   const { openSideCard } = usePokemonSideCard();
-  const isPlayoff = rank <= 8;
+  const isPlayoff = rank <= PLAYOFF_SIZE;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
   const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
   const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
+
+  const narrativeChip = useMemo<StandingsChip | null>(() => {
+    const teamMatches: Match[] = getTeamMatches(player.id);
+    return getStandingsNarrative(player, {
+      rank,
+      standings,
+      teamMatches,
+      totalRegularWeeks: season.totalWeeks,
+      playoffSize: PLAYOFF_SIZE,
+      currentWeek: season.currentWeek,
+    });
+  }, [player, rank, standings, getTeamMatches, season.totalWeeks, season.currentWeek]);
 
   return (
     <div className="border-b border-border-subtle/50 last:border-b-0">
@@ -246,6 +278,20 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
             className="text-xs"
           />
         </div>
+
+        {/* Narrative chip — at most one, only when meaningful */}
+        {narrativeChip && (
+          <span
+            className={cn(
+              'shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',
+              narrativeChip.bgClass,
+              narrativeChip.textClass,
+            )}
+          >
+            <narrativeChip.icon size={10} />
+            {narrativeChip.label}
+          </span>
+        )}
 
         {/* Chevron */}
         <ChevronDown
