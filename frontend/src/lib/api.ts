@@ -378,6 +378,7 @@ export const api = {
     phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
     currentWeek: number;
     totalWeeks: number;
+    archived?: boolean;
   }[]>('/api/seasons'),
 
   getSeasonLeagues: (seasonId: number) => fetchJson<{
