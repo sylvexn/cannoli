@@ -24,6 +24,7 @@ export const leagueRoutes = new Elysia()
       color: l.color,
       draftDate: l.draftDate,
       draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
+      playoffTeamCount: l.playoffTeamCount,
       // Lifecycle fields are per-league (3 leagues run independently per
       // season). Surfaced under `season` for backwards-compat with all
       // existing frontend readers; the underlying source of truth is the

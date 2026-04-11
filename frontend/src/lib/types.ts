@@ -37,7 +37,9 @@ export interface Player {
   teamColor: string;
   /** Owner user id (null if no manager assigned) */
   userId?: number | null;
-  record: { wins: number; losses: number; differential: number };
+  record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+  /** Set when this player is in a tied wins-bucket — describes which rule resolved their order. */
+  tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: RosterPokemon[];
 }
 
@@ -141,6 +143,8 @@ export interface League {
   name: string;
   color: string;
   draftDate?: string | null;
+  /** Configurable bracket size for this league's playoffs (2/4/6/8). */
+  playoffTeamCount: number;
   season: LeagueSeason;
   players: Player[];
   hasData: boolean;

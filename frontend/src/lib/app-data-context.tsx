@@ -39,6 +39,7 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       name: a.name,
       color: a.color,
       draftDate: a.draftDate,
+      playoffTeamCount: a.playoffTeamCount ?? 6,
       season,
       players: [],
       hasData: true,

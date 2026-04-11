@@ -69,6 +69,7 @@ export interface ApiLeague {
   color: string;
   draftDate?: string | null;
   draftOrder?: string[] | null;
+  playoffTeamCount?: number;
   season: {
     id: string;
     seasonNumber: number;
@@ -94,7 +95,8 @@ export interface ApiTeam {
   showdownUsername: string | null;
   logoPath?: string | null;
   userId: number | null;
-  record: { wins: number; losses: number; differential: number };
+  record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+  tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: ApiRosterPokemon[];
 }
 
