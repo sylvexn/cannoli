@@ -12,6 +12,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
@@ -90,10 +91,17 @@ export function StandingsPage() {
           </CardHeader>
           <CardContent className="p-0">
             {standings.map((player, i) => (
-              <StandingsRow key={player.id} player={player} rank={i + 1} leagueUrl={leagueUrl} />
+              <StandingsRow
+                key={player.id}
+                player={player}
+                rank={i + 1}
+                leagueUrl={leagueUrl}
+                playoffCount={league.playoffTeamCount}
+                isQualifyLine={i + 1 === league.playoffTeamCount}
+              />
             ))}
             <div className="px-4 py-1.5 text-[10px] text-text-muted uppercase tracking-wider border-t border-border-subtle">
-              Top 8 qualify for playoffs
+              Top {league.playoffTeamCount} qualify for playoffs
             </div>
           </CardContent>
         </Card>
@@ -194,18 +202,27 @@ export function StandingsPage() {
   );
 }
 
-function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: number; leagueUrl: (p: string) => string }) {
+function StandingsRow({ player, rank, leagueUrl, playoffCount, isQualifyLine }: {
+  player: Player;
+  rank: number;
+  leagueUrl: (p: string) => string;
+  playoffCount: number;
+  isQualifyLine: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { getTeamTrades } = useLeagueData();
   const { openSideCard } = usePokemonSideCard();
-  const isPlayoff = rank <= 8;
+  const isPlayoff = rank <= playoffCount;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
   const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
   const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
 
   return (
-    <div className="border-b border-border-subtle/50 last:border-b-0">
+    <div className={cn(
+      'border-b border-border-subtle/50 last:border-b-0',
+      isQualifyLine && 'border-b-neon/40 border-b-2',
+    )}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/60 transition-all duration-200 cursor-pointer group"
@@ -236,6 +253,9 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
             <span className="text-[10px] text-text-muted/60 block leading-snug text-left">{player.name}</span>
           </div>
         </Link>
+
+        {/* Tiebreaker badge — only when this team is in a tied wins-bucket */}
+        <TiebreakerBadge tiebreaker={player.tiebreaker ?? null} />
 
         {/* Record */}
         <div className="shrink-0">
@@ -316,6 +336,51 @@ function StandingsRow({ player, rank, leagueUrl }: { player: Player; rank: numbe
         </div>
       </div>
     </div>
+  );
+}
+
+function TiebreakerBadge({ tiebreaker }: { tiebreaker: Player['tiebreaker'] }) {
+  if (!tiebreaker) return null;
+  const RULE_LABEL: Record<string, string> = {
+    h2h: 'H2H',
+    diff: 'Diff',
+    kills: 'PF',
+    id: '—',
+  };
+  const RULE_DESC: Record<string, string> = {
+    h2h: 'Head-to-head record vs tied teams',
+    diff: 'Point differential',
+    kills: 'Total kills (points for)',
+    id: 'Stable tiebreak (team id)',
+  };
+  const label = RULE_LABEL[tiebreaker.rule] ?? tiebreaker.rule;
+  const desc = RULE_DESC[tiebreaker.rule] ?? '';
+  // Format value differently per rule
+  let valueStr: string;
+  if (tiebreaker.rule === 'diff') {
+    const v = Number(tiebreaker.value);
+    valueStr = v > 0 ? `+${v}` : String(v);
+  } else if (tiebreaker.rule === 'h2h') {
+    valueStr = String(tiebreaker.value);
+  } else {
+    valueStr = String(tiebreaker.value);
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          onClick={e => e.stopPropagation()}
+          className="hidden md:inline-flex items-center gap-0.5 shrink-0 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/40 text-[9px] font-mono text-text-muted cursor-help"
+        >
+          <span className="font-semibold text-text-secondary">{label}</span>
+          <span className="tabular-nums">{valueStr}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[220px] text-xs">
+        <div className="font-medium text-text-primary mb-0.5">Tiebreaker: {label}</div>
+        <div className="text-text-muted">{desc}</div>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
