@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
-import { LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor } from 'lucide-react';
+import { LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor, ScrollText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDraftState } from './draft-board/use-draft-state';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
@@ -222,6 +223,13 @@ export function DraftBoardPage() {
             <span className="text-draw">Draft</span>
             <span className="text-text-primary ml-1">Board</span>
           </h1>
+          <Link
+            to="/rules"
+            className="hidden md:inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-pink transition-colors"
+          >
+            <ScrollText size={11} />
+            Rules
+          </Link>
           <SegmentedToggle
             value={state.mode}
             onChange={mode => dispatch({ type: 'SET_MODE', mode })}
