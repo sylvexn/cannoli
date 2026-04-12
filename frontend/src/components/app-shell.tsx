@@ -4,6 +4,7 @@ import {
   Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
   Shield, LayoutDashboard, ChevronDown, Globe, Gamepad2,
   Settings, LogOut, User, Archive, LogIn, Film, UserPlus,
+  ScrollText, ListTree, Home,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -66,6 +67,59 @@ export function AppShell() {
     return () => document.removeEventListener('keydown', handleKey);
   }, []);
 
+  // My-team map: leagueId → { teamId, teamAbbrev } and pending trades to me
+  const [myTeams, setMyTeams] = useState<{ leagueId: string; teamId: string; teamAbbrev: string; teamName: string }[]>([]);
+  const [pendingTradeCount, setPendingTradeCount] = useState(0);
+  const [pendingByLeague, setPendingByLeague] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!user || leagues.length === 0) {
+      // Only clear if we currently have stale data (avoids the lint rule about
+      // synchronous setState that fires unconditionally on every effect run).
+      setMyTeams(prev => prev.length === 0 ? prev : []);
+      setPendingTradeCount(prev => prev === 0 ? prev : 0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const teamLists = await Promise.all(leagues.map(l => api.getTeams(l.id).catch(() => [])));
+      if (cancelled) return;
+      const found: typeof myTeams = [];
+      const myTeamIds = new Set<string>();
+      for (let i = 0; i < leagues.length; i++) {
+        const league = leagues[i];
+        if (!league) continue;
+        const teams = teamLists[i] ?? [];
+        const team = teams.find(t => t.userId != null && String(t.userId) === user.id);
+        if (team) {
+          found.push({ leagueId: league.id, teamId: team.id, teamAbbrev: team.teamAbbrev, teamName: team.teamName });
+          myTeamIds.add(team.id);
+        }
+      }
+      setMyTeams(found);
+
+      // Pending trades — only fetch trade lists for leagues where the user has a team
+      const tradeLists = await Promise.all(
+        found.map(t => api.getTrades(t.leagueId).catch(() => [])),
+      );
+      if (cancelled) return;
+      const byLeague: Record<string, number> = {};
+      let total = 0;
+      for (let i = 0; i < found.length; i++) {
+        const f = found[i]!;
+        const trades = tradeLists[i] ?? [];
+        const count = trades.filter(tr =>
+          myTeamIds.has(tr.recipientId) && (tr.status === 'pending' || tr.status === 'awaiting_admin'),
+        ).length;
+        byLeague[f.leagueId] = count;
+        total += count;
+      }
+      setPendingByLeague(byLeague);
+      setPendingTradeCount(total);
+    })();
+    return () => { cancelled = true; };
+  }, [user, leagues]);
+
   // Live match polling
   const [liveMatches, setLiveMatches] = useState<{ id: string; leagueId: string; homePlayer: string; awayPlayer: string; week: number }[]>([]);
 
@@ -88,12 +142,34 @@ export function AppShell() {
     return () => clearInterval(interval);
   }, [leagues]);
 
-  // Track active league for color theming
-  const activeLeagueId = pathname.match(/^\/league\/([^/]+)/)?.[1] ?? null;
-  const activeLeagueColor = useMemo(
-    () => leagues.find(l => l.id === activeLeagueId)?.color,
+  // Track active league for color theming. When on a /league/:id route, that's
+  // the source of truth and we persist it. On global routes, we fall back to
+  // the most recently-visited league so the sidebar logo + breadcrumbs remain
+  // contextually colored instead of resetting to the default.
+  const urlLeagueId = pathname.match(/^\/league\/([^/]+)/)?.[1] ?? null;
+
+  // Persist URL league to localStorage whenever it changes. Read happens lazily
+  // through readPersistedLeagueId() so we don't need a separate state.
+  useEffect(() => {
+    if (urlLeagueId) {
+      try { localStorage.setItem('cannoli:activeLeagueId', urlLeagueId); } catch { /* ignore */ }
+    }
+  }, [urlLeagueId]);
+
+  // Read persisted only on initial mount + when url leaves a league. We don't
+  // need to track it via state because pathname changes already trigger renders.
+  const persistedLeagueId = useMemo(() => {
+    if (urlLeagueId) return urlLeagueId;
+    try { return localStorage.getItem('cannoli:activeLeagueId'); } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlLeagueId, pathname]);
+
+  const activeLeagueId = persistedLeagueId;
+  const activeLeague = useMemo(
+    () => leagues.find(l => l.id === activeLeagueId) ?? null,
     [activeLeagueId, leagues],
   );
+  const activeLeagueColor = activeLeague?.color;
 
   // Track which league accordion is open — only one at a time
   const [openLeagueId, setOpenLeagueId] = useState<string | null>(activeLeagueId);
@@ -179,6 +255,22 @@ export function AppShell() {
 
         {/* Nav */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
+          {/* My Hub — personalized landing for logged-in users */}
+          {user && (
+            <NavLink
+              to="/me"
+              className={({ isActive }) => cn(
+                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-neon/10 text-neon'
+                  : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+              )}
+            >
+              <Home size={16} />
+              My Hub
+            </NavLink>
+          )}
+
           {/* League Overview */}
           <NavLink
             to="/"
@@ -236,6 +328,7 @@ export function AppShell() {
                     <div className="pl-4 space-y-0.5 py-1">
                       {leaguePages.map(({ path, label, icon: Icon }) => {
                         const to = `/league/${league.id}${path}`;
+                        const tradeBadge = path === '/trades' ? (pendingByLeague[league.id] ?? 0) : 0;
                         return (
                           <NavLink
                             key={path}
@@ -254,6 +347,14 @@ export function AppShell() {
                           >
                             <Icon size={14} />
                             {label}
+                            {tradeBadge > 0 && (
+                              <span
+                                title={`${tradeBadge} pending trade proposal${tradeBadge === 1 ? '' : 's'}`}
+                                className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums"
+                              >
+                                {tradeBadge}
+                              </span>
+                            )}
                           </NavLink>
                         );
                       })}
@@ -320,6 +421,35 @@ export function AppShell() {
             Season Archive
           </NavLink>
 
+          {/* Help / reference */}
+          <div className="h-px bg-border-subtle mx-2 my-1" />
+
+          <NavLink
+            to="/tiers"
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-neon/10 text-neon'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <ListTree size={16} />
+            Tier List
+          </NavLink>
+
+          <NavLink
+            to="/rules"
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-pink/10 text-pink'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <ScrollText size={16} />
+            Rules
+          </NavLink>
+
           {isAdmin && (
             <NavLink
               to="/admin"
@@ -338,18 +468,17 @@ export function AppShell() {
 
         {/* Footer — My Team + user dropdown (or login for guests) */}
         <div className="p-3 border-t border-border-default space-y-2">
-          {user && (
-            /* My Team shortcut — disabled until user↔team mapping is wired up */
-            <div
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted/50"
-              title="Team assignment not configured yet"
+          {user && myTeams.length > 0 && (
+            <MyTeamSidebar myTeams={myTeams} leagues={leagues} pendingTradeCount={pendingTradeCount} />
+          )}
+          {user && myTeams.length === 0 && (
+            <NavLink
+              to="/me"
+              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors"
             >
               <User size={14} />
-              <span>My Team</span>
-              <span className="ml-auto text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-overlay text-text-muted/60">
-                Soon
-              </span>
-            </div>
+              <span>My Hub</span>
+            </NavLink>
           )}
 
           <button
@@ -418,12 +547,103 @@ export function AppShell() {
       {/* Main content */}
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-7xl mx-auto p-6'}>
+          {/* Show a return-to-league pill on global routes if we know which
+              league the user was last in. Skip on League Overview / My Hub
+              where it would just be noise. */}
+          {!urlLeagueId && activeLeague && pathname !== '/' && pathname !== '/me' && (
+            <div className="mb-3 flex items-center gap-2 text-xs">
+              <span className="text-text-muted">Last visited:</span>
+              <NavLink
+                to={`/league/${activeLeague.id}`}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border hover:bg-surface-overlay/40 transition-colors"
+                style={{
+                  borderColor: `${activeLeague.color}40`,
+                  color: activeLeague.color,
+                }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: activeLeague.color }} />
+                Return to {activeLeague.name}
+              </NavLink>
+            </div>
+          )}
           <Outlet />
         </div>
       </main>
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       <MatchBanner />
+    </div>
+  );
+}
+
+interface MyTeamSidebarProps {
+  myTeams: { leagueId: string; teamId: string; teamAbbrev: string; teamName: string }[];
+  leagues: { id: string; name: string; color: string }[];
+  pendingTradeCount: number;
+}
+
+function MyTeamSidebar({ myTeams, leagues, pendingTradeCount }: MyTeamSidebarProps) {
+  // Single team: render direct link. Multiple: render a stacked group.
+  if (myTeams.length === 1) {
+    const t = myTeams[0]!;
+    const league = leagues.find(l => l.id === t.leagueId);
+    return (
+      <NavLink
+        to={`/league/${t.leagueId}/teams/${t.teamId}`}
+        className={({ isActive }) => cn(
+          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors',
+          isActive
+            ? 'bg-neon/10 text-neon'
+            : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+        )}
+      >
+        <User size={14} />
+        <span className="truncate">{t.teamAbbrev}</span>
+        <span className="text-[9px] truncate text-text-muted ml-auto" style={league ? { color: league.color } : undefined}>
+          {league?.name.replace(' League', '')}
+        </span>
+        {pendingTradeCount > 0 && (
+          <span title="Pending trade proposals" className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums">
+            {pendingTradeCount}
+          </span>
+        )}
+      </NavLink>
+    );
+  }
+
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-text-muted">
+        <User size={11} />
+        <span>My Teams</span>
+        {pendingTradeCount > 0 && (
+          <span title="Pending trade proposals" className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums">
+            {pendingTradeCount}
+          </span>
+        )}
+      </div>
+      {myTeams.map(t => {
+        const league = leagues.find(l => l.id === t.leagueId);
+        return (
+          <NavLink
+            key={t.leagueId}
+            to={`/league/${t.leagueId}/teams/${t.teamId}`}
+            className={({ isActive }) => cn(
+              'w-full flex items-center gap-2 px-3 py-1 rounded-md text-xs transition-colors',
+              isActive
+                ? 'bg-neon/10 text-neon'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: league?.color }}
+            />
+            <span className="truncate">{t.teamAbbrev}</span>
+            <span className="text-[9px] text-text-muted ml-auto">{league?.name.replace(' League', '')}</span>
+          </NavLink>
+        );
+      })}
     </div>
   );
 }
