@@ -36,6 +36,8 @@ export interface MatchupState {
 type MatchupAction =
   | { type: 'SET_TEAM_A'; roster: RosterPokemon[]; source: TeamSource }
   | { type: 'SET_TEAM_B'; roster: RosterPokemon[]; source: TeamSource }
+  | { type: 'CLEAR_TEAM_A' }
+  | { type: 'CLEAR_TEAM_B' }
   | { type: 'TOGGLE_SUB_A'; name: string }
   | { type: 'TOGGLE_SUB_B'; name: string }
   | { type: 'SET_TAB'; tab: MatchupTab }
@@ -61,6 +63,10 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
       return { ...state, teamA: action.roster, teamASource: action.source, subTeamA: new Set() };
     case 'SET_TEAM_B':
       return { ...state, teamB: action.roster, teamBSource: action.source, subTeamB: new Set() };
+    case 'CLEAR_TEAM_A':
+      return { ...state, teamA: [], teamASource: null, subTeamA: new Set() };
+    case 'CLEAR_TEAM_B':
+      return { ...state, teamB: [], teamBSource: null, subTeamB: new Set() };
     case 'TOGGLE_SUB_A':
       return { ...state, subTeamA: toggleInSet(state.subTeamA, action.name, 6) };
     case 'TOGGLE_SUB_B':
