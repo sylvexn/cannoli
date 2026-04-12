@@ -27,6 +27,8 @@ export function LeagueOverviewPage() {
   const { leagues, loading } = useAppData();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
   const [teamsLoading, setTeamsLoading] = useState(true);
+  const [tradesCount, setTradesCount] = useState<number>(0);
+  const [tradesLoading, setTradesLoading] = useState(true);
 
   // Fetch teams for all leagues
   useEffect(() => {
@@ -38,6 +40,19 @@ export function LeagueOverviewPage() {
       setTeamsPerLeague(Object.fromEntries(results));
       setTeamsLoading(false);
     }).catch(() => setTeamsLoading(false));
+  }, [leagues]);
+
+  // Fetch trades for all leagues to compute the accepted count
+  useEffect(() => {
+    if (leagues.length === 0) return;
+    setTradesLoading(true);
+    Promise.all(
+      leagues.map(l => api.getTrades(l.id).catch(() => []))
+    ).then(results => {
+      const accepted = results.flat().filter(t => t.status === 'accepted').length;
+      setTradesCount(accepted);
+      setTradesLoading(false);
+    }).catch(() => setTradesLoading(false));
   }, [leagues]);
 
   // Compute site-wide stats from fetched teams
@@ -98,7 +113,7 @@ export function LeagueOverviewPage() {
       <div className="inline-flex flex-wrap items-stretch rounded-lg border border-border-default bg-surface-raised divide-x divide-border-subtle overflow-hidden">
         <StatCard icon={Users} label="Players" value={totalPlayers} color="text-neon" loading={teamsLoading} />
         <StatCard icon={Trophy} label="Pokemon Drafted" value={totalDrafted} color="text-draw" loading={teamsLoading} />
-        <StatCard icon={ArrowLeftRight} label="Trades" value={0} color="text-purple-400" loading={false} />
+        <StatCard icon={ArrowLeftRight} label="Trades" value={tradesCount} color="text-purple-400" loading={tradesLoading} />
         <StatCard icon={Swords} label="Matches Played" value={Math.floor(totalMatches)} color="text-win" loading={teamsLoading} />
       </div>
 
@@ -108,9 +123,9 @@ export function LeagueOverviewPage() {
         <div className="xl:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
           {leagues.map(league => {
             const teams = teamsPerLeague[league.id] || [];
-            const standings = [...teams].sort(
-              (a, b) => b.record.wins - a.record.wins || b.record.differential - a.record.differential,
-            );
+            // API already returns teams in the canonical standings order
+            // (h2h → diff → kills → id). Don't re-sort.
+            const standings = teams;
 
             return (
               <Card key={league.id} className="bg-surface-raised border-border-default overflow-hidden">
