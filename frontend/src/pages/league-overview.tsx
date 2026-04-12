@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
+import { EmptyState } from '@/components/empty-state';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
 import {
@@ -170,9 +171,12 @@ export function LeagueOverviewPage() {
                       </Link>
                     </div>
                   ) : (
-                    <div className="text-center py-6 text-text-muted text-sm">
-                      Coming soon
-                    </div>
+                    <EmptyState
+                      variant="coming-soon"
+                      title="Coming soon."
+                      spriteSize="md"
+                      padding="sm"
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -191,9 +195,19 @@ export function LeagueOverviewPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-border">
-                {recentActivity.map(event => (
-                  <ActivityFeedItem key={event.id} event={event} />
-                ))}
+                {recentActivity.length > 0 ? (
+                  recentActivity.map(event => (
+                    <ActivityFeedItem key={event.id} event={event} />
+                  ))
+                ) : (
+                  <EmptyState
+                    variant="quiet"
+                    title="Quiet around here."
+                    subtitle="No league activity yet."
+                    spriteSize="md"
+                    padding="sm"
+                  />
+                )}
               </div>
             </CardContent>
           </Card>

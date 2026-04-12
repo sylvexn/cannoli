@@ -414,6 +414,59 @@ export const playerAvailability = sqliteTable('player_availability', {
   note: text('note'),
 });
 
+// ─── Pin Definitions (catalog of awardable pins/achievements) ─────────────
+//
+// Two creation paths:
+//   * `is_auto = true`  — seeded; awarded by the auto-award job at season-end
+//                          or post-match. The slug `id` is the stable key the
+//                          award job looks up.
+//   * `is_auto = false` — admin-minted via the admin-pins UI; awarded by hand.
+//
+// Adding new auto pins is a code change (the rule has to live somewhere); new
+// custom pins are pure data and need no deploy.
+
+export const pinDefinitions = sqliteTable('pin_definitions', {
+  /** Slug-style key, e.g. 'champion', 'mvp', 'kingslayer'. Stable across renames. */
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description').notNull().default(''),
+  /** `lucide-react` icon name as a string, e.g. 'Crown', 'Star', 'Flame'. */
+  iconName: text('icon_name').notNull().default('Award'),
+  /** Hex #RRGGBB used for ring/icon tint. */
+  color: text('color').notNull().default('#fbbf24'),
+  category: text('category', {
+    enum: ['career', 'season', 'week', 'draft', 'community', 'custom'],
+  }).notNull().default('custom'),
+  /** True for seeded pins handed out by the auto-award job. */
+  isAuto: integer('is_auto', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+});
+
+// ─── Pins (awarded instances — many users × many definitions) ──────────────
+//
+// Unique composite (user_id, pin_def_id, season_id) enforces "one Champion per
+// season per user", while still letting a user collect distinct seasons of the
+// same pin. season_id may be NULL for season-agnostic pins (e.g. lifetime
+// achievements, S1 alum). NULL participates in the unique check in SQLite, so
+// season-less pins can only be awarded once per user.
+//
+// `awarded_by` is NULL for the auto-award job; otherwise the admin's user id.
+// `metadata` is free-form JSON (e.g. `{ pokemon: 'Cinderace' }` for a pin like
+// "Steal of the Draft") — admin authoring may attach context per-award.
+
+export const pins = sqliteTable('pins', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  pinDefId: text('pin_def_id').notNull().references(() => pinDefinitions.id, { onDelete: 'cascade' }),
+  /** Season scope. NULL = lifetime / not season-specific. */
+  seasonId: integer('season_id').references(() => seasons.id),
+  awardedAt: text('awarded_at').default(sql`(datetime('now'))`),
+  /** Admin user id if hand-awarded; NULL if auto-awarded. */
+  awardedBy: integer('awarded_by').references(() => users.id),
+  /** JSON blob — e.g. `{ pokemon: 'Cinderace', context: 'steal' }` */
+  metadata: text('metadata'),
+});
+
 // ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──
 
 export const scrimPokemon = sqliteTable('scrim_pokemon', {

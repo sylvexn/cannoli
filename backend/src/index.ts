@@ -16,6 +16,7 @@ import { matchRoutes } from './routes/matches';
 import { feedbackRoutes } from './routes/feedback';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
+import { pinRoutes } from './routes/pins';
 import { startBot } from './lib/ps-bot';
 import { startSchedulers } from './lib/scheduler';
 import { sqlite } from './db';
@@ -149,6 +150,9 @@ const app = new Elysia()
   })
 
   .use(authRoutes)
+  // Pin routes must register before userRoutes so /api/users/:username/pins
+  // is matched before the more general /api/users/:username profile route.
+  .use(pinRoutes)
   .use(userRoutes)
   .use(leagueRoutes)
   .use(adminRoutes)

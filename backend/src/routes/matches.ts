@@ -6,6 +6,7 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings } from '../lib/standings';
+import { runAutoAwards } from '../lib/pins/auto-award';
 
 export const matchRoutes = new Elysia()
 
@@ -167,6 +168,15 @@ export const matchRoutes = new Elysia()
         winnerId,
         winnerSeed,
       });
+    }
+
+    // ─── Auto-award per-match pins (Kingslayer, Flawless) ─────────
+    // Idempotent — re-running on a re-record (after dismiss-warnings) will
+    // skip already-awarded rows via the unique index. Safe to run on
+    // disputed-status results too: the helpers gate on status='completed'
+    // internally, so a 'disputed' record waits until warnings clear.
+    if (newStatus === 'completed') {
+      runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
     }
 
     return { success: true };

@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { EmptyState } from '@/components/empty-state';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLeagueData } from '@/lib/league-data-context';
@@ -48,10 +49,16 @@ export function TeamProfilePage() {
 
   if (!player) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-text-muted text-lg">Team not found</p>
-        <Link to="/" className="text-neon hover:underline text-sm">Back to standings</Link>
-      </div>
+      <EmptyState
+        variant="not-found"
+        title="Team not found."
+        subtitle="Maybe it desynced. Or never existed."
+        action={
+          <Link to="/" className="text-neon hover:underline text-sm">
+            Back to standings
+          </Link>
+        }
+      />
     );
   }
 

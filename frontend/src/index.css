@@ -678,3 +678,19 @@ aside {
     animation: none;
   }
 }
+
+/* Breathe — subtle scale throb for idle ornaments (empty-state sprites, etc) */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion) {
+  .animate-breathe {
+    animation: none;
+  }
+}

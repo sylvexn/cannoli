@@ -1,0 +1,300 @@
+/**
+ * Pin / achievement endpoints (Slice 3).
+ *
+ *   Public:
+ *     GET    /api/users/:username/pins          — list a user's pins (def joined)
+ *
+ *   Admin:
+ *     GET    /api/admin/pin-definitions          — list defs
+ *     POST   /api/admin/pin-definitions          — create def
+ *     PATCH  /api/admin/pin-definitions/:id      — edit def
+ *     POST   /api/admin/pins/award               — award pin to user
+ *     DELETE /api/admin/pins/:id                 — revoke awarded pin
+ *
+ * Pins are append-only history. The unique index on (user, def, season) means
+ * the auto-award job is safe to re-run; the admin authoring path goes through
+ * the same insert and surfaces a friendly error on dup.
+ */
+import { Elysia } from 'elysia';
+import { db, schema } from '../db';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
+import { isStaff } from '../lib/auth';
+
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const VALID_CATEGORIES = ['career', 'season', 'week', 'draft', 'community', 'custom'] as const;
+type Category = (typeof VALID_CATEGORIES)[number];
+
+export const pinRoutes = new Elysia()
+
+  // ─── GET /api/users/:username/pins (public) ────────────────────────────
+  .get('/api/users/:username/pins', ({ params, set }) => {
+    const username = params.username.toLowerCase().trim();
+    if (username === 'me') { set.status = 404; return { error: 'Not found' }; }
+    const user = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+    if (!user || !user.active) { set.status = 404; return { error: 'User not found' }; }
+
+    // Join pins → pin_definitions; newest first.
+    const rows = db.select({
+      id: schema.pins.id,
+      pinDefId: schema.pins.pinDefId,
+      seasonId: schema.pins.seasonId,
+      awardedAt: schema.pins.awardedAt,
+      awardedBy: schema.pins.awardedBy,
+      metadata: schema.pins.metadata,
+      defName: schema.pinDefinitions.name,
+      defDescription: schema.pinDefinitions.description,
+      defIconName: schema.pinDefinitions.iconName,
+      defColor: schema.pinDefinitions.color,
+      defCategory: schema.pinDefinitions.category,
+      defIsAuto: schema.pinDefinitions.isAuto,
+    })
+      .from(schema.pins)
+      .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
+      .where(eq(schema.pins.userId, user.id))
+      .orderBy(desc(schema.pins.awardedAt))
+      .all();
+
+    return rows.map(r => ({
+      id: r.id,
+      pinDefId: r.pinDefId,
+      seasonId: r.seasonId,
+      awardedAt: r.awardedAt,
+      awardedBy: r.awardedBy,
+      metadata: r.metadata ? safeJson(r.metadata) : null,
+      definition: {
+        id: r.pinDefId,
+        name: r.defName,
+        description: r.defDescription,
+        iconName: r.defIconName,
+        color: r.defColor,
+        category: r.defCategory,
+        isAuto: r.defIsAuto,
+      },
+    }));
+  })
+
+  // ─── GET /api/admin/pin-definitions ────────────────────────────────────
+  .get('/api/admin/pin-definitions', ({ user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    return db.select().from(schema.pinDefinitions)
+      .orderBy(asc(schema.pinDefinitions.category), asc(schema.pinDefinitions.name))
+      .all();
+  })
+
+  // ─── POST /api/admin/pin-definitions ───────────────────────────────────
+  .post('/api/admin/pin-definitions', ({ body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const b = body as Partial<{
+      id: string; name: string; description: string;
+      iconName: string; color: string; category: string;
+    }>;
+    const id = (b.id ?? '').trim().toLowerCase();
+    const name = (b.name ?? '').trim();
+    const iconName = (b.iconName ?? 'Award').trim();
+    const color = (b.color ?? '#fbbf24').trim();
+    const category = (b.category ?? 'custom') as Category;
+    const description = (b.description ?? '').trim();
+
+    if (!SLUG_RE.test(id)) {
+      set.status = 400;
+      return { error: 'id must be a kebab-case slug (lowercase letters/digits/hyphen, max 64 chars)' };
+    }
+    if (!name) { set.status = 400; return { error: 'name required' }; }
+    if (!HEX_RE.test(color)) { set.status = 400; return { error: 'color must be #RRGGBB' }; }
+    if (!VALID_CATEGORIES.includes(category)) {
+      set.status = 400;
+      return { error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` };
+    }
+
+    const dup = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, id)).get();
+    if (dup) { set.status = 409; return { error: `Pin definition '${id}' already exists` }; }
+
+    db.insert(schema.pinDefinitions).values({
+      id, name, description, iconName, color, category, isAuto: false,
+    }).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_def_created',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Created pin definition '${id}' (${name})`,
+      metadata: JSON.stringify({ id, name, category, iconName, color }),
+    }).run();
+
+    return { success: true, id };
+  })
+
+  // ─── PATCH /api/admin/pin-definitions/:id ──────────────────────────────
+  .patch('/api/admin/pin-definitions/:id', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const existing = db.select().from(schema.pinDefinitions)
+      .where(eq(schema.pinDefinitions.id, params.id)).get();
+    if (!existing) { set.status = 404; return { error: 'Pin definition not found' }; }
+
+    const b = body as Partial<{
+      name: string; description: string;
+      iconName: string; color: string; category: string;
+    }>;
+    const updates: Record<string, unknown> = {};
+
+    if (b.name !== undefined) {
+      const v = b.name.trim();
+      if (!v) { set.status = 400; return { error: 'name cannot be empty' }; }
+      updates.name = v;
+    }
+    if (b.description !== undefined) updates.description = b.description.trim();
+    if (b.iconName !== undefined) {
+      const v = b.iconName.trim();
+      if (!v) { set.status = 400; return { error: 'iconName cannot be empty' }; }
+      updates.iconName = v;
+    }
+    if (b.color !== undefined) {
+      if (!HEX_RE.test(b.color)) { set.status = 400; return { error: 'color must be #RRGGBB' }; }
+      updates.color = b.color;
+    }
+    if (b.category !== undefined) {
+      if (!VALID_CATEGORIES.includes(b.category as Category)) {
+        set.status = 400;
+        return { error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` };
+      }
+      updates.category = b.category;
+    }
+
+    if (Object.keys(updates).length === 0) return { success: true };
+
+    db.update(schema.pinDefinitions).set(updates).where(eq(schema.pinDefinitions.id, params.id)).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_def_updated',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Updated pin definition '${params.id}'`,
+      metadata: JSON.stringify({ id: params.id, updates }),
+    }).run();
+
+    return { success: true };
+  })
+
+  // ─── POST /api/admin/pins/award ────────────────────────────────────────
+  .post('/api/admin/pins/award', ({ body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const b = body as { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null };
+    if (!b.userId || !b.pinDefId) {
+      set.status = 400;
+      return { error: 'userId and pinDefId are required' };
+    }
+    const targetUser = db.select().from(schema.users).where(eq(schema.users.id, b.userId)).get();
+    if (!targetUser) { set.status = 404; return { error: 'Target user not found' }; }
+    const def = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, b.pinDefId)).get();
+    if (!def) { set.status = 404; return { error: 'Pin definition not found' }; }
+
+    // Use INSERT OR IGNORE so admin double-clicking the button is a no-op
+    // rather than a 500 from the unique constraint.
+    const seasonId = b.seasonId ?? null;
+    const metadata = b.metadata ? JSON.stringify(b.metadata) : null;
+    const awardedById = user.id ? parseInt(user.id) : null;
+
+    const res = db.run(sql`
+      INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
+      VALUES (${b.userId}, ${b.pinDefId}, ${seasonId}, ${awardedById}, ${metadata})
+    `);
+    const changes = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
+    if (changes === 0) {
+      set.status = 409;
+      return { error: 'User already has this pin for the given season' };
+    }
+
+    // Fetch the inserted row to return the id (lastInsertRowid is on the
+    // statement result; bun:sqlite's `db.run` exposes it as `lastInsertRowid`).
+    const inserted = db.select().from(schema.pins)
+      .where(and(
+        eq(schema.pins.userId, b.userId),
+        eq(schema.pins.pinDefId, b.pinDefId),
+        seasonId == null
+          ? sql`${schema.pins.seasonId} IS NULL`
+          : eq(schema.pins.seasonId, seasonId),
+      ))
+      .orderBy(desc(schema.pins.id))
+      .get();
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_awarded',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Awarded '${def.name}' to ${targetUser.username}`,
+      metadata: JSON.stringify({
+        userId: b.userId,
+        username: targetUser.username,
+        pinDefId: b.pinDefId,
+        pinName: def.name,
+        seasonId,
+        awardedById,
+      }),
+    }).run();
+
+    return { success: true, id: inserted?.id ?? null };
+  })
+
+  // ─── DELETE /api/admin/pins/:id ────────────────────────────────────────
+  .delete('/api/admin/pins/:id', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const id = parseInt(params.id);
+    if (!Number.isFinite(id)) { set.status = 400; return { error: 'Invalid pin id' }; }
+    const existing = db.select().from(schema.pins).where(eq(schema.pins.id, id)).get();
+    if (!existing) { set.status = 404; return { error: 'Pin not found' }; }
+
+    const targetUser = db.select().from(schema.users).where(eq(schema.users.id, existing.userId)).get();
+    const def = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, existing.pinDefId)).get();
+
+    db.delete(schema.pins).where(eq(schema.pins.id, id)).run();
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_revoked',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Revoked '${def?.name ?? existing.pinDefId}' from ${targetUser?.username ?? 'user#' + existing.userId}`,
+      metadata: JSON.stringify({
+        pinId: id,
+        userId: existing.userId,
+        pinDefId: existing.pinDefId,
+        seasonId: existing.seasonId,
+      }),
+    }).run();
+
+    return { success: true };
+  })
+
+  // ─── GET /api/admin/pins/recent (for admin UI's recently-awarded list) ──
+  .get('/api/admin/pins/recent', ({ query, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const limit = Math.min(Math.max(parseInt(String(query?.limit ?? 50)) || 50, 1), 200);
+    const rows = db.select({
+      id: schema.pins.id,
+      userId: schema.pins.userId,
+      username: schema.users.username,
+      pinDefId: schema.pins.pinDefId,
+      defName: schema.pinDefinitions.name,
+      defIconName: schema.pinDefinitions.iconName,
+      defColor: schema.pinDefinitions.color,
+      seasonId: schema.pins.seasonId,
+      awardedAt: schema.pins.awardedAt,
+      awardedBy: schema.pins.awardedBy,
+      metadata: schema.pins.metadata,
+    })
+      .from(schema.pins)
+      .innerJoin(schema.users, eq(schema.users.id, schema.pins.userId))
+      .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
+      .orderBy(desc(schema.pins.id))
+      .limit(limit)
+      .all();
+    return rows.map(r => ({ ...r, metadata: r.metadata ? safeJson(r.metadata) : null }));
+  });
+
+function safeJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return null; }
+}
