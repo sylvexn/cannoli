@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Film, Search, Play, X, Maximize2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ExternalLink, Search, Play, Radio, X, Maximize2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiTeam } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
+import { useAuth } from '@/lib/auth-context';
 import type { League } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/empty-state';
 
 interface ReplayEntry {
   match: ApiMatch;
@@ -16,11 +18,23 @@ interface ReplayEntry {
 
 export function ReplaysPage() {
   const { leagues, loading: leaguesLoading } = useAppData();
+  const { isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<ReplayEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<Set<string>>(new Set());
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
+
+  // Pick the highest active currentWeek across leagues — the natural target
+  // for a "this-week stream". Falls back to the highest week with any
+  // available replay so the button still works mid-season.
+  const streamWeek = useMemo(() => {
+    const fromLeagues = leagues.reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
+    if (fromLeagues > 0) return fromLeagues;
+    const fromReplays = entries.reduce((max, e) => Math.max(max, e.match.week), 0);
+    return fromReplays > 0 ? fromReplays : 1;
+  }, [leagues, entries]);
 
   // Fetch all schedules + teams across leagues
   useEffect(() => {
@@ -112,10 +126,23 @@ export function ReplaysPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <h1 className="font-mono text-xl font-bold uppercase tracking-widest mb-4">
-        <span className="text-neon">Replay</span>{' '}
-        <span className="text-text-primary">Gallery</span>
-      </h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="font-mono text-xl font-bold uppercase tracking-widest">
+          <span className="text-neon">Replay</span>{' '}
+          <span className="text-text-primary">Gallery</span>
+        </h1>
+
+        {isAdmin && (
+          <button
+            onClick={() => navigate(`/replays/stream/${streamWeek}`)}
+            title={`Open broadcast cockpit for week ${streamWeek}`}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/5 text-neon text-[11px] font-mono uppercase tracking-widest hover:bg-neon/10 transition-colors"
+          >
+            <Radio size={14} />
+            Start Week {streamWeek} Stream
+          </button>
+        )}
+      </div>
 
       {/* Replay viewer panel */}
       {viewingReplay && (
@@ -223,12 +250,17 @@ export function ReplaysPage() {
       {loading ? (
         <div className="text-text-muted text-sm py-12 text-center">Loading replays...</div>
       ) : entries.length === 0 ? (
-        <div className="text-text-muted text-sm py-12 text-center flex flex-col items-center gap-2">
-          <Film size={32} className="text-text-muted/40" />
-          No replays available yet.
-        </div>
+        <EmptyState
+          variant="coming-soon"
+          title="No replays available yet."
+          subtitle="Once matches are played, they'll show up here."
+        />
       ) : filtered.length === 0 ? (
-        <div className="text-text-muted text-sm py-12 text-center">No replays match your search.</div>
+        <EmptyState
+          variant="nothing-here"
+          title="No replays match your search."
+          spriteSize="md"
+        />
       ) : (
         <div className="space-y-5 flex-1 overflow-y-auto">
           {grouped.map(([week, weekEntries]) => (

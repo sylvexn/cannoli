@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
+import { EmptyState } from '@/components/empty-state';
 
 // Playoff cut size — kept in sync with the "Top N qualify" footer below.
 // TODO: surface league.playoffTeamCount on the wire and use it dynamically.
@@ -145,9 +146,13 @@ export function StandingsPage() {
                   </div>
                 );
               }) : (
-                <div className="text-center py-4 text-text-muted text-sm">
-                  Regular season complete — playoffs next
-                </div>
+                <EmptyState
+                  variant="season-done"
+                  title="Regular season's done."
+                  subtitle="Playoffs next."
+                  spriteSize="md"
+                  padding="sm"
+                />
               )}
             </CardContent>
           </Card>

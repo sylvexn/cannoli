@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
+import { EmptyState } from '@/components/empty-state';
 import type { Player, Trade } from '@/lib/types';
 import type { ApiTradeBlockListing, ApiTrade } from '@/lib/api';
 import { api } from '@/lib/api';
@@ -288,7 +289,13 @@ export function TradeBlockPage() {
                 />
               ))
             ) : (
-              <p className="text-sm text-text-muted text-center py-6">No active proposals</p>
+              <EmptyState
+                variant="quiet"
+                title="No active proposals."
+                subtitle="Nobody's wheelin' and dealin' right now."
+                spriteSize="md"
+                padding="sm"
+              />
             )}
           </CardContent>
         </Card>
@@ -392,7 +399,12 @@ export function TradeBlockPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-text-muted text-center py-6">No transactions{teamFilter ? ' for this team' : ''}</p>
+              <EmptyState
+                variant="nothing-here"
+                title={teamFilter ? 'No transactions for this team.' : 'No transactions yet.'}
+                spriteSize="md"
+                padding="sm"
+              />
             )}
           </CardContent>
         </Card>

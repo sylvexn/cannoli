@@ -134,6 +134,13 @@
       "when": 1779100000000,
       "tag": "0018_team_captains_locked",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1779200000000,
+      "tag": "0019_pins",
+      "breakpoints": true
     }
   ]
 }

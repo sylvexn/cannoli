@@ -6,6 +6,7 @@ import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { tx } from '../lib/tx';
 import { getBotStatus } from '../lib/ps-bot';
 import { runOnce } from '../lib/scheduler';
+import { runAutoAwards } from '../lib/pins/auto-award';
 
 export const adminRoutes = new Elysia()
 
@@ -1098,6 +1099,7 @@ export const adminRoutes = new Elysia()
     }
 
     let scheduleGenerated = false;
+    let pinsAwarded = 0;
     tx(() => {
       const leagueUpdates: Record<string, unknown> = { phase: phase as any };
       if (phase === 'regular' && previousPhase !== 'regular') {
@@ -1111,17 +1113,30 @@ export const adminRoutes = new Elysia()
         scheduleGenerated = result.success;
       }
 
+      // Season finalization → run auto-award pass (idempotent).
+      // We treat any *transition into* offseason as the trigger, even from
+      // playoffs→offseason that's the normal path or regular→offseason for
+      // leagues that skip playoffs. Re-runs from another phase change won't
+      // dupe.
+      if (phase === 'offseason' && previousPhase !== 'offseason') {
+        const summary = runAutoAwards(params.leagueId, {
+          trigger: 'season-end',
+          awardedBy: user.id ? parseInt(user.id) : null,
+        });
+        pinsAwarded = summary.awarded.length;
+      }
+
       db.insert(schema.activityLog).values({
         type: 'phase_advanced',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
         description: `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
-        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, scheduleGenerated }),
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, scheduleGenerated, pinsAwarded }),
       }).run();
     });
 
-    return { success: true, scheduleGenerated };
+    return { success: true, scheduleGenerated, pinsAwarded };
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, user, set }) => {
