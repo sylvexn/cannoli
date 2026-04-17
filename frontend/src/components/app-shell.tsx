@@ -180,7 +180,7 @@ export function AppShell() {
         {/* Nav */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
           {/* League Overview */}
-          <NavLink
+          <NavLink viewTransition
             to="/"
             end
             className={({ isActive }) => cn(
@@ -237,7 +237,7 @@ export function AppShell() {
                       {leaguePages.map(({ path, label, icon: Icon }) => {
                         const to = `/league/${league.id}${path}`;
                         return (
-                          <NavLink
+                          <NavLink viewTransition
                             key={path}
                             to={to}
                             end={path === ''}
@@ -268,7 +268,7 @@ export function AppShell() {
           <div className="h-px bg-border-subtle mx-2 my-1" />
 
           {/* League-independent pages */}
-          <NavLink
+          <NavLink viewTransition
             to="/matchup"
             className={({ isActive }) => cn(
               'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -281,7 +281,7 @@ export function AppShell() {
             Matchup Center
           </NavLink>
 
-          <NavLink
+          <NavLink viewTransition
             to="/showdown"
             className={({ isActive }) => cn(
               'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -294,7 +294,7 @@ export function AppShell() {
             Showdown
           </NavLink>
 
-          <NavLink
+          <NavLink viewTransition
             to="/replays"
             className={({ isActive }) => cn(
               'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -307,7 +307,7 @@ export function AppShell() {
             Replays
           </NavLink>
 
-          <NavLink
+          <NavLink viewTransition
             to="/archive"
             className={({ isActive }) => cn(
               'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
@@ -321,7 +321,7 @@ export function AppShell() {
           </NavLink>
 
           {isAdmin && (
-            <NavLink
+            <NavLink viewTransition
               to="/admin"
               className={({ isActive }) => cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
