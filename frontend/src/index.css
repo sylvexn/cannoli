@@ -694,3 +694,36 @@ aside {
     animation: none;
   }
 }
+
+/* Row-interactive — for list rows where scaling would jitter neighbors.
+   Adds a left accent stripe + bg tint on hover instead. Set `--card-accent`
+   per row to use the row's own color (e.g. team color). */
+.row-interactive {
+  --card-accent: var(--color-neon, #22d3ee);
+  position: relative;
+  transition: background-color 180ms ease;
+}
+
+.row-interactive::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--card-accent);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.row-interactive:hover::before {
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion) {
+  .row-interactive,
+  .row-interactive::before {
+    transition: none;
+  }
+}

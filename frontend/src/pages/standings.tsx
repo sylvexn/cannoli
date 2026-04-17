@@ -245,8 +245,11 @@ function StandingsRow({
 
   return (
     <div
-      className="stagger-item border-b border-border-subtle/50 last:border-b-0"
-      style={{ ['--i' as never]: Math.min(index, 20) }}
+      className="stagger-item row-interactive border-b border-border-subtle/50 last:border-b-0"
+      style={{
+        ['--i' as never]: Math.min(index, 20),
+        ['--card-accent' as never]: player.teamColor,
+      }}
     >
       <button
         onClick={() => setExpanded(!expanded)}

@@ -334,7 +334,7 @@ export function FreeAgentsPage() {
                       <li
                         key={p.name}
                         className={cn(
-                          'stagger-item flex items-center gap-2 px-2 py-1 rounded transition-colors group',
+                          'stagger-item row-interactive flex items-center gap-2 px-2 py-1 rounded transition-colors group',
                           isSelected
                             ? 'bg-neon/10 ring-1 ring-neon/40'
                             : 'hover:bg-surface-overlay/40',
