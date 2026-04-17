@@ -31,8 +31,8 @@ export function UserSettingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-neon">Sett</span>
-          <span className="text-text-primary">ings</span>
+          <span className="text-neon">User</span>
+          <span className="text-text-primary ml-1">Settings</span>
         </h1>
         <p className="text-sm text-text-muted">Manage your profile, account, and preferences</p>
       </div>
