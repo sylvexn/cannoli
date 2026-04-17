@@ -22,6 +22,7 @@ import { useLeagueUrl } from '@/lib/use-league-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
 import { EmptyState } from '@/components/empty-state';
+import { TeamCoach } from '@/components/team-coach';
 
 // Playoff cut size — kept in sync with the "Top N qualify" footer below.
 // TODO: surface league.playoffTeamCount on the wire and use it dynamically.
@@ -265,22 +266,27 @@ function StandingsRow({
         </div>
 
         {/* Team */}
-        <Link
-          to={leagueUrl(`/teams/${player.id}`)}
-          onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2.5 min-w-0 group/team"
-          style={{ flex: '1 1 0', minWidth: 0 }}
-        >
-          <div className="transition-transform duration-200 group-hover/team:scale-110">
+        <div className="flex items-center gap-2.5 min-w-0" style={{ flex: '1 1 0', minWidth: 0 }}>
+          <Link
+            to={leagueUrl(`/teams/${player.id}`)}
+            onClick={e => e.stopPropagation()}
+            className="group/team transition-transform duration-200 hover:scale-110"
+          >
             <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-          </div>
+          </Link>
           <div className="min-w-0 text-left">
-            <span className="text-sm font-medium text-text-primary group-hover/team:text-neon transition-colors truncate block leading-snug">
+            <Link
+              to={leagueUrl(`/teams/${player.id}`)}
+              onClick={e => e.stopPropagation()}
+              className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block leading-snug"
+            >
               {player.teamName}
+            </Link>
+            <span onClick={e => e.stopPropagation()} className="block leading-snug text-left text-[10px]">
+              <TeamCoach player={player} size="xs" />
             </span>
-            <span className="text-[10px] text-text-muted/60 block leading-snug text-left">{player.name}</span>
           </div>
-        </Link>
+        </div>
 
         {/* Record */}
         <div className="shrink-0">

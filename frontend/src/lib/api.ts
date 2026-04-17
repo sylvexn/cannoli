@@ -85,6 +85,16 @@ export interface ApiLeague {
   } | null;
 }
 
+export interface ApiCoachOwner {
+  username: string;
+  displayName: string | null;
+  avatarPath: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
+  role: 'dev' | 'admin' | 'user';
+}
+
 export interface ApiTeam {
   id: string;
   name: string;
@@ -95,6 +105,8 @@ export interface ApiTeam {
   showdownUsername: string | null;
   logoPath?: string | null;
   userId: number | null;
+  /** Coach identity joined from the users table — for <CoachLink> rendering. */
+  owner?: ApiCoachOwner | null;
   /** True once the team has saved a full captain set during the post-draft
    *  captain gate. League advances to phase=regular once every team is locked. */
   captainsLocked?: boolean;
