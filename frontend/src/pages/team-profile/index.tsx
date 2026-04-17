@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { EmptyState } from '@/components/empty-state';
+import { TeamCoach } from '@/components/team-coach';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLeagueData } from '@/lib/league-data-context';
@@ -356,8 +357,10 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-12 h-12 text-xs shrink-0" />
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-heading font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
-            <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide">
-              {player.name} <span className="text-border-default mx-1">/</span> {player.teamAbbrev}
+            <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide flex items-center gap-1.5">
+              <TeamCoach player={player} showAvatar avatarSize={14} size="xs" />
+              <span className="text-border-default">/</span>
+              <span>{player.teamAbbrev}</span>
             </p>
           </div>
           <button

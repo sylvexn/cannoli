@@ -29,6 +29,16 @@ export const DEFAULT_LEAGUE_CONFIG: LeagueConfig = {
   teraCaptainSlots: 2,
 };
 
+export interface CoachOwner {
+  username: string;
+  displayName: string | null;
+  avatarPath: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  tertiaryColor: string | null;
+  role: 'dev' | 'admin' | 'user';
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -37,6 +47,8 @@ export interface Player {
   teamColor: string;
   /** Owner user id (null if no manager assigned) */
   userId?: number | null;
+  /** Coach identity joined from the users table — for <CoachLink> rendering. */
+  owner?: CoachOwner | null;
   /** Set after the team locks its tera captains during the post-draft gate. */
   captainsLocked?: boolean;
   record: { wins: number; losses: number; differential: number };

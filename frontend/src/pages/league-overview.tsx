@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
+import { CoachLink } from '@/components/coach-link';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
 import {
@@ -293,7 +294,8 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
       <Icon size={12} className="text-text-muted shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0 overflow-hidden">
         <p className="text-[11px] text-text-secondary leading-tight truncate">
-          <span className="font-medium text-text-primary">{event.actor}</span>{' '}
+          <CoachLink coach={{ username: event.actor }} size="xs" />
+          {' '}
           {event.description.toLowerCase()}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">

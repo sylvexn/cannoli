@@ -61,11 +61,31 @@ export const leagueRoutes = new Elysia()
     const teamById = new Map(teamRows.map(t => [t.id, t]));
     const orderedTeams = standings.map(s => teamById.get(s.id)).filter((t): t is NonNullable<typeof t> => !!t);
 
+    // Pre-fetch username + accent colors + avatar for all teams' coaches in one
+    // query — avoids an N+1 lookup when CoachLink needs them.
+    const userIds = orderedTeams.map(t => t.userId).filter((u): u is number => u != null);
+    const userRows = userIds.length > 0
+      ? db.select({
+          id: schema.users.id,
+          username: schema.users.username,
+          displayName: schema.users.displayName,
+          avatarPath: schema.users.avatarPath,
+          primaryColor: schema.users.primaryColor,
+          secondaryColor: schema.users.secondaryColor,
+          tertiaryColor: schema.users.tertiaryColor,
+          role: schema.users.role,
+        }).from(schema.users)
+          .where(sql`${schema.users.id} IN (${sql.join(userIds.map(id => sql`${id}`), sql`, `)})`)
+          .all()
+      : [];
+    const userById = new Map(userRows.map(u => [u.id, u]));
+
     return orderedTeams.map(team => {
       const standing = standingsById.get(team.id)!;
       const roster = db.select().from(schema.rosters)
         .where(eq(schema.rosters.teamId, team.id))
         .all();
+      const owner = team.userId != null ? userById.get(team.userId) : undefined;
 
       const wins = standing.wins;
       const losses = standing.losses;
@@ -127,6 +147,17 @@ export const leagueRoutes = new Elysia()
         showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
         userId: team.userId,
+        // Coach identity (joined from users table) — used by <CoachLink>
+        // to render accent gradients, avatars, and link to /coach/:username.
+        owner: owner ? {
+          username: owner.username,
+          displayName: owner.displayName,
+          avatarPath: owner.avatarPath,
+          primaryColor: owner.primaryColor,
+          secondaryColor: owner.secondaryColor,
+          tertiaryColor: owner.tertiaryColor,
+          role: owner.role,
+        } : null,
         captainsLocked: !!team.captainsLocked,
         record: {
           wins,
