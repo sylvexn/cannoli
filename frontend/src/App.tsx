@@ -21,6 +21,7 @@ import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
 import { ArchivePage } from '@/pages/archive';
 import { ReplaysPage } from '@/pages/replays';
+import { StreamPage } from '@/pages/replays/stream';
 import { PokemonDetailPage } from '@/pages/pokemon-detail';
 import { ShowdownPage } from '@/pages/showdown';
 
@@ -40,6 +41,11 @@ export default function App() {
             {/* Public routes — no sidebar */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/change-password" element={<ChangePasswordPage />} />
+
+            {/* Theater-mode broadcast cockpit — admin only, outside the AppShell. */}
+            <Route element={<ProtectedRoute requireAdmin />}>
+              <Route path="/replays/stream/:week" element={<StreamPage />} />
+            </Route>
 
             {/* App shell (works for both guests and authenticated users) */}
             <Route element={<AppShell />}>
