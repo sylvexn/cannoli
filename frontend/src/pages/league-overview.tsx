@@ -107,14 +107,18 @@ export function LeagueOverviewPage() {
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
         {/* League cards (3 cols on xl) */}
         <div className="xl:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {leagues.map(league => {
+          {leagues.map((league, leagueIdx) => {
             const teams = teamsPerLeague[league.id] || [];
             const standings = [...teams].sort(
               (a, b) => b.record.wins - a.record.wins || b.record.differential - a.record.differential,
             );
 
             return (
-              <Card key={league.id} className="bg-surface-raised border-border-default overflow-hidden">
+              <Card
+                key={league.id}
+                className="stagger-item bg-surface-raised border-border-default overflow-hidden"
+                style={{ ['--i' as never]: Math.min(leagueIdx, 20) }}
+              >
                 <div className="h-1" style={{ backgroundColor: league.color }} />
 
                 <CardHeader className="pb-2">
@@ -196,8 +200,14 @@ export function LeagueOverviewPage() {
             <CardContent className="p-0">
               <div className="divide-y divide-border">
                 {recentActivity.length > 0 ? (
-                  recentActivity.map(event => (
-                    <ActivityFeedItem key={event.id} event={event} />
+                  recentActivity.map((event, i) => (
+                    <div
+                      key={event.id}
+                      className="stagger-item"
+                      style={{ ['--i' as never]: Math.min(i, 20) }}
+                    >
+                      <ActivityFeedItem event={event} />
+                    </div>
                   ))
                 ) : (
                   <EmptyState

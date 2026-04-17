@@ -192,7 +192,7 @@ export function TradeBlockPage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-border-subtle/30">
-              {tradeBlockListings.map(listing => {
+              {tradeBlockListings.map((listing, i) => {
                 const team = playerMap.get(listing.teamId);
                 const mon = team?.roster.find(m => m.name === listing.pokemonName);
                 if (!team || !mon) return null;
@@ -204,9 +204,10 @@ export function TradeBlockPage() {
                   <div
                     key={`${listing.teamId}-${listing.pokemonName}`}
                     className={cn(
-                      'px-3 py-2.5 transition-colors group',
+                      'stagger-item px-3 py-2.5 transition-colors group',
                       deadlinePassed ? 'opacity-40' : 'hover:bg-surface-overlay/30',
                     )}
+                    style={{ ['--i' as never]: Math.min(i, 20) }}
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="shrink-0 mt-0.5 cursor-pointer" onClick={() => openSideCard(mon.name)}>
@@ -279,14 +280,19 @@ export function TradeBlockPage() {
           </CardHeader>
           <CardContent className="space-y-2 px-3 pb-3">
             {activeTrades.length > 0 ? (
-              activeTrades.map(trade => (
-                <CompactTradeCard
+              activeTrades.map((trade, i) => (
+                <div
                   key={trade.id}
-                  trade={trade}
-                  leagueUrl={leagueUrl}
-                  onResponded={loadTrades}
-                  onCounter={t => setProposeOpen({ teamId: t.proposer, counterTo: t })}
-                />
+                  className="stagger-item"
+                  style={{ ['--i' as never]: Math.min(i, 20) }}
+                >
+                  <CompactTradeCard
+                    trade={trade}
+                    leagueUrl={leagueUrl}
+                    onResponded={loadTrades}
+                    onCounter={t => setProposeOpen({ teamId: t.proposer, counterTo: t })}
+                  />
+                </div>
               ))
             ) : (
               <EmptyState

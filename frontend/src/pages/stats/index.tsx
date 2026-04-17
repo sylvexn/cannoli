@@ -227,7 +227,8 @@ export function StatsPage() {
                   return (
                     <tr
                       key={`${stat.teamId}-${stat.name}`}
-                      className="group border-b border-border-subtle/50 transition-all duration-150 hover:bg-surface-overlay/60"
+                      className="stagger-item group border-b border-border-subtle/50 transition-all duration-150 hover:bg-surface-overlay/60"
+                      style={{ ['--i' as never]: Math.min(i, 20) }}
                     >
                       {/* Rank */}
                       <td className="px-3 py-1.5 text-center">

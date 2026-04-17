@@ -100,6 +100,7 @@ export function StandingsPage() {
                 key={player.id}
                 player={player}
                 rank={i + 1}
+                index={i}
                 leagueUrl={leagueUrl}
                 standings={standings}
                 season={currentSeason}
@@ -212,10 +213,11 @@ export function StandingsPage() {
 }
 
 function StandingsRow({
-  player, rank, leagueUrl, standings, season,
+  player, rank, index, leagueUrl, standings, season,
 }: {
   player: Player;
   rank: number;
+  index: number;
   leagueUrl: (p: string) => string;
   standings: Player[];
   season: LeagueSeason;
@@ -242,7 +244,10 @@ function StandingsRow({
   }, [player, rank, standings, getTeamMatches, season.totalWeeks, season.currentWeek]);
 
   return (
-    <div className="border-b border-border-subtle/50 last:border-b-0">
+    <div
+      className="stagger-item border-b border-border-subtle/50 last:border-b-0"
+      style={{ ['--i' as never]: Math.min(index, 20) }}
+    >
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/60 transition-all duration-200 cursor-pointer group"

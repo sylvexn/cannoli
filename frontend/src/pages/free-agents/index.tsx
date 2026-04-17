@@ -326,7 +326,7 @@ export function FreeAgentsPage() {
                 <div className="text-center text-text-muted text-xs py-8">No free agents match these filters.</div>
               ) : (
                 <ul className="space-y-0.5">
-                  {filtered.slice(0, 250).map(p => {
+                  {filtered.slice(0, 250).map((p, i) => {
                     const projectedIfPicked = pointsUsed + p.tier;
                     const overBudget = projectedIfPicked > pointCap;
                     const isSelected = selected?.name === p.name;
@@ -334,11 +334,12 @@ export function FreeAgentsPage() {
                       <li
                         key={p.name}
                         className={cn(
-                          'flex items-center gap-2 px-2 py-1 rounded transition-colors group',
+                          'stagger-item flex items-center gap-2 px-2 py-1 rounded transition-colors group',
                           isSelected
                             ? 'bg-neon/10 ring-1 ring-neon/40'
                             : 'hover:bg-surface-overlay/40',
                         )}
+                        style={{ ['--i' as never]: Math.min(i, 20) }}
                       >
                         <button
                           onClick={() => openSideCard(p.name)}
