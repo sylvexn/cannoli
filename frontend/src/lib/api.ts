@@ -348,6 +348,45 @@ export interface ApiTierListEntry {
   status: 'available' | 'tera-banned' | 'banned';
 }
 
+// ─── Pins ────────────────────────────────────────────────────────────────
+
+export type PinCategory = 'career' | 'season' | 'week' | 'draft' | 'community' | 'custom';
+
+export interface ApiPinDefinition {
+  id: string;
+  name: string;
+  description: string;
+  iconName: string;
+  color: string;
+  category: PinCategory;
+  isAuto: boolean;
+  createdAt?: string | null;
+}
+
+export interface ApiPin {
+  id: number;
+  pinDefId: string;
+  seasonId: number | null;
+  awardedAt: string | null;
+  awardedBy: number | null;
+  metadata: Record<string, unknown> | null;
+  definition: ApiPinDefinition;
+}
+
+export interface ApiPinRecent {
+  id: number;
+  userId: number;
+  username: string;
+  pinDefId: string;
+  defName: string;
+  defIconName: string;
+  defColor: string;
+  seasonId: number | null;
+  awardedAt: string | null;
+  awardedBy: number | null;
+  metadata: Record<string, unknown> | null;
+}
+
 export interface ApiFeedbackIssue {
   number: number;
   title: string;
@@ -766,4 +805,36 @@ export const api = {
       `/api/pokemon?${q}`
     );
   },
+
+  // ─── Pins / achievements ──────────────────────────────────────────────
+  getUserPins: (username: string) =>
+    fetchJson<ApiPin[]>(`/api/users/${encodeURIComponent(username)}/pins`),
+
+  getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
+
+  createPinDefinition: (data: {
+    id: string;
+    name: string;
+    description?: string;
+    iconName: string;
+    color: string;
+    category: PinCategory;
+  }) => postJson<{ success: boolean; id: string }>('/api/admin/pin-definitions', data),
+
+  updatePinDefinition: (id: string, data: {
+    name?: string;
+    description?: string;
+    iconName?: string;
+    color?: string;
+    category?: PinCategory;
+  }) => mutateJson<{ success: boolean }>('PATCH', `/api/admin/pin-definitions/${encodeURIComponent(id)}`, data),
+
+  awardPin: (data: { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null }) =>
+    postJson<{ success: boolean; id: number | null }>('/api/admin/pins/award', data),
+
+  revokePin: (id: number) =>
+    deleteJson<{ success: boolean }>(`/api/admin/pins/${id}`),
+
+  getRecentPins: (limit = 50) =>
+    fetchJson<ApiPinRecent[]>(`/api/admin/pins/recent?limit=${limit}`),
 };

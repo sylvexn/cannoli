@@ -13,11 +13,12 @@ import { AdminTeams } from './admin-teams';
 import { AdminFeedback } from './admin-feedback';
 import { AdminMatches } from './admin-matches';
 import { AdminFreeAgents } from './admin-free-agents';
+import { AdminPins } from './admin-pins';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, ChevronDown, ChevronsUpDown, ChevronsDownUp,
-  UserPlus,
+  UserPlus, Award,
 } from 'lucide-react';
 
 interface NavItem {
@@ -57,6 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList, maxH: 'max-h-[60vh]' },
       { id: 'moves', label: 'Move Categories', icon: Swords, component: AdminMoveCategories },
+      { id: 'pins', label: 'Pins', icon: Award, component: AdminPins, maxH: 'max-h-[70vh]' },
       { id: 'settings', label: 'Settings', icon: Settings, component: AdminSiteSettings },
     ],
   },
