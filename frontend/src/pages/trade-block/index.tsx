@@ -204,10 +204,13 @@ export function TradeBlockPage() {
                   <div
                     key={`${listing.teamId}-${listing.pokemonName}`}
                     className={cn(
-                      'stagger-item px-3 py-2.5 transition-colors group',
+                      'stagger-item row-interactive px-3 py-2.5 transition-colors group',
                       deadlinePassed ? 'opacity-40' : 'hover:bg-surface-overlay/30',
                     )}
-                    style={{ ['--i' as never]: Math.min(i, 20) }}
+                    style={{
+                      ['--i' as never]: Math.min(i, 20),
+                      ['--card-accent' as never]: team.teamColor,
+                    }}
                   >
                     <div className="flex items-start gap-2.5">
                       <div className="shrink-0 mt-0.5 cursor-pointer" onClick={() => openSideCard(mon.name)}>

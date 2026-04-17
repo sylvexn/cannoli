@@ -116,8 +116,12 @@ export function LeagueOverviewPage() {
             return (
               <Card
                 key={league.id}
-                className="stagger-item bg-surface-raised border-border-default overflow-hidden"
-                style={{ ['--i' as never]: Math.min(leagueIdx, 20) }}
+                className="stagger-item card-interactive bg-surface-raised border-border-default overflow-hidden"
+                style={{
+                  ['--i' as never]: Math.min(leagueIdx, 20),
+                  ['--card-accent' as never]: league.color,
+                  ['--card-glow' as never]: `${league.color}30`,
+                }}
               >
                 <div className="h-1" style={{ backgroundColor: league.color }} />
 
@@ -200,15 +204,21 @@ export function LeagueOverviewPage() {
             <CardContent className="p-0">
               <div className="divide-y divide-border">
                 {recentActivity.length > 0 ? (
-                  recentActivity.map((event, i) => (
-                    <div
-                      key={event.id}
-                      className="stagger-item"
-                      style={{ ['--i' as never]: Math.min(i, 20) }}
-                    >
-                      <ActivityFeedItem event={event} />
-                    </div>
-                  ))
+                  recentActivity.map((event, i) => {
+                    const eventLeague = leagues.find(l => l.id === event.leagueId);
+                    return (
+                      <div
+                        key={event.id}
+                        className="stagger-item row-interactive"
+                        style={{
+                          ['--i' as never]: Math.min(i, 20),
+                          ['--card-accent' as never]: eventLeague?.color ?? 'var(--color-neon)',
+                        }}
+                      >
+                        <ActivityFeedItem event={event} />
+                      </div>
+                    );
+                  })
                 ) : (
                   <EmptyState
                     variant="quiet"
