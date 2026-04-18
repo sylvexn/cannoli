@@ -38,6 +38,8 @@ const EVENT_ICONS: Record<string, typeof UserPlus> = {
   user_created: UserPlus,
   user_role_changed: ShieldCheck,
   user_deactivated: UserX,
+  user_reactivated: ShieldCheck,
+  user_updated: ShieldCheck,
   password_reset: KeyRound,
   password_changed: KeyRound,
   user_login: LogIn,

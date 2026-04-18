@@ -36,7 +36,11 @@ interface NewSeasonConfig {
   teraCaptainSlots: number;
   maxTeams: number;
   rosterSize: number;
+  tradeDeadlineWeek: number;
+  forfeitPolicy: 'double_forfeit' | 'admin_review';
   weekDates: Record<string, string>;
+  /** Per-league draft date (ISO datetime). Keyed by league id. */
+  draftDates: Record<string, string>;
   teamsByLeague: LeagueTeamsState[];
 }
 
@@ -51,7 +55,10 @@ function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
     teraCaptainSlots: 2,
     maxTeams: 12,
     rosterSize: 11,
+    tradeDeadlineWeek: 7,
+    forfeitPolicy: 'double_forfeit',
     weekDates: {},
+    draftDates: {},
     teamsByLeague: [],
   };
 }
@@ -125,6 +132,8 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       pointCap: config.pointCap,
       teraCaptainSlots: config.teraCaptainSlots,
       rosterSize: config.rosterSize,
+      tradeDeadlineWeek: config.tradeDeadlineWeek,
+      forfeitPolicy: config.forfeitPolicy,
       weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
       overlapOverride,
       leagues: includedList.map(l => {
@@ -138,7 +147,14 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             managerUsername: r.managerUsername.trim() || null,
             coachName: r.coachName.trim() || undefined,
           }));
-        return { id: l.id, name: l.name, color: l.color, teams };
+        const draftDate = config.draftDates[l.id]?.trim() || null;
+        return {
+          id: l.id,
+          name: l.name,
+          color: l.color,
+          draftDate: draftDate ? new Date(draftDate).toISOString() : null,
+          teams,
+        };
       }),
     };
   }
@@ -452,17 +468,43 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 ['teraCaptainSlots', 'Tera Captains', 0, 6],
                 ['maxTeams', 'Max Teams', 2, 20],
                 ['rosterSize', 'Roster Size', 6, 20],
+                ['tradeDeadlineWeek', 'Trade Deadline (week)', 1, 20],
               ] as const).map(([key, label, min, max]) => (
                 <div key={key} className="space-y-1">
                   <label className="text-xs text-text-muted">{label}</label>
                   <NumberInput
-                    value={config[key]}
+                    value={config[key] as number}
                     onChange={v => setConfig(p => ({ ...p, [key]: v }))}
                     min={min}
                     max={max}
                   />
                 </div>
               ))}
+            </div>
+
+            {/* Forfeit policy */}
+            <div className="space-y-1">
+              <label className="text-xs text-text-muted">Forfeit Policy</label>
+              <div className="flex gap-2">
+                {([
+                  ['double_forfeit', 'Double Forfeit', 'Both teams take an L when a deadline passes'],
+                  ['admin_review', 'Admin Review', 'Match enters disputed state for manual ruling'],
+                ] as const).map(([value, label, desc]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setConfig(p => ({ ...p, forfeitPolicy: value }))}
+                    className={`flex-1 p-2.5 rounded-lg border text-left transition-colors ${
+                      config.forfeitPolicy === value
+                        ? 'border-pink bg-pink/10 text-text-primary'
+                        : 'border-border hover:border-border-default text-text-secondary'
+                    }`}
+                  >
+                    <div className="text-xs font-medium">{label}</div>
+                    <div className="text-[10px] text-text-muted mt-0.5">{desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -482,6 +524,9 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             totalWeeks={config.totalWeeks}
             weekDates={config.weekDates}
             setWeekDates={next => setConfig(p => ({ ...p, weekDates: next }))}
+            leagues={allLeagues.filter(l => l.included).map(l => ({ id: l.id, name: l.name, color: l.color }))}
+            draftDates={config.draftDates}
+            setDraftDates={next => setConfig(p => ({ ...p, draftDates: next }))}
           />
         )}
 

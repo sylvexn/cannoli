@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
+import { Badge } from '@/components/ui/badge';
 import { AdminUsers } from './admin-users';
 import { AdminLeagues } from './admin-leagues';
 import { AdminTrades } from './admin-trades';
@@ -76,6 +78,15 @@ const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 export function AdminPage() {
   const [searchParams] = useSearchParams();
   const [activeId, setActiveId] = useState('users');
+  const [mode, setMode] = useState<'live' | 'mock' | null>(null);
+
+  // Probe /api/health once on mount so admins on mock.cannoli.live get a
+  // visible reminder they aren't pointing at the live DB.
+  useEffect(() => {
+    api.getHealth()
+      .then(h => setMode(h.mode))
+      .catch(() => setMode(null));
+  }, []);
   // All collapsed except first
   const [collapsed, setCollapsed] = useState<Set<string>>(
     () => new Set(ALL_ITEMS.slice(1).map(i => i.id))
@@ -146,8 +157,22 @@ export function AdminPage() {
       {/* Sidebar nav — sticky */}
       <nav className="w-[180px] shrink-0 border-r border-border-default pr-1 pt-1 space-y-4 sticky top-4 self-start">
         <div className="pb-1">
-          <h1 className="px-3 text-lg font-mono font-bold tracking-tight uppercase">
+          <h1 className="px-3 text-lg font-mono font-bold tracking-tight uppercase flex items-center gap-2">
             <span className="text-loss">Admin</span>
+            {mode && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-[9px] font-mono uppercase tracking-wider px-1.5 py-0 h-4',
+                  mode === 'live'
+                    ? 'border-win/40 text-win bg-win/10'
+                    : 'border-draw/40 text-draw bg-draw/10',
+                )}
+                title={mode === 'live' ? 'Pointing at live DB' : 'Pointing at mock DB (mock.cannoli.live)'}
+              >
+                {mode}
+              </Badge>
+            )}
           </h1>
           <p className="px-3 text-[10px] text-text-muted">Site management</p>
         </div>
