@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { formatRelativeTime } from '@/lib/format';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
@@ -20,7 +21,39 @@ const EVENT_ICONS: Record<string, typeof Users> = {
   draft_started: Play, draft_pick: Trophy, draft_completed: Check,
   trade_proposed: ArrowLeftRight, trade_approved: Check, trade_rejected: X,
   match_reported: Swords, tera_captain_set: Star, tera_types_changed: Star,
+  pin_awarded: Trophy,
 };
+
+/**
+ * Map an event type to its category-color treatment for the activity feed.
+ * Each category gets a distinct accent so the feed reads as a stream of
+ * typed moments rather than a flat list of paragraphs.
+ */
+type EventTone = {
+  /** CSS color value used for icon tint + left border */
+  color: string;
+  /** Tailwind class fragment for icon */
+  iconClass: string;
+};
+
+const EVENT_TONES: Record<string, EventTone> = {
+  draft:  { color: '#22d3ee', iconClass: 'text-neon' },           // cyan
+  trade:  { color: '#e879f9', iconClass: 'text-pink' },           // pink secondary
+  match:  { color: '#fbbf24', iconClass: 'text-amber-400' },      // amber
+  fa:     { color: '#a78bfa', iconClass: 'text-violet-400' },     // violet (free-agent)
+  team:   { color: '#94a3b8', iconClass: 'text-text-secondary' },
+  admin:  { color: '#5c6070', iconClass: 'text-text-muted' },
+  scrim:  { color: '#a78bfa', iconClass: 'text-violet-400' },
+  pin:    { color: '#fbbf24', iconClass: 'text-amber-400' },
+};
+
+function getEventTone(event: ApiActivityEvent): EventTone {
+  // Pin events use their own tone regardless of category
+  if (event.type === 'pin_awarded' || event.type.startsWith('pin_')) {
+    return EVENT_TONES.pin;
+  }
+  return EVENT_TONES[event.category] ?? EVENT_TONES.admin;
+}
 
 // League-relevant categories for the public feed
 const FEED_CATEGORIES = new Set(['draft', 'trade', 'match', 'team']);
@@ -279,24 +312,30 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
   const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
+  const tone = getEventTone(event);
 
-  const ts = new Date(event.timestamp ?? Date.now());
-  const now = new Date();
-  const diffMs = now.getTime() - ts.getTime();
-  const diffDays = Math.floor(diffMs / 86400000);
-  const timeStr = diffDays === 0
-    ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : diffDays === 1 ? '1d ago'
-    : `${diffDays}d ago`;
+  // Strip a leading actor mention from description if present — we render
+  // actor separately as a CoachLink, so "alice did X" → "did X".
+  const trimmedDescription = useMemo(() => {
+    const desc = event.description;
+    const actor = event.actor;
+    if (!actor) return desc;
+    // Match common prefixes case-insensitively
+    const re = new RegExp(`^${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`, 'i');
+    return desc.replace(re, '');
+  }, [event.description, event.actor]);
 
   return (
-    <div className="flex items-start gap-2 px-3 py-2 hover:bg-surface-overlay/30 transition-colors overflow-hidden">
-      <Icon size={12} className="text-text-muted shrink-0 mt-0.5" />
+    <div
+      className="relative flex items-start gap-2 px-3 py-2 hover:bg-surface-overlay/30 transition-colors overflow-hidden border-l-2"
+      style={{ borderLeftColor: `${tone.color}80` }}
+    >
+      <Icon size={12} className={cn('shrink-0 mt-0.5', tone.iconClass)} />
       <div className="flex-1 min-w-0 overflow-hidden">
-        <p className="text-[11px] text-text-secondary leading-tight truncate">
+        <p className="text-[11px] text-text-secondary leading-tight">
           <CoachLink coach={{ username: event.actor }} size="xs" />
           {' '}
-          {event.description.toLowerCase()}
+          <span className="text-text-secondary">{trimmedDescription.toLowerCase()}</span>
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">
           {league && (
@@ -304,7 +343,9 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
               {league.name.replace(' League', '')}
             </span>
           )}
-          <span className="text-[9px] text-text-muted shrink-0">{timeStr}</span>
+          <span className="text-[9px] text-text-muted shrink-0">
+            {event.timestamp ? formatRelativeTime(event.timestamp) : ''}
+          </span>
         </div>
       </div>
     </div>
