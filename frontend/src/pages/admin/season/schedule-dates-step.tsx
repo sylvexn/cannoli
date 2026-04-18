@@ -20,10 +20,17 @@ export function ScheduleDatesStep({
   totalWeeks,
   weekDates,
   setWeekDates,
+  leagues = [],
+  draftDates = {},
+  setDraftDates,
 }: {
   totalWeeks: number;
   weekDates: Record<string, string>;
   setWeekDates: (next: Record<string, string>) => void;
+  /** Included leagues — used to render per-league draft datetime pickers */
+  leagues?: { id: string; name: string; color: string }[];
+  draftDates?: Record<string, string>;
+  setDraftDates?: (next: Record<string, string>) => void;
 }) {
   const week1 = weekDates['1'] ?? '';
 
@@ -49,11 +56,46 @@ export function ScheduleDatesStep({
 
   const filledCount = Object.keys(weekDates).filter(k => weekDates[k]).length;
 
+  function setDraftDate(leagueId: string, value: string) {
+    if (!setDraftDates) return;
+    const next = { ...draftDates };
+    if (value) next[leagueId] = value;
+    else delete next[leagueId];
+    setDraftDates(next);
+  }
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-text-secondary">
         Set the date each week ends. Auto-forfeit and auto-week-advance jobs use these to fire on time.
       </p>
+
+      {/* Per-league draft datetime pickers — drives the predraft → draft auto-advance */}
+      {leagues.length > 0 && setDraftDates && (
+        <div className="rounded-lg border border-border bg-surface-overlay p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-pink shrink-0" />
+            <span className="text-xs font-medium text-text-primary">Draft dates (per league)</span>
+          </div>
+          <div className="space-y-1">
+            {leagues.map(l => (
+              <div key={l.id} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
+                <span className="text-xs text-text-primary w-32 shrink-0 truncate">{l.name}</span>
+                <input
+                  type="datetime-local"
+                  value={draftDates[l.id] ?? ''}
+                  onChange={e => setDraftDate(l.id, e.target.value)}
+                  className="flex-1 h-7 px-2 rounded border border-border bg-surface-base text-text-primary text-[11px] font-mono outline-none transition-colors focus:border-pink/60 [color-scheme:dark]"
+                />
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-text-muted">
+            Optional — leagues without a draft date won't be auto-advanced from predraft.
+          </p>
+        </div>
+      )}
 
       <div className="rounded-lg border border-border bg-surface-overlay p-3 space-y-2">
         <div className="flex items-center gap-2">

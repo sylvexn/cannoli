@@ -24,7 +24,7 @@ import { POKEMON_TYPES } from '@/lib/pokemon';
 import {
   AlertTriangle, CheckCircle2, Clock, Swords, Shield,
   ChevronDown, ChevronUp, Plus, Trash2, MoreVertical,
-  Eraser, ArrowRightLeft,
+  Eraser, ArrowRightLeft, Gavel,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
@@ -43,12 +43,15 @@ export function AdminMatches() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
 
-  // Result entry dialog
+  // Result entry dialog (covers both fresh entry and admin force-result)
   const [resultOpen, setResultOpen] = useState(false);
   const [resultMatch, setResultMatch] = useState<ApiAdminMatch | null>(null);
+  const [resultMode, setResultMode] = useState<'enter' | 'force'>('enter');
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [replayUrl, setReplayUrl] = useState('');
+  const [forceForfeit, setForceForfeit] = useState<'none' | 'home' | 'away' | 'both'>('none');
+  const [forceNote, setForceNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPokemonData, setShowPokemonData] = useState(false);
 
@@ -171,15 +174,22 @@ export function AdminMatches() {
   const disputedCount = matches.filter(m => m.status === 'disputed').length;
   const completedCount = matches.filter(m => m.status === 'completed').length;
 
-  function openResultEntry(match: ApiAdminMatch) {
+  function openResultEntry(match: ApiAdminMatch, mode: 'enter' | 'force' = 'enter') {
     setResultMatch(match);
+    setResultMode(mode);
     setHomeScore(match.homeScore ?? 0);
     setAwayScore(match.awayScore ?? 0);
     setReplayUrl(match.replayUrl ?? '');
+    setForceForfeit('none');
+    setForceNote('');
     setShowPokemonData(false);
     setHomePokemon([]);
     setAwayPokemon([]);
     setResultOpen(true);
+  }
+
+  function openForceResult(match: ApiAdminMatch) {
+    openResultEntry(match, 'force');
   }
 
   async function submitResult() {
@@ -207,13 +217,24 @@ export function AdminMatches() {
           ]
         : undefined;
 
-      await api.recordMatchResult(resultMatch.id, {
-        homeScore,
-        awayScore,
-        replayUrl: replayUrl || undefined,
-        pokemonData,
-      });
-      toast.success('Result recorded');
+      if (resultMode === 'force') {
+        await api.forceMatchResult(resultMatch.id, {
+          homeScore,
+          awayScore,
+          forfeitedBy: forceForfeit === 'none' ? null : forceForfeit,
+          note: forceNote.trim() || undefined,
+          pokemonData,
+        });
+        toast.success('Result force-recorded (audit logged)');
+      } else {
+        await api.recordMatchResult(resultMatch.id, {
+          homeScore,
+          awayScore,
+          replayUrl: replayUrl || undefined,
+          pokemonData,
+        });
+        toast.success('Result recorded');
+      }
       setResultOpen(false);
       fetchMatches();
     } catch (err: any) {
@@ -412,6 +433,12 @@ export function AdminMatches() {
                                   Move Week / Deadline
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
+                                  onClick={() => openForceResult(match)}
+                                >
+                                  <Gavel size={12} />
+                                  Force Result
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
                                   onClick={() => openVoid(match)}
                                   disabled={match.homeScore === null && match.awayScore === null && match.status === 'scheduled'}
                                 >
@@ -497,16 +524,30 @@ export function AdminMatches() {
         </div>
       )}
 
-      {/* Result Entry Dialog */}
+      {/* Result Entry Dialog (also handles admin force-result for completed matches) */}
       <Dialog open={resultOpen} onOpenChange={setResultOpen}>
         <DialogContent className={showPokemonData ? 'max-w-2xl' : 'max-w-sm'}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Swords size={16} className="text-neon" />
-              Enter Match Result
+              {resultMode === 'force' ? (
+                <>
+                  <Gavel size={16} className="text-loss" />
+                  Force Match Result
+                </>
+              ) : (
+                <>
+                  <Swords size={16} className="text-neon" />
+                  Enter Match Result
+                </>
+              )}
             </DialogTitle>
             <DialogDescription>
               {resultMatch && `${resultMatch.homeTeamId} vs ${resultMatch.awayTeamId} (Week ${resultMatch.week})`}
+              {resultMode === 'force' && resultMatch?.status === 'completed' && (
+                <span className="block mt-1 text-loss text-[10px]">
+                  Overwriting an already-completed match. Prior K/D snapshot is preserved in the activity log.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -526,15 +567,51 @@ export function AdminMatches() {
               </div>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Replay URL</label>
-              <Input
-                value={replayUrl}
-                onChange={e => setReplayUrl(e.target.value)}
-                placeholder="https://replay.pokemonshowdown.com/..."
-                className="h-8 text-xs bg-surface-overlay"
-              />
+            {/* Winner reminder */}
+            <div className="text-[10px] text-text-muted">
+              Winner: <span className="text-text-primary font-medium">
+                {homeScore === awayScore ? 'Tie' :
+                  homeScore > awayScore ? resultMatch?.homeTeamId : resultMatch?.awayTeamId}
+              </span>
             </div>
+
+            {resultMode === 'force' ? (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Forfeit</label>
+                  <Select value={forceForfeit} onValueChange={(v) => setForceForfeit((v as typeof forceForfeit) ?? 'none')}>
+                    <SelectTrigger className="h-8 text-xs bg-surface-overlay">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">No forfeit</SelectItem>
+                      <SelectItem value="home" className="text-xs">Home forfeited</SelectItem>
+                      <SelectItem value="away" className="text-xs">Away forfeited</SelectItem>
+                      <SelectItem value="both" className="text-xs">Double forfeit</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Reason / note (audit log)</label>
+                  <Input
+                    value={forceNote}
+                    onChange={e => setForceNote(e.target.value)}
+                    placeholder="e.g. dispute resolved in home team's favor"
+                    className="h-8 text-xs bg-surface-overlay"
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Replay URL</label>
+                <Input
+                  value={replayUrl}
+                  onChange={e => setReplayUrl(e.target.value)}
+                  placeholder="https://replay.pokemonshowdown.com/..."
+                  className="h-8 text-xs bg-surface-overlay"
+                />
+              </div>
+            )}
 
             {/* Pokemon K/D toggle */}
             <button
@@ -574,10 +651,16 @@ export function AdminMatches() {
             <Button variant="outline" onClick={() => setResultOpen(false)}>Cancel</Button>
             <Button
               disabled={submitting}
-              className="bg-neon text-surface-base hover:bg-neon/90"
+              className={resultMode === 'force'
+                ? 'bg-loss text-surface-base hover:bg-loss/90'
+                : 'bg-neon text-surface-base hover:bg-neon/90'}
               onClick={submitResult}
             >
-              {submitting ? 'Saving...' : 'Save Result'}
+              {submitting
+                ? 'Saving...'
+                : resultMode === 'force'
+                  ? 'Force Result'
+                  : 'Save Result'}
             </Button>
           </DialogFooter>
         </DialogContent>

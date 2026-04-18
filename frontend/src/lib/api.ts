@@ -69,6 +69,7 @@ export interface ApiLeague {
   color: string;
   draftDate?: string | null;
   draftOrder?: string[] | null;
+  playoffTeamCount?: number;
   season: {
     id: string;
     seasonNumber: number;
@@ -81,6 +82,7 @@ export interface ApiLeague {
     rosterSize: number;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     paused?: boolean;
+    archived?: boolean;
     weekDates?: Record<string, string> | null;
   } | null;
 }
@@ -441,6 +443,7 @@ export const api = {
     phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
     currentWeek: number;
     totalWeeks: number;
+    archived?: boolean;
   }[]>('/api/seasons'),
 
   getSeasonLeagues: (seasonId: number) => fetchJson<{
@@ -532,11 +535,27 @@ export const api = {
   updateLeague: (id: string, data: Record<string, unknown>) =>
     putJson<{ success: boolean }>(`/api/leagues/${id}`, data),
 
-  deleteLeague: (id: string) =>
-    deleteJson<{ success: boolean }>(`/api/leagues/${id}`),
+  deleteLeague: (id: string, opts?: { force?: boolean; confirmName?: string }) => {
+    const q = opts?.force ? '?force=1' : '';
+    return mutateJson<{ success: boolean }>(
+      'DELETE',
+      `/api/leagues/${id}${q}`,
+      opts?.confirmName ? { confirmName: opts.confirmName } : undefined,
+    );
+  },
 
-  advancePhase: (leagueId: string, phase: string) =>
-    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase }),
+  advancePhase: (leagueId: string, phase: string, opts?: { override?: boolean; confirm?: string }) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase, ...opts }),
+
+  generatePlayoffs: (leagueId: string, opts?: { topN?: number }) =>
+    postJson<{
+      success: boolean;
+      matchCount: number;
+      seedings: { seed: number; teamId: string }[];
+    }>(`/api/leagues/${leagueId}/playoffs/generate`, opts ?? {}),
+
+  archiveSeason: (seasonId: number, archived: boolean) =>
+    putJson<{ success: boolean }>(`/api/seasons/${seasonId}/archived`, { archived }),
 
   advanceWeek: (leagueId: string) =>
     postJson<{ success: boolean; week: number }>(`/api/leagues/${leagueId}/week`),
@@ -645,12 +664,26 @@ export const api = {
   getPublicProfile: (username: string) =>
     fetchJson<ApiPublicProfile>(`/api/users/${encodeURIComponent(username)}`),
 
+  // Health probe (used by admin shell to surface live/mock badge)
+  getHealth: () => fetchJson<{
+    status: 'ok' | 'degraded';
+    mode: 'live' | 'mock';
+    db: 'connected' | 'disconnected';
+    uptime: number;
+  }>('/api/health'),
+
   // PS Bot
   getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
 
   runJob: (name: string) => postJson<{ success: boolean }>(`/api/admin/jobs/${name}/run`),
 
-  forceMatchResult: (matchId: string, data: { homeScore: number; awayScore: number; forfeitedBy?: 'home' | 'away' | 'both' | null; note?: string }) =>
+  forceMatchResult: (matchId: string, data: {
+    homeScore: number;
+    awayScore: number;
+    forfeitedBy?: 'home' | 'away' | 'both' | null;
+    note?: string;
+    pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
+  }) =>
     postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
 
   // Team logo

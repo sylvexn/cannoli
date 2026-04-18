@@ -40,6 +40,12 @@ export const seasons = sqliteTable('seasons', {
   pointCap: integer('point_cap').notNull().default(110),
   teraCaptainSlots: integer('tera_captain_slots').notNull().default(2),
   scheduleType: text('schedule_type', { enum: ['round_robin', 'manual'] }).default('round_robin'),
+  /** Marks a season as historical/read-only. Distinct from `phase = offseason`
+   *  on the leagues row: offseason just means "no active matches", whereas
+   *  archived means "writes targeting this season require explicit ?force=1".
+   *  Tier-list edits are also blocked for any league belonging to an
+   *  archived season. */
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 });
 
 // ─── Leagues ─────────────────────────────────────────────────────────────────

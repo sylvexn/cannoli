@@ -129,6 +129,7 @@ export interface LeagueSeason {
   tradeDeadlineWeek: number;
   forfeitPolicy?: 'double_forfeit' | 'admin_review';
   paused?: boolean;
+  archived?: boolean;
   weekDates?: Record<string, string> | null;
 }
 
@@ -155,6 +156,8 @@ export interface League {
   name: string;
   color: string;
   draftDate?: string | null;
+  /** Bracket size for this league's playoffs (2/4/6/8). Per-league. */
+  playoffTeamCount?: number;
   season: LeagueSeason;
   players: Player[];
   hasData: boolean;

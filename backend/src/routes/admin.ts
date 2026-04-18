@@ -61,10 +61,13 @@ export const adminRoutes = new Elysia()
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { homeScore, awayScore, forfeitedBy, note } = body as {
+    const { homeScore, awayScore, forfeitedBy, note, pokemonData } = body as {
       homeScore: number; awayScore: number;
       forfeitedBy?: 'home' | 'away' | 'both' | null;
       note?: string;
+      /** Optional K/D rewrite — if provided, replaces existing match_pokemon
+       *  rows for this match. Snapshot of prior rows still goes to activity log. */
+      pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
     };
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
@@ -89,6 +92,24 @@ export const adminRoutes = new Elysia()
         warnings: null,
       }).where(eq(schema.matches.id, params.matchId)).run();
 
+      // Replace per-Pokemon K/D when caller supplies it. Otherwise leave the
+      // existing rows untouched (admins can adjust scores without rewriting K/D).
+      if (pokemonData && Array.isArray(pokemonData)) {
+        db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.matchId, params.matchId)).run();
+        for (const p of pokemonData) {
+          if (!p.pokemonName?.trim() || !p.teamId?.trim()) continue;
+          db.insert(schema.matchPokemon).values({
+            matchId: params.matchId,
+            teamId: p.teamId,
+            pokemonName: p.pokemonName.trim(),
+            kills: p.kills ?? 0,
+            deaths: p.deaths ?? 0,
+            teraUsed: !!p.teraUsed,
+            teraType: p.teraType ?? null,
+          }).run();
+        }
+      }
+
       if (isOverwrite) {
         db.insert(schema.activityLog).values({
           type: 'match_result_overwritten',
@@ -99,7 +120,7 @@ export const adminRoutes = new Elysia()
           metadata: JSON.stringify({
             matchId: params.matchId,
             previous: priorPokemon,
-            new: [],
+            new: pokemonData ?? [],
             priorScore: { home: match.homeScore, away: match.awayScore },
             newScore: { home: homeScore, away: awayScore },
             by: user.username,
@@ -113,7 +134,7 @@ export const adminRoutes = new Elysia()
         actor: user.username,
         leagueId: match.leagueId,
         description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${note ? ' — ' + note : ''}`,
-        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note }),
+        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note, pokemonRewritten: !!pokemonData }),
       }).run();
     });
 
@@ -193,13 +214,28 @@ export const adminRoutes = new Elysia()
 
     const settings = db.select().from(schema.siteSettings).get();
     const password = settings?.defaultUserPassword || 'password';
-    const result = db.insert(schema.users).values({
-      username: username.trim().toLowerCase(),
-      passwordHash: hashPassword(password),
-      role: (role === 'admin' ? 'admin' : 'user') as 'admin' | 'user',
-      mustChangePassword: true,
-      active: true,
-    }).returning().get();
+    const result = tx(() => {
+      const row = db.insert(schema.users).values({
+        username: username.trim().toLowerCase(),
+        passwordHash: hashPassword(password),
+        role: (role === 'admin' ? 'admin' : 'user') as 'admin' | 'user',
+        mustChangePassword: true,
+        active: true,
+      }).returning().get();
+
+      // Emit a user_created activity row so the audit feed has the canonical
+      // event the UI's icon list expects (admin-activity-log.tsx).
+      db.insert(schema.activityLog).values({
+        type: 'user_created',
+        category: 'admin',
+        actor: user.username,
+        leagueId: null,
+        description: `Created user "${row.username}" (${row.role})`,
+        metadata: JSON.stringify({ userId: row.id, username: row.username, role: row.role }),
+      }).run();
+
+      return row;
+    });
 
     return { user: { id: String(result.id), username: result.username, role: result.role }, password };
   })
@@ -209,21 +245,61 @@ export const adminRoutes = new Elysia()
     const userId = parseInt(params.id);
     const { role, active } = body as { role?: string; active?: boolean };
 
+    const before = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+    if (!before) { set.status = 404; return { error: 'User not found' }; }
+
     const updates: Record<string, unknown> = {};
     if (role !== undefined) updates.role = role;
     if (active !== undefined) updates.active = active;
 
     if (Object.keys(updates).length === 0) { set.status = 400; return { error: 'No updates' }; }
 
-    db.update(schema.users).set(updates).where(eq(schema.users.id, userId)).run();
-    db.insert(schema.activityLog).values({
-      type: 'user_updated',
-      category: 'admin',
-      actor: user.username,
-      leagueId: null,
-      description: `Updated user #${userId}: ${Object.keys(updates).join(', ')}`,
-      metadata: JSON.stringify({ userId, updates }),
-    }).run();
+    tx(() => {
+      db.update(schema.users).set(updates).where(eq(schema.users.id, userId)).run();
+
+      // Emit specific event types per change so the audit UI can render meaningful
+      // icons. A single PUT can flip multiple fields → emit one row per detected
+      // change. Falls back to user_updated for anything else.
+      const events: { type: string; description: string; metadata: Record<string, unknown> }[] = [];
+
+      if (role !== undefined && role !== before.role) {
+        events.push({
+          type: 'user_role_changed',
+          description: `Changed role of "${before.username}": ${before.role} → ${role}`,
+          metadata: { userId, username: before.username, from: before.role, to: role },
+        });
+      }
+      if (active !== undefined && active !== before.active) {
+        events.push({
+          type: active ? 'user_reactivated' : 'user_deactivated',
+          description: active
+            ? `Reactivated user "${before.username}"`
+            : `Deactivated user "${before.username}"`,
+          metadata: { userId, username: before.username, active },
+        });
+      }
+
+      // If nothing specific matched (e.g. a no-op write), keep the legacy event
+      // so something still lands in the log.
+      if (events.length === 0) {
+        events.push({
+          type: 'user_updated',
+          description: `Updated user "${before.username}": ${Object.keys(updates).join(', ')}`,
+          metadata: { userId, updates },
+        });
+      }
+
+      for (const ev of events) {
+        db.insert(schema.activityLog).values({
+          type: ev.type,
+          category: 'admin',
+          actor: user.username,
+          leagueId: null,
+          description: ev.description,
+          metadata: JSON.stringify(ev.metadata),
+        }).run();
+      }
+    });
     return { success: true };
   })
 
@@ -287,12 +363,17 @@ export const adminRoutes = new Elysia()
     // mid-draft tier move silently shifts point math for picks made after the
     // edit. 'draft' is included alongside regular/playoffs to surface the
     // risk to admins instead of letting it through.
+    //
+    // Archived-season leagues count as locked too, even at offseason phase —
+    // historical seasons should be read-only so old standings/rosters stay
+    // referentially valid.
     const activeLeagues = db.select({
       id: schema.leagues.id,
       name: schema.leagues.name,
       phase: schema.leagues.phase,
     }).from(schema.leagues)
-      .where(sql`${schema.leagues.phase} IN ('draft', 'regular', 'playoffs')`)
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(sql`${schema.leagues.phase} IN ('draft', 'regular', 'playoffs') OR ${schema.seasons.archived} = 1`)
       .all();
 
     if (activeLeagues.length > 0) {
@@ -938,12 +1019,30 @@ export const adminRoutes = new Elysia()
     return { id };
   })
 
-  .put('/api/leagues/:leagueId', ({ params, body, user, set }) => {
+  .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek, weekDates, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy } = body as Record<string, unknown>;
+    const {
+      name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
+      weekDates, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
+      playoffTeamCount,
+    } = body as Record<string, unknown>;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    // Archived seasons are read-only by default. Writes to a league belonging
+    // to an archived season require ?force=1 (mirrors the schedule-regen and
+    // delete-league guards).
+    const force = query.force === '1' || query.force === 'true';
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
+    if (season?.archived && !force) {
+      set.status = 409;
+      return {
+        error: `Season ${season.seasonNumber} is archived — pass ?force=1 to edit`,
+        code: 'season_archived',
+        seasonNumber: season.seasonNumber,
+      };
+    }
 
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
@@ -953,6 +1052,23 @@ export const adminRoutes = new Elysia()
     if (weekDates !== undefined) leagueUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
     if (paused !== undefined) leagueUpdates.paused = !!paused;
     if (forfeitPolicy !== undefined) leagueUpdates.forfeitPolicy = forfeitPolicy;
+    if (playoffTeamCount !== undefined) {
+      const n = Number(playoffTeamCount);
+      if (![2, 4, 6, 8].includes(n)) {
+        set.status = 400; return { error: 'playoffTeamCount must be one of 2, 4, 6, 8' };
+      }
+      // Lock once the bracket has been generated (any playoff matches exist),
+      // otherwise editing here silently desyncs from the actual bracket.
+      const playoffMatches = db.select({ c: sql<number>`COUNT(*)` })
+        .from(schema.matches)
+        .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'playoffs')))
+        .get()?.c ?? 0;
+      if (playoffMatches > 0) {
+        set.status = 400;
+        return { error: 'Cannot change bracket size after playoffs have been generated', code: 'playoffs_locked' };
+      }
+      leagueUpdates.playoffTeamCount = n;
+    }
 
     // Phase-aware locks (phase now lives on the league row)
     const draftStarted = !!db.select().from(schema.draftState)
@@ -1005,10 +1121,36 @@ export const adminRoutes = new Elysia()
     return { success: true };
   })
 
-  .delete('/api/leagues/:leagueId', ({ params, user, set }) => {
+  .delete('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    // Phase-aware destructive guard. A league mid-regular-season or in-playoffs
+    // has live trades, match results, standings — silent deletion would wipe
+    // all of that. Require ?force=1 + a typed-name confirm body, mirroring the
+    // schedule-regen pattern.
+    const force = query.force === '1' || query.force === 'true';
+    const isLive = league.phase === 'regular' || league.phase === 'playoffs';
+    if (isLive) {
+      const confirmName = (body as Record<string, unknown> | null)?.confirmName;
+      if (!force) {
+        set.status = 409;
+        return {
+          error: `League is in ${league.phase} phase — pass ?force=1 and { confirmName: "${league.name}" } to delete`,
+          code: 'league_active',
+          phase: league.phase,
+        };
+      }
+      if (typeof confirmName !== 'string' || confirmName.trim() !== league.name) {
+        set.status = 409;
+        return {
+          error: `Force-delete requires confirmName to exactly match league name "${league.name}"`,
+          code: 'league_confirm_required',
+          phase: league.phase,
+        };
+      }
+    }
 
     tx(() => {
       const teamIds = db.select({ id: schema.teams.id }).from(schema.teams)
@@ -1034,8 +1176,40 @@ export const adminRoutes = new Elysia()
         category: 'admin',
         actor: user.username,
         leagueId: null,
-        description: `Deleted league ${league.name}`,
-        metadata: JSON.stringify({ leagueId: params.leagueId }),
+        description: isLive
+          ? `FORCE-DELETED league ${league.name} (phase: ${league.phase})`
+          : `Deleted league ${league.name}`,
+        metadata: JSON.stringify({ leagueId: params.leagueId, phase: league.phase, forced: isLive }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
+  // ─── Season archive toggle ──────────────────────────────────────────
+
+  .put('/api/seasons/:seasonId/archived', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const seasonId = parseInt(params.seasonId);
+    if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
+    const { archived } = body as { archived?: boolean };
+    if (typeof archived !== 'boolean') {
+      set.status = 400; return { error: 'archived (boolean) required' };
+    }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
+    if (!season) { set.status = 404; return { error: 'Season not found' }; }
+
+    tx(() => {
+      db.update(schema.seasons).set({ archived }).where(eq(schema.seasons.id, seasonId)).run();
+      db.insert(schema.activityLog).values({
+        type: archived ? 'season_archived' : 'season_unarchived',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: archived
+          ? `Archived Season ${season.seasonNumber} (writes now require force)`
+          : `Un-archived Season ${season.seasonNumber}`,
+        metadata: JSON.stringify({ seasonId, seasonNumber: season.seasonNumber, archived }),
       }).run();
     });
 
@@ -1046,13 +1220,35 @@ export const adminRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const { phase, override } = body as { phase: string; override?: boolean };
+    const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     // Phase now lives on the league — advancing one league no longer drags
     // the others in the same season along with it.
     const previousPhase = league.phase;
+
+    // ─── Monotonic guard ─────────────────────────────────────────────────
+    // Forward transitions (predraft → draft → regular → playoffs → offseason)
+    // are one-click. Backward transitions are destructive (e.g. playoffs → regular
+    // re-opens trade/FA gates, demotes brackets to draft state, etc.) so they
+    // must be explicitly acknowledged with `{ override: true, confirm: 'I understand' }`.
+    const phaseRank: Record<string, number> = {
+      predraft: 0, draft: 1, regular: 2, playoffs: 3, offseason: 4,
+    };
+    const fromRank = phaseRank[previousPhase] ?? -1;
+    const toRank = phaseRank[phase] ?? -1;
+    if (toRank < fromRank && previousPhase !== phase) {
+      if (!override || confirm !== 'I understand') {
+        set.status = 409;
+        return {
+          error: `Backward phase transition (${previousPhase} → ${phase}) requires explicit override`,
+          code: 'phase_backward_requires_override',
+          from: previousPhase,
+          to: phase,
+        };
+      }
+    }
 
     // ─── Phase transition preconditions ────────────────────────────────
     const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all();
@@ -1126,13 +1322,16 @@ export const adminRoutes = new Elysia()
         pinsAwarded = summary.awarded.length;
       }
 
+      const isBackward = toRank < fromRank;
       db.insert(schema.activityLog).values({
-        type: 'phase_advanced',
+        type: isBackward ? 'phase_reverted' : 'phase_advanced',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
-        description: `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
-        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, scheduleGenerated, pinsAwarded }),
+        description: isBackward
+          ? `REVERTED phase: ${previousPhase} → ${phase} (override)`
+          : `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated, pinsAwarded }),
       }).run();
     });
 
