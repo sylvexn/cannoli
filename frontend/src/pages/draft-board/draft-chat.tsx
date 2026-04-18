@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
+import { CoachLink } from '@/components/coach-link';
 
 interface ChatMessage {
   username: string;
@@ -109,7 +110,7 @@ export function DraftChat({ ws, username }: DraftChatProps) {
             )}
             {messages.map((msg, i) => (
               <div key={i} className="text-xs leading-snug">
-                <span className="font-semibold text-accent-primary">{msg.username}</span>
+                <CoachLink coach={{ username: msg.username }} size="xs" />
                 <span className="text-text-muted mx-1">:</span>
                 <span className="text-text-primary break-words">{msg.message}</span>
               </div>
