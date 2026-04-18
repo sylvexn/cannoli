@@ -64,14 +64,14 @@ export function ReplaysPage() {
     setLoading(true);
     Promise.all(
       leagues.map(async (league) => {
-        const [matches, teams] = await Promise.all([
-          api.getSchedule(league.id).catch(() => [] as ApiMatch[]),
+        const [schedule, teams] = await Promise.all([
+          api.getSchedule(league.id).catch(() => ({ matches: [] as ApiMatch[], byes: [] })),
           api.getTeams(league.id).catch(() => [] as ApiTeam[]),
         ]);
 
         const teamMap = new Map(teams.map(t => [t.id, t]));
 
-        return matches
+        return schedule.matches
           .filter(m => m.replayUrl && m.replayUrl !== '#')
           .map(m => ({
             match: m,

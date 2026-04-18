@@ -15,7 +15,7 @@ type ScheduleView = 'regular' | 'playoffs';
 
 export function SchedulePage() {
   const league = useLeague();
-  const { players, matches, getWeekMatches, loading } = useLeagueData();
+  const { players, matches, byes, getWeekMatches, loading } = useLeagueData();
   const season = league.season;
 
   const hasPlayoffs = useMemo(
@@ -43,6 +43,15 @@ export function SchedulePage() {
   const weekMatches = useMemo(
     () => getWeekMatches(selectedWeek).filter(m => m.phase !== 'playoffs'),
     [getWeekMatches, selectedWeek],
+  );
+
+  /** Teams sitting out the selected week (only populated for odd-team leagues). */
+  const weekByes = useMemo(
+    () => byes
+      .filter(b => b.week === selectedWeek)
+      .map(b => playerMap.get(b.teamId))
+      .filter((p): p is NonNullable<typeof p> => !!p),
+    [byes, selectedWeek, playerMap],
   );
 
   useEffect(() => {
@@ -146,6 +155,19 @@ export function SchedulePage() {
               return <MatchCard key={match.id} match={match} homePlayer={home} awayPlayer={away} />;
             })}
           </div>
+
+          {weekByes.length > 0 && (
+            <div className="rounded-md border border-dashed border-border-subtle px-3 py-2 flex items-center gap-3 text-xs">
+              <span className="font-mono uppercase tracking-widest text-text-muted/70">Bye</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {weekByes.map(team => (
+                  <span key={team.id} className="inline-flex items-center gap-1.5 text-text-secondary">
+                    <span className="font-medium">{team.teamAbbrev}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <AvailabilityPanel selectedWeek={selectedWeek} />
         </>
