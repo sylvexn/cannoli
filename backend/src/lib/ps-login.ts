@@ -113,7 +113,7 @@ export function validatePsSid(sidCookieValue: string): string | null {
 }
 
 /**
- * Destroy a PS session.
+ * Destroy a PS session by sid cookie value.
  */
 export function destroyPsSession(sidCookieValue: string) {
   if (!sidCookieValue) return;
@@ -121,6 +121,18 @@ export function destroyPsSession(sidCookieValue: string) {
   if (parts.length >= 2) {
     psSessions.delete(parts[1]);
   }
+}
+
+/**
+ * Delete a PS session given the raw Cookie header (server-side invalidation
+ * on logout). Mirrors `deleteSession` for the app session — without this, the
+ * sid stays valid in our in-memory map until expiry, so a stolen cookie keeps
+ * authenticating to sim.cannoli.live even after the user logs out of the
+ * main app.
+ */
+export function deletePsSessionFromCookie(cookieHeader: string | undefined) {
+  const sid = parsePsSid(cookieHeader);
+  if (sid) destroyPsSession(sid);
 }
 
 /**

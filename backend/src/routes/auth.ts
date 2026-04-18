@@ -7,7 +7,7 @@ import {
   sessionCookieString, clearSessionCookieString,
   csrfTokenForSession, csrfCookieString, clearCsrfCookieString,
 } from '../lib/auth';
-import { createPsSession, psSidCookieString, clearPsSidCookieString } from '../lib/ps-login';
+import { createPsSession, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie } from '../lib/ps-login';
 
 // ─── Login rate limiter ─────────────────────────────────────────────────────
 // In-memory, per-IP. Max 5 failed attempts per 15-minute window; once
@@ -128,8 +128,13 @@ export const authRoutes = new Elysia()
     }), { headers });
   })
 
-  .post('/api/auth/logout', ({ sessionToken }) => {
+  .post('/api/auth/logout', ({ sessionToken, request }) => {
     if (sessionToken) deleteSession(sessionToken);
+
+    // Server-side PS session invalidation. Without this the sid cookie is
+    // cleared client-side but the in-memory PS session keeps validating
+    // until expiry — meaning a captured cookie remains useful indefinitely.
+    deletePsSessionFromCookie(request.headers.get('cookie') ?? undefined);
 
     const headers = new Headers();
     headers.append('Content-Type', 'application/json');
