@@ -7,9 +7,10 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, Zap } from 'lucide-react';
+import { ChevronDown, ExternalLink, Zap, Swords } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
+import { useLeague } from '@/lib/league-context';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 
@@ -22,6 +23,7 @@ interface MatchCardProps {
 
 export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const leagueUrl = useLeagueUrl();
+  const league = useLeague();
   const [expanded, setExpanded] = useState(false);
   const isCompleted = match.homeScore !== undefined;
   const homeWon = isCompleted && (match.homeScore ?? 0) > (match.awayScore ?? 0);
@@ -99,8 +101,16 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
           <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
         </Link>
 
-        {/* Expand / replay indicators */}
-        <div className="flex items-center gap-1 shrink-0 w-8 justify-end">
+        {/* Expand / replay / scout indicators */}
+        <div className="flex items-center gap-1 shrink-0 justify-end">
+          <Link
+            to={`/matchup?leagueId=${league.id}&teamA=${homePlayer.id}&teamB=${awayPlayer.id}`}
+            onClick={e => e.stopPropagation()}
+            title="Scout this matchup"
+            className="text-text-muted hover:text-neon transition-colors p-1"
+          >
+            <Swords className="w-3.5 h-3.5" />
+          </Link>
           {isCompleted && match.replayUrl && match.replayUrl !== '#' && (
             <a
               href={match.replayUrl}

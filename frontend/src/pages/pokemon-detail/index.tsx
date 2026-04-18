@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -16,7 +16,18 @@ import type { PokemonType } from '@/lib/pokemon';
 
 export function PokemonDetailPage() {
   const { name } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const decodedName = name ? decodeURIComponent(name) : '';
+
+  function handleBack() {
+    // If we have a real history stack, go back. Otherwise, fall back to the
+    // tier list (the closest "browse all Pokemon" surface).
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/tiers');
+    }
+  }
 
   const pokeData = decodedName ? getPokemonData(decodedName) : undefined;
   const tierEntry = decodedName ? getTierEntry(decodedName) : undefined;
@@ -40,7 +51,7 @@ export function PokemonDetailPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Back link */}
-      <button onClick={() => window.history.back()} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-neon transition-colors">
+      <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-neon transition-colors">
         <ArrowLeft size={14} /> Back
       </button>
 

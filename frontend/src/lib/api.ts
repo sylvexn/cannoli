@@ -112,7 +112,8 @@ export interface ApiTeam {
   /** True once the team has saved a full captain set during the post-draft
    *  captain gate. League advances to phase=regular once every team is locked. */
   captainsLocked?: boolean;
-  record: { wins: number; losses: number; differential: number };
+  record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+  tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: ApiRosterPokemon[];
 }
 

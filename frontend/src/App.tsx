@@ -12,6 +12,9 @@ import { PageLoadingSpinner } from '@/components/skeletons';
 import { LoginPage } from '@/pages/login';
 import { ChangePasswordPage } from '@/pages/change-password';
 import { LeagueOverviewPage } from '@/pages/league-overview';
+import { MePage } from '@/pages/me';
+import { RulesPage } from '@/pages/rules';
+import { TierListPage } from '@/pages/tier-list';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
@@ -71,9 +74,12 @@ export default function App() {
               <Route path="showdown" element={<ShowdownPage />} />
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="archive" element={<ArchivePage />} />
+              <Route path="rules" element={<RulesPage />} />
+              <Route path="tiers" element={<TierListPage />} />
 
               {/* Protected global routes */}
               <Route element={<ProtectedRoute />}>
+                <Route path="me" element={<MePage />} />
                 <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>

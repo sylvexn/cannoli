@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { useMatchupState } from './use-matchup-state';
@@ -9,6 +10,11 @@ import { TypeChartTab } from './tabs/typechart-tab';
 import { StatsTab } from './tabs/stats-tab';
 import { SpeedTab } from './tabs/speed-tab';
 import { MovesTab } from './tabs/moves-tab';
+import { useAuth } from '@/lib/auth-context';
+import { useAppData } from '@/lib/app-data-context';
+import { api } from '@/lib/api';
+import type { RosterPokemon } from '@/lib/types';
+import type { PokemonType } from '@/lib/pokemon';
 import {
   LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
 } from 'lucide-react';
@@ -17,6 +23,73 @@ import type { MatchupTab } from './use-matchup-state';
 export function MatchupCenterPage() {
   const { state, dispatch, activeTeamA, activeTeamB } = useMatchupState();
   const speedInitRef = useRef(false);
+  const { user } = useAuth();
+  const { leagues } = useAppData();
+  const [searchParams] = useSearchParams();
+  const initRef = useRef(false);
+
+  // Auto-populate team A with the user's team (and B from deep-link).
+  // Only runs once per mount — manual changes via TeamPicker won't be overridden.
+  useEffect(() => {
+    if (initRef.current) return;
+    if (leagues.length === 0) return;
+    initRef.current = true;
+
+    const paramLeagueId = searchParams.get('leagueId');
+    const paramTeamA = searchParams.get('teamA');
+    const paramTeamB = searchParams.get('teamB');
+
+    (async () => {
+      // Resolve team A
+      let teamAResolved = false;
+      if (paramLeagueId && paramTeamA) {
+        const league = leagues.find(l => l.id === paramLeagueId);
+        if (league) {
+          const teams = await api.getTeams(league.id).catch(() => []);
+          const team = teams.find(t => t.id === paramTeamA);
+          if (team) {
+            dispatch({
+              type: 'SET_TEAM_A',
+              roster: rosterFromApi(team.roster),
+              source: { type: 'league', leagueId: league.id, teamId: team.id, label: `${team.teamName} (${league.name.replace(' League', '')})` },
+            });
+            teamAResolved = true;
+          }
+        }
+      }
+      // Fallback: find user's own team in any league
+      if (!teamAResolved && user) {
+        for (const league of leagues) {
+          const teams = await api.getTeams(league.id).catch(() => []);
+          const team = teams.find(t => t.userId != null && String(t.userId) === user.id);
+          if (team) {
+            dispatch({
+              type: 'SET_TEAM_A',
+              roster: rosterFromApi(team.roster),
+              source: { type: 'league', leagueId: league.id, teamId: team.id, label: `${team.teamName} (${league.name.replace(' League', '')})` },
+            });
+            break;
+          }
+        }
+      }
+
+      // Resolve team B from deep-link
+      if (paramLeagueId && paramTeamB) {
+        const league = leagues.find(l => l.id === paramLeagueId);
+        if (league) {
+          const teams = await api.getTeams(league.id).catch(() => []);
+          const team = teams.find(t => t.id === paramTeamB);
+          if (team) {
+            dispatch({
+              type: 'SET_TEAM_B',
+              roster: rosterFromApi(team.roster),
+              source: { type: 'league', leagueId: league.id, teamId: team.id, label: `${team.teamName} (${league.name.replace(' League', '')})` },
+            });
+          }
+        }
+      }
+    })();
+  }, [leagues, searchParams, user, dispatch]);
 
   // Preload sprites for both teams
   useEffect(() => {
@@ -144,4 +217,18 @@ export function MatchupCenterPage() {
       </Tabs>
     </div>
   );
+}
+
+function rosterFromApi(roster: { name: string; types: string[]; tier: number; isTeraCaptain: boolean; teraTypes?: string[]; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } | null; abilities: string[]; seasonStats: { kills: number; deaths: number; gp: number }; isShiny?: boolean }[]): RosterPokemon[] {
+  return roster.map(r => ({
+    name: r.name,
+    types: r.types as PokemonType[],
+    tier: r.tier,
+    isTeraCaptain: r.isTeraCaptain,
+    teraTypes: r.teraTypes as PokemonType[] | undefined,
+    stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    abilities: r.abilities,
+    seasonStats: r.seasonStats,
+    isShiny: r.isShiny,
+  }));
 }

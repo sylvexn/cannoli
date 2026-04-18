@@ -51,7 +51,9 @@ export interface Player {
   owner?: CoachOwner | null;
   /** Set after the team locks its tera captains during the post-draft gate. */
   captainsLocked?: boolean;
-  record: { wins: number; losses: number; differential: number };
+  record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+  /** Set when this player is in a tied wins-bucket — describes which rule resolved their order. */
+  tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: RosterPokemon[];
 }
 
@@ -156,8 +158,8 @@ export interface League {
   name: string;
   color: string;
   draftDate?: string | null;
-  /** Bracket size for this league's playoffs (2/4/6/8). Per-league. */
-  playoffTeamCount?: number;
+  /** Configurable bracket size for this league's playoffs (2/4/6/8). Per-league. */
+  playoffTeamCount: number;
   season: LeagueSeason;
   players: Player[];
   hasData: boolean;
