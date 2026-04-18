@@ -5,6 +5,7 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { effectiveCost } from '../lib/tera-cost';
 import { computeStandings, type TeamStandingRow } from '../lib/standings';
+import { generateLeagueSchedule } from '../lib/schedule-generator';
 
 export const leagueRoutes = new Elysia()
 
@@ -692,13 +693,23 @@ export const leagueRoutes = new Elysia()
             .where(eq(schema.leagues.id, team.leagueId))
             .run();
           phaseAdvanced = true;
+          // Auto-generate schedule on draft → regular transition. Without this
+          // the league lands in regular phase with currentWeek=1 but zero
+          // matches, and the admin has to manually re-trigger phase advance.
+          const scheduleResult = generateLeagueSchedule(team.leagueId);
           db.insert(schema.activityLog).values({
             type: 'league_phase_advanced',
             category: 'config',
             actor: 'system',
             leagueId: team.leagueId,
             description: `${league!.name} advanced from draft → regular (all captains locked)`,
-            metadata: JSON.stringify({ leagueId: team.leagueId, fromPhase: 'draft', toPhase: 'regular' }),
+            metadata: JSON.stringify({
+              leagueId: team.leagueId,
+              fromPhase: 'draft',
+              toPhase: 'regular',
+              scheduleGenerated: scheduleResult.success,
+              matchCount: scheduleResult.matchCount,
+            }),
           }).run();
         }
       }
