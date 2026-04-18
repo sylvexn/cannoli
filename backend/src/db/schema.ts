@@ -206,6 +206,15 @@ export const matches = sqliteTable('matches', {
   forfeitedBy: text('forfeited_by', { enum: ['home', 'away', 'both'] }),
 });
 
+// ─── Bye Weeks (one row per team-week sit-out for odd-team leagues) ─────────
+
+export const byeWeeks = sqliteTable('bye_weeks', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  leagueId: text('league_id').notNull().references(() => leagues.id),
+  week: integer('week').notNull(),
+  teamId: text('team_id').notNull().references(() => teams.id),
+});
+
 // ─── Match Pokemon (per-match K/D for each Pokemon) ─────────────────────────
 
 export const matchPokemon = sqliteTable('match_pokemon', {

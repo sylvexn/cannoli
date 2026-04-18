@@ -70,7 +70,7 @@ export function TeamProfilePage() {
 
 function TeamProfileContent({ player, rank }: { player: Player; rank: number }) {
   const leagueUrl = useLeagueUrl();
-  const { players, getTeamMatches } = useLeagueData();
+  const { players, getTeamMatches, getTeamByes } = useLeagueData();
   const league = useLeague();
   const { user, isAdmin } = useAuth();
   const season = league.season;
@@ -98,6 +98,16 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
+  const byeWeeks = useMemo(() => new Set(getTeamByes(player.id).map(b => b.week)), [player.id]);
+  /** Match rows + BYE rows interleaved by week, sorted ascending. */
+  const scheduleRows = useMemo(() => {
+    const rows: Array<{ kind: 'match'; week: number; match: typeof matches[number] } | { kind: 'bye'; week: number }> = [
+      ...matches.map(m => ({ kind: 'match' as const, week: m.week, match: m })),
+      ...[...byeWeeks].map(week => ({ kind: 'bye' as const, week })),
+    ];
+    rows.sort((a, b) => a.week - b.week);
+    return rows;
+  }, [matches, byeWeeks]);
   const pool = useMemo(() => computePool(players), []);
 
   // Initialize roster order
@@ -632,7 +642,21 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
 
             <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
               <div className="p-3 flex-1 flex flex-col gap-0.5">
-                {matches.map(match => {
+                {scheduleRows.map(row => {
+                  if (row.kind === 'bye') {
+                    const isCurrent = row.week === (season?.currentWeek ?? 0) + 1;
+                    return (
+                      <div
+                        key={`bye-${row.week}`}
+                        className={`flex items-center gap-2 px-2 rounded flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : ''}`}
+                      >
+                        <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{row.week}</span>
+                        <span className="w-4 text-center text-[10px] text-text-muted">—</span>
+                        <span className="text-[10px] tracking-widest font-mono uppercase text-text-muted/60 flex-1">Bye</span>
+                      </div>
+                    );
+                  }
+                  const match = row.match;
                   const isHome = match.homePlayer === player.id;
                   const opponentId = isHome ? match.awayPlayer : match.homePlayer;
                   const opponent = players.find(p => p.id === opponentId);

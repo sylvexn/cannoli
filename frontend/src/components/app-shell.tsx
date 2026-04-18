@@ -75,7 +75,7 @@ export function AppShell() {
         const allMatches: typeof liveMatches = [];
         for (const league of leagues) {
           const schedule = await api.getSchedule(league.id);
-          const live = schedule.filter(m => m.status === 'in_progress' && (m.phase === 'regular' || m.phase === 'playoffs'));
+          const live = schedule.matches.filter(m => m.status === 'in_progress' && (m.phase === 'regular' || m.phase === 'playoffs'));
           for (const m of live) {
             allMatches.push({ id: m.id, leagueId: league.id, homePlayer: m.homePlayer, awayPlayer: m.awayPlayer, week: m.week });
           }

@@ -141,6 +141,13 @@
       "when": 1779200000000,
       "tag": "0019_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1779300000000,
+      "tag": "0020_bye_weeks",
+      "breakpoints": true
     }
   ]
 }

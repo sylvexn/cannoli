@@ -28,6 +28,76 @@ export interface AdvanceResult {
   winnerSeed: number | null;
 }
 
+/** Pure forfeit-survivor decision used in playoffs. Mirrors the rules in the
+ *  auto-forfeit job: a single ready side keeps its slot ('ready_asymmetry');
+ *  if both/neither are ready, the higher seed (lower seed number) advances
+ *  ('higher_seed_default'). Returned `forfeiter` describes who loses. */
+export function decidePlayoffForfeit(args: {
+  readyHome: boolean;
+  readyAway: boolean;
+  homeSeed: number | null;
+  awaySeed: number | null;
+}): { forfeiter: 'home' | 'away'; reason: 'ready_asymmetry' | 'higher_seed_default' } {
+  const { readyHome, readyAway, homeSeed, awaySeed } = args;
+  if (readyHome && !readyAway) return { forfeiter: 'away', reason: 'ready_asymmetry' };
+  if (!readyHome && readyAway) return { forfeiter: 'home', reason: 'ready_asymmetry' };
+  // Lower seed number = better seed. If tied / nulls, default to home advancing.
+  const hs = homeSeed ?? Number.POSITIVE_INFINITY;
+  const as = awaySeed ?? Number.POSITIVE_INFINITY;
+  if (hs <= as) return { forfeiter: 'away', reason: 'higher_seed_default' };
+  return { forfeiter: 'home', reason: 'higher_seed_default' };
+}
+
+/** Pure bracket routing: given a finished match, decide which slot of which
+ *  next-round match to fill. The caller supplies bracket-shape context so this
+ *  function stays DB-free and unit-testable.
+ *
+ * Returns null if the match is a finals (no next round) or the next round /
+ * slot is not deterministically defined for the inputs.
+ */
+export function computeAdvanceTarget(args: {
+  matchId: string;
+  playoffRound: 'qf' | 'sf' | 'f';
+  /** Number of QF matches in the bracket (2 → 6-team, 4 → 8-team). */
+  qfCount: number;
+  /** SF match ids in ascending id order — only required when advancing from sf. */
+  sfMatchIds?: string[];
+}): { nextRound: 'sf' | 'f'; nextMatchOffset: number; fillHome: boolean } | null {
+  const { matchId, playoffRound, qfCount, sfMatchIds } = args;
+
+  if (playoffRound === 'f') return null;
+
+  // Match number suffix: "<league>-pqf1" → 1
+  const matchNumStr = matchId.replace(/.*p(qf|sf|f)/, '');
+  const matchNum = parseInt(matchNumStr) || 0;
+
+  if (playoffRound === 'qf') {
+    // 8-team bracket: matchNums 1,2 → SF1 (home, away); 3,4 → SF2 (home, away)
+    // 6-team bracket: matchNum 1 → SF1 away; 2 → SF2 away
+    if (qfCount >= 4) {
+      return {
+        nextRound: 'sf',
+        nextMatchOffset: matchNum <= 2 ? 0 : 1,
+        fillHome: matchNum % 2 === 1,
+      };
+    }
+    return {
+      nextRound: 'sf',
+      nextMatchOffset: matchNum <= 1 ? 0 : 1,
+      fillHome: false,
+    };
+  }
+
+  // playoffRound === 'sf' → finals
+  if (!sfMatchIds || sfMatchIds.length === 0) return null;
+  const sfIndex = sfMatchIds.findIndex(id => id === matchId);
+  return {
+    nextRound: 'f',
+    nextMatchOffset: 0,
+    fillHome: sfIndex === 0,
+  };
+}
+
 export function advancePlayoffWinner(params: {
   matchId: string;
   leagueId: string;
@@ -48,61 +118,40 @@ export function advancePlayoffWinner(params: {
   };
 
   if (!playoffRound) return result;
+  if (playoffRound !== 'qf' && playoffRound !== 'sf' && playoffRound !== 'f') return result;
 
-  // Match number suffix: "<league>-pqf1" → 1
-  const matchNumStr = matchId.replace(/.*p(qf|sf|f)/, '');
-  const matchNum = parseInt(matchNumStr) || 0;
-
-  let nextRound: 'sf' | 'f' | null = null;
-  let nextMatchOffset = 0;
-  let fillHome = false;
+  let qfCount = 0;
+  let sfMatchIds: string[] | undefined;
 
   if (playoffRound === 'qf') {
-    nextRound = 'sf';
-
-    // Bracket size detection: 6-team bracket has 2 QF matches (#3v6, #4v5) and
-    // QF winners feed the away slot of SF (home = bye seed). 8-team bracket has
-    // 4 QF matches and QF winners fill BOTH SF slots.
-    //
-    // Generation order for QF matchNum (see playoffs/generate):
-    //   6-team: qf1=3v6 → SF1 away, qf2=4v5 → SF2 away
-    //   8-team: qf1=1v8 → SF1 home, qf2=4v5 → SF1 away,
-    //           qf3=2v7 → SF2 home, qf4=3v6 → SF2 away
-    const qfCount = db.select().from(schema.matches)
+    qfCount = db.select().from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, leagueId),
         eq(schema.matches.phase, 'playoffs'),
         eq(schema.matches.playoffRound, 'qf'),
       ))
       .all().length;
-
-    if (qfCount >= 4) {
-      // 8-team: matchNum 1,2 → SF1 (home,away); 3,4 → SF2 (home,away)
-      nextMatchOffset = matchNum <= 2 ? 0 : 1;
-      fillHome = matchNum % 2 === 1;
-    } else {
-      // 6-team: matchNum 1 → SF1 away, 2 → SF2 away
-      nextMatchOffset = matchNum <= 1 ? 0 : 1;
-      fillHome = false;
-    }
   } else if (playoffRound === 'sf') {
-    nextRound = 'f';
-    nextMatchOffset = 0;
-    const sfMatches = db.select().from(schema.matches)
+    sfMatchIds = db.select().from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, leagueId),
         eq(schema.matches.phase, 'playoffs'),
         eq(schema.matches.playoffRound, 'sf'),
       ))
       .orderBy(asc(schema.matches.id))
-      .all();
-    const sfIndex = sfMatches.findIndex(m => m.id === matchId);
-    fillHome = sfIndex === 0;
-  } else {
-    // 'f' — no further round
-    return result;
+      .all()
+      .map(m => m.id);
   }
 
+  const target = computeAdvanceTarget({
+    matchId,
+    playoffRound: playoffRound as 'qf' | 'sf' | 'f',
+    qfCount,
+    sfMatchIds,
+  });
+  if (!target) return result;
+
+  const { nextRound, nextMatchOffset, fillHome } = target;
   result.toRound = nextRound;
 
   const nextMatches = db.select().from(schema.matches)
@@ -114,24 +163,24 @@ export function advancePlayoffWinner(params: {
     .orderBy(asc(schema.matches.id))
     .all();
 
-  const target = nextMatches[nextMatchOffset];
-  if (!target) return result;
+  const targetMatch = nextMatches[nextMatchOffset];
+  if (!targetMatch) return result;
 
   const updateData: Record<string, unknown> = {};
-  if (fillHome && target.homeTeamId === 'TBD') {
+  if (fillHome && targetMatch.homeTeamId === 'TBD') {
     updateData.homeTeamId = winnerId;
     updateData.homeSeed = winnerSeed;
     result.filledSlot = 'home';
-  } else if (!fillHome && target.awayTeamId === 'TBD') {
+  } else if (!fillHome && targetMatch.awayTeamId === 'TBD') {
     updateData.awayTeamId = winnerId;
     updateData.awaySeed = winnerSeed;
     result.filledSlot = 'away';
   }
 
   if (Object.keys(updateData).length > 0) {
-    db.update(schema.matches).set(updateData).where(eq(schema.matches.id, target.id)).run();
+    db.update(schema.matches).set(updateData).where(eq(schema.matches.id, targetMatch.id)).run();
     result.advanced = true;
-    result.toMatchId = target.id;
+    result.toMatchId = targetMatch.id;
   }
 
   return result;
