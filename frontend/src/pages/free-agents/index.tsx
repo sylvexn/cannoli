@@ -10,6 +10,7 @@ import type { PokemonType } from '@/lib/pokemon';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
@@ -71,8 +72,9 @@ export function FreeAgentsPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [tierMin, setTierMin] = useState<number | ''>('');
-  const [tierMax, setTierMax] = useState<number | ''>('');
+  // 0 sentinel = "unset" (the tier list goes 1–20, so 0 is safe as "no filter")
+  const [tierMin, setTierMin] = useState<number>(0);
+  const [tierMax, setTierMax] = useState<number>(0);
   const [sortBy, setSortBy] = useState<SortOption>('tier-desc');
   const [hideUnaffordable, setHideUnaffordable] = useState(false);
 
@@ -121,8 +123,8 @@ export function FreeAgentsPage() {
         (p.type2 && p.type2.toLowerCase() === typeFilter),
       );
     }
-    if (tierMin !== '') list = list.filter(p => p.tier >= tierMin);
-    if (tierMax !== '') list = list.filter(p => p.tier <= tierMax);
+    if (tierMin > 0) list = list.filter(p => p.tier >= tierMin);
+    if (tierMax > 0) list = list.filter(p => p.tier <= tierMax);
 
     if (hideUnaffordable && myTeam) {
       // If the team is full and would need to drop, "affordable" means
@@ -289,22 +291,22 @@ export function FreeAgentsPage() {
               </Select>
               <div className="flex items-center gap-1 text-[11px] text-text-muted">
                 <span>Tier</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <NumberInput
                   value={tierMin}
-                  onChange={e => setTierMin(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={setTierMin}
+                  min={0}
+                  max={20}
+                  className="w-20"
                   placeholder="min"
-                  className="w-12 px-1.5 py-1 rounded bg-surface border border-border-subtle text-text-primary text-xs focus:border-neon/40 focus:outline-none"
                 />
                 <span>–</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <NumberInput
                   value={tierMax}
-                  onChange={e => setTierMax(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={setTierMax}
+                  min={0}
+                  max={20}
+                  className="w-20"
                   placeholder="max"
-                  className="w-12 px-1.5 py-1 rounded bg-surface border border-border-subtle text-text-primary text-xs focus:border-neon/40 focus:outline-none"
                 />
               </div>
               <label className="flex items-center gap-1.5 text-[11px] text-text-muted cursor-pointer select-none">

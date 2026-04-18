@@ -58,6 +58,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         owner: t.owner ?? null,
         captainsLocked: t.captainsLocked,
         record: t.record,
+        tiebreaker: t.tiebreaker ?? null,
         roster: t.roster.map(r => ({
           name: r.name,
           types: r.types as PokemonType[],
@@ -104,10 +105,10 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
     await loadAll(false);
   }, [loadAll, detailCache]);
 
-  const standings = [...players].sort((a, b) => {
-    if (b.record.wins !== a.record.wins) return b.record.wins - a.record.wins;
-    return b.record.differential - a.record.differential;
-  });
+  // Backend already returns teams ordered by the documented tiebreaker
+  // hierarchy (h2h → diff → kills → id). Trust it — re-sorting client-side
+  // would drop the h2h dimension.
+  const standings = players;
 
   const getWeekMatches = (week: number) =>
     matches.filter(m => m.week === week);
