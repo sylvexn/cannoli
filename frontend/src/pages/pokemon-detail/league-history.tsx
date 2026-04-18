@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamCoach } from '@/components/team-coach';
 import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,7 +85,7 @@ export function LeagueHistory({ pokemonName }: LeagueHistoryProps) {
                   {player.teamName}
                 </span>
               </Link>
-              <span className="text-[11px] text-text-muted">{player.name}</span>
+              <TeamCoach player={player} size="xs" className="text-[11px] text-text-muted" />
             </div>
 
             {/* Stats row */}
