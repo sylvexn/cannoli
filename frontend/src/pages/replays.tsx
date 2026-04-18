@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Search, Play, Radio, X, Maximize2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { ExternalLink, Search, Play, Radio, X, Maximize2, Minimize2, Link2 } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiTeam } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import type { League } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
+import { toast } from 'sonner';
 
 interface ReplayEntry {
   match: ApiMatch;
@@ -16,15 +17,27 @@ interface ReplayEntry {
   awayTeam: ApiTeam | undefined;
 }
 
+type TimeFilter = 'this-week' | 'last-week' | 'my-matches' | 'all';
+
+const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
+  { id: 'this-week', label: 'This Week' },
+  { id: 'last-week', label: 'Last Week' },
+  { id: 'my-matches', label: 'My Matches' },
+  { id: 'all', label: 'All-Time' },
+];
+
 export function ReplaysPage() {
   const { leagues, loading: leaguesLoading } = useAppData();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [entries, setEntries] = useState<ReplayEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<Set<string>>(new Set());
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('this-week');
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
+  const [theater, setTheater] = useState(false);
 
   // Pick the highest active currentWeek across leagues — the natural target
   // for a "this-week stream". Falls back to the highest week with any
@@ -35,6 +48,14 @@ export function ReplaysPage() {
     const fromReplays = entries.reduce((max, e) => Math.max(max, e.match.week), 0);
     return fromReplays > 0 ? fromReplays : 1;
   }, [leagues, entries]);
+
+  // Highest week with at least one replay — used for "This Week" / "Last Week"
+  // so the filters land on something meaningful even if currentWeek hasn't
+  // been bumped yet for the latest reported matches.
+  const latestReplayWeek = useMemo(
+    () => entries.reduce((max, e) => Math.max(max, e.match.week), 0),
+    [entries],
+  );
 
   // Fetch all schedules + teams across leagues
   useEffect(() => {
@@ -65,14 +86,44 @@ export function ReplaysPage() {
     });
   }, [leagues, leaguesLoading]);
 
+  // Open a specific replay if ?match=ID is in the URL — for share links
+  useEffect(() => {
+    const matchId = searchParams.get('match');
+    if (matchId && entries.length > 0 && !viewingReplay) {
+      const found = entries.find(e => e.match.id === matchId);
+      if (found) {
+        setViewingReplay(found);
+        // If the deep-linked replay is filtered out by current filters,
+        // reset filters so the user actually sees the row in context.
+        setTimeFilter('all');
+      }
+    }
+  }, [searchParams, entries, viewingReplay]);
+
   // Filter + group
   const filtered = useMemo(() => {
     let result = entries;
 
+    // League filter
     if (leagueFilter.size > 0) {
       result = result.filter(e => leagueFilter.has(e.league.id));
     }
 
+    // Time filter
+    if (timeFilter !== 'all') {
+      result = result.filter(e => {
+        if (timeFilter === 'this-week') return e.match.week === latestReplayWeek;
+        if (timeFilter === 'last-week') return e.match.week === Math.max(0, latestReplayWeek - 1);
+        if (timeFilter === 'my-matches') {
+          if (!user) return false;
+          const myUserId = parseInt(user.id);
+          return e.homeTeam?.userId === myUserId || e.awayTeam?.userId === myUserId;
+        }
+        return true;
+      });
+    }
+
+    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(e =>
@@ -86,7 +137,7 @@ export function ReplaysPage() {
     }
 
     return result;
-  }, [entries, search, leagueFilter]);
+  }, [entries, search, leagueFilter, timeFilter, latestReplayWeek, user]);
 
   // Group by week (descending)
   const grouped = useMemo(() => {
@@ -99,6 +150,25 @@ export function ReplaysPage() {
     return [...map.entries()].sort((a, b) => b[0] - a[0]);
   }, [filtered]);
 
+  // Stats strip — total + by league
+  const stats = useMemo(() => {
+    const total = entries.length;
+    const byLeague = new Map<string, number>();
+    for (const e of entries) {
+      byLeague.set(e.league.id, (byLeague.get(e.league.id) ?? 0) + 1);
+    }
+    const blowouts = entries.filter(e => {
+      const margin = Math.abs((e.match.homeScore ?? 0) - (e.match.awayScore ?? 0));
+      return margin >= 4;
+    }).length;
+    const sweeps = entries.filter(e => {
+      const home = e.match.homeScore ?? 0;
+      const away = e.match.awayScore ?? 0;
+      return (home === 6 && away === 0) || (away === 6 && home === 0);
+    }).length;
+    return { total, byLeague, blowouts, sweeps };
+  }, [entries]);
+
   function toggleLeagueFilter(id: string) {
     setLeagueFilter(prev => {
       const next = new Set(prev);
@@ -106,6 +176,27 @@ export function ReplaysPage() {
       else next.add(id);
       return next;
     });
+  }
+
+  function copyShareLink(matchId: string) {
+    const url = `${window.location.origin}/replays?match=${encodeURIComponent(matchId)}`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.success('Replay link copied'),
+      () => toast.error('Could not copy'),
+    );
+  }
+
+  function handleViewReplay(entry: ReplayEntry | null) {
+    setViewingReplay(entry);
+    if (!entry) {
+      // Closing the viewer — drop the ?match query param if present
+      if (searchParams.has('match')) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('match');
+        setSearchParams(next, { replace: true });
+      }
+      setTheater(false);
+    }
   }
 
   // Check if a replay URL can be safely iframed.
@@ -125,18 +216,29 @@ export function ReplaysPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="font-mono text-xl font-bold uppercase tracking-widest">
-          <span className="text-neon">Replay</span>{' '}
-          <span className="text-text-primary">Gallery</span>
-        </h1>
+    <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-40 bg-surface p-6')}>
+      <div className="flex items-center justify-between mb-3 gap-4">
+        <div className="flex items-baseline gap-4 min-w-0">
+          <h1 className="font-mono text-xl font-bold uppercase tracking-widest shrink-0">
+            <span className="text-neon">Replay</span>{' '}
+            <span className="text-text-primary">Gallery</span>
+          </h1>
+          {!loading && stats.total > 0 && (
+            <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted shrink-0 truncate">
+              <span><span className="text-text-secondary tabular-nums">{stats.total}</span> total</span>
+              <span className="text-border-default">·</span>
+              <span><span className="text-amber-400 tabular-nums">{stats.sweeps}</span> sweep{stats.sweeps !== 1 && 's'}</span>
+              <span className="text-border-default">·</span>
+              <span><span className="text-pink tabular-nums">{stats.blowouts}</span> blowout{stats.blowouts !== 1 && 's'}</span>
+            </div>
+          )}
+        </div>
 
         {isAdmin && (
           <button
             onClick={() => navigate(`/replays/stream/${streamWeek}`)}
             title={`Open broadcast cockpit for week ${streamWeek}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/5 text-neon text-[11px] font-mono uppercase tracking-widest hover:bg-neon/10 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/5 text-neon text-[11px] font-mono uppercase tracking-widest hover:bg-neon/10 transition-colors shrink-0"
           >
             <Radio size={14} />
             Start Week {streamWeek} Stream
@@ -146,7 +248,10 @@ export function ReplaysPage() {
 
       {/* Replay viewer panel */}
       {viewingReplay && (
-        <div className="mb-4 rounded-lg border border-neon/20 bg-surface-raised overflow-hidden">
+        <div className={cn(
+          'mb-4 rounded-lg border border-neon/20 bg-surface-raised overflow-hidden',
+          theater && 'flex-1 flex flex-col mb-0',
+        )}>
           <div className="flex items-center justify-between px-3 py-2 bg-surface-overlay border-b border-border-subtle">
             <div className="flex items-center gap-2 text-xs">
               <Play size={12} className="text-neon" />
@@ -164,6 +269,20 @@ export function ReplaysPage() {
               </span>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => copyShareLink(viewingReplay.match.id)}
+                className="p-1 text-text-muted hover:text-neon transition-colors"
+                title="Copy share link"
+              >
+                <Link2 size={13} />
+              </button>
+              <button
+                onClick={() => setTheater(t => !t)}
+                className="p-1 text-text-muted hover:text-neon transition-colors"
+                title={theater ? 'Exit theater mode' : 'Theater mode'}
+              >
+                {theater ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
               {isLocalReplay(viewingReplay.match.replayUrl!) && (
                 <a
                   href={viewingReplay.match.replayUrl!}
@@ -172,12 +291,13 @@ export function ReplaysPage() {
                   className="p-1 text-text-muted hover:text-neon transition-colors"
                   title="Open in new tab"
                 >
-                  <Maximize2 size={13} />
+                  <ExternalLink size={13} />
                 </a>
               )}
               <button
-                onClick={() => setViewingReplay(null)}
+                onClick={() => handleViewReplay(null)}
                 className="p-1 text-text-muted hover:text-loss transition-colors"
+                title="Close"
               >
                 <X size={14} />
               </button>
@@ -186,8 +306,8 @@ export function ReplaysPage() {
           {isLocalReplay(viewingReplay.match.replayUrl!) ? (
             <iframe
               src={viewingReplay.match.replayUrl!}
-              className="w-full border-0 bg-white"
-              style={{ height: '500px' }}
+              className={cn('w-full border-0 bg-white', theater ? 'flex-1' : '')}
+              style={!theater ? { height: '500px' } : undefined}
               title="Replay viewer"
               sandbox="allow-scripts allow-same-origin"
             />
@@ -207,47 +327,69 @@ export function ReplaysPage() {
         </div>
       )}
 
-      {/* Search + filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Search teams, players..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 rounded-md bg-surface-raised border border-border-default text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon/50"
-          />
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {leagues.map(league => {
-            const active = leagueFilter.has(league.id);
-            return (
+      {/* Time filter chips + Search + League chips */}
+      {!theater && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {TIME_FILTERS.map(f => (
               <button
-                key={league.id}
-                onClick={() => toggleLeagueFilter(league.id)}
+                key={f.id}
+                onClick={() => setTimeFilter(f.id)}
+                disabled={f.id === 'my-matches' && !user}
                 className={cn(
-                  'text-[10px] font-bold px-2 py-1 rounded-full border transition-colors cursor-pointer',
-                  active
-                    ? 'border-transparent'
+                  'text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
+                  timeFilter === f.id
+                    ? 'border-neon/40 bg-neon/10 text-neon'
                     : 'border-border-default text-text-muted hover:text-text-secondary',
                 )}
-                style={active ? {
-                  color: league.color,
-                  backgroundColor: `${league.color}20`,
-                  borderColor: `${league.color}40`,
-                } : undefined}
               >
-                {league.name.replace(' League', '')}
+                {f.label}
               </button>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                placeholder="Search teams, players..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-md bg-surface-raised border border-border-default text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon/50"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {leagues.map(league => {
+                const active = leagueFilter.has(league.id);
+                return (
+                  <button
+                    key={league.id}
+                    onClick={() => toggleLeagueFilter(league.id)}
+                    className={cn(
+                      'text-[10px] font-bold px-2 py-1 rounded-full border transition-colors cursor-pointer',
+                      active
+                        ? 'border-transparent'
+                        : 'border-border-default text-text-muted hover:text-text-secondary',
+                    )}
+                    style={active ? {
+                      color: league.color,
+                      backgroundColor: `${league.color}20`,
+                      borderColor: `${league.color}40`,
+                    } : undefined}
+                  >
+                    {league.name.replace(' League', '')}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Content */}
-      {loading ? (
+      {theater ? null : loading ? (
         <div className="text-text-muted text-sm py-12 text-center">Loading replays...</div>
       ) : entries.length === 0 ? (
         <EmptyState
@@ -258,7 +400,8 @@ export function ReplaysPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           variant="nothing-here"
-          title="No replays match your search."
+          title="No replays match these filters."
+          subtitle={timeFilter !== 'all' ? 'Try All-Time to see everything.' : undefined}
           spriteSize="md"
         />
       ) : (
@@ -269,18 +412,24 @@ export function ReplaysPage() {
                 Week {week}
               </h2>
               <div className="space-y-1">
-                {weekEntries.map(({ match, league, homeTeam, awayTeam }) => {
+                {weekEntries.map(({ match, league, homeTeam, awayTeam }, i) => {
                   const entry = { match, league, homeTeam, awayTeam };
                   const isViewing = viewingReplay?.match.id === match.id;
+                  const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
+                  const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
                   return (
                     <div
                       key={match.id}
                       className={cn(
-                        'flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors',
+                        'stagger-item row-interactive flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors',
                         isViewing
                           ? 'bg-neon/5 border-neon/20'
                           : 'bg-surface-raised border-border-default hover:border-border-default/80',
                       )}
+                      style={{
+                        ['--i' as never]: Math.min(i, 20),
+                        ['--card-accent' as never]: league.color,
+                      }}
                     >
                       <span className="text-[10px] font-mono text-text-muted w-8 shrink-0">
                         W{match.week}
@@ -296,18 +445,26 @@ export function ReplaysPage() {
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Link
                           to={`/league/${league.id}/teams/${homeTeam?.id}`}
-                          className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate"
+                          className={cn(
+                            'text-sm font-medium hover:text-neon transition-colors truncate',
+                            homeWon ? 'text-win' : 'text-text-secondary',
+                          )}
                         >
                           {homeTeam?.teamAbbrev ?? match.homePlayer}
                         </Link>
 
                         <span className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
-                          {match.homeScore}-{match.awayScore}
+                          <span className={homeWon ? 'text-win' : ''}>{match.homeScore}</span>
+                          -
+                          <span className={awayWon ? 'text-win' : ''}>{match.awayScore}</span>
                         </span>
 
                         <Link
                           to={`/league/${league.id}/teams/${awayTeam?.id}`}
-                          className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate"
+                          className={cn(
+                            'text-sm font-medium hover:text-neon transition-colors truncate',
+                            awayWon ? 'text-win' : 'text-text-secondary',
+                          )}
                         >
                           {awayTeam?.teamAbbrev ?? match.awayPlayer}
                         </Link>
@@ -315,7 +472,7 @@ export function ReplaysPage() {
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
-                          onClick={() => setViewingReplay(isViewing ? null : entry)}
+                          onClick={() => handleViewReplay(isViewing ? null : entry)}
                           className={cn(
                             'flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded transition-colors',
                             isViewing
@@ -325,6 +482,13 @@ export function ReplaysPage() {
                         >
                           <Play size={11} />
                           {isViewing ? 'Playing' : 'Watch'}
+                        </button>
+                        <button
+                          onClick={() => copyShareLink(match.id)}
+                          className="text-text-muted hover:text-neon transition-colors p-1"
+                          title="Copy share link"
+                        >
+                          <Link2 size={13} />
                         </button>
                         <a
                           href={match.replayUrl!}
@@ -346,7 +510,7 @@ export function ReplaysPage() {
       )}
 
       {/* Count */}
-      {!loading && filtered.length > 0 && (
+      {!loading && !theater && filtered.length > 0 && (
         <p className="text-[10px] text-text-muted mt-4">
           {filtered.length} replay{filtered.length !== 1 ? 's' : ''} found
         </p>
