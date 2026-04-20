@@ -727,3 +727,99 @@ aside {
     transition: none;
   }
 }
+
+/* ─── Slice 7 — Draft pick celebration ────────────────────────────────────
+   Played on every pick on every connected client. The keyframes split
+   sprite, glow, tier-badge, and row-border highlights so each layer can
+   compose without re-running its neighbour. */
+
+@keyframes pick-celebration {
+  0%   { transform: scale(0.6); }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.pick-celebration {
+  animation: pick-celebration 1200ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Radial glow burst — apply via ::before on the freshly-landed pick card.
+   Set `--pick-type` on the card to the type CSS var (e.g. var(--color-type-fire)). */
+@keyframes pick-glow-burst {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  35%  { opacity: 0.6; transform: translate(-50%, -50%) scale(1.0); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); }
+}
+
+.pick-glow-burst {
+  position: relative;
+  isolation: isolate;
+}
+
+.pick-glow-burst::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 80px;
+  height: 80px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--pick-type, #22d3ee) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  animation: pick-glow-burst 800ms ease-out both;
+}
+
+/* Tier badge slide-in — fires 200ms after sprite peak. */
+@keyframes tier-badge-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.tier-badge-slide-in {
+  animation: tier-badge-slide-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 200ms;
+}
+
+/* Row border-pulse — picks the type color via `--pick-type` and pulses the
+   border for ~600ms after the row enters. */
+@keyframes pick-border-pulse {
+  0%   { box-shadow: 0 0 0 1px var(--pick-type, #22d3ee), 0 0 0 0 transparent; }
+  50%  { box-shadow: 0 0 0 1px var(--pick-type, #22d3ee), 0 0 12px 2px var(--pick-type, #22d3ee); }
+  100% { box-shadow: 0 0 0 1px transparent, 0 0 0 0 transparent; }
+}
+
+.pick-border-pulse {
+  animation: pick-border-pulse 600ms ease-out both;
+  animation-delay: 600ms;
+}
+
+@media (prefers-reduced-motion) {
+  .pick-celebration,
+  .pick-glow-burst::before,
+  .tier-badge-slide-in,
+  .pick-border-pulse {
+    animation: none;
+  }
+}
+
+/* ─── Slice 7C — On-the-clock pulse glow ──────────────────────────────────
+   Breathing 4px inset shadow in the user's accent color. Scoped to the
+   draft-board root via `.pulse-glow` when it's the user's turn. */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: inset 0 0 0 4px color-mix(in oklab, var(--user-primary, #22d3ee) 30%, transparent); }
+  50%      { box-shadow: inset 0 0 0 4px color-mix(in oklab, var(--user-primary, #22d3ee) 60%, transparent); }
+}
+
+.pulse-glow {
+  animation: pulse-glow 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion) {
+  .pulse-glow {
+    animation: none;
+    box-shadow: inset 0 0 0 4px color-mix(in oklab, var(--user-primary, #22d3ee) 45%, transparent);
+  }
+}
