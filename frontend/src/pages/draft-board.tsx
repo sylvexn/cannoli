@@ -252,8 +252,16 @@ export function DraftBoardPage() {
 
   const showFooter = state.mode === 'demo' || state.mode === 'live';
 
+  // Pulse-glow on the draft room body when it's THIS user's turn — peripheral
+  // signal to remove "did I miss my turn?" anxiety. Color = user accent.
+  const showOnTheClockGlow = isLiveMode && isUserTurn && !isDemoComplete;
+
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <UserAccentScope user={user} className="contents">
+    <div className={cn(
+      'flex flex-col h-full overflow-hidden',
+      showOnTheClockGlow && 'pulse-glow',
+    )}>
       {/* Top bar: title + mode + view toggle — always compact */}
       <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0">
         <div className="flex items-center gap-3">
@@ -534,5 +542,6 @@ export function DraftBoardPage() {
         onDraft={handleUserPick}
       />
     </div>
+    </UserAccentScope>
   );
 }
