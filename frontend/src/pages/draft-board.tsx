@@ -3,9 +3,15 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
-import { LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor, ScrollText } from 'lucide-react';
+import {
+  LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor, ScrollText,
+  Volume2, VolumeX,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/lib/auth-context';
+import { UserAccentScope } from '@/components/user-accent-scope';
 import { useDraftState } from './draft-board/use-draft-state';
+import { useDraftMute } from './draft-board/use-draft-mute';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
 import { DraftPoolWithRail } from './draft-board/draft-pool-with-rail';
 import { DraftTeamSidebar } from './draft-board/draft-team-sidebar';
@@ -53,6 +59,8 @@ function SegmentedToggle<T extends string>({
 }
 
 export function DraftBoardPage() {
+  const { user } = useAuth();
+  const { muted, toggleMuted, hintShown, markHintShown } = useDraftMute();
   const {
     state, dispatch,
     league, players,
@@ -64,6 +72,10 @@ export function DraftBoardPage() {
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
   } = useDraftState();
+
+  // One-time "sound on — click to mute" chip. Auto-dismisses after 5s and
+  // records the flag so it never resurfaces.
+  const [hintVisible, setHintVisible] = useState(false);
 
   // Captain gate is open while every team has finished drafting (live mode +
   // isDemoComplete) but the league is still in phase=draft (= some team
@@ -162,18 +174,32 @@ export function DraftBoardPage() {
     }
   }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
 
-  // Play Pokemon cry when a new pick is made (demo or live)
+  // Play Pokemon cry on EVERY broadcast pick (demo or live). All connected
+  // clients hear the cry on every pick — moved out of the per-user gate so the
+  // draft feels live and shared. Per-user mute toggle controls audibility.
   const prevPickCountRef = useRef(state.allPicks.length);
   useEffect(() => {
     const prev = prevPickCountRef.current;
     prevPickCountRef.current = state.allPicks.length;
     if (isLiveMode && state.allPicks.length > prev && state.allPicks.length > 0) {
       const lastPick = state.allPicks[state.allPicks.length - 1];
-      if (lastPick.pokemonName && lastPick.playerId === state.userTeamId) {
-        playCry(lastPick.pokemonName);
+      if (lastPick.pokemonName && !muted) {
+        playCry(lastPick.pokemonName, 0.15);
+        // Surface the one-time hint the first time a cry actually plays.
+        if (!hintShown) {
+          setHintVisible(true);
+          markHintShown();
+        }
       }
     }
-  }, [state.allPicks.length, isLiveMode, state.userTeamId]);
+  }, [state.allPicks.length, isLiveMode, muted, hintShown, markHintShown]);
+
+  // Auto-dismiss the hint chip after 5s.
+  useEffect(() => {
+    if (!hintVisible) return;
+    const t = setTimeout(() => setHintVisible(false), 5000);
+    return () => clearTimeout(t);
+  }, [hintVisible]);
 
   // Toast when a queued Pokemon gets drafted by someone else
   const prevQueueRef = useRef<string[]>([]);
@@ -290,6 +316,42 @@ export function DraftBoardPage() {
             >
               {state.allPicks.length} picks
             </button>
+          )}
+
+          {/* Cry mute toggle — always visible during live/demo so spectators
+              can pre-mute before the first pick fires. */}
+          {isLiveMode && (
+            <div className="relative">
+              <button
+                onClick={toggleMuted}
+                title={muted ? 'Cries muted — click to unmute' : 'Cries on — click to mute'}
+                aria-label={muted ? 'Unmute pick cries' : 'Mute pick cries'}
+                aria-pressed={muted}
+                className={cn(
+                  'h-6 w-6 inline-flex items-center justify-center rounded border transition-colors',
+                  muted
+                    ? 'text-text-muted border-border-subtle hover:text-text-secondary'
+                    : 'text-neon border-neon/30 bg-neon/5 hover:bg-neon/10',
+                )}
+              >
+                {muted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+              </button>
+              {hintVisible && (
+                <div
+                  role="status"
+                  className={cn(
+                    'absolute right-0 top-full mt-1.5 z-50 whitespace-nowrap',
+                    'flex items-center gap-1.5 px-2 py-1 rounded-md border',
+                    'border-neon/30 bg-surface-raised text-[10px] font-mono text-text-secondary',
+                    'shadow-[0_0_10px_rgba(34,211,238,0.15)]',
+                    'animate-in fade-in slide-in-from-top-1 duration-200',
+                  )}
+                >
+                  <Volume2 size={10} className="text-neon shrink-0" />
+                  Sound on — click to mute
+                </div>
+              )}
+            </div>
           )}
           <SegmentedToggle
             value={state.viewMode}
