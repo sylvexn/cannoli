@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Search, Play, Radio, X, Maximize2, Minimize2, Link2 } from 'lucide-react';
+import { ExternalLink, Search, Play, Radio, X, Maximize2, Minimize2, Link2, Zap, Flame, Trophy } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
-import type { ApiMatch, ApiTeam } from '@/lib/api';
+import type { ApiMatch, ApiTeam, ApiReplaySummary } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { useAuth } from '@/lib/auth-context';
 import type { League } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
+import { PokemonSprite } from '@/components/pokemon-sprite';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 
 interface ReplayEntry {
@@ -38,6 +40,7 @@ export function ReplaysPage() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('this-week');
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
   const [theater, setTheater] = useState(false);
+  const [summaries, setSummaries] = useState<Map<string, ApiReplaySummary>>(new Map());
 
   // Pick the highest active currentWeek across leagues — the natural target
   // for a "this-week stream". Falls back to the highest week with any
@@ -85,6 +88,30 @@ export function ReplaysPage() {
       setLoading(false);
     });
   }, [leagues, leaguesLoading]);
+
+  // Lazily fetch replay summaries (MVP / sweep / teraCount) for all visible
+  // entries. Cached by matchId so filter changes don't re-trigger fetches.
+  // Failures are silent — the row falls back to its plain layout.
+  useEffect(() => {
+    if (entries.length === 0) return;
+    let cancelled = false;
+    const missing = entries.filter(e => !summaries.has(e.match.id));
+    if (missing.length === 0) return;
+    Promise.all(
+      missing.map(e => api.getReplaySummary(e.match.id).catch(() => null)),
+    ).then(results => {
+      if (cancelled) return;
+      setSummaries(prev => {
+        const next = new Map(prev);
+        for (let i = 0; i < missing.length; i++) {
+          const r = results[i];
+          if (r) next.set(missing[i].match.id, r);
+        }
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [entries, summaries]);
 
   // Open a specific replay if ?match=ID is in the URL — for share links
   useEffect(() => {
@@ -417,6 +444,10 @@ export function ReplaysPage() {
                   const isViewing = viewingReplay?.match.id === match.id;
                   const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
                   const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
+                  const summary = summaries.get(match.id);
+                  const mvpTeam = summary?.mvp
+                    ? (summary.mvp.teamId === match.homePlayer ? homeTeam : awayTeam)
+                    : undefined;
                   return (
                     <div
                       key={match.id}
@@ -470,6 +501,9 @@ export function ReplaysPage() {
                         </Link>
                       </div>
 
+                      {/* Replay-summary glance — MVP / sweep / tera-heavy */}
+                      <ReplayRowGlance summary={summary} mvpTeamColor={mvpTeam?.teamColor} />
+
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => handleViewReplay(isViewing ? null : entry)}
@@ -514,6 +548,77 @@ export function ReplaysPage() {
         <p className="text-[10px] text-text-muted mt-4">
           {filtered.length} replay{filtered.length !== 1 ? 's' : ''} found
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Inline glance line for a replay row — surfaces the unused replay_summary
+ * data the user has been sitting on: top K-getter as a sprite + name + kill
+ * count (if any), tera count when ≥3 (mark as "tera-heavy"), and a sweep
+ * pill when the score was 6-0. All optional; renders nothing if the summary
+ * hasn't loaded or the match is uneventful.
+ */
+function ReplayRowGlance({
+  summary,
+  mvpTeamColor,
+}: {
+  summary: ApiReplaySummary | undefined;
+  mvpTeamColor: string | undefined;
+}) {
+  if (!summary || !summary.isComplete) return null;
+
+  const hasMvp = summary.mvp && summary.mvp.kills > 0;
+  const teraHeavy = summary.teraCount >= 3;
+  const sweep = summary.sweep;
+
+  if (!hasMvp && !teraHeavy && !sweep) return null;
+
+  return (
+    <div className="hidden md:flex items-center gap-1.5 shrink-0 mr-1">
+      {hasMvp && summary.mvp && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/60"
+              style={mvpTeamColor ? { borderColor: `${mvpTeamColor}40` } : undefined}
+            >
+              <Trophy size={10} className="text-amber-400 shrink-0" />
+              <PokemonSprite name={summary.mvp.name} size="xs" className="!w-4 !h-4" />
+              <span className="text-[10px] font-mono tabular-nums text-text-secondary">
+                {summary.mvp.kills}K
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            <span className="font-medium">{summary.mvp.name}</span>
+            {' — '}
+            <span className="text-win">{summary.mvp.kills}K</span>
+            {' / '}
+            <span className="text-loss">{summary.mvp.deaths}D</span>
+            {' (MVP)'}
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {sweep && (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400">
+          <Flame size={9} />
+          Sweep
+        </span>
+      )}
+      {teraHeavy && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-pink/15 text-pink">
+              <Zap size={9} />
+              {summary.teraCount}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            {summary.teraCount} teras used — tera-heavy game
+          </TooltipContent>
+        </Tooltip>
       )}
     </div>
   );

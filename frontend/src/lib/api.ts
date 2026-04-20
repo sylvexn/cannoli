@@ -182,6 +182,18 @@ export interface ApiMatchPokemon {
   teraType: string | null;
 }
 
+export interface ApiReplaySummary {
+  matchId: string;
+  isComplete: boolean;
+  mvp: { name: string; kills: number; deaths: number; teamId: string } | null;
+  teraCount: number;
+  sweep: boolean;
+  margin: number;
+  scoreLine: string | null;
+  home: ApiMatchPokemon[];
+  away: ApiMatchPokemon[];
+}
+
 export interface ApiTransaction {
   id: number;
   week: number;
@@ -465,6 +477,7 @@ export const api = {
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
   getMatchPokemon: (matchId: string) => fetchJson<{ home: ApiMatchPokemon[]; away: ApiMatchPokemon[] }>(`/api/matches/${matchId}/pokemon`),
+  getReplaySummary: (matchId: string) => fetchJson<ApiReplaySummary | null>(`/api/matches/${matchId}/replay-summary`),
 
   getTransactions: (leagueId: string) => fetchJson<ApiTransaction[]>(`/api/leagues/${leagueId}/transactions`),
 
