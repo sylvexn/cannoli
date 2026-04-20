@@ -242,7 +242,7 @@ export function TradeBlockPage() {
                         )}
                       </div>
                       <div className="shrink-0 flex flex-col items-center gap-1">
-                        <Link to={leagueUrl(`/teams/${team.id}`)} className="group/team">
+                        <Link to={leagueUrl(`/teams/${team.id}`)} viewTransition className="group/team">
                           <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
                         </Link>
                         <span className="text-[8px] text-text-muted">{team.teamAbbrev}</span>

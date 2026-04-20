@@ -46,7 +46,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
         {/* Home team */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <Link
-            to={leagueUrl(`/teams/${homePlayer.id}`)}
+            to={leagueUrl(`/teams/${homePlayer.id}`)} viewTransition
             onClick={e => e.stopPropagation()}
             className="group/home shrink-0"
           >
@@ -54,7 +54,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
           </Link>
           <div className="min-w-0">
             <Link
-              to={leagueUrl(`/teams/${homePlayer.id}`)}
+              to={leagueUrl(`/teams/${homePlayer.id}`)} viewTransition
               onClick={e => e.stopPropagation()}
               className={cn(
                 'text-sm font-medium transition-colors block truncate hover:text-neon',
@@ -90,7 +90,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
         <div className="flex items-center gap-2.5 justify-end min-w-0 flex-1">
           <div className="min-w-0 text-right">
             <Link
-              to={leagueUrl(`/teams/${awayPlayer.id}`)}
+              to={leagueUrl(`/teams/${awayPlayer.id}`)} viewTransition
               onClick={e => e.stopPropagation()}
               className={cn(
                 'text-sm font-medium transition-colors block truncate hover:text-pink',
@@ -104,7 +104,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             </span>
           </div>
           <Link
-            to={leagueUrl(`/teams/${awayPlayer.id}`)}
+            to={leagueUrl(`/teams/${awayPlayer.id}`)} viewTransition
             onClick={e => e.stopPropagation()}
             className="group/away shrink-0"
           >

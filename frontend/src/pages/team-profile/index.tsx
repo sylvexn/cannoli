@@ -679,7 +679,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                       ) : (
                         <span className="w-4 text-center text-[10px] text-text-muted">—</span>
                       )}
-                      <Link to={leagueUrl(`/teams/${opponentId}`)} className="flex items-center gap-1.5 flex-1 min-w-0">
+                      <Link to={leagueUrl(`/teams/${opponentId}`)} viewTransition className="flex items-center gap-1.5 flex-1 min-w-0">
                         <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
                         <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
                       </Link>
