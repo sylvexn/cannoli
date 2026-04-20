@@ -10,6 +10,79 @@ import { runAutoAwards } from '../lib/pins/auto-award';
 
 export const matchRoutes = new Elysia()
 
+  // ─── Replay summary (MVP / sweep / teras / score line) ──────────────
+  //
+  // Cheap computation from matchPokemon (already has per-mon K/D + tera) plus
+  // the match row's scores. No log parsing required — this is what powers the
+  // replay-row glance line and post-roll mini-card on the stream cockpit.
+
+  .get('/api/matches/:matchId/replay-summary', ({ params }) => {
+    const match = db.select().from(schema.matches)
+      .where(eq(schema.matches.id, params.matchId))
+      .get();
+    if (!match) return null;
+
+    const entries = db.select().from(schema.matchPokemon)
+      .where(eq(schema.matchPokemon.matchId, params.matchId))
+      .all();
+
+    const homeMons = entries.filter(e => e.teamId === match.homeTeamId);
+    const awayMons = entries.filter(e => e.teamId === match.awayTeamId);
+
+    // MVP — top kill-getter across both teams, ties broken by lower deaths
+    const allMons = [...homeMons, ...awayMons];
+    const mvpEntry = allMons.length > 0
+      ? allMons.reduce((best, m) => {
+          if (m.kills > best.kills) return m;
+          if (m.kills === best.kills && m.deaths < best.deaths) return m;
+          return best;
+        })
+      : null;
+    const mvp = mvpEntry ? {
+      name: mvpEntry.pokemonName,
+      kills: mvpEntry.kills,
+      deaths: mvpEntry.deaths,
+      teamId: mvpEntry.teamId,
+    } : null;
+
+    const homeScore = match.homeScore ?? 0;
+    const awayScore = match.awayScore ?? 0;
+    const isComplete = match.homeScore != null && match.awayScore != null;
+
+    const teraCount = entries.filter(e => e.teraUsed).length;
+    const sweep = isComplete && (
+      (homeScore === 6 && awayScore === 0) ||
+      (awayScore === 6 && homeScore === 0)
+    );
+
+    return {
+      matchId: match.id,
+      isComplete,
+      mvp,
+      teraCount,
+      sweep,
+      // Margin of victory; useful for "blowout" / "nailbiter" classification
+      margin: Math.abs(homeScore - awayScore),
+      scoreLine: isComplete ? `${homeScore}-${awayScore}` : null,
+      // pokemon entries returned so the row's MVP popover doesn't need a
+      // second round-trip to /pokemon
+      home: homeMons.map(m => ({
+        name: m.pokemonName,
+        kills: m.kills,
+        deaths: m.deaths,
+        teraUsed: m.teraUsed,
+        teraType: m.teraType,
+      })),
+      away: awayMons.map(m => ({
+        name: m.pokemonName,
+        kills: m.kills,
+        deaths: m.deaths,
+        teraUsed: m.teraUsed,
+        teraType: m.teraType,
+      })),
+    };
+  })
+
   // ─── Match Details (pokemon K/D for a specific match) ────────────────
 
   .get('/api/matches/:matchId/pokemon', ({ params }) => {
