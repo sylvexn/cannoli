@@ -99,7 +99,12 @@ function DefinitionsTab() {
       {loading ? (
         <div className="text-xs text-text-muted">Loading...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-xs text-text-muted">No pin definitions match.</div>
+        <EmptyState
+          variant="nothing-here"
+          title="No pin definitions match."
+          spriteSize="md"
+          padding="sm"
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {filtered.map(def => (
@@ -477,7 +482,12 @@ function AwardTab() {
         {loading ? (
           <div className="text-xs text-text-muted">Loading...</div>
         ) : recent.length === 0 ? (
-          <div className="text-xs text-text-muted">No pins awarded yet.</div>
+          <EmptyState
+            variant="quiet"
+            title="No pins awarded yet."
+            spriteSize="md"
+            padding="sm"
+          />
         ) : (
           <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
             {recent.map(r => (
