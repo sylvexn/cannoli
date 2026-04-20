@@ -182,7 +182,7 @@ export function CompactTradeCard({
           {proposer && (
             <div className="flex items-center gap-1.5 mb-1.5">
               <TeamLogo abbrev={proposer.teamAbbrev} color={proposer.teamColor} size="sm" />
-              <Link to={leagueUrl(`/teams/${proposer.id}`)} className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
+              <Link to={leagueUrl(`/teams/${proposer.id}`)} viewTransition className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
                 {proposer.teamName}
               </Link>
             </div>
@@ -213,7 +213,7 @@ export function CompactTradeCard({
           ) : recipient ? (
             <div className="flex items-center gap-1.5 mb-1.5">
               <TeamLogo abbrev={recipient.teamAbbrev} color={recipient.teamColor} size="sm" />
-              <Link to={leagueUrl(`/teams/${recipient.id}`)} className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
+              <Link to={leagueUrl(`/teams/${recipient.id}`)} viewTransition className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
                 {recipient.teamName}
               </Link>
             </div>

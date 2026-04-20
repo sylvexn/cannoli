@@ -171,7 +171,7 @@ export function StatsPage() {
                 </Link>
                 {/* Team */}
                 {team && (
-                  <Link to={leagueUrl(`/teams/${team.id}`)} className="flex items-center gap-1 group/team">
+                  <Link to={leagueUrl(`/teams/${team.id}`)} viewTransition className="flex items-center gap-1 group/team">
                     <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
                     <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
                       {team.teamAbbrev}
@@ -257,7 +257,7 @@ export function StatsPage() {
                             </Link>
                             {team && (
                               <Link
-                                to={leagueUrl(`/teams/${team.id}`)}
+                                to={leagueUrl(`/teams/${team.id}`)} viewTransition
                                 className="flex items-center gap-1 group/team"
                               >
                                 <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />

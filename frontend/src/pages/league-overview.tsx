@@ -176,7 +176,7 @@ export function LeagueOverviewPage() {
 
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <Link to={`/league/${league.id}`} className="hover:opacity-80 transition-opacity">
+                    <Link to={`/league/${league.id}`} viewTransition className="hover:opacity-80 transition-opacity">
                       <CardTitle className="text-base font-heading" style={{ color: league.color }}>
                         {league.name}
                       </CardTitle>
@@ -199,7 +199,7 @@ export function LeagueOverviewPage() {
                       {standings.slice(0, 6).map((team, i) => (
                         <Link
                           key={team.id}
-                          to={`/league/${league.id}/teams/${team.id}`}
+                          to={`/league/${league.id}/teams/${team.id}`} viewTransition
                           className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-surface-overlay/60 transition-colors group"
                         >
                           <span className={cn(

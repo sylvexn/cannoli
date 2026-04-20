@@ -476,6 +476,7 @@ export function ReplaysPage() {
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Link
                           to={`/league/${league.id}/teams/${homeTeam?.id}`}
+                          viewTransition
                           className={cn(
                             'text-sm font-medium hover:text-neon transition-colors truncate',
                             homeWon ? 'text-win' : 'text-text-secondary',
@@ -492,6 +493,7 @@ export function ReplaysPage() {
 
                         <Link
                           to={`/league/${league.id}/teams/${awayTeam?.id}`}
+                          viewTransition
                           className={cn(
                             'text-sm font-medium hover:text-neon transition-colors truncate',
                             awayWon ? 'text-win' : 'text-text-secondary',
