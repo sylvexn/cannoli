@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Match, Player, MatchPokemonEntry } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamCoach } from '@/components/team-coach';
 import { TYPE_COLORS } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
@@ -43,25 +44,30 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
         )}
       >
         {/* Home team */}
-        <Link
-          to={leagueUrl(`/teams/${homePlayer.id}`)}
-          onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2.5 group/home min-w-0 flex-1"
-        >
-          <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" />
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <Link
+            to={leagueUrl(`/teams/${homePlayer.id}`)}
+            onClick={e => e.stopPropagation()}
+            className="group/home shrink-0"
+          >
+            <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" />
+          </Link>
           <div className="min-w-0">
-            <span className={cn(
-              'text-sm font-medium transition-colors block truncate',
-              homeWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
-              'group-hover/home:text-neon',
-            )}>
+            <Link
+              to={leagueUrl(`/teams/${homePlayer.id}`)}
+              onClick={e => e.stopPropagation()}
+              className={cn(
+                'text-sm font-medium transition-colors block truncate hover:text-neon',
+                homeWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
+              )}
+            >
               {homePlayer.teamName}
-            </span>
-            <span className="text-[10px] text-text-muted/60 block truncate">
-              {homePlayer.name}
+            </Link>
+            <span onClick={e => e.stopPropagation()} className="block text-[10px] truncate">
+              <TeamCoach player={homePlayer} size="xs" className="text-text-muted/60" />
             </span>
           </div>
-        </Link>
+        </div>
 
         {/* Score / VS */}
         {isCompleted ? (
@@ -81,25 +87,30 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
         )}
 
         {/* Away team */}
-        <Link
-          to={leagueUrl(`/teams/${awayPlayer.id}`)}
-          onClick={e => e.stopPropagation()}
-          className="flex items-center gap-2.5 justify-end group/away min-w-0 flex-1"
-        >
+        <div className="flex items-center gap-2.5 justify-end min-w-0 flex-1">
           <div className="min-w-0 text-right">
-            <span className={cn(
-              'text-sm font-medium transition-colors block truncate',
-              awayWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
-              'group-hover/away:text-pink',
-            )}>
+            <Link
+              to={leagueUrl(`/teams/${awayPlayer.id}`)}
+              onClick={e => e.stopPropagation()}
+              className={cn(
+                'text-sm font-medium transition-colors block truncate hover:text-pink',
+                awayWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
+              )}
+            >
               {awayPlayer.teamName}
-            </span>
-            <span className="text-[10px] text-text-muted/60 block truncate">
-              {awayPlayer.name}
+            </Link>
+            <span onClick={e => e.stopPropagation()} className="block text-[10px] truncate">
+              <TeamCoach player={awayPlayer} size="xs" className="text-text-muted/60" />
             </span>
           </div>
-          <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
-        </Link>
+          <Link
+            to={leagueUrl(`/teams/${awayPlayer.id}`)}
+            onClick={e => e.stopPropagation()}
+            className="group/away shrink-0"
+          >
+            <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
+          </Link>
+        </div>
 
         {/* Expand / replay / scout indicators */}
         <div className="flex items-center gap-1 shrink-0 justify-end">

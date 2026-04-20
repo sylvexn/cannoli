@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { api } from '@/lib/api';
 import type { ApiAuthUser } from '@/lib/api';
+import { CoachLink } from '@/components/coach-link';
 import {
   UserPlus, MoreHorizontal, KeyRound, ShieldCheck, ShieldOff,
   UserX, UserCheck, Copy, Eye, EyeOff, Search,
@@ -174,9 +175,20 @@ export function AdminUsers() {
               !user.active && 'opacity-40',
             )}
           >
-            {/* Username */}
-            <span className="text-[13px] font-medium text-text-primary w-[160px] truncate">
-              {user.username}
+            {/* Username — links to public profile + opens hover card */}
+            <span className="w-[160px] truncate text-[13px] font-medium">
+              <CoachLink
+                coach={{
+                  username: user.username,
+                  displayName: user.displayName,
+                  avatarPath: user.avatarPath,
+                  primaryColor: user.primaryColor,
+                  secondaryColor: user.secondaryColor,
+                  tertiaryColor: user.tertiaryColor,
+                  role: user.role,
+                }}
+                size="sm"
+              />
             </span>
 
             {/* Role badge */}
