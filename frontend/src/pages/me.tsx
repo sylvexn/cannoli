@@ -8,9 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
+import { EmptyState } from '@/components/empty-state';
 import { PHASE_COLORS } from '@/lib/constants';
 import {
-  User as UserIcon, Calendar, ArrowLeftRight, UserPlus, Star,
+  Calendar, ArrowLeftRight, UserPlus, Star,
   Hourglass, Swords, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -101,12 +102,19 @@ export function MePage() {
       {/* No teams — guide them */}
       {!loadingData && myTeams.length === 0 && (
         <Card className="bg-surface-raised border-border-default">
-          <CardContent className="py-6 text-sm text-text-muted text-center">
-            <UserIcon size={20} className="inline mb-2 text-text-muted" />
-            <div>You don't manage a team in any active league yet.</div>
-            <Link to="/" className="text-neon hover:underline text-xs mt-1 inline-block">
-              Browse leagues →
-            </Link>
+          <CardContent className="py-2">
+            <EmptyState
+              variant="coming-soon"
+              title="No team yet."
+              subtitle="You don't manage a team in any active league."
+              action={
+                <Link to="/" className="text-neon hover:underline text-xs inline-block">
+                  Browse leagues →
+                </Link>
+              }
+              spriteSize="md"
+              padding="sm"
+            />
           </CardContent>
         </Card>
       )}
@@ -117,8 +125,8 @@ export function MePage() {
           <h2 className="text-xs font-mono uppercase tracking-widest text-text-muted">
             My Teams
           </h2>
-          {myTeams.map(({ league, team }) => (
-            <MyTeamCard key={league.id} league={league} team={team} />
+          {myTeams.map(({ league, team }, i) => (
+            <MyTeamCard key={league.id} league={league} team={team} index={i} />
           ))}
         </div>
 
@@ -139,7 +147,12 @@ export function MePage() {
             </CardHeader>
             <CardContent className="space-y-1.5">
               {pendingTradesForMe.length === 0 ? (
-                <p className="text-xs text-text-muted">No pending proposals.</p>
+                <EmptyState
+                  variant="quiet"
+                  title="No pending proposals."
+                  spriteSize="md"
+                  padding="sm"
+                />
               ) : (
                 pendingTradesForMe.slice(0, 5).map(({ leagueId, trade }) => {
                   const league = leagues.find(l => l.id === leagueId);
@@ -190,12 +203,19 @@ export function MePage() {
   );
 }
 
-function MyTeamCard({ league, team }: MyTeamEntry) {
+function MyTeamCard({ league, team, index }: MyTeamEntry & { index: number }) {
   const draftedCount = team.roster.length;
   const captainCount = team.roster.filter(r => r.isTeraCaptain).length;
 
   return (
-    <Card className="bg-surface-raised border-border-default overflow-hidden">
+    <Card
+      className="stagger-item card-interactive bg-surface-raised border-border-default overflow-hidden"
+      style={{
+        ['--i' as never]: Math.min(index, 20),
+        ['--card-accent' as never]: league.color,
+        ['--card-glow' as never]: `${league.color}30`,
+      }}
+    >
       <div className="h-1" style={{ backgroundColor: league.color }} />
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-3">
