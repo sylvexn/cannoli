@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import type { ApiActivityEvent } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import type { EventCategory } from '@/lib/types';
+import { EmptyState } from '@/components/empty-state';
 
 const EVENT_CATEGORIES: EventCategory[] = ['admin', 'auth', 'config', 'draft', 'trade', 'fa', 'match', 'team'];
 const CATEGORY_LABELS: Record<string, string> = {
@@ -193,12 +194,21 @@ export function AdminActivityLog() {
       <Card>
         <CardContent className="p-0 divide-y divide-border">
           {visible.length === 0 ? (
-            <div className="py-8 text-center text-text-muted text-sm">
-              No events match your filters
-            </div>
+            <EmptyState
+              variant="nothing-here"
+              title="No events match your filters."
+              spriteSize="md"
+              padding="sm"
+            />
           ) : (
-            visible.map(event => (
-              <EventRow key={event.id} event={event} />
+            visible.map((event, i) => (
+              <div
+                key={event.id}
+                className="stagger-item"
+                style={{ ['--i' as never]: Math.min(i, 20) }}
+              >
+                <EventRow event={event} />
+              </div>
             ))
           )}
         </CardContent>
