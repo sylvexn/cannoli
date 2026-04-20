@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
+import { EmptyState } from '@/components/empty-state';
 import { Search, X, Star, ShieldOff, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { pokemonRoute } from '@/lib/pokemon-route';
@@ -108,8 +109,13 @@ export function TierListPage() {
         ))}
         {byTier.length === 0 && (
           <Card className="bg-surface-raised border-border-default">
-            <CardContent className="py-8 text-center text-text-muted text-sm">
-              No Pokémon match these filters.
+            <CardContent className="py-2">
+              <EmptyState
+                variant="nothing-here"
+                title="No Pokémon match these filters."
+                spriteSize="md"
+                padding="sm"
+              />
             </CardContent>
           </Card>
         )}
