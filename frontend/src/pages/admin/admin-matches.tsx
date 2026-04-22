@@ -20,6 +20,7 @@ import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { NumberInput } from '@/components/ui/number-input';
+import { EmptyState } from '@/components/empty-state';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import {
   AlertTriangle, CheckCircle2, Clock, Swords, Shield,
@@ -318,7 +319,11 @@ export function AdminMatches() {
       {loading ? (
         <p className="text-sm text-text-muted text-center py-8">Loading matches...</p>
       ) : matchesByWeek.length === 0 ? (
-        <p className="text-sm text-text-muted text-center py-8">No matches found</p>
+        <EmptyState
+          variant="nothing-here"
+          title="No matches found."
+          spriteSize="md"
+        />
       ) : (
         <div className="space-y-3">
           {matchesByWeek.map(([week, weekMatches]) => (
