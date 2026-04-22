@@ -12,6 +12,7 @@ import { Plus, Pencil, Trash2, Search, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Pin } from '@/components/pin';
+import { EmptyState } from '@/components/empty-state';
 import { formatRelativeTime } from '@/lib/format';
 import { PinIconPicker, RECENT_LUCIDE_NAMES } from './pins/pin-icon-picker';
 
