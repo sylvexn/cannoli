@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -98,7 +99,7 @@ function DefinitionsTab() {
       </div>
 
       {loading ? (
-        <div className="text-xs text-text-muted">Loading...</div>
+        <LoadingSprite size="sm" padding="sm" />
       ) : filtered.length === 0 ? (
         <EmptyState
           variant="nothing-here"
@@ -481,7 +482,7 @@ function AwardTab() {
       <div className="space-y-2 rounded-md border border-border-default bg-surface-raised/30 p-3">
         <h3 className="text-xs font-mono uppercase tracking-wider text-text-secondary">Recently awarded</h3>
         {loading ? (
-          <div className="text-xs text-text-muted">Loading...</div>
+          <LoadingSprite size="sm" padding="sm" />
         ) : recent.length === 0 ? (
           <EmptyState
             variant="quiet"

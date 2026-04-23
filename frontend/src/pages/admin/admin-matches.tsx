@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -317,7 +318,7 @@ export function AdminMatches() {
 
       {/* Match list by week */}
       {loading ? (
-        <p className="text-sm text-text-muted text-center py-8">Loading matches...</p>
+        <LoadingSprite label="Loading matches..." />
       ) : matchesByWeek.length === 0 ? (
         <EmptyState
           variant="nothing-here"

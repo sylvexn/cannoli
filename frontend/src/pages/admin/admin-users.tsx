@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -116,7 +117,7 @@ export function AdminUsers() {
   }
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-8 text-center">Loading users...</div>;
+    return <LoadingSprite label="Loading users..." />;
   }
 
   return (

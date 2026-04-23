@@ -4,6 +4,7 @@ import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { LoadingSprite } from '@/components/loading-sprite';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -92,7 +93,7 @@ export function AdminSiteSettings() {
   }
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-8 text-center">Loading settings...</div>;
+    return <LoadingSprite label="Loading settings..." />;
   }
 
   return (

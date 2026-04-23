@@ -177,12 +177,19 @@ export function DraftBoardPage() {
   // Play Pokemon cry on EVERY broadcast pick (demo or live). All connected
   // clients hear the cry on every pick — moved out of the per-user gate so the
   // draft feels live and shared. Per-user mute toggle controls audibility.
+  // Also auto-expands the pick log so the celebration sequence (sprite scale,
+  // type-color glow, tier badge slide) is always seen — collapsed log meant
+  // celebrations were silently invisible. Users can manually re-collapse.
   const prevPickCountRef = useRef(state.allPicks.length);
   useEffect(() => {
     const prev = prevPickCountRef.current;
     prevPickCountRef.current = state.allPicks.length;
     if (isLiveMode && state.allPicks.length > prev && state.allPicks.length > 0) {
       const lastPick = state.allPicks[state.allPicks.length - 1];
+      // Make sure the pick log is open so the celebration is visible. The
+      // DraftPickLog uses mount as its "freshly landed" trigger, so we want
+      // it mounted before the pick state propagates further.
+      setPickLogExpanded(true);
       if (lastPick.pokemonName && !muted) {
         playCry(lastPick.pokemonName, 0.15);
         // Surface the one-time hint the first time a cry actually plays.

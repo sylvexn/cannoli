@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
+import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -229,7 +230,7 @@ export function AdminFreeAgents() {
 
       {/* FA list */}
       {loading ? (
-        <div className="text-center text-text-muted text-xs py-8">Loading...</div>
+        <LoadingSprite />
       ) : (
         <div className="space-y-0.5 max-h-[50vh] overflow-y-auto">
           <div className="text-[10px] text-text-muted mb-1">{filtered.length} free agents available</div>

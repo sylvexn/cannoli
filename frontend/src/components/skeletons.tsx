@@ -1,6 +1,7 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { LoadingSprite } from '@/components/loading-sprite';
 
 export function TableRowSkeleton({ cols = 5 }: { cols?: number }) {
   return (
@@ -219,10 +220,7 @@ export function TradeBlockSkeleton() {
 export function PageLoadingSpinner() {
   return (
     <div className="flex items-center justify-center h-64">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 border-2 border-border-default border-t-neon rounded-full animate-spin" />
-        <span className="text-sm text-text-muted">Loading...</span>
-      </div>
+      <LoadingSprite size="lg" padding="lg" />
     </div>
   );
 }
