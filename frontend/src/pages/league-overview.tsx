@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { formatRelativeTime } from '@/lib/format';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
@@ -10,6 +10,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
 import { CoachLink } from '@/components/coach-link';
+import { EventDescription } from '@/components/event-description';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
 import {
@@ -264,7 +265,7 @@ export function LeagueOverviewPage() {
                           ['--card-accent' as never]: eventLeague?.color ?? 'var(--color-neon)',
                         }}
                       >
-                        <ActivityFeedItem event={event} />
+                        <ActivityFeedItem event={event} teamsPerLeague={teamsPerLeague} />
                       </div>
                     );
                   })
@@ -323,22 +324,17 @@ function AnnouncementBanner({ text, type }: { text: string; type: 'info' | 'warn
   );
 }
 
-function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
+function ActivityFeedItem({
+  event,
+  teamsPerLeague,
+}: {
+  event: ApiActivityEvent;
+  teamsPerLeague?: Record<string, ApiTeam[]>;
+}) {
   const { leagues } = useAppData();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
   const tone = getEventTone(event);
-
-  // Strip a leading actor mention from description if present — we render
-  // actor separately as a CoachLink, so "alice did X" → "did X".
-  const trimmedDescription = useMemo(() => {
-    const desc = event.description;
-    const actor = event.actor;
-    if (!actor) return desc;
-    // Match common prefixes case-insensitively
-    const re = new RegExp(`^${actor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+`, 'i');
-    return desc.replace(re, '');
-  }, [event.description, event.actor]);
 
   return (
     <div
@@ -350,7 +346,7 @@ function ActivityFeedItem({ event }: { event: ApiActivityEvent }) {
         <p className="text-[11px] text-text-secondary leading-tight">
           <CoachLink coach={{ username: event.actor }} size="xs" />
           {' '}
-          <span className="text-text-secondary">{trimmedDescription.toLowerCase()}</span>
+          <EventDescription event={event} teamsPerLeague={teamsPerLeague} />
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">
           {league && (
