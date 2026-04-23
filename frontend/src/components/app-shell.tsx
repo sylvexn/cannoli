@@ -1,18 +1,9 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Trophy, Swords, BarChart3, Calendar, ArrowLeftRight,
-  Shield, LayoutDashboard, ChevronDown, Globe, Gamepad2,
-  Settings, LogOut, User, Archive, LogIn, Film, UserPlus,
-  ScrollText, ListTree, Home,
+  Swords, Shield, Globe, Gamepad2,
+  Archive, Film, ScrollText, ListTree, Home,
 } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
 import {
   Tooltip,
   TooltipTrigger,
@@ -20,26 +11,15 @@ import {
 } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
-import { PHASE_COLORS } from '@/lib/constants';
 import { api } from '@/lib/api';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
-import { FeedbackDialog } from './feedback-dialog';
 import { CommandPalette } from './command-palette';
 import { MatchBanner } from './match-banner';
-import { Search } from 'lucide-react';
 import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
-import { UserAccentScope } from './user-accent-scope';
-import { BotStatusChip } from './bot-status-chip';
-
-const leaguePages = [
-  { path: '', label: 'Standings', icon: Trophy },
-  { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
-  { path: '/schedule', label: 'Schedule', icon: Calendar },
-  { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
-  { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
-  { path: '/free-agents', label: 'Free Agents', icon: UserPlus },
-];
+import { useLocalStorageState } from '@/lib/use-local-storage-state';
+import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
+import { SidebarFooter } from './app-shell/sidebar-footer';
 
 // Routes that need full-width layout (no max-w constraint)
 const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
@@ -148,23 +128,19 @@ export function AppShell() {
   // contextually colored instead of resetting to the default.
   const urlLeagueId = pathname.match(/^\/league\/([^/]+)/)?.[1] ?? null;
 
-  // Persist URL league to localStorage whenever it changes. Read happens lazily
-  // through readPersistedLeagueId() so we don't need a separate state.
+  // Persist URL league via shared hook (also keeps tabs in sync via storage events).
+  const [persistedActiveLeagueId, setPersistedActiveLeagueId] = useLocalStorageState<string | null>(
+    'cannoli:activeLeagueId',
+    null,
+  );
+
   useEffect(() => {
-    if (urlLeagueId) {
-      try { localStorage.setItem('cannoli:activeLeagueId', urlLeagueId); } catch { /* ignore */ }
+    if (urlLeagueId && urlLeagueId !== persistedActiveLeagueId) {
+      setPersistedActiveLeagueId(urlLeagueId);
     }
-  }, [urlLeagueId]);
+  }, [urlLeagueId, persistedActiveLeagueId, setPersistedActiveLeagueId]);
 
-  // Read persisted only on initial mount + when url leaves a league. We don't
-  // need to track it via state because pathname changes already trigger renders.
-  const persistedLeagueId = useMemo(() => {
-    if (urlLeagueId) return urlLeagueId;
-    try { return localStorage.getItem('cannoli:activeLeagueId'); } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlLeagueId, pathname]);
-
-  const activeLeagueId = persistedLeagueId;
+  const activeLeagueId = urlLeagueId ?? persistedActiveLeagueId;
   const activeLeague = useMemo(
     () => leagues.find(l => l.id === activeLeagueId) ?? null,
     [activeLeagueId, leagues],
@@ -287,83 +263,12 @@ export function AppShell() {
           </NavLink>
 
           {/* League sections */}
-          {leagues.map(league => {
-            const isOpen = openLeagueId === league.id;
-
-            return (
-              <div key={league.id}>
-                {/* League header — accordion toggle */}
-                <button
-                  onClick={() => toggleLeague(league.id)}
-                  className="gem-wrapper w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
-                >
-                  <div className={`league-banner league-banner-${league.id} flex-1 min-w-0`}>
-                    <span className="league-banner-text text-white truncate">
-                      {league.name.replace(' League', '')}
-                    </span>
-                  </div>
-                  <span className={cn(
-                    'text-[9px] px-1 py-0.5 rounded font-bold uppercase shrink-0',
-                    PHASE_COLORS[league.season.phase],
-                  )}>
-                    {league.season.phase === 'regular'
-                      ? `W${league.season.currentWeek}`
-                      : league.season.phase.slice(0, 3)}
-                  </span>
-                  <ChevronDown
-                    size={14}
-                    className={cn(
-                      'text-text-muted transition-transform duration-200 shrink-0',
-                      isOpen && 'rotate-180',
-                    )}
-                  />
-                </button>
-
-                {/* Collapsible sub-pages */}
-                <div className={cn(
-                  'grid transition-all duration-200 ease-out',
-                  isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-                )}>
-                  <div className="overflow-hidden">
-                    <div className="pl-4 space-y-0.5 py-1">
-                      {leaguePages.map(({ path, label, icon: Icon }) => {
-                        const to = `/league/${league.id}${path}`;
-                        const tradeBadge = path === '/trades' ? (pendingByLeague[league.id] ?? 0) : 0;
-                        return (
-                          <NavLink viewTransition
-                            key={path}
-                            to={to}
-                            end={path === ''}
-                            className={({ isActive }) => cn(
-                              'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors',
-                              isActive
-                                ? 'text-text-primary font-medium'
-                                : 'text-text-muted hover:bg-surface-overlay/60 hover:text-text-secondary',
-                            )}
-                            style={({ isActive }) => isActive ? {
-                              backgroundColor: `${league.color}15`,
-                              color: league.color,
-                            } : undefined}
-                          >
-                            <Icon size={14} />
-                            {label}
-                            {tradeBadge > 0 && (
-                              <span
-                                title={`${tradeBadge} pending trade proposal${tradeBadge === 1 ? '' : 's'}`}
-                                className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums"
-                              >
-                                {tradeBadge}
-                              </span>
-                            )}
-                          </NavLink>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          <SidebarLeagueNav
+            leagues={leagues}
+            openLeagueId={openLeagueId}
+            onToggle={toggleLeague}
+            pendingByLeague={pendingByLeague}
+          />
 
           {/* Separator */}
           <div className="h-px bg-border-subtle mx-2 my-1" />
@@ -467,81 +372,15 @@ export function AppShell() {
         </nav>
 
         {/* Footer — My Team + user dropdown (or login for guests) */}
-        <div className="p-3 border-t border-border-default space-y-2">
-          {user && myTeams.length > 0 && (
-            <MyTeamSidebar myTeams={myTeams} leagues={leagues} pendingTradeCount={pendingTradeCount} />
-          )}
-          {user && myTeams.length === 0 && (
-            <NavLink
-              to="/me"
-              className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors"
-            >
-              <User size={14} />
-              <span>My Hub</span>
-            </NavLink>
-          )}
-
-          <button
-            onClick={() => setCmdOpen(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors"
-          >
-            <Search size={14} />
-            <span>Search</span>
-            <kbd className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-overlay text-text-muted">
-              Ctrl+K
-            </kbd>
-          </button>
-
-          {user && <FeedbackDialog />}
-
-          {/* PS bot status — staff only */}
-          {isAdmin && <BotStatusChip />}
-
-          {user ? (
-            <UserAccentScope user={user}>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
-                <div
-                  className={cn(
-                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                    !user.primaryColor && (isAdmin ? 'bg-neon/20 text-neon' : 'bg-surface-overlay text-text-secondary'),
-                  )}
-                  style={user.primaryColor ? {
-                    backgroundColor: 'color-mix(in oklab, var(--user-primary) 30%, transparent)',
-                    color: 'var(--user-primary)',
-                    boxShadow: '0 0 0 1.5px var(--user-secondary)',
-                  } : undefined}
-                >
-                  {user.username.charAt(0).toUpperCase()}
-                </div>
-                <div className="text-xs text-left min-w-0">
-                  <div className="text-text-primary font-medium truncate">{user.username}</div>
-                  <div className="text-text-muted">{user.role}</div>
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" sideOffset={8}>
-                <DropdownMenuItem onClick={() => navigate('/settings')}>
-                  <Settings size={14} />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { logout(); navigate('/login'); }}>
-                  <LogOut size={14} />
-                  Log Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            </UserAccentScope>
-          ) : (
-            <button
-              onClick={() => navigate('/login')}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-neon hover:bg-neon/10 transition-colors"
-            >
-              <LogIn size={14} />
-              Log In
-            </button>
-          )}
-        </div>
+        <SidebarFooter
+          user={user}
+          isAdmin={isAdmin}
+          myTeams={myTeams}
+          leagues={leagues}
+          pendingTradeCount={pendingTradeCount}
+          onOpenCommand={() => setCmdOpen(true)}
+          onLogout={logout}
+        />
       </aside>
 
       {/* Main content */}
@@ -572,78 +411,6 @@ export function AppShell() {
 
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       <MatchBanner />
-    </div>
-  );
-}
-
-interface MyTeamSidebarProps {
-  myTeams: { leagueId: string; teamId: string; teamAbbrev: string; teamName: string }[];
-  leagues: { id: string; name: string; color: string }[];
-  pendingTradeCount: number;
-}
-
-function MyTeamSidebar({ myTeams, leagues, pendingTradeCount }: MyTeamSidebarProps) {
-  // Single team: render direct link. Multiple: render a stacked group.
-  if (myTeams.length === 1) {
-    const t = myTeams[0]!;
-    const league = leagues.find(l => l.id === t.leagueId);
-    return (
-      <NavLink
-        to={`/league/${t.leagueId}/teams/${t.teamId}`}
-        className={({ isActive }) => cn(
-          'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-          isActive
-            ? 'bg-neon/10 text-neon'
-            : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-        )}
-      >
-        <User size={14} />
-        <span className="truncate">{t.teamAbbrev}</span>
-        <span className="text-[9px] truncate text-text-muted ml-auto" style={league ? { color: league.color } : undefined}>
-          {league?.name.replace(' League', '')}
-        </span>
-        {pendingTradeCount > 0 && (
-          <span title="Pending trade proposals" className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums">
-            {pendingTradeCount}
-          </span>
-        )}
-      </NavLink>
-    );
-  }
-
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center gap-2 px-3 py-1 text-[10px] uppercase tracking-wider text-text-muted">
-        <User size={11} />
-        <span>My Teams</span>
-        {pendingTradeCount > 0 && (
-          <span title="Pending trade proposals" className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-purple-400/20 text-purple-400 text-[9px] font-bold tabular-nums">
-            {pendingTradeCount}
-          </span>
-        )}
-      </div>
-      {myTeams.map(t => {
-        const league = leagues.find(l => l.id === t.leagueId);
-        return (
-          <NavLink
-            key={t.leagueId}
-            to={`/league/${t.leagueId}/teams/${t.teamId}`}
-            className={({ isActive }) => cn(
-              'w-full flex items-center gap-2 px-3 py-1 rounded-md text-xs transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <span
-              className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ backgroundColor: league?.color }}
-            />
-            <span className="truncate">{t.teamAbbrev}</span>
-            <span className="text-[9px] text-text-muted ml-auto">{league?.name.replace(' League', '')}</span>
-          </NavLink>
-        );
-      })}
     </div>
   );
 }
