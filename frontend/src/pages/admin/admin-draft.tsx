@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { LoadingSprite } from '@/components/loading-sprite';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { Save, Timer, Zap } from 'lucide-react';
@@ -47,7 +48,7 @@ export function AdminDraft() {
   }
 
   if (loading) {
-    return <p className="text-sm text-text-muted text-center py-8">Loading...</p>;
+    return <LoadingSprite />;
   }
 
   return (

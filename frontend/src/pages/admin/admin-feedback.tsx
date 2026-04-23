@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { LoadingSprite } from '@/components/loading-sprite';
+import { EmptyState } from '@/components/empty-state';
 import { api } from '@/lib/api';
 import type { ApiFeedbackIssue } from '@/lib/api';
 import {
@@ -89,11 +91,14 @@ export function AdminFeedback() {
       <Card>
         <CardContent className="p-0 divide-y divide-border">
           {loading ? (
-            <div className="py-8 text-center text-text-muted text-sm">Loading...</div>
+            <LoadingSprite />
           ) : issues.length === 0 ? (
-            <div className="py-8 text-center text-text-muted text-sm">
-              No {filter !== 'all' ? filter : ''} feedback issues
-            </div>
+            <EmptyState
+              variant="quiet"
+              title={`No ${filter !== 'all' ? filter + ' ' : ''}feedback issues.`}
+              spriteSize="md"
+              padding="sm"
+            />
           ) : (
             issues.map(issue => (
               <IssueRow key={issue.number} issue={issue} />

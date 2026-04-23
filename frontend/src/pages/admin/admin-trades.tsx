@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -88,7 +89,7 @@ export function AdminTrades() {
   }
 
   if (loading) {
-    return <div className="text-sm text-text-muted py-8 text-center">Loading trades...</div>;
+    return <LoadingSprite label="Loading trades..." />;
   }
 
   return (
