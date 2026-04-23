@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from './api';
 import type { League, LeagueSeason } from './types';
 
@@ -65,8 +65,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => setLoading(false));
   }, []);
 
+  const value = useMemo<AppData>(() => ({ leagues, loading, refreshLeagues }), [leagues, loading, refreshLeagues]);
+
   return (
-    <AppDataContext.Provider value={{ leagues, loading, refreshLeagues }}>
+    <AppDataContext.Provider value={value}>
       {children}
     </AppDataContext.Provider>
   );

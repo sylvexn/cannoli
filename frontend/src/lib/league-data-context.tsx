@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from './api';
 import type { Player, Match, MatchPokemonEntry, Trade } from './types';
 import type { ApiTransaction, ApiByeWeek } from './api';
@@ -110,20 +110,26 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
   // would drop the h2h dimension.
   const standings = players;
 
-  const getWeekMatches = (week: number) =>
-    matches.filter(m => m.week === week);
+  const getWeekMatches = useCallback((week: number) =>
+    matches.filter(m => m.week === week),
+    [matches],
+  );
 
-  const getTeamMatches = (teamId: string) =>
+  const getTeamMatches = useCallback((teamId: string) =>
     matches
       .filter(m => m.homePlayer === teamId || m.awayPlayer === teamId)
-      .sort((a, b) => a.week - b.week);
+      .sort((a, b) => a.week - b.week),
+    [matches],
+  );
 
-  const getTeamByes = (teamId: string) =>
+  const getTeamByes = useCallback((teamId: string) =>
     byes
       .filter(b => b.teamId === teamId)
-      .sort((a, b) => a.week - b.week);
+      .sort((a, b) => a.week - b.week),
+    [byes],
+  );
 
-  const getMatchDetail = async (matchId: string) => {
+  const getMatchDetail = useCallback(async (matchId: string) => {
     if (detailCache.has(matchId)) return detailCache.get(matchId)!;
     try {
       const d = await api.getMatchPokemon(matchId);
@@ -148,9 +154,9 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
     } catch {
       return null;
     }
-  };
+  }, [detailCache]);
 
-  const getTeamTrades = (teamId: string): Trade[] => {
+  const getTeamTrades = useCallback((teamId: string): Trade[] => {
     return transactions
       .filter(t => t.type === 'fa' || t.type === 'trade')
       .filter(t => t.teamId === teamId || t.otherTeamId === teamId)
@@ -165,23 +171,28 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         proposedAt: '',
         resolvedAt: '',
       }));
-  };
+  }, [transactions]);
+
+  const value = useMemo<LeagueData>(() => ({
+    players,
+    standings,
+    matches,
+    byes,
+    transactions,
+    loading,
+    getWeekMatches,
+    getTeamMatches,
+    getTeamByes,
+    getMatchDetail,
+    getTeamTrades,
+    refresh,
+  }), [
+    players, standings, matches, byes, transactions, loading,
+    getWeekMatches, getTeamMatches, getTeamByes, getMatchDetail, getTeamTrades, refresh,
+  ]);
 
   return (
-    <LeagueDataContext.Provider value={{
-      players,
-      standings,
-      matches,
-      byes,
-      transactions,
-      loading,
-      getWeekMatches,
-      getTeamMatches,
-      getTeamByes,
-      getMatchDetail,
-      getTeamTrades,
-      refresh,
-    }}>
+    <LeagueDataContext.Provider value={value}>
       {children}
     </LeagueDataContext.Provider>
   );
