@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Film } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -26,6 +26,7 @@ import {
   isLocalReplay,
   storageKey,
 } from './stream-types';
+import { initialStreamState, streamReducer } from './stream-reducer';
 
 /**
  * Theater-mode broadcast cockpit. The page is mounted *outside* the
@@ -38,24 +39,27 @@ export function StreamPage() {
   const week = parseInt(weekParam ?? '0', 10);
 
   const { leagues, loading: leaguesLoading } = useAppData();
-  const [entries, setEntries] = useState<QueueEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [state, dispatch] = useReducer(streamReducer, initialStreamState);
+  const {
+    entries,
+    loading,
+    streamMode,
+    phase,
+    activeIndex,
+    featured,
+    prerollDelayMs,
+    prerollHeld,
+    showLowerThird,
+    resumePromptOpen,
+    pendingState,
+    endConfirmOpen,
+  } = state;
 
-  // "lobby" = pre-stream queue editor. "live" = theater mode.
-  const [streamMode, setStreamMode] = useState<'lobby' | 'live'>('lobby');
-  const [phase, setPhase] = useState<StreamPhase>('preroll');
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [featured, setFeatured] = useState<Set<string>>(new Set());
-  const [prerollDelayMs, setPrerollDelayMs] = useState<number>(5000);
-  const [prerollHeld, setPrerollHeld] = useState(false);
-  const [showLowerThird, setShowLowerThird] = useState(false);
-  const [resumePromptOpen, setResumePromptOpen] = useState(false);
-  const [pendingState, setPendingState] = useState<PersistedState | null>(null);
-  const [endConfirmOpen, setEndConfirmOpen] = useState(false);
-
+  // Pure scratch UI — drag-hover index only feeds reorder dispatches,
+  // doesn't interact with the rest of the machine.
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
-  // Idle-fade for control bar
+  // Idle-fade for control bar — independent timer-driven UI.
   const [controlsVisible, setControlsVisible] = useState(true);
   const idleTimerRef = useRef<number | null>(null);
 
@@ -63,7 +67,7 @@ export function StreamPage() {
   useEffect(() => {
     if (leaguesLoading || leagues.length === 0 || !week) return;
 
-    setLoading(true);
+    dispatch({ type: 'start-loading' });
     Promise.all(
       leagues.map(async (league) => {
         const [matches, teams] = await Promise.all([
@@ -91,8 +95,7 @@ export function StreamPage() {
           });
       }),
     ).then(results => {
-      setEntries(results.flat());
-      setLoading(false);
+      dispatch({ type: 'entries-loaded', entries: results.flat() });
     });
   }, [leagues, leaguesLoading, week]);
 
@@ -105,10 +108,9 @@ export function StreamPage() {
       const parsed = JSON.parse(raw) as PersistedState;
       // Only prompt to resume if we have meaningful progress (not first match).
       if (parsed.index > 0 && parsed.index < entries.length) {
-        setPendingState(parsed);
-        setResumePromptOpen(true);
+        dispatch({ type: 'prompt-resume', pending: parsed });
       } else {
-        applyPersistedOrder(parsed);
+        dispatch({ type: 'apply-persisted-order', persisted: parsed });
       }
     } catch {
       // ignore corrupt state
@@ -116,53 +118,22 @@ export function StreamPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, entries.length]);
 
-  function applyPersistedOrder(state: PersistedState) {
-    setFeatured(new Set(state.featured));
-    setPrerollDelayMs(state.prerollDelayMs);
-    setEntries(prev => {
-      const map = new Map(prev.map(e => [e.id, e]));
-      const reordered: QueueEntry[] = [];
-      for (const id of state.order) {
-        const e = map.get(id);
-        if (e) {
-          reordered.push(e);
-          map.delete(id);
-        }
-      }
-      // append any new entries discovered since persistence
-      for (const remaining of map.values()) reordered.push(remaining);
-      return reordered;
-    });
-  }
-
-  function acceptResume() {
-    if (!pendingState) return;
-    applyPersistedOrder(pendingState);
-    setActiveIndex(pendingState.index);
-    setPhase('preroll');
-    setStreamMode('live');
-    setResumePromptOpen(false);
-    setPendingState(null);
-  }
-
   function declineResume() {
-    if (pendingState) applyPersistedOrder(pendingState);
     localStorage.removeItem(storageKey(weekParam));
-    setResumePromptOpen(false);
-    setPendingState(null);
+    dispatch({ type: 'decline-resume' });
   }
 
   // ── Persist on changes ───────────────────────────────────────────────────
   useEffect(() => {
     if (loading || entries.length === 0) return;
     if (streamMode !== 'live') return;
-    const state: PersistedState = {
+    const persisted: PersistedState = {
       order: entries.map(e => e.id),
       index: activeIndex,
       featured: [...featured],
       prerollDelayMs,
     };
-    localStorage.setItem(storageKey(weekParam), JSON.stringify(state));
+    localStorage.setItem(storageKey(weekParam), JSON.stringify(persisted));
   }, [entries, activeIndex, featured, prerollDelayMs, streamMode, loading, weekParam]);
 
   // ── Idle-fade ─────────────────────────────────────────────────────────────
@@ -192,13 +163,7 @@ export function StreamPage() {
   function handleDragOver(e: React.DragEvent, idx: number) {
     e.preventDefault();
     if (dragIndex === null || dragIndex === idx) return;
-    setEntries(prev => {
-      const next = prev.slice();
-      const [moved] = next.splice(dragIndex, 1);
-      if (!moved) return prev;
-      next.splice(idx, 0, moved);
-      return next;
-    });
+    dispatch({ type: 'reorder-entries', from: dragIndex, to: idx });
     setDragIndex(idx);
   }
   function handleDragEnd() {
@@ -213,42 +178,23 @@ export function StreamPage() {
       navigate('/replays');
       return;
     }
-    setActiveIndex(i => i + 1);
-    setPhase('preroll');
-    setPrerollHeld(false);
+    dispatch({ type: 'next-match' });
   }, [activeIndex, entries.length, navigate, weekParam]);
 
   const goToPrevMatch = useCallback(() => {
     if (activeIndex === 0) return;
-    setActiveIndex(i => i - 1);
-    setPhase('preroll');
-    setPrerollHeld(false);
+    dispatch({ type: 'prev-match' });
   }, [activeIndex]);
 
-  const advanceFromPreroll = useCallback(() => setPhase('replay'), []);
+  const advanceFromPreroll = useCallback(
+    () => dispatch({ type: 'set-phase', phase: 'replay' }),
+    [],
+  );
 
   function endStream() {
-    setEndConfirmOpen(false);
     localStorage.removeItem(storageKey(weekParam));
-    setStreamMode('lobby');
+    dispatch({ type: 'end-stream' });
     navigate('/replays');
-  }
-
-  function toggleFeatured(id: string) {
-    setFeatured(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function startStream() {
-    if (entries.length === 0) return;
-    setActiveIndex(0);
-    setPhase('preroll');
-    setPrerollHeld(false);
-    setStreamMode('live');
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -289,9 +235,9 @@ export function StreamPage() {
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
-          onToggleFeatured={toggleFeatured}
-          onChangeDelay={setPrerollDelayMs}
-          onStart={startStream}
+          onToggleFeatured={(id) => dispatch({ type: 'toggle-featured', id })}
+          onChangeDelay={(delayMs) => dispatch({ type: 'set-preroll-delay', delayMs })}
+          onStart={() => dispatch({ type: 'start-stream' })}
           onBack={() => navigate('/replays')}
         />
       ) : (
@@ -307,23 +253,23 @@ export function StreamPage() {
           controlsVisible={controlsVisible}
           onPrev={goToPrevMatch}
           onNext={goToNextMatch}
-          onTogglePause={() => setPrerollHeld(h => !h)}
-          onToggleLowerThird={() => setShowLowerThird(s => !s)}
-          onEnd={() => setEndConfirmOpen(true)}
+          onTogglePause={() => dispatch({ type: 'toggle-preroll-held' })}
+          onToggleLowerThird={() => dispatch({ type: 'toggle-lower-third' })}
+          onEnd={() => dispatch({ type: 'set-end-confirm-open', open: true })}
           onPrerollAdvance={advanceFromPreroll}
           onPrerollSkip={goToNextMatch}
-          onPrerollHold={setPrerollHeld}
-          onPrerollReplay={() => {
-            setPhase('preroll');
-            setPrerollHeld(false);
-          }}
+          onPrerollHold={(held) => dispatch({ type: 'set-preroll-held', held })}
+          onPrerollReplay={() => dispatch({ type: 'replay-preroll' })}
           onPostrollContinue={goToNextMatch}
-          onReplayDone={() => setPhase('postroll')}
+          onReplayDone={() => dispatch({ type: 'set-phase', phase: 'postroll' })}
         />
       )}
 
       {/* Resume prompt */}
-      <Dialog open={resumePromptOpen} onOpenChange={setResumePromptOpen}>
+      <Dialog
+        open={resumePromptOpen}
+        onOpenChange={(open) => dispatch({ type: 'set-resume-open', open })}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="font-mono uppercase tracking-widest">
@@ -342,7 +288,7 @@ export function StreamPage() {
               Start over
             </button>
             <button
-              onClick={acceptResume}
+              onClick={() => dispatch({ type: 'accept-resume' })}
               className="px-3 py-1.5 rounded-md border border-neon/40 bg-neon/10 text-neon text-sm hover:bg-neon/20 transition-colors"
             >
               Resume
@@ -352,7 +298,10 @@ export function StreamPage() {
       </Dialog>
 
       {/* End confirm */}
-      <Dialog open={endConfirmOpen} onOpenChange={setEndConfirmOpen}>
+      <Dialog
+        open={endConfirmOpen}
+        onOpenChange={(open) => dispatch({ type: 'set-end-confirm-open', open })}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="font-mono uppercase tracking-widest">
@@ -364,7 +313,7 @@ export function StreamPage() {
           </DialogHeader>
           <DialogFooter>
             <button
-              onClick={() => setEndConfirmOpen(false)}
+              onClick={() => dispatch({ type: 'set-end-confirm-open', open: false })}
               className="px-3 py-1.5 rounded-md border border-border-default text-sm text-text-secondary hover:text-text-primary transition-colors"
             >
               Keep streaming
