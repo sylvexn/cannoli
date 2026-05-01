@@ -1,6 +1,6 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
-import { typeColors } from '@/components/type-chip';
+import { TYPE_COLORS } from '@/lib/constants';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMemo } from 'react';
 
@@ -46,7 +46,7 @@ export function TypeEffectivenessTooltip({ types, children }: TypeEffectivenessT
               <span
                 key={t}
                 className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded text-white"
-                style={{ backgroundColor: typeColors[t] }}
+                style={{ backgroundColor: TYPE_COLORS[t] }}
               >
                 {t}
               </span>
@@ -71,7 +71,7 @@ export function TypeEffectivenessTooltip({ types, children }: TypeEffectivenessT
                       <span
                         key={type}
                         className="text-[9px] font-semibold uppercase px-1 py-px rounded text-white"
-                        style={{ backgroundColor: typeColors[type] }}
+                        style={{ backgroundColor: TYPE_COLORS[type] }}
                       >
                         {type.slice(0, 3)}
                       </span>

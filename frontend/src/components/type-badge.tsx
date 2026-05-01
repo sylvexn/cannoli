@@ -1,5 +1,6 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
+import { TYPE_LABELS } from '@/lib/constants';
 import { TypeEffectivenessTooltip } from './type-effectiveness-tooltip';
 
 interface TypeBadgeProps {
@@ -8,13 +9,6 @@ interface TypeBadgeProps {
   className?: string;
   noTooltip?: boolean;
 }
-
-const typeLabels: Record<PokemonType, string> = {
-  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
-  ice: 'ICE', fighting: 'FIG', poison: 'POI', ground: 'GRO', flying: 'FLY',
-  psychic: 'PSY', bug: 'BUG', rock: 'ROC', ghost: 'GHO', dragon: 'DRA',
-  dark: 'DRK', steel: 'STL', fairy: 'FAI',
-};
 
 export function TypeBadge({ type, size = 'sm', className, noTooltip }: TypeBadgeProps) {
   const badge = (
@@ -26,7 +20,7 @@ export function TypeBadge({ type, size = 'sm', className, noTooltip }: TypeBadge
       )}
       style={{ backgroundColor: `var(--color-type-${type})` }}
     >
-      {typeLabels[type]}
+      {TYPE_LABELS[type]}
     </span>
   );
 

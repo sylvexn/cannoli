@@ -4,14 +4,6 @@ import type { Player, RosterPokemon } from '@/lib/types';
 import { TIER_LIST } from '@/data/tier-list';
 import { TYPE_CHART } from '@/lib/type-effectiveness';
 
-// ─── Type abbreviations ──────────────────────────────────────────
-export const TYPE_ABBR: Record<PokemonType, string> = {
-  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
-  ice: 'ICE', fighting: 'FIG', poison: 'POI', ground: 'GRO', flying: 'FLY',
-  psychic: 'PSY', bug: 'BUG', rock: 'ROC', ghost: 'GHO', dragon: 'DRA',
-  dark: 'DRK', steel: 'STL', fairy: 'FAI',
-};
-
 // ─── Interfaces ──────────────────────────────────────────────────
 export interface TypeHit { name: string; mult: number }
 export interface TypeProfileEntry {
