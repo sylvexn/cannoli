@@ -9,6 +9,17 @@ export const TYPE_COLORS: Record<PokemonType, string> = {
   steel: '#b7b7ce', fairy: '#d685ad',
 };
 
+/** Three-letter Pokemon type labels for chips/badges */
+export const TYPE_LABELS: Record<PokemonType, string> = {
+  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
+  ice: 'ICE', fighting: 'FIG', poison: 'POI', ground: 'GRO', flying: 'FLY',
+  psychic: 'PSY', bug: 'BUG', rock: 'ROC', ghost: 'GHO', dragon: 'DRA',
+  dark: 'DRK', steel: 'STL', fairy: 'FAI',
+};
+
+/** Alias kept for code that imported the team-profile copy as TYPE_ABBR */
+export const TYPE_ABBR = TYPE_LABELS;
+
 /** Phase display config — shared across overview, app-shell, admin */
 export const PHASE_COLORS: Record<string, string> = {
   draft: 'text-draw bg-draw/10',

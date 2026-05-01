@@ -1,6 +1,13 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
+import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { TypeEffectivenessTooltip } from './type-effectiveness-tooltip';
+
+/**
+ * @deprecated Import `TYPE_COLORS` from `@/lib/constants` directly.
+ * Re-exported here only for callers that haven't migrated yet.
+ */
+export const typeColors = TYPE_COLORS;
 
 interface TypeChipProps {
   types: PokemonType[];
@@ -9,21 +16,6 @@ interface TypeChipProps {
   /** Disable the effectiveness tooltip */
   noTooltip?: boolean;
 }
-
-const typeLabels: Record<PokemonType, string> = {
-  normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',
-  ice: 'ICE', fighting: 'FIG', poison: 'POI', ground: 'GRO', flying: 'FLY',
-  psychic: 'PSY', bug: 'BUG', rock: 'ROC', ghost: 'GHO', dragon: 'DRA',
-  dark: 'DRK', steel: 'STL', fairy: 'FAI',
-};
-
-export const typeColors: Record<PokemonType, string> = {
-  normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
-  grass: '#7ac74c', ice: '#96d9d6', fighting: '#c22e28', poison: '#a33ea1',
-  ground: '#e2bf65', flying: '#a98ff3', psychic: '#f95587', bug: '#a6b91a',
-  rock: '#b6a136', ghost: '#735797', dragon: '#6f35fc', dark: '#705746',
-  steel: '#b7b7ce', fairy: '#d685ad',
-};
 
 const sizeStyles = {
   xs: 'text-[9px] h-4 min-w-[38px]',
@@ -56,9 +48,9 @@ function TypeChipInner({ types, size = 'sm', className }: { types: PokemonType[]
           sizeStyles[size],
           className,
         )}
-        style={{ backgroundColor: typeColors[types[0]] }}
+        style={{ backgroundColor: TYPE_COLORS[types[0]] }}
       >
-        {typeLabels[types[0]]}
+        {TYPE_LABELS[types[0]]}
       </span>
     );
   }
@@ -73,15 +65,15 @@ function TypeChipInner({ types, size = 'sm', className }: { types: PokemonType[]
     >
       <span
         className="inline-flex items-center justify-center px-1.5 flex-1"
-        style={{ backgroundColor: typeColors[types[0]] }}
+        style={{ backgroundColor: TYPE_COLORS[types[0]] }}
       >
-        {typeLabels[types[0]]}
+        {TYPE_LABELS[types[0]]}
       </span>
       <span
         className="inline-flex items-center justify-center px-1.5 flex-1"
-        style={{ backgroundColor: typeColors[types[1]] }}
+        style={{ backgroundColor: TYPE_COLORS[types[1]] }}
       >
-        {typeLabels[types[1]]}
+        {TYPE_LABELS[types[1]]}
       </span>
     </span>
   );
