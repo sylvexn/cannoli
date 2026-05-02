@@ -20,6 +20,30 @@ export const TYPE_LABELS: Record<PokemonType, string> = {
 /** Alias kept for code that imported the team-profile copy as TYPE_ABBR */
 export const TYPE_ABBR = TYPE_LABELS;
 
+/**
+ * Matchup-center side accents — semantic names for the blue/red split between
+ * "your team" (a) and "opponent" (b), and the stat-quality green/yellow/red ladder.
+ *
+ * Note: these hex values are duplicated in Tailwind arbitrary class strings
+ * (e.g. `bg-[#3b82f6]/10`) because Tailwind JIT requires literal class strings.
+ * Prefer this constant in JS values (inline `style`, conditional logic).
+ */
+export const MATCHUP_COLORS = {
+  sideA: '#3b82f6',
+  sideB: '#ef4444',
+  statHigh: '#4ade80',     // ≥130
+  statGood: '#86efac',     // ≥100
+  statWeak: '#fbbf24',     // ≥60
+  statLow: '#f87171',      // <60
+} as const;
+
+/** Medal placement colors (1st/2nd/3rd) for archive + leaderboards */
+export const MEDAL_COLORS = {
+  gold: '#fcd34d',  // matches text-draw token; kept here for completeness
+  silver: '#cbd5e1',
+  bronze: '#cd7f32',
+} as const;
+
 /** Phase display config — shared across overview, app-shell, admin */
 export const PHASE_COLORS: Record<string, string> = {
   draft: 'text-draw bg-draw/10',
