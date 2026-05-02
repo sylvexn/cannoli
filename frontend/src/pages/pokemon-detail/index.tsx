@@ -3,7 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { TypeChip, typeColors } from '@/components/type-chip';
+import { TypeChip } from '@/components/type-chip';
+import { TYPE_COLORS } from '@/lib/constants';
 import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
@@ -188,7 +189,7 @@ function DefensiveMatchups({ types }: { types: PokemonType[] }) {
                   <span
                     key={type}
                     className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded text-white"
-                    style={{ backgroundColor: typeColors[type] }}
+                    style={{ backgroundColor: TYPE_COLORS[type] }}
                   >
                     {type}
                   </span>

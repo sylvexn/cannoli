@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { typeColors } from '@/components/type-chip';
+import { TYPE_COLORS } from '@/lib/constants';
 import type { RosterPokemon } from '@/lib/types';
 import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon';
 import { getDefensiveMatchups } from '@/lib/type-effectiveness';
@@ -99,7 +99,7 @@ function TypeGrid({
               <td className="px-1 py-[3px]">
                 <span
                   className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase text-white leading-none"
-                  style={{ backgroundColor: typeColors[type] }}
+                  style={{ backgroundColor: TYPE_COLORS[type] }}
                 >
                   {type.slice(0, 3)}
                 </span>

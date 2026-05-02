@@ -1,7 +1,6 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
-import { TYPE_COLORS } from '@/lib/constants';
-import { TYPE_ABBR } from './utils';
+import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import type { TypeProfileEntry } from './utils';
 import { DefSegment, MultChip } from './defensive-profile';
 
