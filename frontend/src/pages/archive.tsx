@@ -5,6 +5,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
+import { MEDAL_COLORS } from '@/lib/constants';
 import {
   Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon,
 } from 'lucide-react';
@@ -241,10 +242,13 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
                 const team = teamMap.get(mvp.teamId);
                 return (
                   <div key={mvp.pokemonName} className="flex items-center gap-1.5">
-                    <span className={cn(
-                      'text-[10px] font-bold',
-                      i === 0 ? 'text-draw' : i === 1 ? 'text-text-secondary' : 'text-[#cd7f32]',
-                    )}>
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold',
+                        i === 0 ? 'text-draw' : i === 1 ? 'text-text-secondary' : '',
+                      )}
+                      style={i === 2 ? { color: MEDAL_COLORS.bronze } : undefined}
+                    >
                       #{i + 1}
                     </span>
                     <PokemonSprite name={mvp.pokemonName} size="xs" />
