@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn, tierToHslColor } from '@/lib/utils';
 
 interface TierBadgeProps {
   points: number;
@@ -8,9 +8,8 @@ interface TierBadgeProps {
 function tierHsl(points: number): { bg: string; text: string } {
   const clamped = Math.max(1, Math.min(20, points));
   const hue = Math.round(270 - ((clamped - 1) / 19) * 270);
-  const bg = `hsl(${hue}, 75%, 45%)`;
   const text = (hue >= 40 && hue <= 160) ? '#000' : '#fff';
-  return { bg, text };
+  return { bg: tierToHslColor(points), text };
 }
 
 export function TierBadge({ points, className }: TierBadgeProps) {
