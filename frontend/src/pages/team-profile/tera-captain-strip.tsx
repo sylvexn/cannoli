@@ -2,13 +2,12 @@ import { useState } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
-import { TYPE_COLORS } from '@/lib/constants';
+import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { getEffectiveCost, canBeTeraCaptain } from '@/data/tier-list';
 import { Save, X, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { TYPE_ABBR } from './utils';
 import { cn } from '@/lib/utils';
 
 interface TeraCaptainStripProps {
