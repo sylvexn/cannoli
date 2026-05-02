@@ -7,6 +7,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { ArrowRightLeft, Plus, Search, X } from 'lucide-react';
 import { freeAgentToRoster } from './utils';
 import type { PoolEntry } from './utils';
+import { tierToHslColor } from '@/lib/utils';
 
 interface SwapPickerProps {
   swappingIndex: number;
@@ -107,7 +108,7 @@ export function SwapPicker({
                   <PokemonSprite name={fa.name} size="sm" />
                   <span
                     className="absolute bottom-0 right-0 text-[7px] font-bold rounded-tl px-[3px] py-[1px] leading-none text-white/90"
-                    style={{ backgroundColor: `hsl(${Math.round(270 - ((Math.max(1, Math.min(20, fa.tier)) - 1) / 19) * 270)}, 75%, 45%)` }}
+                    style={{ backgroundColor: tierToHslColor(fa.tier) }}
                   >
                     {fa.tier}
                   </span>
@@ -281,7 +282,7 @@ export function AddPicker({
                   <PokemonSprite name={fa.name} size="sm" />
                   <span
                     className="absolute bottom-0 right-0 text-[7px] font-bold rounded-tl px-[3px] py-[1px] leading-none text-white/90"
-                    style={{ backgroundColor: `hsl(${Math.round(270 - ((Math.max(1, Math.min(20, fa.tier)) - 1) / 19) * 270)}, 75%, 45%)` }}
+                    style={{ backgroundColor: tierToHslColor(fa.tier) }}
                   >
                     {fa.tier}
                   </span>
