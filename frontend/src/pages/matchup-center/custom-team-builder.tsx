@@ -7,6 +7,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { X, ClipboardPaste, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { MATCHUP_COLORS } from '@/lib/constants';
 
 interface CustomTeamBuilderProps {
   side: 'a' | 'b';
@@ -166,7 +167,7 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
   }
 
   const borderColor = side === 'a' ? 'border-[#3b82f6]/20' : 'border-[#ef4444]/20';
-  const accentColor = side === 'a' ? '#3b82f6' : '#ef4444';
+  const accentColor = side === 'a' ? MATCHUP_COLORS.sideA : MATCHUP_COLORS.sideB;
 
   return (
     <div className={cn('rounded-lg border bg-surface-raised p-3 space-y-3', borderColor)}>
