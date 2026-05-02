@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
+import { formatTimestamp } from '@/lib/format';
 
 interface AdminTrade {
   id: string;
@@ -218,7 +219,7 @@ function TradeApprovalCard({
             </div>
             <div className="flex items-center gap-1 text-[10px] text-text-muted">
               <Clock size={10} />
-              {new Date(trade.proposedAt).toLocaleString()}
+              {formatTimestamp(trade.proposedAt)}
             </div>
             {trade.rejectReason && (
               <div className="text-[11px] text-loss/80 italic">

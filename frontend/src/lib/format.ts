@@ -53,3 +53,19 @@ export function formatTenure(joinedSeasonNumber: number | null | undefined): str
 export function formatRecord(wins: number, losses: number, draws = 0): string {
   return draws > 0 ? `${wins}-${losses}-${draws}` : `${wins}-${losses}`;
 }
+
+/**
+ * Dense full-date + time stamp for admin tables — short month, no year if
+ * current year, 24-hour time. Use this instead of `new Date(x).toLocaleString()`
+ * across admin surfaces so the date format stays consistent.
+ */
+export function formatTimestamp(input: string | number | Date): string {
+  const date = input instanceof Date ? input : new Date(input);
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const datePart = date.toLocaleDateString(undefined, sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${datePart} ${timePart}`;
+}
