@@ -7,6 +7,7 @@ import {
 } from '../lib/draft-engine';
 import type { PickErrorCode } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
+import { getLeague } from '../lib/queries';
 
 // ─── Presence tracking per league ──────────────────────────────────────────
 
@@ -85,8 +86,7 @@ function tickTimers() {
     // Previously the scheduler called executePick directly, which made the
     // admin auto-pick endpoint unreachable (paused-with-flag state never
     // existed); see also lib/draft-engine.handleTimerExpiry.
-    const league = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, s.leagueId)).get();
+    const league = getLeague(s.leagueId);
     if (!league?.draftOrder) continue;
     const teamOrder: string[] = JSON.parse(league.draftOrder);
     const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
