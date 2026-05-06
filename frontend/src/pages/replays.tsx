@@ -1,32 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ExternalLink, Search, Play, Radio, X, Maximize2, Minimize2, Link2, Zap, Flame, Trophy } from 'lucide-react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Radio } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
-import type { ApiMatch, ApiTeam, ApiReplaySummary } from '@/lib/api';
+import type { ApiMatch, ApiReplaySummary } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { useAuth } from '@/lib/auth-context';
-import type { League } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
-import { PokemonSprite } from '@/components/pokemon-sprite';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-
-interface ReplayEntry {
-  match: ApiMatch;
-  league: League;
-  homeTeam: ApiTeam | undefined;
-  awayTeam: ApiTeam | undefined;
-}
-
-type TimeFilter = 'this-week' | 'last-week' | 'my-matches' | 'all';
-
-const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
-  { id: 'this-week', label: 'This Week' },
-  { id: 'last-week', label: 'Last Week' },
-  { id: 'my-matches', label: 'My Matches' },
-  { id: 'all', label: 'All-Time' },
-];
+import type { ReplayEntry, TimeFilter } from './replays/replay-types';
+import { ReplayViewerPanel } from './replays/replay-viewer-panel';
+import { ReplayFilters } from './replays/replay-filters';
+import { ReplayRow } from './replays/replay-row';
 
 export function ReplaysPage() {
   const { leagues, loading: leaguesLoading } = useAppData();
@@ -69,7 +54,7 @@ export function ReplaysPage() {
       leagues.map(async (league) => {
         const [schedule, teams] = await Promise.all([
           api.getSchedule(league.id).catch(() => ({ matches: [] as ApiMatch[], byes: [] })),
-          api.getTeams(league.id).catch(() => [] as ApiTeam[]),
+          api.getTeams(league.id).catch(() => []),
         ]);
 
         const teamMap = new Map(teams.map(t => [t.id, t]));
@@ -226,22 +211,6 @@ export function ReplaysPage() {
     }
   }
 
-  // Check if a replay URL can be safely iframed.
-  // Includes both relative `/replay…` paths (legacy) and the configured PS
-  // sim host (which sets `frame-ancestors 'self' https://cannoli.live` per
-  // showdown/nginx.conf).
-  function isLocalReplay(url: string) {
-    if (url.startsWith('/replays/') || url.startsWith('/replay')) return true;
-    const psUrl = (import.meta.env.VITE_SHOWDOWN_URL as string | undefined) || 'https://sim.cannoli.live';
-    try {
-      const psHost = new URL(psUrl).host;
-      const u = new URL(url);
-      return u.host === psHost;
-    } catch {
-      return false;
-    }
-  }
-
   return (
     <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-40 bg-surface p-6')}>
       <div className="flex items-center justify-between mb-3 gap-4">
@@ -275,144 +244,27 @@ export function ReplaysPage() {
 
       {/* Replay viewer panel */}
       {viewingReplay && (
-        <div className={cn(
-          'mb-4 rounded-lg border border-neon/20 bg-surface-raised overflow-hidden',
-          theater && 'flex-1 flex flex-col mb-0',
-        )}>
-          <div className="flex items-center justify-between px-3 py-2 bg-surface-overlay border-b border-border-subtle">
-            <div className="flex items-center gap-2 text-xs">
-              <Play size={12} className="text-neon" />
-              <span className="font-semibold text-text-primary">
-                {viewingReplay.homeTeam?.teamAbbrev ?? 'Home'} vs {viewingReplay.awayTeam?.teamAbbrev ?? 'Away'}
-              </span>
-              <span className="text-text-muted">
-                — W{viewingReplay.match.week}
-              </span>
-              <span
-                className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                style={{ color: viewingReplay.league.color, backgroundColor: `${viewingReplay.league.color}15` }}
-              >
-                {viewingReplay.league.name.replace(' League', '')}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => copyShareLink(viewingReplay.match.id)}
-                className="p-1 text-text-muted hover:text-neon transition-colors"
-                title="Copy share link"
-              >
-                <Link2 size={13} />
-              </button>
-              <button
-                onClick={() => setTheater(t => !t)}
-                className="p-1 text-text-muted hover:text-neon transition-colors"
-                title={theater ? 'Exit theater mode' : 'Theater mode'}
-              >
-                {theater ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-              </button>
-              {isLocalReplay(viewingReplay.match.replayUrl!) && (
-                <a
-                  href={viewingReplay.match.replayUrl!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-1 text-text-muted hover:text-neon transition-colors"
-                  title="Open in new tab"
-                >
-                  <ExternalLink size={13} />
-                </a>
-              )}
-              <button
-                onClick={() => handleViewReplay(null)}
-                className="p-1 text-text-muted hover:text-loss transition-colors"
-                title="Close"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </div>
-          {isLocalReplay(viewingReplay.match.replayUrl!) ? (
-            <iframe
-              src={viewingReplay.match.replayUrl!}
-              className={cn('w-full border-0 bg-white', theater ? 'flex-1' : '')}
-              style={!theater ? { height: '500px' } : undefined}
-              title="Replay viewer"
-              sandbox="allow-scripts allow-same-origin"
-            />
-          ) : (
-            <div className="flex items-center justify-center py-12 text-text-muted text-sm">
-              <a
-                href={viewingReplay.match.replayUrl!}
-                target="_blank"
-                rel="noreferrer"
-                className="text-neon hover:underline flex items-center gap-1"
-              >
-                <ExternalLink size={14} />
-                Open replay on Pokemon Showdown
-              </a>
-            </div>
-          )}
-        </div>
+        <ReplayViewerPanel
+          entry={viewingReplay}
+          theater={theater}
+          onToggleTheater={() => setTheater(t => !t)}
+          onCopyShareLink={copyShareLink}
+          onClose={() => handleViewReplay(null)}
+        />
       )}
 
       {/* Time filter chips + Search + League chips */}
       {!theater && (
-        <>
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            {TIME_FILTERS.map(f => (
-              <button
-                key={f.id}
-                onClick={() => setTimeFilter(f.id)}
-                disabled={f.id === 'my-matches' && !user}
-                className={cn(
-                  'text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
-                  timeFilter === f.id
-                    ? 'border-neon/40 bg-neon/10 text-neon'
-                    : 'border-border-default text-text-muted hover:text-text-secondary',
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Search teams, players..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-md bg-surface-raised border border-border-default text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon/50"
-              />
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {leagues.map(league => {
-                const active = leagueFilter.has(league.id);
-                return (
-                  <button
-                    key={league.id}
-                    onClick={() => toggleLeagueFilter(league.id)}
-                    className={cn(
-                      'text-[10px] font-bold px-2 py-1 rounded-full border transition-colors cursor-pointer',
-                      active
-                        ? 'border-transparent'
-                        : 'border-border-default text-text-muted hover:text-text-secondary',
-                    )}
-                    style={active ? {
-                      color: league.color,
-                      backgroundColor: `${league.color}20`,
-                      borderColor: `${league.color}40`,
-                    } : undefined}
-                  >
-                    {league.name.replace(' League', '')}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </>
+        <ReplayFilters
+          timeFilter={timeFilter}
+          onTimeFilterChange={setTimeFilter}
+          search={search}
+          onSearchChange={setSearch}
+          leagues={leagues}
+          leagueFilter={leagueFilter}
+          onToggleLeagueFilter={toggleLeagueFilter}
+          hasUser={!!user}
+        />
       )}
 
       {/* Content */}
@@ -439,106 +291,17 @@ export function ReplaysPage() {
                 Week {week}
               </h2>
               <div className="space-y-1">
-                {weekEntries.map(({ match, league, homeTeam, awayTeam }, i) => {
-                  const entry = { match, league, homeTeam, awayTeam };
-                  const isViewing = viewingReplay?.match.id === match.id;
-                  const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
-                  const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
-                  const summary = summaries.get(match.id);
-                  const mvpTeam = summary?.mvp
-                    ? (summary.mvp.teamId === match.homePlayer ? homeTeam : awayTeam)
-                    : undefined;
-                  return (
-                    <div
-                      key={match.id}
-                      className={cn(
-                        'stagger-item row-interactive flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors',
-                        isViewing
-                          ? 'bg-neon/5 border-neon/20'
-                          : 'bg-surface-raised border-border-default hover:border-border-default/80',
-                      )}
-                      style={{
-                        ['--i' as never]: Math.min(i, 20),
-                        ['--card-accent' as never]: league.color,
-                      }}
-                    >
-                      <span className="text-[10px] font-mono text-text-muted w-8 shrink-0">
-                        W{match.week}
-                      </span>
-
-                      <span
-                        className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
-                        style={{ color: league.color, backgroundColor: `${league.color}15` }}
-                      >
-                        {league.name.replace(' League', '')}
-                      </span>
-
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Link
-                          to={`/league/${league.id}/teams/${homeTeam?.id}`}
-                          viewTransition
-                          className={cn(
-                            'text-sm font-medium hover:text-neon transition-colors truncate',
-                            homeWon ? 'text-win' : 'text-text-secondary',
-                          )}
-                        >
-                          {homeTeam?.teamAbbrev ?? match.homePlayer}
-                        </Link>
-
-                        <span className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
-                          <span className={homeWon ? 'text-win' : ''}>{match.homeScore}</span>
-                          -
-                          <span className={awayWon ? 'text-win' : ''}>{match.awayScore}</span>
-                        </span>
-
-                        <Link
-                          to={`/league/${league.id}/teams/${awayTeam?.id}`}
-                          viewTransition
-                          className={cn(
-                            'text-sm font-medium hover:text-neon transition-colors truncate',
-                            awayWon ? 'text-win' : 'text-text-secondary',
-                          )}
-                        >
-                          {awayTeam?.teamAbbrev ?? match.awayPlayer}
-                        </Link>
-                      </div>
-
-                      {/* Replay-summary glance — MVP / sweep / tera-heavy */}
-                      <ReplayRowGlance summary={summary} mvpTeamColor={mvpTeam?.teamColor} />
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleViewReplay(isViewing ? null : entry)}
-                          className={cn(
-                            'flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded transition-colors',
-                            isViewing
-                              ? 'text-neon bg-neon/10'
-                              : 'text-text-muted hover:text-neon hover:bg-neon/5',
-                          )}
-                        >
-                          <Play size={11} />
-                          {isViewing ? 'Playing' : 'Watch'}
-                        </button>
-                        <button
-                          onClick={() => copyShareLink(match.id)}
-                          className="text-text-muted hover:text-neon transition-colors p-1"
-                          title="Copy share link"
-                        >
-                          <Link2 size={13} />
-                        </button>
-                        <a
-                          href={match.replayUrl!}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-text-muted hover:text-neon transition-colors p-1"
-                          title="Open replay"
-                        >
-                          <ExternalLink size={13} />
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })}
+                {weekEntries.map((entry, i) => (
+                  <ReplayRow
+                    key={entry.match.id}
+                    entry={entry}
+                    index={i}
+                    isViewing={viewingReplay?.match.id === entry.match.id}
+                    summary={summaries.get(entry.match.id)}
+                    onToggleViewing={handleViewReplay}
+                    onCopyShareLink={copyShareLink}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -550,77 +313,6 @@ export function ReplaysPage() {
         <p className="text-[10px] text-text-muted mt-4">
           {filtered.length} replay{filtered.length !== 1 ? 's' : ''} found
         </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * Inline glance line for a replay row — surfaces the unused replay_summary
- * data the user has been sitting on: top K-getter as a sprite + name + kill
- * count (if any), tera count when ≥3 (mark as "tera-heavy"), and a sweep
- * pill when the score was 6-0. All optional; renders nothing if the summary
- * hasn't loaded or the match is uneventful.
- */
-function ReplayRowGlance({
-  summary,
-  mvpTeamColor,
-}: {
-  summary: ApiReplaySummary | undefined;
-  mvpTeamColor: string | undefined;
-}) {
-  if (!summary || !summary.isComplete) return null;
-
-  const hasMvp = summary.mvp && summary.mvp.kills > 0;
-  const teraHeavy = summary.teraCount >= 3;
-  const sweep = summary.sweep;
-
-  if (!hasMvp && !teraHeavy && !sweep) return null;
-
-  return (
-    <div className="hidden md:flex items-center gap-1.5 shrink-0 mr-1">
-      {hasMvp && summary.mvp && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/60"
-              style={mvpTeamColor ? { borderColor: `${mvpTeamColor}40` } : undefined}
-            >
-              <Trophy size={10} className="text-amber-400 shrink-0" />
-              <PokemonSprite name={summary.mvp.name} size="xs" className="!w-4 !h-4" />
-              <span className="text-[10px] font-mono tabular-nums text-text-secondary">
-                {summary.mvp.kills}K
-              </span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            <span className="font-medium">{summary.mvp.name}</span>
-            {' — '}
-            <span className="text-win">{summary.mvp.kills}K</span>
-            {' / '}
-            <span className="text-loss">{summary.mvp.deaths}D</span>
-            {' (MVP)'}
-          </TooltipContent>
-        </Tooltip>
-      )}
-      {sweep && (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400">
-          <Flame size={9} />
-          Sweep
-        </span>
-      )}
-      {teraHeavy && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-pink/15 text-pink">
-              <Zap size={9} />
-              {summary.teraCount}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            {summary.teraCount} teras used — tera-heavy game
-          </TooltipContent>
-        </Tooltip>
       )}
     </div>
   );
