@@ -5,9 +5,9 @@
  * Right panel: opponent roster + compact type coverage (scouting cheat sheet).
  * Bottom bar: back to lobby, toggle panels, spectator count.
  */
-import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, PanelLeftClose, PanelRightClose, ArrowLeft, Eye } from 'lucide-react';
 import type { LiveMatchStats } from './use-arena-websocket';
+import { useLocalStorageState } from '@/lib/use-local-storage-state';
 
 const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
@@ -22,22 +22,8 @@ interface BattleHudProps {
 
 export function BattleHud(props: BattleHudProps) {
   const { psRoomId, isOfficial, label, liveStats, onBackToLobby } = props;
-  const [leftOpen, setLeftOpen] = useState(() => {
-    const stored = localStorage.getItem('arena-panel-left');
-    return stored !== 'false';
-  });
-  const [rightOpen, setRightOpen] = useState(() => {
-    const stored = localStorage.getItem('arena-panel-right');
-    return stored !== 'false';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('arena-panel-left', String(leftOpen));
-  }, [leftOpen]);
-
-  useEffect(() => {
-    localStorage.setItem('arena-panel-right', String(rightOpen));
-  }, [rightOpen]);
+  const [leftOpen, setLeftOpen] = useLocalStorageState<boolean>('arena-panel-left', true);
+  const [rightOpen, setRightOpen] = useLocalStorageState<boolean>('arena-panel-right', true);
 
   const iframeUrl = psRoomId ? `${PS_URL}/${psRoomId}` : PS_URL;
 
