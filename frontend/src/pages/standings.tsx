@@ -25,10 +25,6 @@ import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeleton
 import { EmptyState } from '@/components/empty-state';
 import { TeamCoach } from '@/components/team-coach';
 
-// Playoff cut size — kept in sync with the "Top N qualify" footer below.
-// TODO: surface league.playoffTeamCount on the wire and use it dynamically.
-const PLAYOFF_SIZE = 8;
-
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
