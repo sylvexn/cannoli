@@ -100,6 +100,10 @@ export class ReplayParser {
   // Team preview roster (from |poke| lines)
   private teamPreview: { p1: string[]; p2: string[] } = { p1: [], p2: [] };
 
+  // Lethal-hit attribution staged from |-damage| and consumed by |faint|.
+  // Keyed by target nick → killer nick.
+  private pendingKiller = new Map<string, string>();
+
   /**
    * Parse a complete battle log (post-match).
    */
@@ -359,8 +363,7 @@ export class ReplayParser {
 
     // Store the killer info on the target for when |faint| fires
     if (killerNick) {
-      (this as any)._pendingKiller = (this as any)._pendingKiller ?? new Map();
-      (this as any)._pendingKiller.set(target, killerNick);
+      this.pendingKiller.set(target, killerNick);
     }
 
     return false;
@@ -378,8 +381,7 @@ export class ReplayParser {
     faintedStats.deaths = 1;
 
     // Apply kill credit
-    const pendingKillers: Map<string, string> | undefined = (this as any)._pendingKiller;
-    const killerNick = pendingKillers?.get(faintedNick) ?? this.lastAttacker.get(faintedNick);
+    const killerNick = this.pendingKiller.get(faintedNick) ?? this.lastAttacker.get(faintedNick);
 
     if (killerNick) {
       const killerSide = this.nickToSide.get(killerNick);
@@ -391,7 +393,7 @@ export class ReplayParser {
     }
 
     // Clean up pending killer
-    pendingKillers?.delete(faintedNick);
+    this.pendingKiller.delete(faintedNick);
 
     return true;
   }
