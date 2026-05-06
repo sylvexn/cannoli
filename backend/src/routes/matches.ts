@@ -7,6 +7,7 @@ import { tx } from '../lib/tx';
 import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
+import { getLeague } from '../lib/queries';
 
 export const matchRoutes = new Elysia()
 
@@ -453,9 +454,7 @@ export const matchRoutes = new Elysia()
 
     const { force, confirmName } = (body || {}) as { force?: boolean; confirmName?: string };
 
-    const league = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, params.leagueId))
-      .get();
+    const league = getLeague(params.leagueId);
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     // Safety lock: refuse to nuke an in-flight regular season or playoffs
@@ -531,7 +530,7 @@ export const matchRoutes = new Elysia()
 
     const { topN } = (body || {}) as { topN?: number };
 
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    const league = getLeague(params.leagueId);
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     // Bracket size: explicit override > league config > default 6

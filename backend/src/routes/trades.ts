@@ -3,6 +3,7 @@ import { db, schema } from '../db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
+import { getLeague, getTeamRoster } from '../lib/queries';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -48,8 +49,8 @@ function validateProposedTrade(opts: {
   }
 
   // Pull rosters
-  const proposerRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, proposerId)).all();
-  const recipientRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, recipientId)).all();
+  const proposerRoster = getTeamRoster(proposerId);
+  const recipientRoster = getTeamRoster(recipientId);
 
   // Verify ownership
   for (const name of offering) {
@@ -125,7 +126,7 @@ function loadTradeContext(tradeId: number) {
   if (!proposerTeam || !recipientTeam) return null;
   if (proposerTeam.leagueId !== trade.leagueId) return null;
   if (recipientTeam.leagueId !== trade.leagueId) return null;
-  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, trade.leagueId)).get();
+  const league = getLeague(trade.leagueId);
   const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
   return { trade, league, season, proposerTeam, recipientTeam };
 }
@@ -489,7 +490,7 @@ export const tradeRoutes = new Elysia()
       set.status = 400; return { error: 'Recipient team is not in this league' };
     }
 
-    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    const league = getLeague(params.leagueId);
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = league?.currentWeek || 0;
 

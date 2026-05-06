@@ -11,6 +11,7 @@ import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
 import { createBattle, isBotConnected } from '../lib/ps-bot';
+import { getLeague } from '../lib/queries';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,7 @@ function getUserTeam(userId: number): { teamId: string; leagueId: string } | nul
 }
 
 function getCurrentMatch(teamId: string, leagueId: string) {
-  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+  const league = getLeague(leagueId);
   if (!league) return null;
   if (league.phase !== 'regular') return null;
 
