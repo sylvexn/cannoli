@@ -1,9 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { EmptyState } from '@/components/empty-state';
-import { TeamCoach } from '@/components/team-coach';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { getEffectiveCost, canBeTeraCaptain } from '@/data/tier-list';
@@ -12,29 +10,20 @@ import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { TeamLogo } from '@/components/team-logo';
-import { RecordDisplay } from '@/components/record-display';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
-import { TierBadge } from '@/components/tier-badge';
-import { PointCapBarLarge } from '@/components/point-cap-bar';
 import { Card } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import {
-  ArrowLeft, ExternalLink, FlaskConical, RotateCcw,
-  X, ArrowRightLeft, Plus,
-  Shield, Calendar, Zap, Sparkles,
-} from 'lucide-react';
+import { ArrowLeft, ExternalLink, Shield, Calendar, Zap } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
-import { RankBadge } from './rank-badge';
 import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
-import { SwapPicker, AddPicker } from './theorycraft-mode';
-import { TeraCaptainStrip } from './tera-captain-strip';
 import { RosterActions } from './roster-actions';
+import { HeaderStrip } from './header-strip';
+import { SpriteShowcase } from './sprite-showcase';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -359,245 +348,52 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       </Link>
 
       {/* ═══ TEAM HEADER ═══ */}
-      <div className="relative rounded-lg overflow-hidden" style={{ background: `linear-gradient(135deg, ${player.teamColor}08, ${player.teamColor}03 40%, transparent)` }}>
-        {/* Accent bar */}
-        <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${player.teamColor}cc, ${player.teamColor}30 60%, transparent)` }} />
-
-        <div className="px-5 pt-4 pb-3 flex items-center gap-4">
-          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-12 h-12 text-xs shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-heading font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
-            <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide flex items-center gap-1.5">
-              <TeamCoach player={player} showAvatar avatarSize={14} size="xs" />
-              <span className="text-border-default">/</span>
-              <span>{player.teamAbbrev}</span>
-            </p>
-          </div>
-          <button
-            onClick={() => { setTheorycraftMode(!theorycraftMode); if (theorycraftMode) handleResetAll(); }}
-            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all ${
-              theorycraftMode
-                ? 'bg-pink/10 text-pink border border-pink/25'
-                : 'bg-surface-overlay/50 text-text-muted border border-border-subtle hover:text-neon hover:border-neon/30'
-            }`}
-          >
-            <FlaskConical size={11} />
-            {theorycraftMode ? 'Exit' : 'Theorycraft'}
-          </button>
-        </div>
-
-        {/* Stats strip */}
-        <div className="mx-5 mb-4 rounded-lg bg-surface-raised border border-border-default overflow-hidden">
-          <div className="flex items-stretch divide-x divide-border-subtle">
-            {/* Rank */}
-            <div className="flex items-center justify-center px-5 py-3">
-              <RankBadge rank={rank} />
-            </div>
-
-            {/* Record */}
-            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
-              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
-                <RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />
-              </div>
-              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Record</span>
-            </div>
-
-            {/* K/D */}
-            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
-              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
-                <span className="text-win">{teamKills}</span>
-                <span className="text-text-muted/30 mx-0.5">/</span>
-                <span className="text-loss">{teamDeaths}</span>
-              </div>
-              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">K / D</span>
-            </div>
-
-            {/* Win Rate */}
-            <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
-              <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none text-text-primary">
-                {((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-sm text-text-muted font-normal">%</span>
-              </div>
-              <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Win Rate</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <HeaderStrip
+        player={player}
+        rank={rank}
+        theorycraftMode={theorycraftMode}
+        onToggleTheorycraft={() => { setTheorycraftMode(!theorycraftMode); if (theorycraftMode) handleResetAll(); }}
+        teamKills={teamKills}
+        teamDeaths={teamDeaths}
+      />
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
-      <Card className="bg-surface-raised border-border-default overflow-hidden">
-        <div className="flex items-center justify-center gap-1 px-4 py-3 flex-wrap">
-          {activeRoster.map((mon, i) => {
-            const isSwapped = swaps.some(s => s.index === (rosterOrder[i] ?? i));
-            const isSwapping = swappingIndex === i;
-            const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
-            const isPosOver = dragOverIndex === i && draggingPosFrom !== null && draggingPosFrom !== i;
-            const beingDragged = draggingPosFrom === i;
-            return (
-              <div
-                key={`${mon.name}-${i}`}
-                className="relative group"
-                ref={(el) => { if (el) spriteRefs.current.set(i, el); else spriteRefs.current.delete(i); }}
-              >
-                <Tooltip>
-                  <TooltipTrigger>
-                    <div
-                      onPointerDown={(e) => {
-                        // Only start position drag from the sprite body (not tera badge)
-                        if ((e.target as HTMLElement).closest('svg')) return;
-                        handlePositionPointerDown(i, e);
-                      }}
-                      className={`relative p-1.5 rounded-lg transition-all duration-200 ${
-                        theorycraftMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
-                      } ${isSwapped ? 'ring-1 ring-pink/40' : ''
-                      } ${isSwapping ? 'ring-2 ring-neon/60 bg-neon/5' : ''
-                      } ${isPosOver ? 'ring-2 ring-neon/50 bg-neon/8 scale-105' : ''
-                      } ${beingDragged ? 'opacity-30 scale-95' : 'hover:bg-surface-overlay/60'
-                      }`}
-                    >
-                      <PokemonSprite name={mon.name} size="xl" shiny={isMonShiny(mon)} className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
-                      {mon.isTeraCaptain && (
-                        <svg
-                          width="27"
-                          height="27"
-                          viewBox="0 0 18 18"
-                          onClick={(e) => {
-                            if (!theorycraftMode) return;
-                            e.stopPropagation();
-                            setTeraEditingIndex(teraEditingIndex === i ? null : i);
-                          }}
-                          className={`absolute top-0.5 right-0.5 select-none ${theorycraftMode ? 'cursor-pointer hover:scale-110 transition-transform' : ''}`}
-                          style={{ filter: 'drop-shadow(0 0 5px rgba(232, 121, 249, 0.5))' }}
-                        >
-                          <circle cx="9" cy="9" r="8.5" fill="#e879f9" />
-                          <circle cx="9" cy="9" r="7.5" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="0.5" />
-                          <path d="M9 3 L13.5 7.5 L9 15 L4.5 7.5 Z" fill="none" stroke="white" strokeWidth="1.2" strokeLinejoin="round" opacity="0.9" />
-                          <path d="M4.5 7.5 L13.5 7.5" stroke="white" strokeWidth="0.8" opacity="0.5" />
-                          <path d="M9 3 L9 7.5" stroke="white" strokeWidth="0.6" opacity="0.35" />
-                        </svg>
-                      )}
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
-                        <TierBadge points={effectiveCost} />
-                      </div>
-                      {/* Swap button on hover (theorycraft mode only) */}
-                      {theorycraftMode && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSwappingIndex(isSwapping ? null : i); }}
-                          className={`absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-all p-1 rounded-md ${
-                            isSwapping ? 'opacity-100 bg-neon/20 text-neon' : isSwapped ? 'opacity-100 bg-pink/20 text-pink' : 'bg-surface/80 text-text-muted hover:text-neon hover:bg-neon/10'
-                          }`}
-                        >
-                          {isSwapped ? <RotateCcw size={13} onClick={(e) => { e.stopPropagation(); handleRevertSwap(i); }} /> : <ArrowRightLeft size={13} />}
-                        </button>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="bg-surface-overlay border-border-default text-xs">
-                    <span className="font-semibold text-text-primary">{mon.name}</span>
-                    <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
-                  </TooltipContent>
-                </Tooltip>
-                {/* Shiny toggle button — any authenticated user (backend checks ownership) */}
-                {user && !theorycraftMode && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleToggleShiny(mon); }}
-                    className={`absolute bottom-7 left-1 z-10 transition-all p-1 rounded-md ${
-                      isMonShiny(mon)
-                        ? 'opacity-100 bg-yellow-500/20 text-yellow-400'
-                        : 'opacity-0 group-hover:opacity-100 bg-surface/80 text-text-muted hover:text-yellow-400 hover:bg-yellow-500/10'
-                    }`}
-                  >
-                    <Sparkles size={13} />
-                  </button>
-                )}
-                {/* Remove button */}
-                {theorycraftMode && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleRemoveMon(i); }}
-                    className="absolute top-0 right-0 z-20 w-5 h-5 flex items-center justify-center rounded-full bg-loss text-white shadow-md hover:scale-110 transition-transform cursor-pointer"
-                  >
-                    <X size={11} strokeWidth={3} />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {/* Add Pokemon button (theorycraft, max 12) */}
-          {theorycraftMode && activeRoster.length < 12 && (
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setAddingMode(!addingMode); setSwappingIndex(null); }}
-                  className={`relative p-1.5 rounded-lg transition-all duration-200 w-[76px] h-[76px] flex items-center justify-center border-2 border-dashed ${
-                    addingMode
-                      ? 'border-neon/60 bg-neon/5 text-neon'
-                      : 'border-border-subtle hover:border-neon/40 text-text-muted hover:text-neon hover:bg-surface-overlay/40'
-                  }`}
-                >
-                  <Plus size={24} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-surface-overlay border-border-default text-xs">
-                Add Pokemon ({activeRoster.length}/12)
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-
-        {/* Swap picker */}
-        {swappingIndex !== null && theorycraftMode && !addingMode && (
-          <SwapPicker
-            swappingIndex={swappingIndex}
-            activeRoster={activeRoster}
-            pool={pool}
-            pointsUsed={pointsUsed}
-            config={config}
-            onSwap={handleSwap}
-            onClose={() => { setSwappingIndex(null); }}
-          />
-        )}
-
-        {/* Add picker */}
-        {addingMode && theorycraftMode && (
-          <AddPicker
-            activeRoster={activeRoster}
-            pool={pool}
-            pointsUsed={pointsUsed}
-            config={config}
-            onAdd={handleAddMon}
-            onClose={() => setAddingMode(false)}
-          />
-        )}
-
-        {/* ─── TERA CAPTAINS STRIP ─── */}
-        <TeraCaptainStrip
-          activeRoster={activeRoster}
-          captainCount={captainCount}
-          config={config}
-          theorycraftMode={theorycraftMode}
-          canEdit={theorycraftMode || isAdmin}
-          seasonPhase={season?.phase ?? null}
-          teraEdits={teraEdits}
-          teraEditingIndex={teraEditingIndex}
-          pointsUsed={pointsUsed}
-          playerId={player.id}
-          onTeraEditingIndexChange={setTeraEditingIndex}
-          onToggleCaptain={handleToggleCaptain}
-          onTeraTypeToggle={handleTeraTypeToggle}
-          onTeraEditsClear={() => setTeraEdits([])}
-        />
-
-        {/* Point cap bar */}
-        <div className="px-6 py-3 border-t border-border-subtle">
-          <div className="max-w-xl mx-auto flex items-center gap-3">
-            <PointCapBarLarge used={pointsUsed} total={config.pointCap} className="flex-1" />
-            {pointsDelta !== 0 && (
-              <span className={`text-[10px] font-mono font-semibold shrink-0 ${pointsDelta > 0 ? 'text-loss' : 'text-win'}`}>
-                {pointsDelta > 0 ? '+' : ''}{pointsDelta}
-              </span>
-            )}
-          </div>
-        </div>
-      </Card>
+      <SpriteShowcase
+        player={player}
+        config={config}
+        activeRoster={activeRoster}
+        swaps={swaps}
+        rosterOrder={rosterOrder}
+        pool={pool}
+        pointsUsed={pointsUsed}
+        pointsDelta={pointsDelta}
+        captainCount={captainCount}
+        theorycraftMode={theorycraftMode}
+        isAdmin={isAdmin}
+        user={user}
+        season={season}
+        swappingIndex={swappingIndex}
+        addingMode={addingMode}
+        teraEditingIndex={teraEditingIndex}
+        teraEdits={teraEdits}
+        draggingPosFrom={draggingPosFrom}
+        dragOverIndex={dragOverIndex}
+        dragPos={dragPos}
+        spriteRefs={spriteRefs}
+        isMonShiny={isMonShiny}
+        onPointerDownSprite={handlePositionPointerDown}
+        onSetSwappingIndex={setSwappingIndex}
+        onSetAddingMode={setAddingMode}
+        onSetTeraEditingIndex={setTeraEditingIndex}
+        onRevertSwap={handleRevertSwap}
+        onRemoveMon={handleRemoveMon}
+        onToggleShiny={handleToggleShiny}
+        onSwap={handleSwap}
+        onAddMon={handleAddMon}
+        onToggleCaptain={handleToggleCaptain}
+        onTeraTypeToggle={handleTeraTypeToggle}
+        onTeraEditsClear={() => setTeraEdits([])}
+      />
 
       {/* ═══ MAIN CONTENT GRID ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
@@ -721,19 +517,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           </Tabs>
         </Card>
       </div>
-
-      {/* Floating drag cursor */}
-      {isDragging && dragPos && draggingPosFrom !== null && createPortal(
-        <div
-          className="fixed z-[9999] pointer-events-none"
-          style={{ left: dragPos.x - 16, top: dragPos.y - 16 }}
-        >
-          <div className="w-10 h-10 rounded-lg bg-surface-overlay/90 border border-neon/30 flex items-center justify-center shadow-glow-sm">
-            <PokemonSprite name={activeRoster[draggingPosFrom].name} size="sm" />
-          </div>
-        </div>,
-        document.body,
-      )}
     </div>
   );
 }
