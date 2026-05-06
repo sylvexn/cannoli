@@ -18,6 +18,8 @@ dist/
 # IDE
 .vscode/
 .idea/
+.claude/
+notes*
 
 # OS
 .DS_Store
