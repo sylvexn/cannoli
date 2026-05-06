@@ -1,24 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import type { ApiDraftState } from '@/lib/api';
 import { toast } from 'sonner';
-import {
-  ChevronRight, Play, Pause, SkipForward, AlertTriangle,
-  Sparkles, Plus, Pencil, Trash2, Zap, Calendar, Trophy, RotateCw,
-} from 'lucide-react';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { PHASES, phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
+import { Sparkles, Plus } from 'lucide-react';
+import { phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
 import { NewSeasonWizard } from './season/new-season-wizard';
 import { DraftOrderEditor } from './season/draft-order-editor';
+import { SeasonLeagueCard } from './season/season-league-card';
+import { SeasonScheduleDates } from './season/season-schedule-dates';
+import { SeasonArchiveSection } from './season/season-archive-section';
+import { SeasonConfirmDialogs } from './season/season-confirm-dialogs';
+import { SeasonPlayoffDialog } from './season/season-playoff-dialog';
+import { SeasonBackwardPhaseDialog } from './season/season-backward-phase-dialog';
 
 export function AdminSeason() {
   const { leagues: defaultLeagues, refreshLeagues } = useAppData();
@@ -438,274 +434,25 @@ export function AdminSeason() {
         {leagueList.map(league => {
           const state = leagueStates[league.id];
           if (!state) return null;
-          const phase = state.phase as Phase;
-          const config = phaseConfig[phase];
-          const nextPhase = getNextPhase(phase);
-          const Icon = config.icon;
-          const isRegular = phase === 'regular';
-          const isDraft = phase === 'draft';
-          const atWeekLimit = isRegular && state.currentWeek >= state.totalWeeks;
-          const draftState = draftStates[league.id];
-
           return (
-            <Card key={league.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: league.color }} />
-                  <CardTitle className="text-base flex-1">{league.name}</CardTitle>
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="outline" className={config.color}>
-                      <Icon size={12} />
-                      {config.label}
-                    </Badge>
-                    <button
-                      onClick={() => openEditLeague(league)}
-                      className="p-1 rounded hover:bg-surface-overlay transition-colors text-text-muted hover:text-text-primary"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      onClick={() => confirmDeleteLeague(league.id)}
-                      className="p-1 rounded hover:bg-loss/10 transition-colors text-text-muted hover:text-loss"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Phase timeline */}
-                <div className="flex items-center gap-1">
-                  {PHASES.map((p, i) => {
-                    const isCurrent = p === phase;
-                    const isPast = PHASES.indexOf(p) < PHASES.indexOf(phase);
-                    const pConfig = phaseConfig[p];
-                    return (
-                      <div key={p} className="flex items-center gap-1 flex-1">
-                        <div className={`flex-1 h-1.5 rounded-full transition-colors ${
-                          isCurrent ? pConfig.color.split(' ')[1] : isPast ? 'bg-win/30' : 'bg-surface-overlay'
-                        }`} />
-                        {i < PHASES.length - 1 && (
-                          <ChevronRight size={10} className={`shrink-0 ${isPast || isCurrent ? 'text-text-secondary' : 'text-text-muted/30'}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-1 justify-between text-[10px] text-text-muted px-0.5">
-                  {PHASES.map(p => (
-                    <span key={p} className={`${p === phase ? 'text-text-primary font-medium' : ''}`}>
-                      {phaseConfig[p].label}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Draft controls */}
-                {isDraft && (
-                  <div className="space-y-2 rounded-md border border-draw/20 bg-draw/5 p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Zap size={14} className="text-draw" />
-                        <span className="text-text-primary font-medium">Draft Engine</span>
-                        {draftState && (
-                          <Badge variant="outline" className={
-                            draftState.status === 'in_progress' ? 'text-win bg-win/10 border-win/30' :
-                            draftState.status === 'paused' ? 'text-draw bg-draw/10 border-draw/30' :
-                            draftState.status === 'completed' ? 'text-neon bg-neon/10 border-neon/30' :
-                            'text-text-muted'
-                          }>
-                            {draftState.status === 'in_progress' ? 'Live' :
-                             draftState.status === 'paused' ? 'Paused' :
-                             draftState.status === 'completed' ? 'Completed' : 'Not Started'}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {(!draftState || draftState.status === 'not_started') && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleStartDraft(league.id)}
-                            className="bg-win text-surface-base hover:bg-win/90 h-7 text-xs"
-                          >
-                            <Play size={12} />
-                            Start Draft
-                          </Button>
-                        )}
-                        {draftState?.status === 'in_progress' && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handlePauseDraft(league.id)}
-                            className="h-7 text-xs"
-                          >
-                            <Pause size={12} />
-                            Pause
-                          </Button>
-                        )}
-                        {draftState?.status === 'paused' && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleResumeDraft(league.id)}
-                            className="bg-win text-surface-base hover:bg-win/90 h-7 text-xs"
-                          >
-                            <Play size={12} />
-                            Resume
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                    {draftState && draftState.status !== 'not_started' && (
-                      <div className="flex items-center gap-3 text-xs text-text-muted">
-                        <span className="font-mono tabular-nums">
-                          Pick {draftState.currentPickIndex} / {draftState.snakeOrder?.length ?? '?'}
-                        </span>
-                        <div className="flex-1 h-1 rounded-full bg-surface-overlay overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-draw transition-all"
-                            style={{ width: `${draftState.snakeOrder?.length ? (draftState.currentPickIndex / draftState.snakeOrder.length) * 100 : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Playoff bracket controls (playoffs phase only) */}
-                {phase === 'playoffs' && (() => {
-                  const apiLeague = defaultLeagues.find(l => l.id === league.id);
-                  const bracketSize = (apiLeague as any)?.playoffTeamCount ?? 6;
-                  const info = playoffInfo[league.id];
-                  const hasBracket = !!info?.hasBracket;
-                  return (
-                    <div className="space-y-2 rounded-md border border-pink/20 bg-pink/5 p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Trophy size={14} className="text-pink" />
-                          <span className="text-text-primary font-medium">Playoff Bracket</span>
-                          <Badge variant="outline" className="text-pink border-pink/30">
-                            Top {bracketSize}
-                          </Badge>
-                          {hasBracket ? (
-                            <Badge variant="outline" className="text-win bg-win/10 border-win/30">
-                              {info.matchCount} matches generated
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-draw bg-draw/10 border-draw/30">
-                              Not generated
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex gap-1.5">
-                          {!hasBracket ? (
-                            <Button
-                              size="sm"
-                              onClick={() => openPlayoffsDialog(league, false)}
-                              className="bg-pink text-surface-base hover:bg-pink/90 h-7 text-xs"
-                            >
-                              <Trophy size={12} />
-                              Generate
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openPlayoffsDialog(league, true)}
-                              className="text-loss border-loss/30 hover:bg-loss/10 h-7 text-xs"
-                            >
-                              <RotateCw size={12} />
-                              Regenerate
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      {!hasBracket && (
-                        <p className="text-[10px] text-text-muted">
-                          Bracket size is set per-league in the Leagues editor (currently {bracketSize}).
-                          Seeding uses the standings tiebreaker hierarchy at the time of generation.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Week progress (regular season only) */}
-                {isRegular && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-text-muted">Week Progress</span>
-                      <span className="font-mono text-text-primary">
-                        {state.currentWeek} / {state.totalWeeks}
-                      </span>
-                    </div>
-                    <div className="w-full h-2 rounded-full bg-surface-overlay overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-neon transition-all"
-                        style={{ width: `${(state.currentWeek / state.totalWeeks) * 100}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => handleGenerateSchedule(league)}
-                        className="text-draw border-draw/30 hover:bg-draw/10"
-                      >
-                        <Sparkles size={12} />
-                        Regenerate Schedule
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => confirmWeekAdvance(league.id)}
-                        disabled={atWeekLimit}
-                        className={atWeekLimit ? 'opacity-50' : ''}
-                      >
-                        <SkipForward size={12} />
-                        Advance Week
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Phase advance */}
-                <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-                  <div className="text-xs text-text-muted">
-                    {config.description}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {/* Revert affordance — undoes an accidental forward step */}
-                    {(() => {
-                      const idx = PHASES.indexOf(phase);
-                      const prev = idx > 0 ? PHASES[idx - 1] : null;
-                      if (!prev) return null;
-                      return (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={() => confirmBackward(league.id, phase, prev as Phase)}
-                          className="text-loss/80 border-loss/20 hover:bg-loss/10 hover:text-loss h-7 text-[10px]"
-                        >
-                          <RotateCw size={10} className="-scale-x-100" />
-                          Revert to {phaseConfig[prev as Phase].label}
-                        </Button>
-                      );
-                    })()}
-                    {nextPhase ? (
-                      <Button
-                        size="sm"
-                        onClick={() => confirmAdvance(league)}
-                        className="bg-neon text-surface-base hover:bg-neon/90"
-                      >
-                        <Play size={12} />
-                        Advance to {phaseConfig[nextPhase].label}
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-text-muted">Season complete</span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <SeasonLeagueCard
+              key={league.id}
+              league={league}
+              state={state}
+              draftState={draftStates[league.id]}
+              apiLeague={defaultLeagues.find(l => l.id === league.id)}
+              playoffInfo={playoffInfo[league.id]}
+              onEditLeague={openEditLeague}
+              onDeleteLeague={confirmDeleteLeague}
+              onStartDraft={handleStartDraft}
+              onPauseDraft={handlePauseDraft}
+              onResumeDraft={handleResumeDraft}
+              onOpenPlayoffsDialog={openPlayoffsDialog}
+              onGenerateSchedule={handleGenerateSchedule}
+              onConfirmWeekAdvance={confirmWeekAdvance}
+              onConfirmAdvance={confirmAdvance}
+              onConfirmBackward={confirmBackward}
+            />
           );
         })}
       </div>
@@ -726,173 +473,43 @@ export function AdminSeason() {
       </div>
 
       {/* Season Archive — read-only gate for historical seasons */}
-      <div className="space-y-3 pt-2">
-        <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
-          <AlertTriangle size={12} />
-          Season Archive
-        </h3>
-        <Card>
-          <CardContent className="p-3 space-y-2">
-            <p className="text-[11px] text-text-muted">
-              Archived seasons are read-only — writes to their leagues require <span className="font-mono">?force=1</span>,
-              and tier-list edits are blocked even when leagues are at offseason. Toggle once a season is wrapped up so
-              historical standings stay referentially valid.
-            </p>
-            <div className="space-y-1">
-              {seasonsList.length === 0 ? (
-                <div className="text-xs text-text-muted text-center py-2">No seasons</div>
-              ) : seasonsList.map(s => (
-                <div key={s.id} className="flex items-center gap-3 px-2 py-1.5 rounded border border-border-subtle">
-                  <span className="text-xs font-mono text-text-primary w-16">S{s.seasonNumber}</span>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">{s.phase}</Badge>
-                  {s.archived && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-loss border-loss/30 bg-loss/10">
-                      Archived
-                    </Badge>
-                  )}
-                  <div className="flex-1" />
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => toggleArchive(s.id, !s.archived)}
-                    className={s.archived ? '' : 'text-loss/80 border-loss/20 hover:bg-loss/10'}
-                  >
-                    {s.archived ? 'Un-archive' : 'Archive'}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <SeasonArchiveSection seasonsList={seasonsList} onToggleArchive={toggleArchive} />
 
       {/* Schedule Dates */}
-      <div className="space-y-3 pt-2">
-        <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
-          <Calendar size={12} />
-          Schedule Dates
-        </h3>
-        {leagueList.map(league => {
-          const state = leagueStates[league.id];
-          if (!state || !state.totalWeeks) return null;
-          const existingDates: Record<string, string> = state.weekDates ?? {};
-          const draftDate = defaultLeagues.find(l => l.id === league.id)?.draftDate ?? '';
+      <SeasonScheduleDates
+        leagueList={leagueList}
+        leagueStates={leagueStates}
+        defaultLeagues={defaultLeagues}
+        refreshLeagues={refreshLeagues}
+      />
 
-          return (
-            <Card key={league.id}>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: league.color }} />
-                  <span className="text-sm font-medium text-text-primary">{league.name}</span>
-                </div>
-
-                {/* Draft date */}
-                <div className="flex items-center gap-3">
-                  <label className="text-xs text-text-muted w-20 shrink-0">Draft Date</label>
-                  <input
-                    type="datetime-local"
-                    defaultValue={draftDate?.replace('Z', '').slice(0, 16) ?? ''}
-                    onBlur={async (e) => {
-                      const val = e.target.value;
-                      try {
-                        await api.updateLeague(league.id, { draftDate: val ? new Date(val).toISOString() : null });
-                        toast.success('Draft date saved');
-                        refreshLeagues?.();
-                      } catch (err: any) { toast.error(err.message); }
-                    }}
-                    className="flex-1 h-7 px-2 rounded border border-border-default bg-surface-overlay text-text-primary text-xs font-mono"
-                  />
-                </div>
-
-                {/* Week dates */}
-                <div className="space-y-1">
-                  <label className="text-xs text-text-muted">Week Dates</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
-                    {Array.from({ length: state.totalWeeks }, (_, i) => i + 1).map(week => (
-                      <div key={week} className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-text-muted font-mono w-5 text-right shrink-0">W{week}</span>
-                        <input
-                          type="date"
-                          defaultValue={existingDates[String(week)] ?? ''}
-                          onBlur={async (e) => {
-                            const newDates = { ...existingDates };
-                            if (e.target.value) {
-                              newDates[String(week)] = e.target.value;
-                            } else {
-                              delete newDates[String(week)];
-                            }
-                            try {
-                              await api.updateLeague(league.id, { weekDates: newDates });
-                              toast.success(`Week ${week} date saved`);
-                              refreshLeagues?.();
-                            } catch (err: any) { toast.error(err.message); }
-                          }}
-                          className="flex-1 h-6 px-1.5 rounded border border-border-default bg-surface-overlay text-text-primary text-[10px] font-mono"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Advance Phase Confirmation */}
-      <Dialog open={advanceOpen} onOpenChange={setAdvanceOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-draw" />
-              Advance Phase
-            </DialogTitle>
-            <DialogDescription>
-              {advanceTarget && (
-                <>
-                  Advance <strong>{leagueList.find(l => l.id === advanceTarget.leagueId)?.name}</strong> from{' '}
-                  <strong>{phaseConfig[advanceTarget.from].label}</strong> to{' '}
-                  <strong>{phaseConfig[advanceTarget.to].label}</strong>?
-                  {advanceTarget.from === 'draft' && advanceTarget.to === 'regular' && (
-                    <> A round-robin schedule will be generated automatically.</>
-                  )}
-                  {' '}This action cannot be undone.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdvanceOpen(false)}>Cancel</Button>
-            <Button onClick={executeAdvance} className="bg-neon text-surface-base hover:bg-neon/90">
-              Confirm Advance
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Week Advance Confirmation */}
-      <Dialog open={weekOpen} onOpenChange={setWeekOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Advance Week</DialogTitle>
-            <DialogDescription>
-              {weekTarget && (
-                <>
-                  Advance <strong>{leagueList.find(l => l.id === weekTarget)?.name}</strong> to{' '}
-                  <strong>Week {leagueStates[weekTarget].currentWeek + 1}</strong>?
-                  Ensure all match results for the current week are reported.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWeekOpen(false)}>Cancel</Button>
-            <Button onClick={executeWeekAdvance} className="bg-neon text-surface-base hover:bg-neon/90">
-              Advance
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Standard advance / week / delete / regen confirmation dialogs */}
+      <SeasonConfirmDialogs
+        leagueList={leagueList}
+        leagueStates={leagueStates}
+        advanceOpen={advanceOpen}
+        setAdvanceOpen={setAdvanceOpen}
+        advanceTarget={advanceTarget}
+        onExecuteAdvance={executeAdvance}
+        weekOpen={weekOpen}
+        setWeekOpen={setWeekOpen}
+        weekTarget={weekTarget}
+        onExecuteWeekAdvance={executeWeekAdvance}
+        deleteOpen={deleteOpen}
+        setDeleteOpen={setDeleteOpen}
+        deleteTarget={deleteTarget}
+        deleteConfirmText={deleteConfirmText}
+        setDeleteConfirmText={setDeleteConfirmText}
+        deleteSubmitting={deleteSubmitting}
+        onExecuteDeleteLeague={executeDeleteLeague}
+        regenOpen={regenOpen}
+        setRegenOpen={setRegenOpen}
+        regenTarget={regenTarget}
+        regenConfirmText={regenConfirmText}
+        setRegenConfirmText={setRegenConfirmText}
+        regenSubmitting={regenSubmitting}
+        onExecuteForcedRegen={executeForcedRegen}
+      />
 
       {/* League Edit Dialog */}
       <LeagueEditDialog
@@ -906,229 +523,30 @@ export function AdminSeason() {
         onSave={saveLeague}
       />
 
-      {/* Delete League Confirmation */}
-      <Dialog open={deleteOpen} onOpenChange={(o) => { if (!o) { setDeleteOpen(false); setDeleteConfirmText(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-loss" />
-              Delete League
-            </DialogTitle>
-            <DialogDescription>
-              {deleteTarget && (() => {
-                const target = leagueList.find(l => l.id === deleteTarget);
-                const phase = leagueStates[deleteTarget]?.phase as Phase | undefined;
-                const isLive = phase === 'regular' || phase === 'playoffs';
-                return (
-                  <>
-                    Permanently delete <strong>{target?.name}</strong>?
-                    This removes all associated season data and cannot be undone.
-                    {isLive && (
-                      <span className="block mt-2 text-loss text-[11px]">
-                        WARNING: This league is in <strong>{phase}</strong> phase — live trades, match results, and standings will all be wiped.
-                      </span>
-                    )}
-                  </>
-                );
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-          {deleteTarget && (() => {
-            const target = leagueList.find(l => l.id === deleteTarget);
-            const phase = leagueStates[deleteTarget]?.phase as Phase | undefined;
-            const isLive = phase === 'regular' || phase === 'playoffs';
-            if (!isLive || !target) return null;
-            return (
-              <div className="space-y-2">
-                <div className="text-xs text-text-secondary">
-                  Type the league name <span className="font-mono text-text-primary">{target.name}</span> to confirm.
-                </div>
-                <Input
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  placeholder={target.name}
-                  className="bg-surface-overlay"
-                  autoFocus
-                />
-              </div>
-            );
-          })()}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              disabled={deleteSubmitting || (() => {
-                if (!deleteTarget) return true;
-                const target = leagueList.find(l => l.id === deleteTarget);
-                const phase = leagueStates[deleteTarget]?.phase as Phase | undefined;
-                const isLive = phase === 'regular' || phase === 'playoffs';
-                return isLive && deleteConfirmText.trim() !== target?.name;
-              })()}
-              onClick={executeDeleteLeague}
-            >
-              {deleteSubmitting ? 'Deleting…' : 'Delete'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Force Regenerate Schedule Confirmation */}
-      <Dialog open={regenOpen} onOpenChange={(o) => { if (!o) { setRegenOpen(false); setRegenConfirmText(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-loss" />
-              Regenerate Schedule (Destructive)
-            </DialogTitle>
-            <DialogDescription>
-              {regenTarget?.name} is in <strong>{regenTarget?.phase}</strong> phase.
-              Regenerating will delete every match, including ones with results recorded.
-              Standings will be reset.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="text-xs text-text-secondary">
-            Type the league name <span className="font-mono text-text-primary">{regenTarget?.name}</span> to confirm.
-          </div>
-          <Input
-            value={regenConfirmText}
-            onChange={(e) => setRegenConfirmText(e.target.value)}
-            placeholder={regenTarget?.name ?? ''}
-            className="bg-surface-overlay"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRegenOpen(false)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              disabled={regenSubmitting || regenConfirmText.trim() !== regenTarget?.name}
-              onClick={executeForcedRegen}
-            >
-              {regenSubmitting ? 'Regenerating...' : 'Force Regenerate'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Playoff Bracket Generation Dialog */}
-      <Dialog open={playoffOpen} onOpenChange={(o) => { if (!o) { setPlayoffOpen(false); setPlayoffTarget(null); setPlayoffConfirmText(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Trophy size={16} className="text-pink" />
-              {playoffTarget?.isRegen ? 'Regenerate Playoff Bracket' : 'Generate Playoff Bracket'}
-            </DialogTitle>
-            <DialogDescription>
-              {playoffTarget && (
-                <>
-                  <strong>{playoffTarget.name}</strong> — top <strong>{playoffTarget.topN}</strong> teams.
-                  {playoffTarget.isRegen && (
-                    <span className="block mt-1 text-loss text-[11px]">
-                      Regenerating will delete every existing playoff match for this league, including ones with results recorded.
-                    </span>
-                  )}
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <div className="text-xs text-text-secondary font-medium">Seeding preview</div>
-            {playoffPreview.length === 0 ? (
-              <div className="text-xs text-text-muted text-center py-4">Loading standings…</div>
-            ) : (
-              <div className="space-y-1 max-h-[200px] overflow-y-auto rounded border border-border-subtle">
-                {playoffPreview.map(({ teamId, rank }) => (
-                  <div key={teamId} className="flex items-center gap-2 px-2 py-1 text-xs">
-                    <span className="font-mono text-pink w-6 text-center">#{rank}</span>
-                    <span className="text-text-primary font-medium">{teamId}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {playoffTarget?.isRegen && (
-              <>
-                <div className="text-xs text-text-secondary pt-2">
-                  Type the league name <span className="font-mono text-text-primary">{playoffTarget.name}</span> to confirm regeneration.
-                </div>
-                <Input
-                  value={playoffConfirmText}
-                  onChange={(e) => setPlayoffConfirmText(e.target.value)}
-                  placeholder={playoffTarget.name}
-                  className="bg-surface-overlay"
-                  autoFocus
-                />
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPlayoffOpen(false)}>Cancel</Button>
-            <Button
-              disabled={
-                playoffSubmitting ||
-                playoffPreview.length === 0 ||
-                (playoffTarget?.isRegen && playoffConfirmText.trim() !== playoffTarget?.name)
-              }
-              className={playoffTarget?.isRegen
-                ? 'bg-loss text-surface-base hover:bg-loss/90'
-                : 'bg-pink text-surface-base hover:bg-pink/90'}
-              onClick={executePlayoffs}
-            >
-              <Trophy size={12} />
-              {playoffSubmitting
-                ? 'Generating…'
-                : playoffTarget?.isRegen
-                  ? 'Regenerate'
-                  : 'Generate Bracket'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SeasonPlayoffDialog
+        playoffOpen={playoffOpen}
+        setPlayoffOpen={setPlayoffOpen}
+        playoffTarget={playoffTarget}
+        setPlayoffTarget={setPlayoffTarget}
+        playoffPreview={playoffPreview}
+        playoffConfirmText={playoffConfirmText}
+        setPlayoffConfirmText={setPlayoffConfirmText}
+        playoffSubmitting={playoffSubmitting}
+        onExecutePlayoffs={executePlayoffs}
+      />
 
       {/* Backward Phase Override Dialog */}
-      <Dialog open={backwardOpen} onOpenChange={(o) => { if (!o) { setBackwardOpen(false); setBackwardTarget(null); setBackwardConfirmText(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={16} className="text-loss" />
-              Revert Phase (Destructive)
-            </DialogTitle>
-            <DialogDescription>
-              {backwardTarget && (
-                <>
-                  Move <strong>{leagueList.find(l => l.id === backwardTarget.leagueId)?.name}</strong> backward from{' '}
-                  <strong>{phaseConfig[backwardTarget.from].label}</strong> to{' '}
-                  <strong>{phaseConfig[backwardTarget.to].label}</strong>.
-                  <span className="block mt-2 text-loss text-[11px]">
-                    Backward phase moves can re-open trade gates, demote brackets, and confuse downstream auto-jobs.
-                    This is logged as <span className="font-mono">phase_reverted</span>.
-                  </span>
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <div className="text-xs text-text-secondary">
-              Type <span className="font-mono text-text-primary">I understand</span> to confirm.
-            </div>
-            <Input
-              value={backwardConfirmText}
-              onChange={(e) => setBackwardConfirmText(e.target.value)}
-              placeholder="I understand"
-              className="bg-surface-overlay"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBackwardOpen(false)}>Cancel</Button>
-            <Button
-              variant="destructive"
-              disabled={backwardConfirmText.trim() !== 'I understand'}
-              onClick={executeBackward}
-            >
-              Revert Phase
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SeasonBackwardPhaseDialog
+        leagueList={leagueList}
+        backwardOpen={backwardOpen}
+        setBackwardOpen={setBackwardOpen}
+        backwardTarget={backwardTarget}
+        setBackwardTarget={setBackwardTarget}
+        backwardConfirmText={backwardConfirmText}
+        setBackwardConfirmText={setBackwardConfirmText}
+        onExecuteBackward={executeBackward}
+      />
 
       {/* New Season Wizard */}
       <NewSeasonWizard open={wizardOpen} onClose={() => setWizardOpen(false)} leagues={leagueList} />
