@@ -352,6 +352,8 @@ export const activityLog = sqliteTable('activity_log', {
   type: text('type').notNull(),
   category: text('category', { enum: ['admin', 'auth', 'config', 'draft', 'trade', 'fa', 'match', 'team', 'scrim'] }).notNull(),
   actor: text('actor').notNull(),
+  // Nullable on purpose: cross-league events (auth, profile updates, season-wide
+  // admin actions) have no single league context.
   leagueId: text('league_id'),
   description: text('description').notNull(),
   /** JSON blob for event-specific data */

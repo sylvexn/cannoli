@@ -198,10 +198,7 @@ export const authRoutes = new Elysia()
   .post('/api/auth/change-password', ({ body, user, set }) => {
     const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
 
-    if (!user) {
-      set.status = 401;
-      return { error: 'Not authenticated' };
-    }
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     if (!currentPassword || !newPassword) {
       set.status = 400;
       return { error: 'Current and new password required' };
