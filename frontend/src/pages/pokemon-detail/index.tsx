@@ -59,8 +59,8 @@ export function PokemonDetailPage() {
       {/* Page title */}
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-neon">Pokemon</span>
-          <span className="text-text-primary ml-2">{decodedName}</span>
+          <span className="text-neon">Pokemon</span>{' '}
+          <span className="text-text-primary">{decodedName}</span>
         </h1>
       </div>
 

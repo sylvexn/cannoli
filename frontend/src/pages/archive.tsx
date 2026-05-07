@@ -109,8 +109,8 @@ export function ArchivePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-            <span className="text-purple-400">Season</span>
-            <span className="text-text-primary ml-1">Archive</span>
+            <span className="text-purple-400">Season</span>{' '}
+            <span className="text-text-primary">Archive</span>
           </h1>
           <p className="text-sm text-text-muted">Historical seasons and results</p>
         </div>

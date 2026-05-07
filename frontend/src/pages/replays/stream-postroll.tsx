@@ -110,8 +110,8 @@ export function StreamPostroll({ match, league, homeTeam, awayTeam, durationMs, 
 
       <div className="relative z-10 flex flex-col items-center gap-10 px-12 max-w-4xl w-full">
         <h1 className="font-mono font-bold uppercase tracking-[0.25em] text-center text-2xl">
-          <span className="text-neon">Final</span>
-          <span className="text-text-primary ml-3">Score</span>
+          <span className="text-neon">Final</span>{' '}
+          <span className="text-text-primary">Score</span>
         </h1>
 
         {/* Score row */}

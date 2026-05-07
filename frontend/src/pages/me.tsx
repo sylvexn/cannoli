@@ -91,8 +91,8 @@ export function MePage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-neon">My</span>
-          <span className="text-text-primary ml-1">Hub</span>
+          <span className="text-neon">My</span>{' '}
+          <span className="text-text-primary">Hub</span>
         </h1>
         <p className="text-sm text-text-muted">
           Welcome back, {user.username}.
