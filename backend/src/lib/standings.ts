@@ -131,8 +131,8 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
 
   return teams.map(team => {
     const phaseClause = phase === 'regular'
-      ? sql`AND ${schema.matches.phase} = 'regular'`
-      : sql``;
+      ? eq(schema.matches.phase, 'regular')
+      : undefined;
 
     const home = db.select({
       w: sql<number>`COALESCE(SUM(CASE WHEN home_score > away_score THEN 1 ELSE 0 END), 0)`,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { orderRecords, type RawRecord } from '../src/lib/standings';
+import { computeStandings, orderRecords, type RawRecord } from '../src/lib/standings';
 
 /** Build a head-to-head lookup that returns the same provided wins map for any
  *  tiedIds set. Tests pass in the wins map directly so we don't have to recompute. */
@@ -114,6 +114,16 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     expect(out[0].differential).toBe(12);
     expect(out[0].kills).toBe(33);
     expect(out[0].deaths).toBe(21);
+  });
+
+  // Regression: phase: 'all' used to splice an empty sql`` into and(...),
+  // producing `WHERE … AND ()` and crashing with `near ")" syntax error`.
+  // Just exercise the SQL path — empty/unknown leagueId is fine, we only care
+  // that no SQLiteError is thrown.
+  test("regression: computeStandings({ phase: 'all' }) does not crash with SQL syntax error", () => {
+    expect(() => computeStandings('__nonexistent_league__', { phase: 'all' })).not.toThrow();
+    expect(() => computeStandings('__nonexistent_league__', { phase: 'regular' })).not.toThrow();
+    expect(() => computeStandings('__nonexistent_league__')).not.toThrow();
   });
 
   test('different wins-buckets each evaluate tiebreakers independently', () => {
