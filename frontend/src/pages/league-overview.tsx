@@ -71,7 +71,13 @@ export function LeagueOverviewPage() {
     if (leagues.length === 0) return;
     setTeamsLoading(true);
     Promise.all(
-      leagues.map(l => api.getTeams(l.id).then(teams => [l.id, teams] as const))
+      leagues.map(l =>
+        api.getTeams(l.id)
+          .then(teams => [l.id, teams] as const)
+          // If a league's /teams endpoint 500s, fall back to an empty list so
+          // one bad league doesn't blank the whole overview.
+          .catch(() => [l.id, []] as const)
+      )
     ).then(results => {
       setTeamsPerLeague(Object.fromEntries(results));
       setTeamsLoading(false);
@@ -91,11 +97,16 @@ export function LeagueOverviewPage() {
     }).catch(() => setTradesLoading(false));
   }, [leagues]);
 
-  // Compute site-wide stats from fetched teams
+  // Compute site-wide stats from fetched teams. Guard against partial/missing
+  // shapes — /teams can 500 or return malformed entries when the standings query
+  // crashes, and we don't want to take down the whole page.
   const allTeams = Object.values(teamsPerLeague).flat();
   const totalPlayers = allTeams.length;
-  const totalDrafted = allTeams.reduce((s, t) => s + t.roster.length, 0);
-  const totalMatches = allTeams.reduce((s, t) => s + t.record.wins + t.record.losses, 0) / 2;
+  const totalDrafted = allTeams.reduce((s, t) => s + (t?.roster?.length ?? 0), 0);
+  const totalMatches = allTeams.reduce(
+    (s, t) => s + (t?.record?.wins ?? 0) + (t?.record?.losses ?? 0),
+    0,
+  ) / 2;
 
   // Recent activity — league events only (draft, trade, match, team)
   const [recentActivity, setRecentActivity] = useState<ApiActivityEvent[]>([]);
