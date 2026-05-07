@@ -44,6 +44,15 @@ interface MonitoredBattle {
   parser: ReplayParser;
   lines: string[]; // full log accumulator
   isOfficial: boolean;
+  /**
+   * Which PS side (p1 / p2) the Cannoli HOME team is playing as for this
+   * match. PS picks p1/p2 by challenge order — independent of how Cannoli
+   * recorded the matchup — so without this lookup ~half of all matches get
+   * home/away swapped both in the Arena HUD and in match_pokemon.teamId.
+   * `null` until both `|player|` lines arrive AND we map them to a known
+   * matchup (or the bot rejoins an in-progress room with a known psRoomId).
+   */
+  homeSide: 'p1' | 'p2' | null;
 }
 
 let ws: WebSocket | null = null;
@@ -308,6 +317,7 @@ function handleBotPm(sender: string, message: string) {
       parser: new ReplayParser(),
       lines: [],
       isOfficial: false,
+      homeSide: null,
     };
     monitoredBattles.set(roomId, entry);
     // Set matchId immediately so live-stats broadcasting starts as soon as the
@@ -343,6 +353,18 @@ function rejoinInProgressBattles() {
     const p1 = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : '';
     const p2 = awayTeam?.showdownUsername ? toUserid(awayTeam.showdownUsername) : '';
 
+    // Orientation: compare each PS userid to the home team's mapping.
+    // p1 mapped to homeTeamId → home plays p1; otherwise home plays p2.
+    // (If neither player maps to the home team — e.g. team had no PS username
+    // recorded — fall back to null and let the bot resolve once |player|
+    // lines arrive.)
+    const p1Team = p1 ? useridToTeam.get(p1)?.teamId : null;
+    const p2Team = p2 ? useridToTeam.get(p2)?.teamId : null;
+    const homeSide: 'p1' | 'p2' | null =
+      p1Team === match.homeTeamId ? 'p1'
+        : p2Team === match.homeTeamId ? 'p2'
+          : null;
+
     monitoredBattles.set(roomId, {
       roomId,
       matchId: match.id,
@@ -351,6 +373,7 @@ function rejoinInProgressBattles() {
       parser: new ReplayParser(),
       lines: [],
       isOfficial: true,
+      homeSide,
     });
 
     console.log(`[PS Bot] Rejoining ${roomId} for match ${match.id}`);
@@ -377,6 +400,7 @@ function handleBattleLine(room: string, line: string) {
         parser: new ReplayParser(),
         lines: [],
         isOfficial: false,
+        homeSide: null,
       });
     }
     return;
@@ -454,6 +478,12 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
   if (match) {
     battle.matchId = match.id;
     battle.isOfficial = true;
+    // Resolve home/away orientation now that we know which Cannoli match this
+    // battle corresponds to. team1 == home → p1 is home; team2 == home → p2.
+    battle.homeSide =
+      team1.teamId === match.homeTeamId ? 'p1'
+        : team2.teamId === match.homeTeamId ? 'p2'
+          : null;
 
     // Update match with PS room ID and status
     db.update(schema.matches)
@@ -497,13 +527,22 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
       const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
 
-      // Determine scores
+      // Determine scores. Use the resolved orientation (battle.homeSide) when
+      // available — this is the single source of truth for which PS side
+      // corresponds to the Cannoli home team. Fall back to the older
+      // username-comparison heuristic only if orientation never resolved
+      // (team rosters with no PS username, etc.).
       let homeScore = 0;
       let awayScore = 0;
       if (winnerUsername) {
         const winnerUserid = toUserid(winnerUsername);
-        const homeUserid = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : null;
-        if (winnerUserid === homeUserid || winnerUserid === battle.p1 && match.homeTeamId === (useridToTeam.get(battle.p1)?.teamId)) {
+        const homeSide = battle.homeSide;
+        const homeIsP1 = homeSide === 'p1'
+          || (homeSide === null && useridToTeam.get(battle.p1)?.teamId === match.homeTeamId);
+        const homeWon = homeIsP1
+          ? winnerUserid === battle.p1
+          : winnerUserid === battle.p2;
+        if (homeWon) {
           homeScore = result.winnerScore;
           awayScore = result.loserScore;
         } else {
@@ -529,12 +568,17 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         .where(eq(schema.matches.id, battle.matchId))
         .run();
 
-      // Write per-Pokemon K/D stats
+      // Write per-Pokemon K/D stats. Attribute by orientation, not by raw
+      // p1/p2 → home/away mapping. The previous code used useridToTeam, which
+      // is correct ONLY when the userid maps cleanly back; if it didn't (stale
+      // mapping, name change), the fallback `match.homeTeamId` for p1 was
+      // wrong half the time. With battle.homeSide resolved at match start,
+      // we deterministically know which PS side is home.
       for (const mon of result.pokemon) {
         const side = mon.player;
-        const teamId = side === 'p1'
-          ? (useridToTeam.get(battle.p1)?.teamId || match.homeTeamId)
-          : (useridToTeam.get(battle.p2)?.teamId || match.awayTeamId);
+        const homeSide = battle.homeSide
+          ?? (useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1' : 'p2');
+        const teamId = side === homeSide ? match.homeTeamId : match.awayTeamId;
 
         if (mon.appeared) {
           db.insert(schema.matchPokemon).values({
@@ -554,12 +598,15 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         const homeRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, homeTeam.id)).all();
         const awayRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, awayTeam.id)).all();
 
+        const homeSide = battle.homeSide
+          ?? (useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1' : 'p2');
         const warnings = validateMatchResult(
           result,
           homeRoster.map(r => ({ pokemonName: r.pokemonName, isTeraCaptain: r.isTeraCaptain })),
           awayRoster.map(r => ({ pokemonName: r.pokemonName, isTeraCaptain: r.isTeraCaptain })),
           homeTeam.teamAbbrev,
           awayTeam.teamAbbrev,
+          homeSide,
         );
 
         if (warnings.length > 0) {
@@ -603,7 +650,9 @@ function broadcastLiveStats(battle: MonitoredBattle) {
   const broadcaster = getArenaBroadcaster();
   if (!broadcaster) return;
 
-  const stats = battle.parser.getLiveStats();
+  // Use resolved orientation so HUD's "home" column always shows the Cannoli
+  // home team — regardless of which PS side they got assigned.
+  const stats = battle.parser.getLiveStats(battle.homeSide ?? 'p1');
   const matchId = battle.matchId || battle.roomId;
 
   broadcaster.publish(`arena:match:${matchId}`, JSON.stringify({

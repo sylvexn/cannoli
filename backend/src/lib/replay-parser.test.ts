@@ -164,5 +164,40 @@ describe('ReplayParser', () => {
       expect(typeof live.terasRemaining.home).toBe('boolean');
       expect(typeof live.terasRemaining.away).toBe('boolean');
     });
+
+    // Orientation: PS picks p1/p2 by challenge order. The Cannoli home team
+    // can land on either side. Without this remap the Arena HUD shows ~half
+    // of all matches with home/away inverted.
+    test('homeSide=p1: home is p1 (default behavior)', () => {
+      const parser = new ReplayParser();
+      for (const line of log.split('\n')) parser.feedLine(line);
+      const live = parser.getLiveStats('p1');
+      expect(live.home.player).toBe('ROA_Bio');     // p1
+      expect(live.away.player).toBe('hellofellorat'); // p2
+    });
+
+    test('homeSide=p2: home maps to p2, away to p1', () => {
+      const parser = new ReplayParser();
+      for (const line of log.split('\n')) parser.feedLine(line);
+      const live = parser.getLiveStats('p2');
+      expect(live.home.player).toBe('hellofellorat'); // p2
+      expect(live.away.player).toBe('ROA_Bio');       // p1
+      // teraRemaining flags must follow the swap too
+      const liveDefault = parser.getLiveStats('p1');
+      expect(live.terasRemaining.home).toBe(liveDefault.terasRemaining.away);
+      expect(live.terasRemaining.away).toBe(liveDefault.terasRemaining.home);
+    });
+
+    test('homeSide swap also rotates pokemon lists', () => {
+      const parser = new ReplayParser();
+      for (const line of log.split('\n')) parser.feedLine(line);
+      const liveP1Home = parser.getLiveStats('p1');
+      const liveP2Home = parser.getLiveStats('p2');
+      // Same Pokemon, just relabeled which side is home.
+      expect(liveP2Home.home.pokemon.map(p => p.species).sort())
+        .toEqual(liveP1Home.away.pokemon.map(p => p.species).sort());
+      expect(liveP2Home.away.pokemon.map(p => p.species).sort())
+        .toEqual(liveP1Home.home.pokemon.map(p => p.species).sort());
+    });
   });
 });

@@ -193,9 +193,20 @@ export class ReplayParser {
 
   /**
    * Get live match stats suitable for Arena broadcast.
+   *
+   * The parser itself is PS-protocol-pure — it has no concept of "home" vs
+   * "away" beyond the side a player happens to occupy. The caller passes
+   * `homeSide` to indicate which PS side (p1/p2) the Cannoli home team is
+   * playing as for THIS match. Defaults to 'p1' for back-compat with tests
+   * and ad-hoc replay parsing where orientation is unknown.
+   *
+   * Without this, ~half of all matches end up with home/away swapped in the
+   * Arena HUD (the bug being fixed): PS picks p1/p2 based on who challenged
+   * whom, which has nothing to do with which side Cannoli marked home.
    */
-  getLiveStats(): LiveMatchStats {
+  getLiveStats(homeSide: 'p1' | 'p2' = 'p1'): LiveMatchStats {
     const allStats = Array.from(this.stats.values());
+    const awaySide = homeSide === 'p1' ? 'p2' : 'p1';
 
     const makeSide = (side: 'p1' | 'p2') => ({
       player: this.players[side],
@@ -212,12 +223,12 @@ export class ReplayParser {
     });
 
     return {
-      home: makeSide('p1'),
-      away: makeSide('p2'),
+      home: makeSide(homeSide),
+      away: makeSide(awaySide),
       turn: this.turn,
       terasRemaining: {
-        home: !this.teraUsedBySide.p1,
-        away: !this.teraUsedBySide.p2,
+        home: !this.teraUsedBySide[homeSide],
+        away: !this.teraUsedBySide[awaySide],
       },
     };
   }
@@ -539,18 +550,21 @@ export function validateMatchResult(
   awayRoster: { pokemonName: string; isTeraCaptain: boolean }[],
   homeTeamAbbrev: string,
   awayTeamAbbrev: string,
+  homeSide: 'p1' | 'p2' = 'p1',
 ): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
 
-  // Determine which side is home/away
-  // Caller must ensure p1 = home, p2 = away (or map accordingly)
+  // Caller passes `homeSide` to identify which PS side the Cannoli home team
+  // played as. Defaults to 'p1' for back-compat — but the bot path now
+  // resolves orientation from useridToTeam so warnings hit the correct team.
+  const awaySide = homeSide === 'p1' ? 'p2' : 'p1';
   const sides: Array<{
     side: 'p1' | 'p2';
     roster: typeof homeRoster;
     abbrev: string;
   }> = [
-    { side: 'p1', roster: homeRoster, abbrev: homeTeamAbbrev },
-    { side: 'p2', roster: awayRoster, abbrev: awayTeamAbbrev },
+    { side: homeSide, roster: homeRoster, abbrev: homeTeamAbbrev },
+    { side: awaySide, roster: awayRoster, abbrev: awayTeamAbbrev },
   ];
 
   for (const { side, roster, abbrev } of sides) {
