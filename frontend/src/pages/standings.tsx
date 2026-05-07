@@ -89,8 +89,8 @@ export function StandingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-win">League</span>
-          <span className="text-text-primary ml-1">Hub</span>
+          <span className="text-win">League</span>{' '}
+          <span className="text-text-primary">Hub</span>
         </h1>
         <p className="text-sm text-text-muted">
           Season {currentSeason.seasonNumber} &middot; Week {currentSeason.currentWeek} of {currentSeason.totalWeeks}
