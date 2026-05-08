@@ -7,7 +7,7 @@ import { api, type ApiPublicProfile } from '@/lib/api';
 import { formatRecord, formatTenure } from '@/lib/format';
 import { spriteUrl } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
-import { blendHex } from '@/lib/color';
+import { blendHex, readableOnDark } from '@/lib/color';
 import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Shield, Code2 } from 'lucide-react';
@@ -92,14 +92,22 @@ export function CoachLink({
     size === 'md' ? 'text-sm' :
     '';
 
-  // Accent-gradient name: subtle horizontal gradient using user's two main colors,
-  // bright on primary, fading to secondary. Falls back to solid neon if no colors set.
-  const nameStyle: CSSProperties = {
-    backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
-    WebkitBackgroundClip: 'text',
-    backgroundClip: 'text',
-    color: 'transparent',
-  };
+  // Staff (dev/admin) get the accent gradient; regular users get a solid
+  // readable color from their primary (team-derived) palette so the role
+  // is legible at a glance — gradient names = staff, solid = coach/user.
+  // The solid color is lifted to a lightness floor so very dark team
+  // colors (#530000 etc.) still read on the near-black site background.
+  const isStaff = coach.role === 'dev' || coach.role === 'admin';
+  const nameStyle: CSSProperties = isStaff
+    ? {
+        backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent',
+      }
+    : {
+        color: readableOnDark(primary),
+      };
 
   const nameNode = (
     <span
@@ -245,12 +253,17 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
   const secondary = merged.secondaryColor ?? FALLBACK_SECONDARY;
   const tertiary = merged.tertiaryColor ?? blendHex(primary, secondary);
 
-  const nameStyle: CSSProperties = {
-    backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
-    WebkitBackgroundClip: 'text',
-    backgroundClip: 'text',
-    color: 'transparent',
-  };
+  const isStaff = coach.role === 'dev' || coach.role === 'admin';
+  const nameStyle: CSSProperties = isStaff
+    ? {
+        backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
+        WebkitBackgroundClip: 'text',
+        backgroundClip: 'text',
+        color: 'transparent',
+      }
+    : {
+        color: readableOnDark(primary),
+      };
 
   const bannerStyle: CSSProperties = {
     background: `linear-gradient(135deg, ${primary}40 0%, ${secondary}30 50%, ${tertiary}25 100%)`,
