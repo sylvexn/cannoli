@@ -6,7 +6,11 @@
  * Pin definitions and Pin award are split into two sibling routes that share
  * the same /admin/pins parent header (with sub-tab nav). Other tabs are 1:1.
  */
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
 import { AdminSection } from './admin-section';
 import { AdminUsers } from './admin-users';
 import { AdminTeams } from './admin-teams';
@@ -58,9 +62,17 @@ export const AdminMoveCategoriesRoute = () => (
 export const AdminSiteSettingsRoute = () => (
   <AdminSection icon={Settings} title="Settings"><AdminSiteSettings /></AdminSection>
 );
-export const AdminActivityRoute = () => (
-  <AdminSection icon={ScrollText} title="Activity Log"><AdminActivityLog /></AdminSection>
-);
+export const AdminActivityRoute = () => {
+  return (
+    <AdminSection
+      icon={ScrollText}
+      title="Activity Log"
+      actions={<BackfillPinAuditButton />}
+    >
+      <AdminActivityLog />
+    </AdminSection>
+  );
+};
 export const AdminFeedbackRoute = () => (
   <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
 );
@@ -86,3 +98,32 @@ export const AdminPinsAwardRoute = () => (
 
 /** Bare /admin/pins lands on the definitions sub-tab. */
 export const AdminPinsIndexRoute = () => <Navigate to="definitions" replace />;
+
+/**
+ * Header action for the Activity Log: trigger pin audit-log backfill.
+ * Idempotent — safe to click repeatedly. Reports inserted/skipped counts.
+ */
+function BackfillPinAuditButton() {
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    if (!confirm('Backfill pin_awarded events for any pins missing them? Idempotent — safe to re-run.')) return;
+    setBusy(true);
+    try {
+      const r = await api.backfillPinAudit();
+      if (r.inserted > 0) {
+        toast.success(`Inserted ${r.inserted} pin_awarded entries (${r.skipped} already logged)`);
+      } else {
+        toast.info(`Already up to date (${r.skipped} pin events already logged)`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Backfill failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button variant="ghost" size="sm" onClick={run} disabled={busy} className="h-7 text-[11px]">
+      {busy ? 'Backfilling...' : 'Backfill pin events'}
+    </Button>
+  );
+}
