@@ -20,6 +20,7 @@ import { AdminMatches } from './admin-matches';
 import { AdminTrades } from './admin-trades';
 import { AdminFreeAgents } from './admin-free-agents';
 import { AdminTierList } from './admin-tier-list';
+import { AdminTemplates } from './admin-templates';
 import { AdminMoveCategories } from './admin-move-categories';
 import { AdminSiteSettings } from './admin-site-settings';
 import { AdminActivityLog } from './admin-activity-log';
@@ -29,7 +30,7 @@ import { DefinitionsTab, AwardTab } from './admin-pins';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot,
+  Trophy, UserPlus, Award, Bot, Layers,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -55,6 +56,9 @@ export const AdminFreeAgentsRoute = () => (
 );
 export const AdminTierListRoute = () => (
   <AdminSection icon={List} title="Tier List"><AdminTierList /></AdminSection>
+);
+export const AdminTemplatesRoute = () => (
+  <AdminSection icon={Layers} title="Templates"><AdminTemplates /></AdminSection>
 );
 export const AdminMoveCategoriesRoute = () => (
   <AdminSection icon={Swords} title="Move Categories"><AdminMoveCategories /></AdminSection>

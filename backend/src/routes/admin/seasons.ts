@@ -20,6 +20,7 @@ export const seasonRoutes = new Elysia()
       tradeDeadlineWeek = 7,
       rosterSize = 10,
       forfeitPolicy = 'double_forfeit',
+      format = 'gen9natdex',
       weekDates = null,
       leagues: leaguePayloads = [],
       overlapOverride = false,
@@ -31,6 +32,7 @@ export const seasonRoutes = new Elysia()
       tradeDeadlineWeek?: number;
       rosterSize?: number;
       forfeitPolicy?: 'double_forfeit' | 'admin_review';
+      format?: string;
       weekDates?: Record<string, string> | null;
       leagues?: {
         id: string;
@@ -117,6 +119,7 @@ export const seasonRoutes = new Elysia()
             tradeDeadlineWeek,
             rosterSize,
             forfeitPolicy,
+            format,
           }).run();
 
           for (const t of lg.teams ?? []) {

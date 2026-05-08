@@ -441,6 +441,24 @@ export interface ApiTierListEntry {
   status: 'available' | 'tera-banned' | 'banned';
 }
 
+/** Saved {format, captain config, banlist, tier-list snapshot} preset. The
+ *  season wizard's "Start from template" option seeds initial state from one
+ *  of these so admins don't have to re-enter the same numbers each season. */
+export interface ApiDraftTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  format: string;
+  tierListSnapshot: { tier: number; names: string[] }[];
+  banlist: string[];
+  teraBanlist: string[];
+  captainCount: number;
+  pointCap: number;
+  rosterSize: number;
+  createdAt: string | null;
+  createdBy: number | null;
+}
+
 // ─── Speed Tiers ─────────────────────────────────────────────────────────
 
 export interface ApiSpeedTierRow {
@@ -605,6 +623,40 @@ export const api = {
   getTradeBlock: (leagueId: string) => fetchJson<ApiTradeBlockListing[]>(`/api/leagues/${leagueId}/trade-block`),
 
   getTierList: () => fetchJson<ApiTierListEntry[]>('/api/tier-list'),
+
+  // ─── Draft Templates ─────────────────────────────────────────────
+  // A template snapshots format + tier list + bans + captain config so a new
+  // season can spin up a known-good preset. The wizard "Start from template"
+  // step seeds initial state from one of these.
+  listDraftTemplates: () => fetchJson<ApiDraftTemplate[]>('/api/draft-templates'),
+
+  getDraftTemplate: (id: number) => fetchJson<ApiDraftTemplate>(`/api/draft-templates/${id}`),
+
+  createDraftTemplate: (data: {
+    name: string;
+    description?: string | null;
+    format: string;
+    tierListSnapshot: { tier: number; names: string[] }[];
+    banlist?: string[];
+    teraBanlist?: string[];
+    captainCount?: number;
+    pointCap?: number;
+    rosterSize?: number;
+  }) => postJson<ApiDraftTemplate>('/api/draft-templates', data),
+
+  updateDraftTemplate: (id: number, data: Partial<{
+    name: string;
+    description: string | null;
+    format: string;
+    tierListSnapshot: { tier: number; names: string[] }[];
+    banlist: string[];
+    teraBanlist: string[];
+    captainCount: number;
+    pointCap: number;
+    rosterSize: number;
+  }>) => putJson<ApiDraftTemplate>(`/api/draft-templates/${id}`, data),
+
+  deleteDraftTemplate: (id: number) => deleteJson<{ success: boolean }>(`/api/draft-templates/${id}`),
 
   // Admin write
   createUser: (username: string, role: string) =>
