@@ -1,45 +1,40 @@
-import { useSearchParams } from 'react-router-dom';
-import { PlayTab } from './play-tab';
-import { ArenaTab } from './arena-tab';
+/**
+ * Showdown page — full-page PS iframe with a collapsible Arena footer.
+ *
+ * Layout:
+ *   ┌───────────────────────────────┐
+ *   │ PS iframe (flex-1, max space) │
+ *   ├───────────────────────────────┤
+ *   │ Arena footer (collapsible)    │
+ *   └───────────────────────────────┘
+ *
+ * Iframe-shrink fix: iframes don't honour flex shrink the way block elements
+ * do. We constrain the iframe with a `position: relative; overflow: hidden`
+ * wrapper and pin it with `position: absolute; inset: 0`. Do NOT remove —
+ * removing this causes the PS toolbar/canvas to leak past the right edge.
+ */
+import { ArenaFooter } from './arena-footer';
 
-const TABS = ['play', 'arena'] as const;
-type Tab = typeof TABS[number];
+const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
 export function ShowdownPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get('tab');
-  const activeTab: Tab = tabParam === 'arena' ? 'arena' : 'play';
-
-  const setTab = (tab: Tab) => {
-    setSearchParams(tab === 'play' ? {} : { tab });
-  };
-
   return (
     <div className="flex flex-col h-full">
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 px-2 pb-3 flex-shrink-0">
-        <h1 className="font-mono text-lg font-bold uppercase tracking-wider mr-4">
-          <span className="text-orange-400">Showdown</span>
-        </h1>
-        {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setTab(tab)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? 'bg-orange-400/15 text-orange-400'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary'
-            }`}
-          >
-            {tab === 'play' ? 'Play' : 'Arena'}
-          </button>
-        ))}
+      {/* PS iframe — flex-1 so it gets all leftover space above the footer */}
+      <div
+        className="flex-1 min-h-0 relative rounded-lg border border-border-default"
+        style={{ overflow: 'hidden', maxWidth: '100%', maxHeight: '100%' }}
+      >
+        <iframe
+          src={PS_URL}
+          className="absolute inset-0 block h-full w-full border-0"
+          allow="clipboard-write"
+          title="Pokemon Showdown"
+        />
       </div>
 
-      {/* Tab content — fills remaining height */}
-      <div className="flex-1 min-h-0">
-        {activeTab === 'play' ? <PlayTab /> : <ArenaTab />}
-      </div>
+      {/* Arena footer — collapsible, sibling beneath the iframe */}
+      <ArenaFooter />
     </div>
   );
 }
