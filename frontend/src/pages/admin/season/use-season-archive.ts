@@ -40,5 +40,25 @@ export function useSeasonArchive() {
     }
   }, [refreshSeasons]);
 
-  return { seasonsList, refreshSeasons, toggleArchive };
+  /**
+   * Full archive ceremony — only meaningful when archiving (not un-archiving).
+   * Returns the awards summary so the UI can surface what was minted.
+   */
+  const archiveCeremony = useCallback(async (seasonId: number) => {
+    try {
+      const result = await api.archiveSeasonCeremony(seasonId);
+      const totalNew = result.newAwards.reduce((s, l) => s + l.awarded.length, 0);
+      const totalExisting = result.existingAwards.reduce((s, l) => s + l.awarded, 0);
+      toast.success(
+        `Season ${result.seasonNumber} archived — ${totalExisting + totalNew} pins minted across ${result.leagues} league${result.leagues === 1 ? '' : 's'}`,
+      );
+      refreshSeasons();
+      return result;
+    } catch (err: any) {
+      toast.error(err.message);
+      throw err;
+    }
+  }, [refreshSeasons]);
+
+  return { seasonsList, refreshSeasons, toggleArchive, archiveCeremony };
 }
