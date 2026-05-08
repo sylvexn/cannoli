@@ -2,10 +2,10 @@
  * Admin panel layout.
  *
  * Sub-routed: each tab is its own route under /admin/<slug>. The bare /admin
- * lands on the People → Users tab (existing default). Sub-routes for heavier
- * tabs:
- *   /admin/pins/definitions — pin catalog
- *   /admin/pins/award       — award/revoke + recent list
+ * lands on the People → Users tab (existing default). The Pins tab is a
+ * single page now (was Definitions / Award; redesigned into one season-
+ * scoped grid with per-card metadata-aware award dialogs). Legacy
+ * `/admin/pins/{definitions,award}` URLs redirect to `/admin/pins`.
  *
  * Sidebar persists across all sub-routes; the right pane is a single Outlet
  * that renders the active tab. Replaces the prior single-page scrollable

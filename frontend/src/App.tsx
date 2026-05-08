@@ -27,8 +27,8 @@ import {
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
   AdminTemplatesRoute,
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
-  AdminFeedbackRoute, AdminBotRoute, AdminPinsIndexRoute,
-  AdminPinsDefinitionsRoute, AdminPinsAwardRoute,
+  AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
+  AdminPinsLegacyRedirect,
 } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
 import { ArchiveHubPage } from '@/pages/archive/hub';
@@ -118,9 +118,9 @@ export default function App() {
                     <Route path="tiers" element={<AdminTierListRoute />} />
                     <Route path="templates" element={<AdminTemplatesRoute />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
-                    <Route path="pins" element={<AdminPinsIndexRoute />} />
-                    <Route path="pins/definitions" element={<AdminPinsDefinitionsRoute />} />
-                    <Route path="pins/award" element={<AdminPinsAwardRoute />} />
+                    <Route path="pins" element={<AdminPinsRoute />} />
+                    <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
+                    <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
                     <Route path="settings" element={<AdminSiteSettingsRoute />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
