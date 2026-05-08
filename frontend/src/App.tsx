@@ -22,6 +22,13 @@ import { TradeBlockPage } from '@/pages/trade-block';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
+import {
+  AdminUsersRoute, AdminTeamsRoute, AdminLeaguesRoute, AdminSeasonRoute,
+  AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
+  AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
+  AdminFeedbackRoute, AdminBotRoute, AdminPinsIndexRoute,
+  AdminPinsDefinitionsRoute, AdminPinsAwardRoute,
+} from '@/pages/admin/admin-routes';
 import { ArchivePage } from '@/pages/archive';
 import { ReplaysPage } from '@/pages/replays';
 import { StreamPage } from '@/pages/replays/stream';
@@ -89,7 +96,25 @@ export default function App() {
                 <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>
-                  <Route path="admin" element={<AdminPage />} />
+                  <Route path="admin" element={<AdminPage />}>
+                    <Route index element={<AdminUsersRoute />} />
+                    <Route path="users" element={<AdminUsersRoute />} />
+                    <Route path="teams" element={<AdminTeamsRoute />} />
+                    <Route path="leagues" element={<AdminLeaguesRoute />} />
+                    <Route path="season" element={<AdminSeasonRoute />} />
+                    <Route path="matches" element={<AdminMatchesRoute />} />
+                    <Route path="trades" element={<AdminTradesRoute />} />
+                    <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
+                    <Route path="tiers" element={<AdminTierListRoute />} />
+                    <Route path="moves" element={<AdminMoveCategoriesRoute />} />
+                    <Route path="pins" element={<AdminPinsIndexRoute />} />
+                    <Route path="pins/definitions" element={<AdminPinsDefinitionsRoute />} />
+                    <Route path="pins/award" element={<AdminPinsAwardRoute />} />
+                    <Route path="settings" element={<AdminSiteSettingsRoute />} />
+                    <Route path="activity" element={<AdminActivityRoute />} />
+                    <Route path="bot" element={<AdminBotRoute />} />
+                    <Route path="feedback" element={<AdminFeedbackRoute />} />
+                  </Route>
                 </Route>
               </Route>
             </Route>

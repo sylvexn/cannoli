@@ -17,8 +17,6 @@ import { EmptyState } from '@/components/empty-state';
 import { formatRelativeTime } from '@/lib/format';
 import { PinIconPicker, RECENT_LUCIDE_NAMES } from './pins/pin-icon-picker';
 
-type SubTab = 'definitions' | 'award';
-
 const CATEGORIES: PinCategory[] = ['career', 'season', 'week', 'draft', 'community', 'custom'];
 
 // `id` slug input mirrors the backend regex: kebab-case, lowercase letters/
@@ -26,36 +24,9 @@ const CATEGORIES: PinCategory[] = ['career', 'season', 'week', 'draft', 'communi
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-export function AdminPins() {
-  const [tab, setTab] = useState<SubTab>('definitions');
-
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-1 rounded-md border border-border-default p-0.5 w-fit">
-        {(['definitions', 'award'] as SubTab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn(
-              'px-3 py-1 text-xs font-medium rounded transition-colors capitalize',
-              tab === t
-                ? 'bg-surface-overlay text-text-primary'
-                : 'text-text-muted hover:text-text-secondary',
-            )}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'definitions' ? <DefinitionsTab /> : <AwardTab />}
-    </div>
-  );
-}
-
 // ─── Definitions sub-tab ────────────────────────────────────────────────
 
-function DefinitionsTab() {
+export function DefinitionsTab() {
   const [defs, setDefs] = useState<ApiPinDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -309,7 +280,7 @@ function DefinitionDialog({
 
 // ─── Award sub-tab ──────────────────────────────────────────────────────
 
-function AwardTab() {
+export function AwardTab() {
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [defs, setDefs] = useState<ApiPinDefinition[]>([]);
   const [recent, setRecent] = useState<ApiPinRecent[]>([]);

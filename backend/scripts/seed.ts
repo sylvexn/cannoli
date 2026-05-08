@@ -535,6 +535,16 @@ if (MODE === 'mock') {
   seedMockData(coachTeamIds);
 }
 
+// Backfill pin_awarded activity-log entries for any pins inserted by importers
+// (S9/S10/S11 historical) that bypassed the audit-logging path. Idempotent.
+{
+  const { backfillPinAuditLog } = await import('../src/lib/pins/backfill-audit');
+  const r = backfillPinAuditLog();
+  if (r.inserted > 0 || r.skipped > 0) {
+    console.log(`\nPin audit backfill: ${r.inserted} inserted, ${r.skipped} already-logged`);
+  }
+}
+
 // ─── Final summary ──────────────────────────────────────────────────────────
 
 console.log('\n=== Seed Complete ===');

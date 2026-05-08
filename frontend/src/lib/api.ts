@@ -850,6 +850,11 @@ export const api = {
 
   // PS Bot
   getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
+  reconnectBot: () => postJson<{ success: boolean }>('/api/admin/bot/reconnect'),
+
+  // Pin audit-log backfill (idempotent)
+  backfillPinAudit: () =>
+    postJson<{ inserted: number; skipped: number }>('/api/admin/pins/backfill-audit'),
 
   runJob: (name: string) => postJson<{ success: boolean }>(`/api/admin/jobs/${name}/run`),
 
