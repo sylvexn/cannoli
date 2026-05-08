@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
@@ -10,13 +10,23 @@ import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
 import { MEDAL_COLORS } from '@/lib/constants';
 import {
-  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon,
+  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon, ArrowRight,
 } from 'lucide-react';
+
+/**
+ * Season hub page at /archive/:seasonId. Per-season overview surfacing the
+ * 3 leagues' top-line standings, champions, and MVP medals. Each league
+ * card links into the per-league deep-dive at /archive/:seasonId/:leagueId.
+ *
+ * The season picker that lived on the standalone /archive page has moved
+ * up to the hub (/archive); this page is single-season scoped.
+ */
 
 interface ArchiveSeason {
   id: number;
   seasonNumber: number;
   phase: string;
+  archived?: boolean;
 }
 
 interface ArchiveRosterMon {
@@ -66,112 +76,61 @@ interface ArchiveLeague {
   mvps: ArchiveMvp[];
 }
 
-export function ArchivePage() {
-  const [seasons, setSeasons] = useState<ArchiveSeason[]>([]);
-  const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+export function ArchiveSeasonPage() {
+  const { seasonId: seasonIdParam } = useParams<{ seasonId: string }>();
+  const seasonId = seasonIdParam ? parseInt(seasonIdParam) : null;
+  const [season, setSeason] = useState<ArchiveSeason | null>(null);
   const [leagues, setLeagues] = useState<ArchiveLeague[]>([]);
   const [loading, setLoading] = useState(true);
-  const [leaguesLoading, setLeaguesLoading] = useState(false);
 
-  // Fetch seasons list
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/seasons`)
-      .then(r => r.json())
-      .then((data: ArchiveSeason[]) => {
-        setSeasons(data);
-        // Auto-select oldest completed season (not the current one)
-        const archived = data.filter(s => s.phase === 'offseason');
-        if (archived.length > 0) {
-          setSelectedSeason(archived[0].id);
-        } else if (data.length > 1) {
-          setSelectedSeason(data[1].id);
-        }
+    if (!seasonId) return;
+    setLoading(true);
+    Promise.all([
+      fetch('/api/seasons').then(r => r.json() as Promise<ArchiveSeason[]>),
+      fetch(`/api/seasons/${seasonId}/leagues`).then(r => r.json() as Promise<ArchiveLeague[]>),
+    ])
+      .then(([seasons, lg]) => {
+        setSeason(seasons.find(s => s.id === seasonId) ?? null);
+        setLeagues(lg);
         setLoading(false);
-      });
-  }, []);
+      })
+      .catch(() => setLoading(false));
+  }, [seasonId]);
 
-  // Fetch leagues for selected season
-  useEffect(() => {
-    if (!selectedSeason) return;
-    setLeaguesLoading(true);
-    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/seasons/${selectedSeason}/leagues`)
-      .then(r => r.json())
-      .then((data: ArchiveLeague[]) => {
-        setLeagues(data);
-        setLeaguesLoading(false);
-      });
-  }, [selectedSeason]);
-
-  if (loading) return <div className="text-text-muted py-20 text-center">Loading archive...</div>;
-
-  const currentSeason = seasons.find(s => s.id === selectedSeason);
+  if (!seasonId) {
+    return <div className="text-text-muted py-20 text-center">Missing season id.</div>;
+  }
+  if (loading) return <div className="text-text-muted py-20 text-center text-sm">Loading season…</div>;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
             <span className="text-purple-400">Season</span>{' '}
-            <span className="text-text-primary">Archive</span>
+            <span className="text-text-primary">{season ? `S${season.seasonNumber}` : 'Archive'}</span>
           </h1>
-          <p className="text-sm text-text-muted">Historical seasons and results</p>
-        </div>
-
-        {/* Season picker */}
-        <div className="flex gap-2">
-          {seasons.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setSelectedSeason(s.id)}
-              className={cn(
-                'px-4 py-2 rounded-lg border text-sm font-mono font-bold transition-all',
-                selectedSeason === s.id
-                  ? 'bg-purple-400/10 border-purple-400/40 text-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
-                  : 'border-border-default text-text-muted hover:text-text-primary hover:border-border-default/80',
-              )}
-            >
-              S{s.seasonNumber}
-            </button>
-          ))}
+          <p className="text-sm text-text-muted">
+            {leagues.length} leagues
+            {' · '}
+            {leagues.reduce((s, l) => s + l.teams.length, 0)} teams
+            {season?.phase === 'offseason' && ' · Completed'}
+          </p>
         </div>
       </div>
 
-      {/* Season info bar */}
-      {currentSeason && (
-        <div className="flex items-center gap-4 text-sm text-text-muted">
-          <span>Season {currentSeason.seasonNumber}</span>
-          <span>·</span>
-          <span>{leagues.length} leagues</span>
-          <span>·</span>
-          <span>{leagues.reduce((s, l) => s + l.teams.length, 0)} teams</span>
-          {currentSeason.phase === 'offseason' && (
-            <>
-              <span>·</span>
-              <Badge variant="outline" className="text-[10px] text-text-muted border-border-default">
-                Completed
-              </Badge>
-            </>
-          )}
-        </div>
-      )}
-
-      {leaguesLoading ? (
-        <div className="text-text-muted py-12 text-center">Loading season data...</div>
-      ) : leagues.length === 0 ? (
+      {leagues.length === 0 ? (
         <div className="rounded-xl border border-border-default bg-surface-raised/40 py-16 px-6 flex flex-col items-center justify-center text-center">
           <div className="rounded-full p-4 bg-purple-400/5 border border-purple-400/20 mb-4">
             <ArchiveIcon size={28} className="text-purple-400/70" />
           </div>
-          <h2 className="text-base font-medium text-text-primary mb-1">No archived seasons yet</h2>
-          <p className="text-sm text-text-muted max-w-sm">
-            Past seasons will appear here once they're completed. The current season ({currentSeason ? `S${currentSeason.seasonNumber}` : 'live'}) is still in progress.
-          </p>
+          <h2 className="text-base font-medium text-text-primary mb-1">No data for this season</h2>
         </div>
       ) : (
         <div className="space-y-8">
           {leagues.map(league => (
-            <LeagueArchiveCard key={league.id} league={league} />
+            <LeagueArchiveCard key={league.id} seasonId={seasonId} league={league} />
           ))}
         </div>
       )}
@@ -179,15 +138,13 @@ export function ArchivePage() {
   );
 }
 
-function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
+function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: ArchiveLeague }) {
   const [expanded, setExpanded] = useState(false);
   const teamMap = useMemo(() => new Map(league.teams.map(t => [t.id, t])), [league.teams]);
   const champion = league.champion ? teamMap.get(league.champion) : null;
 
-  // Find champion from playoffs if not set
   const derivedChampion = useMemo(() => {
     if (champion) return champion;
-    // Last playoff winner
     const sorted = [...league.playoffs].reverse();
     for (const m of sorted) {
       if (m.homeScore != null && m.awayScore != null) {
@@ -198,49 +155,58 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
     return null;
   }, [champion, league.playoffs, teamMap]);
 
+  const leagueDeepLink = `/archive/${seasonId}/${league.id}`;
+
   return (
     <Card className="bg-surface-raised border-border-default overflow-hidden">
-      {/* League color bar */}
       <div className="h-1.5" style={{ backgroundColor: league.color }} />
 
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <CardTitle className="text-lg font-heading" style={{ color: league.color }}>
-              {league.name}
+              <Link to={leagueDeepLink} className="hover:underline underline-offset-4">
+                {league.name}
+              </Link>
             </CardTitle>
             <Badge variant="outline" className="text-[10px] text-text-muted">
               {league.teams.length} teams
             </Badge>
           </div>
 
-          {/* Champion display */}
-          {derivedChampion && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-draw/5 border border-draw/20">
-              <Crown size={14} className="text-draw" />
-              <TeamLogo abbrev={derivedChampion.teamAbbrev} color={derivedChampion.teamColor} size="sm" />
-              <span className="text-sm font-bold text-draw">{derivedChampion.teamName}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {derivedChampion && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-draw/5 border border-draw/20">
+                <Crown size={14} className="text-draw" />
+                <TeamLogo abbrev={derivedChampion.teamAbbrev} color={derivedChampion.teamColor} size="sm" />
+                <span className="text-sm font-bold text-draw">{derivedChampion.teamName}</span>
+              </div>
+            )}
+            <Link
+              to={leagueDeepLink}
+              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+            >
+              View league
+              <ArrowRight size={12} />
+            </Link>
+          </div>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Top 6 standings */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {league.teams.slice(0, 6).map((team, i) => (
-            <ArchiveTeamRow key={team.id} team={team} rank={i + 1} />
+            <ArchiveTeamRow key={team.id} seasonId={seasonId} leagueId={league.id} team={team} rank={i + 1} />
           ))}
         </div>
 
-        {/* MVPs */}
         {league.mvps.length > 0 && (
           <div className="flex items-center gap-4 pt-2 border-t border-border-subtle">
             <div className="flex items-center gap-1.5 text-[10px] text-text-muted uppercase tracking-wider shrink-0">
               <Medal size={12} />
               Season MVPs
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               {league.mvps.map((mvp, i) => {
                 const team = teamMap.get(mvp.teamId);
                 return (
@@ -269,7 +235,6 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
           </div>
         )}
 
-        {/* Expandable: full standings + bracket */}
         {league.teams.length > 6 && (
           <button
             onClick={() => setExpanded(!expanded)}
@@ -282,14 +247,19 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
 
         {expanded && (
           <div className="space-y-4 pt-2 border-t border-border-subtle">
-            {/* Remaining standings */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
               {league.teams.slice(6).map((team, i) => (
-                <ArchiveTeamRow key={team.id} team={team} rank={i + 7} compact />
+                <ArchiveTeamRow
+                  key={team.id}
+                  seasonId={seasonId}
+                  leagueId={league.id}
+                  team={team}
+                  rank={i + 7}
+                  compact
+                />
               ))}
             </div>
 
-            {/* Playoff bracket mini */}
             {league.playoffs.length > 0 && (
               <div>
                 <div className="flex items-center gap-1.5 text-[10px] text-text-muted uppercase tracking-wider mb-2">
@@ -347,7 +317,11 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
   );
 }
 
-function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: number; compact?: boolean }) {
+function ArchiveTeamRow({
+  seasonId, leagueId, team, rank, compact,
+}: {
+  seasonId: number; leagueId: string; team: ArchiveTeam; rank: number; compact?: boolean;
+}) {
   const [showRoster, setShowRoster] = useState(false);
   const { openSideCard } = usePokemonSideCard();
 
@@ -360,7 +334,7 @@ function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: numb
       onMouseEnter={() => setShowRoster(true)}
       onMouseLeave={() => setShowRoster(false)}
     >
-      <div className="flex items-center gap-2.5">
+      <Link to={`/archive/${seasonId}/${leagueId}/${team.id}`} className="flex items-center gap-2.5">
         <span className={cn(
           'text-xs font-bold font-mono w-5 text-center shrink-0',
           rank === 1 ? 'text-draw' : rank <= 3 ? 'text-neon' : 'text-text-muted',
@@ -383,9 +357,8 @@ function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: numb
           differential={team.record.differential}
           className="text-[10px]"
         />
-      </div>
+      </Link>
 
-      {/* Roster hover popover */}
       {showRoster && team.roster.length > 0 && (
         <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-lg border border-border-default bg-surface-raised shadow-card-lg p-2.5 space-y-1">
           <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1">
@@ -394,11 +367,12 @@ function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: numb
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             {team.roster.sort((a, b) => b.tier - a.tier).map(mon => (
               <div key={mon.name} className="flex items-center gap-1.5">
-                <button onClick={() => openSideCard(mon.name)} title="View details">
+                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); openSideCard(mon.name); }} title="View details">
                   <PokemonSprite name={mon.name} size="xs" />
                 </button>
                 <Link
                   to={pokemonRoute(mon.name)}
+                  onClick={(e) => e.stopPropagation()}
                   className="text-[11px] text-text-primary truncate flex-1 hover:text-neon hover:underline transition-colors"
                 >
                   {mon.name}
