@@ -44,6 +44,7 @@ export const leagueRoutes = new Elysia()
         forfeitPolicy: l.forfeitPolicy,
         paused: l.paused,
         weekDates: l.weekDates ? JSON.parse(l.weekDates) : null,
+        weekDatesAutoFilled: !!l.weekDatesAutoFilled,
         archived: !!season.archived,
       } : null,
     }));
@@ -67,20 +68,13 @@ export const leagueRoutes = new Elysia()
     const isMock = (process.env.CANNOLI_MODE || 'mock') === 'mock';
     const row = db.select().from(schema.siteSettings).get();
     if (!row) return {
-      siteName: 'Cannoli',
       announcement: null,
       announcementType: 'info',
       draftDemoVisible: isMock,
     };
     return {
-      siteName: row.siteName,
       announcement: row.announcement,
       announcementType: row.announcementType,
-      defaultPointCap: row.defaultPointCap,
-      defaultTeraCaptainSlots: row.defaultTeraCaptainSlots,
-      defaultTradeDeadlineWeek: row.defaultTradeDeadlineWeek,
-      defaultRosterSize: row.defaultRosterSize,
-      defaultMaxTeams: row.defaultMaxTeams,
       defaultUserPassword: row.defaultUserPassword,
       draftTimerEnabled: row.draftTimerEnabled ?? true,
       draftDemoVisible: row.draftDemoVisible ?? isMock,

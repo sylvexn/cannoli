@@ -138,7 +138,7 @@ export function AdminSeason() {
       {/* Schedule Dates */}
       <SeasonScheduleDates
         leagueList={leagueList}
-        leagueStates={leagueStates as Record<string, { totalWeeks: number; weekDates?: Record<string, string> } & Record<string, unknown>>}
+        leagueStates={leagueStates as Record<string, { totalWeeks: number; weekDates?: Record<string, string>; weekDatesAutoFilled?: boolean } & Record<string, unknown>>}
         defaultLeagues={defaultLeagues as unknown as ApiLeague[]}
         refreshLeagues={refreshLeagues}
       />
