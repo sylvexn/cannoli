@@ -91,6 +91,8 @@ export const archiveDeepRoutes = new Elysia()
           teamColor: team.teamColor,
           userId: team.userId,
           rank: team.rank,
+          finishPosition: team.finishPosition,
+          finishLabel: team.finishLabel,
           roster,
           record: {
             wins: standing.wins,
@@ -314,6 +316,8 @@ export const archiveDeepRoutes = new Elysia()
         teamAbbrev: team.teamAbbrev,
         teamColor: team.teamColor,
         userId: team.userId,
+        finishPosition: team.finishPosition,
+        finishLabel: team.finishLabel,
       },
       league: league && {
         id: league.id,
