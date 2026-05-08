@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CoachAvatar } from '@/components/coach-avatar';
 import { TeamLogo } from '@/components/team-logo';
-import { api, type ApiPublicProfile } from '@/lib/api';
+import { api, type ApiPublicProfile, type ApiPin } from '@/lib/api';
+import { Pin } from '@/components/pin';
 import { formatRecord, formatTenure } from '@/lib/format';
 import { spriteUrl } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
@@ -211,6 +212,10 @@ interface CoachLinkPopoverProps {
 
 function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) {
   const [profile, setProfile] = useState<ApiPublicProfile | null>(null);
+  // Pin strip in the popover — small `xs` icons surfacing the trophy case at
+  // a glance. Fetched alongside the profile so a single hover hits both
+  // endpoints. Empty array = nothing to show (graceful no-op).
+  const [pins, setPins] = useState<ApiPin[]>([]);
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef(false);
 
@@ -219,8 +224,12 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
     fetchedRef.current = true;
     setLoading(true);
     try {
-      const data = await api.getPublicProfile(coach.username);
+      const [data, userPins] = await Promise.all([
+        api.getPublicProfile(coach.username),
+        api.getUserPins(coach.username).catch(() => [] as ApiPin[]),
+      ]);
       setProfile(data);
+      setPins(userPins);
     } catch {
       // Allow retry on next hover by clearing the flag.
       fetchedRef.current = false;
@@ -390,6 +399,28 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
                 : '—'}
               accent={merged.careerSummary.championships > 0 ? '#fbbf24' : undefined}
             />
+          </div>
+        )}
+
+        {/* Pin strip — top 6 awarded pins as 24px circular badges. Tooltip
+            on each surfaces the def description + earned-at relative time
+            (Pin component owns that). Caps at 6 to keep the popover compact;
+            the full trophy case lives on the profile page. */}
+        {pins.length > 0 && (
+          <div className="border-t border-border-subtle/50 px-3 py-2 flex items-center gap-1.5 flex-wrap">
+            {pins.slice(0, 6).map(p => (
+              <Pin
+                key={p.id}
+                def={p.definition}
+                size="sm"
+                awardedAt={p.awardedAt}
+              />
+            ))}
+            {pins.length > 6 && (
+              <span className="text-[9px] font-mono text-text-muted ml-0.5 tabular-nums">
+                +{pins.length - 6}
+              </span>
+            )}
           </div>
         )}
 
