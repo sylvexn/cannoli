@@ -16,10 +16,13 @@
  * the same insert and surfaces a friendly error on dup.
  */
 import { Elysia } from 'elysia';
-import { db, schema } from '../db';
+import { db, schema, sqlite } from '../db';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { checkSeasonArchived } from '../lib/archive-guard';
+import {
+  S9_AWARDS, S10_AWARDS, mintManualPins, type ManualAward,
+} from '../lib/pins/awards-data';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -303,8 +306,69 @@ export const pinRoutes = new Elysia()
       .limit(limit)
       .all();
     return rows.map(r => ({ ...r, metadata: r.metadata ? safeJson(r.metadata) : null }));
+  })
+
+  // ─── GET /api/admin/pins/manual-awards/:season ─────────────────────────
+  // Surface the per-season hand-curated award list (the same data the seed
+  // job mints from) so the admin Bulk-Mint Wizard can render a preview
+  // before committing. Returns the raw rows from awards-data.ts; the wizard
+  // may render them grouped by pin.
+  .get('/api/admin/pins/manual-awards/:season', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const season = parseInt(params.season);
+    if (!Number.isFinite(season)) { set.status = 400; return { error: 'Invalid season' }; }
+    const awards = manualAwardsForSeason(season);
+    if (!awards) { set.status = 404; return { error: `No manual award list for S${season}` }; }
+    return { season, awards };
+  })
+
+  // ─── POST /api/admin/pins/mint-season ───────────────────────────────────
+  // Re-run mintManualPins for a hand-curated season. Idempotent: existing
+  // pins survive the (user, def, season) unique index. Returns the
+  // ManualMintSummary so the wizard can show inserted/skipped/unresolved
+  // counts.
+  .post('/api/admin/pins/mint-season', ({ body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const b = body as { season: number };
+    if (!Number.isFinite(b?.season)) {
+      set.status = 400;
+      return { error: 'season is required' };
+    }
+    const awards = manualAwardsForSeason(b.season);
+    if (!awards) {
+      set.status = 404;
+      return { error: `No manual award list for S${b.season}` };
+    }
+    const adminId = user.id ? parseInt(user.id) : null;
+    const summary = mintManualPins(sqlite, b.season, awards, adminId);
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_awarded',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Bulk-minted S${b.season} awards (${summary.inserted} new, ${summary.skipped} skipped)`,
+      metadata: JSON.stringify({
+        bulkMint: true,
+        season: b.season,
+        inserted: summary.inserted,
+        skipped: summary.skipped,
+        unresolved: summary.unresolved.length,
+      }),
+    }).run();
+
+    return { success: true, ...summary };
   });
 
 function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }
+}
+
+/** Look up the hand-curated award list for a given season number. The seed
+ *  ships fixtures for S9 and S10; future seasons can be added here when
+ *  their manual awards lands in `lib/pins/awards-data.ts`. */
+function manualAwardsForSeason(season: number): ManualAward[] | null {
+  if (season === 9) return S9_AWARDS;
+  if (season === 10) return S10_AWARDS;
+  return null;
 }
