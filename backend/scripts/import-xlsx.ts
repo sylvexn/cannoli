@@ -43,6 +43,67 @@ function readTeamColorFromSheet(wb: XLSX.WorkBook, abbrev: string): string | nul
   return `#${rgb.toUpperCase()}`;
 }
 
+// ─── Color helpers ──────────────────────────────────────────────────────────
+// Used to derive a user-accent secondary color from a single team color so
+// CoachLink gradient text + avatar tinting reads as the team identity rather
+// than the generic cyan→violet fallback. Tertiary stays null and the frontend
+// blends primary+secondary at render time when needed.
+
+function hexToHsl(hex: string): [number, number, number] {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
+  if (!m) return [0, 0, 50];
+  const r = parseInt(m[1].slice(0, 2), 16) / 255;
+  const g = parseInt(m[1].slice(2, 4), 16) / 255;
+  const b = parseInt(m[1].slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s * 100, l * 100];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sN = s / 100;
+  const lN = l / 100;
+  const c = (1 - Math.abs(2 * lN - 1)) * sN;
+  const hh = ((h % 360) + 360) % 360;
+  const x = c * (1 - Math.abs(((hh / 60) % 2) - 1));
+  const m = lN - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hh < 60) [r, g, b] = [c, x, 0];
+  else if (hh < 120) [r, g, b] = [x, c, 0];
+  else if (hh < 180) [r, g, b] = [0, c, x];
+  else if (hh < 240) [r, g, b] = [0, x, c];
+  else if (hh < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
+/** Derive a complementary secondary from a team's primary color. Hue rotates
+ *  +30°, saturation clamps to a readable band, and lightness pushes toward
+ *  the middle so very dark or very light primaries still produce a usable
+ *  gradient endpoint. */
+export function deriveSecondaryFromTeamColor(primary: string): string {
+  const [h, s, l] = hexToHsl(primary);
+  const newH = (h + 30) % 360;
+  const newS = Math.max(45, Math.min(85, s));
+  // Push lightness toward 50 so dark/saturated team colors still read in text.
+  const newL = l > 60 ? l - 18 : l + 18;
+  return hslToHex(newH, newS, newL);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function sheet(wb: XLSX.WorkBook, name: string): any[][] {
@@ -273,6 +334,10 @@ export function importSeason(
     const teamIds: string[] = [];
     const teamNameToId = new Map<string, string>();
     const coachToTeamId = new Map<string, string>();
+    /** Coach name → team color hex. Used downstream to seed user accent
+     *  colors so CoachLink renders each name in the team palette rather
+     *  than the global fallback gradient. */
+    const coachToTeamColor = new Map<string, string>();
 
     // Standings: rows 5,7,9,... have team data (alternating with W/L rows at 6,8,10,...)
     for (let i = 5; i < standings.length; i += 2) {
@@ -298,6 +363,7 @@ export function importSeason(
         readTeamColorFromSheet(styledWb, abbrev) ||
         TEAM_COLORS[teamIds.length - 1] ||
         '#888888';
+      coachToTeamColor.set(coach, teamColor);
 
       db.insert(schema.teams).values({
         id: teamId,
@@ -325,10 +391,25 @@ export function importSeason(
         let userId: number;
         if (existing) {
           userId = existing.id;
+          // Backfill accent colors for users created before colors were seeded
+          // (e.g. previously-imported S9 archive coaches). New imports take
+          // precedence only when the existing row has nothing set, so manual
+          // user customizations from the settings panel are preserved.
+          const teamColor = coachToTeamColor.get(coach);
+          if (teamColor) {
+            sqlite.prepare(
+              `UPDATE users
+                  SET primary_color = COALESCE(primary_color, ?),
+                      secondary_color = COALESCE(secondary_color, ?)
+                WHERE id = ?`,
+            ).run(teamColor, deriveSecondaryFromTeamColor(teamColor), userId);
+          }
         } else {
+          const teamColor = coachToTeamColor.get(coach) ?? null;
+          const secondaryColor = teamColor ? deriveSecondaryFromTeamColor(teamColor) : null;
           const result = sqlite.prepare(
-            'INSERT INTO users (username, password_hash, role, must_change_password, active) VALUES (?, ?, ?, ?, ?) RETURNING id'
-          ).get(username, passwordHash, 'user', 1, 1) as any;
+            'INSERT INTO users (username, password_hash, role, must_change_password, active, primary_color, secondary_color) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id'
+          ).get(username, passwordHash, 'user', 1, 1, teamColor, secondaryColor) as any;
           userId = result.id;
         }
         allCoachUserIds.set(username, userId);
