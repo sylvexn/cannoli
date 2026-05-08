@@ -67,8 +67,13 @@ export function BattleHud(props: BattleHudProps) {
           </div>
         )}
 
-        {/* Center: PS iframe */}
-        <div className="flex-1 min-w-0 relative">
+        {/* Center: PS iframe — see PlayTab for the absolute-pin rationale.
+            Without overflow:hidden + absolute inset:0, the iframe ignores
+            flex shrink and the PS toolbar/canvas leaks past the right edge. */}
+        <div
+          className="flex-1 min-w-0 min-h-0 relative"
+          style={{ overflow: 'hidden', maxWidth: '100%', maxHeight: '100%' }}
+        >
           {!leftOpen && (
             <button
               onClick={() => setLeftOpen(true)}
@@ -81,7 +86,7 @@ export function BattleHud(props: BattleHudProps) {
 
           <iframe
             src={iframeUrl}
-            className="w-full h-full border-0"
+            className="absolute inset-0 block h-full w-full border-0"
             allow="clipboard-write"
             title="Pokemon Showdown Battle"
           />
