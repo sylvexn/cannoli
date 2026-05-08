@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, and, sql, asc, desc } from 'drizzle-orm';
+import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings, type TeamStandingRow } from '../../lib/standings';
 
 export const archiveRoutes = new Elysia()
@@ -50,36 +50,92 @@ export const archiveRoutes = new Elysia()
     const leagues = db.select().from(schema.leagues)
       .where(eq(schema.leagues.seasonId, seasonId))
       .all();
+    if (leagues.length === 0) return [];
+
+    const leagueIds = leagues.map(l => l.id);
+
+    // Bulk-fetch every team in the season once. Previous version did one
+    // SELECT per league; per-team roster + per-roster pokemon lookups
+    // ballooned to ~470 round-trips for a 3-league/12-team/12-mon season.
+    const allTeams = db.select().from(schema.teams)
+      .where(inArray(schema.teams.leagueId, leagueIds))
+      .all();
+    const teamById = new Map(allTeams.map(t => [t.id, t]));
+    const teamIds = allTeams.map(t => t.id);
+
+    const allRosters = teamIds.length === 0 ? [] : db.select({
+      teamId: schema.rosters.teamId,
+      pokemonName: schema.rosters.pokemonName,
+      nickname: schema.rosters.nickname,
+      tier: schema.rosters.tier,
+      costAtDraft: schema.rosters.costAtDraft,
+      isTeraCaptain: schema.rosters.isTeraCaptain,
+      type1: schema.pokemon.type1,
+      type2: schema.pokemon.type2,
+    })
+      .from(schema.rosters)
+      .leftJoin(schema.pokemon, eq(schema.pokemon.name, schema.rosters.pokemonName))
+      .where(inArray(schema.rosters.teamId, teamIds))
+      .all();
+    const rostersByTeam = new Map<string, typeof allRosters>();
+    for (const r of allRosters) {
+      if (!rostersByTeam.has(r.teamId)) rostersByTeam.set(r.teamId, []);
+      rostersByTeam.get(r.teamId)!.push(r);
+    }
+
+    const allPlayoffs = db.select().from(schema.matches)
+      .where(and(
+        inArray(schema.matches.leagueId, leagueIds),
+        eq(schema.matches.phase, 'playoffs'),
+      ))
+      .orderBy(asc(schema.matches.leagueId), asc(schema.matches.week))
+      .all();
+    const playoffsByLeague = new Map<string, typeof allPlayoffs>();
+    for (const m of allPlayoffs) {
+      if (!playoffsByLeague.has(m.leagueId)) playoffsByLeague.set(m.leagueId, []);
+      playoffsByLeague.get(m.leagueId)!.push(m);
+    }
+
+    // MVPs: single GROUP-BY across all 3 leagues, then partition + top-3 in
+    // memory. Avoids running N independent ORDER-BY-LIMIT queries.
+    const mvpRows = db.select({
+      leagueId: schema.matches.leagueId,
+      pokemonName: schema.matchPokemon.pokemonName,
+      teamId: schema.matchPokemon.teamId,
+      kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
+      deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
+      gp: sql<number>`COUNT(*)`,
+    }).from(schema.matchPokemon)
+      .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
+      .where(and(
+        inArray(schema.matches.leagueId, leagueIds),
+        eq(schema.matches.phase, 'regular'),
+      ))
+      .groupBy(schema.matches.leagueId, schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
+      .all();
+    const mvpByLeague = new Map<string, typeof mvpRows>();
+    for (const m of mvpRows) {
+      if (!mvpByLeague.has(m.leagueId)) mvpByLeague.set(m.leagueId, []);
+      mvpByLeague.get(m.leagueId)!.push(m);
+    }
 
     return leagues.map(l => {
       const standings = computeStandings(l.id, { phase: 'all' });
       const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
-      const teamRows = db.select().from(schema.teams)
-        .where(eq(schema.teams.leagueId, l.id))
-        .all();
-      const teamRowById = new Map(teamRows.map(t => [t.id, t]));
 
       const teams = standings
-        .map(s => teamRowById.get(s.id))
-        .filter((t): t is NonNullable<typeof t> => !!t)
+        .map(s => teamById.get(s.id))
+        .filter((t): t is NonNullable<typeof t> => !!t && t.leagueId === l.id)
         .map(team => {
           const standing = standingsById.get(team.id)!;
-          const roster = db.select().from(schema.rosters)
-            .where(eq(schema.rosters.teamId, team.id))
-            .all()
-            .map(r => {
-              const poke = db.select().from(schema.pokemon)
-                .where(eq(schema.pokemon.name, r.pokemonName))
-                .get();
-              return {
-                name: r.pokemonName,
-                nickname: r.nickname ?? null,
-                // costAtDraft snapshot — see /api/leagues/:leagueId/teams.
-                tier: r.costAtDraft || r.tier,
-                types: poke ? [poke.type1, poke.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
-                isTeraCaptain: r.isTeraCaptain,
-              };
-            });
+          const roster = (rostersByTeam.get(team.id) ?? []).map(r => ({
+            name: r.pokemonName,
+            nickname: r.nickname ?? null,
+            // costAtDraft snapshot — see /api/leagues/:leagueId/teams.
+            tier: r.costAtDraft || r.tier,
+            types: [r.type1, r.type2].filter(Boolean).map(t => (t as string).toLowerCase()),
+            isTeraCaptain: r.isTeraCaptain,
+          }));
 
           return {
             id: team.id,
@@ -100,40 +156,34 @@ export const archiveRoutes = new Elysia()
           };
         });
 
-      const playoffs = db.select().from(schema.matches)
-        .where(and(eq(schema.matches.leagueId, l.id), eq(schema.matches.phase, 'playoffs')))
-        .orderBy(asc(schema.matches.week))
-        .all()
-        .map(m => ({
-          id: m.id,
-          playoffRound: m.playoffRound,
-          homeTeamId: m.homeTeamId,
-          awayTeamId: m.awayTeamId,
-          homeScore: m.homeScore,
-          awayScore: m.awayScore,
-          homeSeed: m.homeSeed,
-          awaySeed: m.awaySeed,
-        }));
+      const playoffs = (playoffsByLeague.get(l.id) ?? []).map(m => ({
+        id: m.id,
+        playoffRound: m.playoffRound,
+        homeTeamId: m.homeTeamId,
+        awayTeamId: m.awayTeamId,
+        homeScore: m.homeScore,
+        awayScore: m.awayScore,
+        homeSeed: m.homeSeed,
+        awaySeed: m.awaySeed,
+      }));
 
       let champion: string | null = null;
       const finals = playoffs.filter(m => m.playoffRound === 'f');
       if (finals.length > 0 && finals[0].homeScore != null) {
-        champion = finals[0].homeScore! > finals[0].awayScore! ? finals[0].homeTeamId : finals[0].awayTeamId;
+        champion = finals[0].homeScore! > finals[0].awayScore!
+          ? finals[0].homeTeamId : finals[0].awayTeamId;
       }
 
-      const mvps = db.select({
-        pokemonName: schema.matchPokemon.pokemonName,
-        teamId: schema.matchPokemon.teamId,
-        kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
-        deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
-        gp: sql<number>`COUNT(*)`,
-      }).from(schema.matchPokemon)
-        .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
-        .where(and(eq(schema.matches.leagueId, l.id), eq(schema.matches.phase, 'regular')))
-        .groupBy(schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
-        .orderBy(sql`SUM(${schema.matchPokemon.kills}) DESC`)
-        .limit(3)
-        .all();
+      const mvps = (mvpByLeague.get(l.id) ?? [])
+        .sort((a, b) => (b.kills ?? 0) - (a.kills ?? 0))
+        .slice(0, 3)
+        .map(m => ({
+          pokemonName: m.pokemonName,
+          teamId: m.teamId,
+          kills: m.kills,
+          deaths: m.deaths,
+          gp: m.gp,
+        }));
 
       return {
         id: l.id,
@@ -142,13 +192,7 @@ export const archiveRoutes = new Elysia()
         teams,
         playoffs,
         champion,
-        mvps: mvps.map(m => ({
-          pokemonName: m.pokemonName,
-          teamId: m.teamId,
-          kills: m.kills,
-          deaths: m.deaths,
-          gp: m.gp,
-        })),
+        mvps,
       };
     });
   });
