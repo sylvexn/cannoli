@@ -16,6 +16,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ArrowLeft, ExternalLink, Shield, Calendar, Zap, Sword } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
+import { canManageTeam } from '@/lib/permissions';
 import { api } from '@/lib/api';
 import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
@@ -67,7 +68,11 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const leagueUrl = useLeagueUrl();
   const { players, getTeamMatches, getTeamByes, refresh } = useLeagueData();
   const league = useLeague();
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
+  // Team-level manager authority: owner OR staff (admin/dev). Drives every
+  // edit affordance on this page — tera captains, nickname editing, theorycraft
+  // commits, etc. See lib/permissions.
+  const canManage = canManageTeam(user, player);
   const season = league.season;
   const config = DEFAULT_LEAGUE_CONFIG;
 
@@ -411,7 +416,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         pointsDelta={pointsDelta}
         captainCount={captainCount}
         theorycraftMode={theorycraftMode}
-        isAdmin={isAdmin}
+        canManage={canManage}
         user={user}
         season={season}
         swappingIndex={swappingIndex}
@@ -453,7 +458,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             onSort={handleSort}
             onResetAll={handleResetAll}
             teamId={player.id}
-            canEditNickname={!theorycraftMode && (isAdmin || (!!user && player.userId === parseInt(user.id)))}
+            canEditNickname={!theorycraftMode && canManageTeam(user, player)}
             onNicknameSaved={() => { void refresh(); }}
           />
           {/* Owner-only: trade-block listings + release controls */}

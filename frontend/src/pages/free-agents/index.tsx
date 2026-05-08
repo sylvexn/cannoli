@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { isStaff, isTeamOwner } from '@/lib/permissions';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useAppData } from '@/lib/app-data-context';
@@ -50,12 +51,29 @@ export function FreeAgentsPage() {
 
   const phase = league.season.phase;
   const pointCap = league.season.pointCap;
+  const userIsStaff = isStaff(user);
 
-  // The user's team in this league (if any)
-  const myTeam: Player | undefined = useMemo(() => {
+  // Owner's team in this league (if any). Used as the default acting team
+  // for the page; staff override via the team picker below.
+  const ownedTeam: Player | undefined = useMemo(() => {
     if (!user) return undefined;
-    return players.find(p => p.userId != null && String(p.userId) === user.id);
+    return players.find(p => isTeamOwner(user, p));
   }, [players, user]);
+
+  // Staff team picker — staff can manage FA pickups for any team. Default
+  // to the owned team if they have one in this league, else the first team.
+  const [actingTeamId, setActingTeamId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!userIsStaff) return;
+    if (actingTeamId && players.some(p => p.id === actingTeamId)) return;
+    setActingTeamId(ownedTeam?.id ?? players[0]?.id ?? null);
+  }, [userIsStaff, players, ownedTeam, actingTeamId]);
+
+  // Resolved acting team: staff use the picker, owners use their team.
+  const myTeam: Player | undefined = useMemo(() => {
+    if (userIsStaff) return players.find(p => p.id === actingTeamId) ?? ownedTeam;
+    return ownedTeam;
+  }, [userIsStaff, players, actingTeamId, ownedTeam]);
 
   // Free agents fetched from backend
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
@@ -203,7 +221,17 @@ export function FreeAgentsPage() {
   }
 
   if (!myTeam) {
-    return <NotAManagerRedirect currentLeagueId={league.id} currentLeagueName={league.name} />;
+    // Staff with no managed team in *this* league still shouldn't hit the
+    // redirect — they can act on any team via the picker. Only fall through
+    // when there are literally no teams at all.
+    if (userIsStaff && players.length > 0) {
+      // No-op: actingTeamId effect will populate; but avoid render loop.
+    } else {
+      return <NotAManagerRedirect currentLeagueId={league.id} currentLeagueName={league.name} />;
+    }
+  }
+  if (!myTeam) {
+    return null;
   }
 
   return (
@@ -218,6 +246,31 @@ export function FreeAgentsPage() {
           {league.name} · Week {league.season.currentWeek}
         </span>
       </div>
+
+      {/* Staff team picker — staff can manage any team's free-agent pickups.
+          Hidden for owners (who only see their own team). */}
+      {userIsStaff && players.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
+            Acting as
+          </span>
+          <Select
+            value={myTeam.id}
+            onValueChange={v => { setActingTeamId(v); setSelected(null); }}
+          >
+            <SelectTrigger className="h-7 w-[260px] text-xs bg-surface border-border-subtle">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {players.map(p => (
+                <SelectItem key={p.id} value={p.id} className="text-xs">
+                  {p.teamAbbrev} — {p.teamName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Budget bar */}
       <BudgetBar

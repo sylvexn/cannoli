@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useAuth } from '@/lib/auth-context';
+import { isStaff, isTeamOwner } from '@/lib/permissions';
 import { api } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { cn } from '@/lib/utils';
@@ -56,7 +57,14 @@ interface AvailabilityPanelProps {
 export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
   const league = useLeague();
   const { players } = useLeagueData();
-  const { isAdmin } = useAuth();
+  const { user } = useAuth();
+  const userIsStaff = isStaff(user);
+  // The single team this user owns in this league (if any), so non-staff
+  // owners can edit their own row without staff-level cross-team access.
+  const ownedTeam = useMemo(
+    () => players.find(p => isTeamOwner(user, p)) ?? null,
+    [players, user],
+  );
   const [entries, setEntries] = useState<AvailEntry[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
 
@@ -102,8 +110,12 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
     }
   }
 
-  // Determine which teams the user can edit
-  const canEdit = isAdmin; // For now, admins can edit any team
+  // Edit access: staff edit any team (via the team picker); team owners can
+  // edit their own row only. Non-staff with no team in this league are read-only.
+  const canEdit = userIsStaff || !!ownedTeam;
+  // For non-staff owners, force the picker to their own team (they can't
+  // edit other teams). Staff see the picker and can choose freely.
+  const editableTeamId = userIsStaff ? selectedTeam : (ownedTeam?.id ?? null);
   const isEmpty = weekEntries.length === 0;
   const [expanded, setExpanded] = useState(false);
 
@@ -135,7 +147,7 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
         <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider">
           Week {selectedWeek} Availability
         </h3>
-        {canEdit && (
+        {userIsStaff ? (
           <select
             value={selectedTeam ?? ''}
             onChange={(e) => setSelectedTeam(e.target.value || null)}
@@ -146,7 +158,11 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
               <option key={p.id} value={p.id}>{p.teamAbbrev} — {p.name}</option>
             ))}
           </select>
-        )}
+        ) : ownedTeam ? (
+          <span className="text-[10px] text-text-muted font-mono">
+            Editing {ownedTeam.teamAbbrev}
+          </span>
+        ) : null}
       </div>
 
       {/* Grid */}
@@ -167,7 +183,7 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
 
         {/* Player rows */}
         {players.map(player => {
-          const isEditable = canEdit && selectedTeam === player.id;
+          const isEditable = canEdit && editableTeamId === player.id;
           return (
             <div
               key={player.id}
@@ -216,7 +232,9 @@ export function AvailabilityPanel({ selectedWeek }: AvailabilityPanelProps) {
 
       <p className="text-[10px] text-text-muted">
         {canEdit
-          ? 'Select a team above, then click cells to cycle: Available → Maybe → Busy'
+          ? userIsStaff
+            ? 'Select a team above, then click cells to cycle: Available → Maybe → Busy'
+            : 'Click cells in your row to cycle: Available → Maybe → Busy'
           : 'Player availability for this week'}
       </p>
     </div>
