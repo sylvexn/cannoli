@@ -24,7 +24,8 @@ interface SpriteShowcaseProps {
   pointsDelta: number;
   captainCount: number;
   theorycraftMode: boolean;
-  isAdmin: boolean;
+  /** True if the viewer can take manager actions on this team (owner OR staff). */
+  canManage: boolean;
   user: User | null;
   season: LeagueSeason | null | undefined;
 
@@ -67,7 +68,7 @@ export function SpriteShowcase({
   pointsDelta,
   captainCount,
   theorycraftMode,
-  isAdmin,
+  canManage,
   user,
   season,
   swappingIndex,
@@ -248,7 +249,7 @@ export function SpriteShowcase({
           captainCount={captainCount}
           config={config}
           theorycraftMode={theorycraftMode}
-          canEdit={theorycraftMode || isAdmin}
+          canEdit={theorycraftMode || canManage}
           seasonPhase={season?.phase ?? null}
           teraEdits={teraEdits}
           teraEditingIndex={teraEditingIndex}

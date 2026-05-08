@@ -16,6 +16,7 @@ import { ArrowRightLeft, Check, Send, AlertCircle } from 'lucide-react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { useAuth } from '@/lib/auth-context';
+import { isTeamOwner } from '@/lib/permissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
@@ -111,10 +112,13 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId, counterTo }
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
   const pointCap = league.season.pointCap ?? 110;
 
-  // Default to the current user's team in this league, if any
+  // Default the proposer side to the current user's owned team in this
+  // league, if any. Staff (admin/dev) typically don't own a team here so
+  // they fall through to picking a proposer manually — the team selector
+  // already lists every team.
   const myTeam = useMemo(
-    () => players.find(p => user?.id != null && p.userId === parseInt(user.id)) ?? null,
-    [players, user?.id],
+    () => players.find(p => isTeamOwner(user, p)) ?? null,
+    [players, user],
   );
 
   const [proposerTeamId, setProposerTeamId] = useState<string | null>(myTeam?.id ?? null);
