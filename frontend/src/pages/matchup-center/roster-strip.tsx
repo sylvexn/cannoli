@@ -52,8 +52,8 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
           {label || colors.label}
         </span>
         <span className="text-[10px] text-text-muted">
-          {hasSubTeam ? `${subTeam.size}/6 selected` : `${team.length} Pokemon`}
-          {!hasSubTeam && ' · click to pick 6'}
+          {hasSubTeam ? `${subTeam.size}/12 selected` : `${team.length} Pokemon`}
+          {!hasSubTeam && ' · click to pick up to 12'}
         </span>
       </div>
       <div className="group/strip flex">
