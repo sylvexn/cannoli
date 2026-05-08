@@ -50,6 +50,7 @@ function buildSpeedRows(leagueIds: string[]) {
       id: `${team?.leagueId ?? ''}:${r.teamId}:${r.pokemonName}`,
       name: r.pokemonName,
       nickname: r.nickname ?? null,
+      isShiny: !!r.isShiny,
       dex: p?.nationalDexNumber ?? null,
       baseSpeed: p?.spe ?? 0,
       type1: p?.type1 ?? null,
