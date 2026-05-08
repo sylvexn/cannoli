@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -8,21 +8,35 @@ import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamLink } from '@/components/team-link';
+import { CoachLink } from '@/components/coach-link';
 import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
-import { Swords, Sparkles, X, ExternalLink } from 'lucide-react';
+import { Swords, Sparkles, X, ExternalLink, UsersRound } from 'lucide-react';
 import { useLeagueOptional } from '@/lib/league-context';
 import { getTierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
+import { api, type ApiGlobalOwnership } from '@/lib/api';
 import type { Player } from '@/lib/types';
+
+/** Per-league ownership entry as exposed to side-card callers. */
+export interface GlobalOwnershipEntry {
+  leagueId: string;
+  leagueName: string;
+  leagueColor: string;
+  owner: Player;
+}
 
 interface PokemonSideCardProps {
   name: string | null;
   onClose: () => void;
-  /** Optional: player who owns this Pokemon (for ownership display) */
+  /** Optional: single-league owner block (legacy callsite). When present and
+   *  globalOwnership is absent, the single owner block renders. */
   owner?: Player;
+  /** Optional: explicit cross-league ownership list. When provided, replaces
+   *  the single-owner block with a stacked per-league list. */
+  globalOwnership?: GlobalOwnershipEntry[];
   /** Optional: season stats override (kills/deaths/gp) */
   seasonStats?: { kills: number; deaths: number; gp: number };
   /** Optional: tera captain info */
@@ -33,12 +47,27 @@ export function PokemonSideCard({
   name,
   onClose,
   owner,
+  globalOwnership,
   seasonStats,
   teraCaptain,
 }: PokemonSideCardProps) {
   const league = useLeagueOptional();
-  const leagueUrl = (path: string) => league ? `/league/${league.id}${path.startsWith('/') ? path : `/${path}`}` : '#';
   const isOpen = !!name;
+
+  // Auto-fetch global ownership when no explicit owner / ownership list was
+  // passed AND the side card was opened from a context-only callsite (e.g.
+  // tier list, free-agents, replays). Skips inside a league scope when the
+  // single-owner prop is already provided.
+  const [autoOwnership, setAutoOwnership] = useState<ApiGlobalOwnership[] | null>(null);
+  useEffect(() => {
+    if (!name) { setAutoOwnership(null); return; }
+    if (owner || globalOwnership) { setAutoOwnership(null); return; }
+    let cancelled = false;
+    api.getPokemonGlobalOwnership(name)
+      .then(rows => { if (!cancelled) setAutoOwnership(rows); })
+      .catch(() => { if (!cancelled) setAutoOwnership([]); });
+    return () => { cancelled = true; };
+  }, [name, owner, globalOwnership]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,6 +84,17 @@ export function PokemonSideCard({
   const stats = pokeData?.stats;
   const abilities = pokeData?.abilities ?? [];
   const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
+
+  // Resolve which ownership list to render. Caller-provided wins; otherwise we
+  // derive from the auto-fetched global list.
+  const ownershipEntries: GlobalOwnershipEntry[] = globalOwnership ?? (autoOwnership
+    ? autoOwnership.map(o => ({
+        leagueId: o.leagueId,
+        leagueName: o.leagueName,
+        leagueColor: o.leagueColor,
+        owner: ownerFromApi(o),
+      }))
+    : []);
 
   return createPortal(
     <>
@@ -85,7 +125,7 @@ export function PokemonSideCard({
               <X size={16} />
             </button>
 
-            {/* Hero */}
+            {/* Hero — Pokemon name/sprite both link to the canonical detail page */}
             <div className="relative px-6 pt-6 pb-4">
               {owner && (
                 <div
@@ -95,13 +135,22 @@ export function PokemonSideCard({
               )}
 
               <div className="relative flex items-start gap-4">
-                <div className="flex-shrink-0 rounded-lg bg-surface-overlay/50 p-2">
+                <Link
+                  to={`/pokemon/${encodeURIComponent(name)}`}
+                  onClick={onClose}
+                  className="flex-shrink-0 rounded-lg bg-surface-overlay/50 p-2 hover:bg-surface-overlay transition-colors"
+                  title={`Open ${name} profile`}
+                >
                   <PokemonSprite name={name} size="xl" />
-                </div>
+                </Link>
                 <div className="flex-1 min-w-0 pt-1">
-                  <h2 className="text-lg font-heading font-bold text-text-primary leading-tight">
+                  <Link
+                    to={`/pokemon/${encodeURIComponent(name)}`}
+                    onClick={onClose}
+                    className="text-lg font-heading font-bold text-text-primary leading-tight hover:text-neon transition-colors"
+                  >
                     {name}
-                  </h2>
+                  </Link>
                   <div className="flex items-center gap-2 mt-1.5">
                     {tierEntry && <TierBadge points={tierEntry.tier} />}
                     {types && <TypeChip types={types} size="sm" />}
@@ -194,7 +243,71 @@ export function PokemonSideCard({
                 </div>
               )}
 
-              {owner && (
+              {/* Ownership: cross-league stack when we have multiple, single
+                  block when only the legacy `owner` prop was passed. */}
+              {ownershipEntries.length > 0 ? (
+                <div>
+                  <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <UsersRound size={11} className="text-neon" />
+                    On The Block
+                  </h3>
+                  <div className="flex flex-col gap-1.5">
+                    {ownershipEntries.map(({ leagueId, leagueName, leagueColor, owner: o }) => (
+                      <div
+                        key={`${leagueId}-${o.id}`}
+                        className="flex items-center gap-2.5 p-2.5 rounded-md bg-surface-overlay/30 border border-border-subtle"
+                      >
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] font-bold uppercase shrink-0 font-mono"
+                          style={{ borderColor: `${leagueColor}50`, color: leagueColor }}
+                        >
+                          {leagueName.replace(' League', '')}
+                        </Badge>
+                        <TeamLink
+                          team={{
+                            leagueId,
+                            teamId: o.id,
+                            teamName: o.teamName,
+                            teamAbbrev: o.teamAbbrev,
+                            teamColor: o.teamColor,
+                            record: o.record,
+                          }}
+                          logoOnly
+                          logoSize="md"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to={`/league/${leagueId}/teams/${o.id}`}
+                            onClick={onClose}
+                            className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block"
+                          >
+                            {o.teamName}
+                          </Link>
+                          {o.owner ? (
+                            <CoachLink
+                              coach={{
+                                username: o.owner.username,
+                                displayName: o.owner.displayName,
+                                primaryColor: o.owner.primaryColor,
+                                secondaryColor: o.owner.secondaryColor,
+                                tertiaryColor: o.owner.tertiaryColor,
+                                avatarPath: o.owner.avatarPath,
+                                role: o.owner.role,
+                              }}
+                              size="xs"
+                              noHoverCard
+                              className="text-[11px]"
+                            />
+                          ) : (
+                            <div className="text-[11px] text-text-muted">{o.name}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : owner ? (
                 <div>
                   <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider mb-2">
                     Owner
@@ -216,19 +329,40 @@ export function PokemonSideCard({
                     ) : (
                       <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
                     )}
-                    <div>
+                    <div className="min-w-0">
                       <Link
-                        to={leagueUrl(`/teams/${owner.id}`)}
-                        className="text-sm font-medium text-text-primary hover:text-neon transition-colors"
-                        onClick={(e) => e.stopPropagation()}
+                        to={league ? `/league/${league.id}/teams/${owner.id}` : '#'}
+                        onClick={onClose}
+                        className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block"
                       >
                         {owner.teamName}
                       </Link>
-                      <div className="text-[11px] text-text-muted">{owner.name}</div>
+                      {owner.owner ? (
+                        <CoachLink
+                          coach={{
+                            username: owner.owner.username,
+                            displayName: owner.owner.displayName,
+                            primaryColor: owner.owner.primaryColor,
+                            secondaryColor: owner.owner.secondaryColor,
+                            tertiaryColor: owner.owner.tertiaryColor,
+                            avatarPath: owner.owner.avatarPath,
+                            role: owner.owner.role,
+                          }}
+                          size="xs"
+                          noHoverCard
+                          className="text-[11px]"
+                        />
+                      ) : (
+                        <div className="text-[11px] text-text-muted">{owner.name}</div>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
+              ) : autoOwnership !== null ? (
+                <div className="text-[11px] text-text-muted italic">
+                  Free agent across all active leagues.
+                </div>
+              ) : null}
             </div>
 
             {/* Full Profile link */}
@@ -248,4 +382,26 @@ export function PokemonSideCard({
     </>,
     document.body,
   );
+}
+
+/**
+ * Adapt the `ApiGlobalOwnership` row's `owner` field into a `Player`-shaped
+ * object. The side card's existing rendering primitives (TeamLink + CoachLink)
+ * expect Player fields, so we synthesize the minimal subset the owner block
+ * actually reads — coach data lives on the team query, not the ownership
+ * endpoint, so we leave `owner` undefined and let the card show the team
+ * abbrev as the secondary line.
+ */
+function ownerFromApi(row: ApiGlobalOwnership): Player {
+  // The side-card owner block only reads id/teamName/teamAbbrev/teamColor/
+  // name/record/owner — everything else is structural-only.
+  return {
+    id: row.owner.teamId,
+    name: row.owner.teamName,
+    teamName: row.owner.teamName,
+    teamAbbrev: row.owner.teamAbbrev,
+    teamColor: row.owner.teamColor,
+    record: { wins: 0, losses: 0, differential: 0 },
+    roster: [],
+  } as Player;
 }

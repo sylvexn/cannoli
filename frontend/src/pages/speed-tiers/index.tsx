@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gauge, RotateCcw, Sparkles } from 'lucide-react';
 import { api, type ApiSpeedTierRow } from '@/lib/api';
-import { useLeague } from '@/lib/league-context';
-import { useLeagueData } from '@/lib/league-data-context';
-import { useLeagueUrl } from '@/lib/use-league-url';
+import { useAppData } from '@/lib/app-data-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { TYPE_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -38,9 +36,7 @@ const DEFAULT_FILTERS: SpeedFilters = {
 };
 
 export function SpeedTiersPage() {
-  const league = useLeague();
-  const { players } = useLeagueData();
-  const leagueUrl = useLeagueUrl();
+  const { leagues } = useAppData();
   const { openSideCard } = usePokemonSideCard();
 
   const [rows, setRows] = useState<ApiSpeedTierRow[] | null>(null);
@@ -48,40 +44,62 @@ export function SpeedTiersPage() {
   const [filters, setFilters] = useState<SpeedFilters>(DEFAULT_FILTERS);
   const [assumptions, setAssumptions] = useState<CalcAssumptions>(DEFAULT_ASSUMPTIONS);
 
+  // League multi-select chips. Default: all active leagues toggled on.
+  const [activeLeagueIds, setActiveLeagueIds] = useState<Set<string>>(new Set());
+  const allLeagueIds = useMemo(() => leagues.map(l => l.id).join(','), [leagues]);
+
+  useEffect(() => {
+    if (leagues.length > 0 && activeLeagueIds.size === 0) {
+      setActiveLeagueIds(new Set(leagues.map(l => l.id)));
+    }
+    // We intentionally only seed when the set is empty — re-seeding on every
+    // leagues update would clobber user toggles. allLeagueIds is included
+    // so that adding a league does revalidate the membership invariant.
+  }, [allLeagueIds, leagues, activeLeagueIds.size]);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    api.getSpeedTiers(league.id)
+    api.getGlobalSpeedTiers()
       .then(data => { if (!cancelled) setRows(data); })
       .catch(() => { if (!cancelled) setRows([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [league.id]);
+  }, []);
 
   useEffect(() => {
     if (rows) preloadSprites(rows.map(r => r.name));
   }, [rows]);
 
-  // Teams list for the filter dropdown — pull from league-data so we always
-  // get the canonical color/abbrev even if the speed-tier endpoint omits a
-  // team that has no rostered mons (defensive).
-  const teams = useMemo(
-    () => players.map(p => ({
-      id: p.id,
-      teamAbbrev: p.teamAbbrev,
-      teamName: p.teamName,
-      teamColor: p.teamColor,
-    })),
-    [players],
-  );
+  // Teams list for the filter dropdown — derived from the rows themselves so
+  // it scopes to the currently-selected leagues.
+  const teams = useMemo(() => {
+    if (!rows) return [];
+    const seen = new Map<string, { id: string; teamAbbrev: string; teamName: string; teamColor: string }>();
+    for (const r of rows) {
+      if (!r.owner) continue;
+      if (r.league && !activeLeagueIds.has(r.league.id)) continue;
+      if (!seen.has(r.owner.teamId)) {
+        seen.set(r.owner.teamId, {
+          id: r.owner.teamId,
+          teamAbbrev: r.owner.teamAbbrev,
+          teamName: r.owner.teamName,
+          teamColor: r.owner.teamColor,
+        });
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.teamAbbrev.localeCompare(b.teamAbbrev));
+  }, [rows, activeLeagueIds]);
 
   const computed = useMemo(() => {
     if (!rows) return [];
-    return rows.map(r => {
-      const calc = computeRow(r.baseSpeed, r.abilities, assumptions);
-      return { ...r, calc };
-    });
-  }, [rows, assumptions]);
+    return rows
+      .filter(r => !r.league || activeLeagueIds.has(r.league.id))
+      .map(r => {
+        const calc = computeRow(r.baseSpeed, r.abilities, assumptions);
+        return { ...r, calc };
+      });
+  }, [rows, assumptions, activeLeagueIds]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
@@ -117,7 +135,23 @@ export function SpeedTiersPage() {
   const handleReset = () => {
     setAssumptions(DEFAULT_ASSUMPTIONS);
     setFilters(DEFAULT_FILTERS);
+    setActiveLeagueIds(new Set(leagues.map(l => l.id)));
   };
+
+  function toggleLeague(id: string) {
+    setActiveLeagueIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Don't allow zero — it's a guaranteed empty table. Treat the toggle
+        // as a "solo" (this league only) when it's the last enabled chip.
+        if (next.size === 1) return new Set(leagues.map(l => l.id));
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   if (loading && !rows) return <SpeedTiersSkeleton />;
 
@@ -126,12 +160,12 @@ export function SpeedTiersPage() {
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-            <span style={{ color: league.color }}>SPEED</span>{' '}
+            <span className="text-cyan-300">SPEED</span>{' '}
             <span className="text-text-primary">TIERS</span>
           </h1>
           <p className="text-xs text-text-muted">
             <Gauge size={11} className="inline mr-1 -mt-0.5" />
-            Every rostered Pokemon, sorted by adjusted speed under your assumptions.
+            Every rostered Pokemon across active leagues, sorted by adjusted speed under your assumptions.
             {filters.trickRoom && (
               <span className="ml-1 text-pink font-semibold">
                 <RotateCcw size={11} className="inline -mt-0.5 mr-0.5" />
@@ -140,6 +174,33 @@ export function SpeedTiersPage() {
             )}
           </p>
         </div>
+
+        {/* League filter chips — multi-select, color-coded */}
+        {leagues.length > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {leagues.map(l => {
+              const active = activeLeagueIds.has(l.id);
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => withViewTransition(() => toggleLeague(l.id))}
+                  className={cn(
+                    'px-2 py-1 rounded-full text-[10px] font-mono uppercase tracking-wider border transition-all',
+                    active ? 'opacity-100' : 'opacity-40 hover:opacity-70',
+                  )}
+                  style={{
+                    color: l.color,
+                    borderColor: `${l.color}${active ? '80' : '40'}`,
+                    backgroundColor: active ? `${l.color}15` : 'transparent',
+                  }}
+                  title={`${active ? 'Hide' : 'Show'} ${l.name}`}
+                >
+                  {l.name.replace(' League', '')}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <SpeedFilterBar
@@ -172,6 +233,7 @@ export function SpeedTiersPage() {
                   <th className="w-7" />
                   <th className="px-1 py-1.5 text-left text-[10px] uppercase text-text-muted">Pokemon</th>
                   <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-24">Type</th>
+                  <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-14">League</th>
                   <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-32">Owner</th>
                   <th className="px-2 py-1.5 text-right text-[10px] uppercase text-text-muted w-14">Base</th>
                   <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-32">Ability</th>
@@ -186,7 +248,7 @@ export function SpeedTiersPage() {
               <tbody>
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center text-text-muted text-xs py-8">
+                    <td colSpan={12} className="text-center text-text-muted text-xs py-8">
                       {rows?.length === 0
                         ? 'No rostered Pokemon yet — speed tiers populate after the draft.'
                         : 'No Pokemon match the current filters.'}
@@ -230,9 +292,21 @@ export function SpeedTiersPage() {
                         <TypeChip types={types} size="xs" />
                       </td>
                       <td className="px-2 py-1">
-                        {r.owner ? (
+                        {r.league && (
                           <Link
-                            to={leagueUrl(`/teams/${r.owner.teamId}`)}
+                            to={`/league/${r.league.id}`}
+                            className="inline-flex items-center gap-1 px-1.5 py-px rounded border text-[9px] font-mono font-bold uppercase tracking-wider hover:bg-surface-overlay/60 transition-colors"
+                            style={{ borderColor: `${r.league.color}50`, color: r.league.color }}
+                            title={r.league.name}
+                          >
+                            {r.league.name.replace(' League', '').slice(0, 3)}
+                          </Link>
+                        )}
+                      </td>
+                      <td className="px-2 py-1">
+                        {r.owner && r.league ? (
+                          <Link
+                            to={`/league/${r.league.id}/teams/${r.owner.teamId}`}
                             viewTransition
                             className="inline-flex items-center gap-1.5 group/team min-w-0"
                           >
