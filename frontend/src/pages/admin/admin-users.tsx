@@ -27,7 +27,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'dev' | 'admin' | 'user'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
   const [sortBy, setSortBy] = useState<'username' | 'role' | 'status' | 'created'>('username');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [createOpen, setCreateOpen] = useState(false);
@@ -51,7 +51,11 @@ export function AdminUsers() {
   const filtered = useMemo(() => {
     let list = users;
     if (roleFilter !== 'all') {
-      list = list.filter(u => u.role === roleFilter);
+      list = list.filter(u =>
+        roleFilter === 'admin'
+          ? (u.role === 'admin' || u.role === 'dev')
+          : u.role === roleFilter,
+      );
     }
     if (search) {
       const q = search.toLowerCase();
@@ -127,7 +131,7 @@ export function AdminUsers() {
       {/* Header: role filter + search + create */}
       <div className="flex items-center gap-3">
         <div className="flex gap-0.5 rounded-md border border-border-subtle overflow-hidden">
-          {(['all', 'dev', 'admin', 'user'] as const).map(r => (
+          {(['all', 'admin', 'user'] as const).map(r => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}

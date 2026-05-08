@@ -92,6 +92,10 @@ export const leagues = sqliteTable('leagues', {
   totalWeeks: integer('total_weeks').notNull().default(11),
   /** JSON object mapping week number to ISO date string, e.g. {"1":"2026-04-14"} */
   weekDates: text('week_dates'),
+  /** Set true once the wizard has auto-filled weeks 2..N from week 1.
+   *  Once true (or once the admin manually edits any week), the
+   *  one-time auto-fill never runs again — manual edits are sticky. */
+  weekDatesAutoFilled: integer('week_dates_auto_filled', { mode: 'boolean' }).notNull().default(false),
   /** When 1, scheduler skips auto-advance + auto-forfeit for THIS league only. */
   paused: integer('paused', { mode: 'boolean' }).notNull().default(false),
   /** What happens when a match deadline passes without a result. */
