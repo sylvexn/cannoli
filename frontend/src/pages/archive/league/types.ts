@@ -33,6 +33,12 @@ export interface TeamRow {
   teamColor: string;
   userId: number | null;
   rank: number;
+  /** Final placement (1 = Champion, 2 = Runner-up, 3 = Semifinalist, 5 =
+   *  Quarterfinalist, 9+ = Regular Season). NULL until the league wraps. */
+  finishPosition: number | null;
+  /** Pre-formatted label paired with finishPosition (e.g. "Champion",
+   *  "Runner-up", "Semifinalist", "Quarterfinalist", "Regular Season"). */
+  finishLabel: string | null;
   roster: RosterMon[];
   record: {
     wins: number;
