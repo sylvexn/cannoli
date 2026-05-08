@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Settings, LogOut, User, LogIn, Search } from 'lucide-react';
+import { Settings, LogOut, User, LogIn, Search, UserCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -9,7 +9,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '../feedback-dialog';
 import { UserAccentScope } from '../user-accent-scope';
-import { BotStatusChip } from '../bot-status-chip';
 import { CoachAvatar } from '../coach-avatar';
 import { cn } from '@/lib/utils';
 import type { useAuth } from '@/lib/auth-context';
@@ -25,7 +24,9 @@ interface MyTeam {
 
 interface SidebarFooterProps {
   user: AuthUser | null;
-  isAdmin: boolean;
+  /** Admin flag — currently unused here (BotStatusChip moved to admin), but
+   *  kept on the API so callers don't need to drop the prop. */
+  isAdmin?: boolean;
   myTeams: MyTeam[];
   leagues: { id: string; name: string; color: string }[];
   pendingTradeCount: number;
@@ -34,7 +35,7 @@ interface SidebarFooterProps {
 }
 
 export function SidebarFooter({
-  user, isAdmin, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout,
+  user, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout,
 }: SidebarFooterProps) {
   const navigate = useNavigate();
 
@@ -66,9 +67,6 @@ export function SidebarFooter({
 
       {user && <FeedbackDialog />}
 
-      {/* PS bot status — staff only */}
-      {isAdmin && <BotStatusChip />}
-
       {user ? (
         <UserAccentScope user={user}>
           <DropdownMenu>
@@ -87,6 +85,10 @@ export function SidebarFooter({
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" sideOffset={8}>
+              <DropdownMenuItem onClick={() => navigate(`/coach/${user.username}`)}>
+                <UserCircle size={14} />
+                View profile
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/settings')}>
                 <Settings size={14} />
                 Settings
