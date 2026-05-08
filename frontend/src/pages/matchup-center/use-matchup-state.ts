@@ -68,9 +68,9 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
     case 'CLEAR_TEAM_B':
       return { ...state, teamB: [], teamBSource: null, subTeamB: new Set() };
     case 'TOGGLE_SUB_A':
-      return { ...state, subTeamA: toggleInSet(state.subTeamA, action.name, 6) };
+      return { ...state, subTeamA: toggleInSet(state.subTeamA, action.name, 12) };
     case 'TOGGLE_SUB_B':
-      return { ...state, subTeamB: toggleInSet(state.subTeamB, action.name, 6) };
+      return { ...state, subTeamB: toggleInSet(state.subTeamB, action.name, 12) };
     case 'SET_TAB':
       return { ...state, activeTab: action.tab };
     case 'ADD_SPEED_SLOT':

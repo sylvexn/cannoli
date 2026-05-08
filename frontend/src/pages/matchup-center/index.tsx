@@ -216,7 +216,7 @@ export function MatchupCenterPage() {
             onClick={() => dispatch({ type: 'RESET_SUB_TEAMS' })}
             disabled={!hasSubTeam}
             className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-20 disabled:cursor-default"
-            title="Reset selected 6"
+            title="Reset selected Pokemon"
           >
             <RotateCcw size={14} />
           </button>
