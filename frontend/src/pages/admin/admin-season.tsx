@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
-import type { ApiDraftState } from '@/lib/api';
 import { toast } from 'sonner';
 import { Sparkles, Plus } from 'lucide-react';
 import { phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
@@ -15,6 +14,8 @@ import { SeasonArchiveSection } from './season/season-archive-section';
 import { SeasonConfirmDialogs } from './season/season-confirm-dialogs';
 import { SeasonPlayoffDialog } from './season/season-playoff-dialog';
 import { SeasonBackwardPhaseDialog } from './season/season-backward-phase-dialog';
+import { useSeasonArchive } from './season/use-season-archive';
+import { useDraftStates } from './season/use-draft-states';
 
 export function AdminSeason() {
   const { leagues: defaultLeagues, refreshLeagues } = useAppData();
@@ -27,24 +28,8 @@ export function AdminSeason() {
     Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }]))
   );
 
-  // Draft state per league
-  const [draftStates, setDraftStates] = useState<Record<string, ApiDraftState | null>>({});
-
-  // Fetch draft states for leagues in draft phase
-  const fetchDraftStates = useCallback(async () => {
-    const states: Record<string, ApiDraftState | null> = {};
-    for (const league of defaultLeagues) {
-      if (league.season?.phase === 'draft') {
-        try {
-          const s = await api.getDraftState(league.id);
-          states[league.id] = s;
-        } catch { states[league.id] = null; }
-      }
-    }
-    setDraftStates(states);
-  }, [defaultLeagues]);
-
-  useEffect(() => { fetchDraftStates(); }, [fetchDraftStates]);
+  // Draft state per league + start/pause/resume actions
+  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues);
 
   // Sync when defaultLeagues changes
   useEffect(() => {
@@ -94,29 +79,8 @@ export function AdminSeason() {
   const [backwardTarget, setBackwardTarget] = useState<{ leagueId: string; from: Phase; to: Phase } | null>(null);
   const [backwardConfirmText, setBackwardConfirmText] = useState('');
 
-  // Season archive list
-  const [seasonsList, setSeasonsList] = useState<{ id: number; seasonNumber: number; phase: string; archived: boolean }[]>([]);
-  const refreshSeasons = useCallback(() => {
-    api.getSeasons()
-      .then(rows => setSeasonsList(rows.map(r => ({
-        id: r.id,
-        seasonNumber: r.seasonNumber,
-        phase: r.phase,
-        archived: !!r.archived,
-      }))))
-      .catch(() => {});
-  }, []);
-  useEffect(() => { refreshSeasons(); }, [refreshSeasons]);
-
-  async function toggleArchive(seasonId: number, archived: boolean) {
-    try {
-      await api.archiveSeason(seasonId, archived);
-      toast.success(archived ? 'Season archived' : 'Season un-archived');
-      refreshSeasons();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  }
+  // Season archive list (read-only, with toggle)
+  const { seasonsList, toggleArchive } = useSeasonArchive();
 
   // Detect existing bracket per league (look at schedule playoff matches).
   useEffect(() => {
@@ -304,36 +268,6 @@ export function AdminSeason() {
     }
     setWeekOpen(false);
     setWeekTarget(null);
-  }
-
-  // Draft controls
-  async function handleStartDraft(leagueId: string) {
-    try {
-      const state = await api.startDraft(leagueId, 120);
-      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
-      toast.success('Draft started!');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  }
-
-  async function handlePauseDraft(leagueId: string) {
-    try {
-      await api.pauseDraft(leagueId);
-      setDraftStates(prev => ({
-        ...prev,
-        [leagueId]: prev[leagueId] ? { ...prev[leagueId]!, status: 'paused' } : null,
-      }));
-      toast.success('Draft paused');
-    } catch (err: any) { toast.error(err.message); }
-  }
-
-  async function handleResumeDraft(leagueId: string) {
-    try {
-      const state = await api.resumeDraft(leagueId);
-      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
-      toast.success('Draft resumed');
-    } catch (err: any) { toast.error(err.message); }
   }
 
   // League CRUD
