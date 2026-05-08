@@ -95,10 +95,8 @@ export interface ApiCoachOwner {
   secondaryColor: string | null;
   tertiaryColor: string | null;
   role: 'dev' | 'admin' | 'user';
-  // Coach flair — surfaced inline so CoachLink can render the signature
-  // sprite + type chip wherever a team owner appears (no extra fetch).
-  signaturePokemonId?: number | null;
-  signaturePokemonName?: string | null;
+  // Coach flair — surfaced inline so CoachLink can render the type chip
+  // wherever a team owner appears (no extra fetch).
   title?: string | null;
   signatureType?: string | null;
 }
@@ -315,10 +313,6 @@ export interface ApiPublicProfile {
   tertiaryColor: string | null;
   createdAt: string | null;
   // ─── Coach flair ────────────────────────────────────────────────────────
-  /** pokemon.id of chosen signature mon (null = none). */
-  signaturePokemonId?: number | null;
-  /** Display name of the signature mon (resolved server-side via join). */
-  signaturePokemonName?: string | null;
   /** Short user-set flair string, ≤ 40 chars. */
   title?: string | null;
   /** Canonical Pokemon type name — drives chip + optional avatar tint. */
@@ -768,16 +762,12 @@ export const api = {
 
   // Profile (displayName, bio, statusMessage, bannerUrl + coach flair).
   // bannerUrl is for clearing the banner or pasting a remote URL — multipart
-  // uploads should go through `uploadUserBanner` below. Flair fields drive
-  // the signature-pokemon sprite + title + type chip in CoachLink.
+  // uploads should go through `uploadUserBanner` below.
   updateMe: (data: {
     displayName?: string | null;
     bio?: string | null;
     statusMessage?: string | null;
     bannerUrl?: string | null;
-    signaturePokemonId?: number | null;
-    title?: string | null;
-    signatureType?: string | null;
   }) => mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
 
   // Staff override — edit another user's profile fields. Backend gates on
@@ -790,9 +780,6 @@ export const api = {
       bio?: string | null;
       statusMessage?: string | null;
       bannerUrl?: string | null;
-      signaturePokemonId?: number | null;
-      title?: string | null;
-      signatureType?: string | null;
     },
   ) => mutateJson<{ success: boolean }>(
     'PATCH',
