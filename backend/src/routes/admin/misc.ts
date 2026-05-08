@@ -3,8 +3,9 @@ import { db, schema } from '../../db';
 import { eq, desc } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
-import { getBotStatus } from '../../lib/ps-bot';
+import { getBotStatus, restartBot } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
+import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 
 export const miscRoutes = new Elysia()
 
@@ -13,6 +14,38 @@ export const miscRoutes = new Elysia()
   .get('/api/admin/bot-status', ({ user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     return getBotStatus();
+  })
+
+  // Force-reconnect the PS Monitor Bot. Closes the current WS and immediately
+  // reopens — used when the bot is wedged or after credential rotations.
+  .post('/api/admin/bot/reconnect', ({ user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    restartBot();
+    db.insert(schema.activityLog).values({
+      type: 'bot_reconnect',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: 'Force-reconnected PS Monitor Bot',
+      metadata: '{}',
+    }).run();
+    return { success: true };
+  })
+
+  // Backfill pin_awarded activity-log entries for pins missing them.
+  // Idempotent — safe to re-run; returns how many rows were emitted.
+  .post('/api/admin/pins/backfill-audit', ({ user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const result = backfillPinAuditLog();
+    db.insert(schema.activityLog).values({
+      type: 'pin_audit_backfilled',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Backfilled ${result.inserted} pin_awarded log entries (${result.skipped} already present)`,
+      metadata: JSON.stringify(result),
+    }).run();
+    return result;
   })
 
   // ─── Manual job trigger (admin tool) ────────────────────────────────

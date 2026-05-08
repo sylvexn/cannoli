@@ -152,6 +152,18 @@ export function stopBot() {
   connected = false;
 }
 
+/**
+ * Force-reconnect: tear down the existing socket, reset reconnect-attempt
+ * counters, then reconnect. Used by the admin "force reconnect" button.
+ */
+export function restartBot() {
+  stopBot();
+  botState.reconnectAttempts = 0;
+  botState.lastError = null;
+  botState.lastErrorAt = null;
+  startBot();
+}
+
 export function isBotConnected(): boolean {
   return connected;
 }

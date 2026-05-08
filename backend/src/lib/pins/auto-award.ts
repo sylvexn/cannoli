@@ -202,6 +202,39 @@ function tryInsert(
   const changed = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
   if (changed > 0) {
     summary.awarded.push({ pinDefId, userId, metadata: metadata ?? undefined });
+
+    // Mirror the admin-mint path: emit a `pin_awarded` activity-log event so
+    // auto-awarded pins show up in the admin Activity Log alongside hand-mints.
+    // Best-effort — don't fail the award if logging trips for any reason.
+    try {
+      const def = db.select().from(schema.pinDefinitions)
+        .where(eq(schema.pinDefinitions.id, pinDefId)).get();
+      const targetUser = db.select().from(schema.users)
+        .where(eq(schema.users.id, userId)).get();
+      const actor = awardedBy
+        ? db.select({ username: schema.users.username })
+            .from(schema.users).where(eq(schema.users.id, awardedBy)).get()?.username ?? 'system'
+        : 'system';
+      db.insert(schema.activityLog).values({
+        type: 'pin_awarded',
+        category: 'admin',
+        actor,
+        leagueId: null,
+        description: `Auto-awarded '${def?.name ?? pinDefId}' to ${targetUser?.username ?? 'user#' + userId}`,
+        metadata: JSON.stringify({
+          userId,
+          username: targetUser?.username ?? null,
+          pinDefId,
+          pinName: def?.name ?? pinDefId,
+          seasonId,
+          awardedById: awardedBy,
+          auto: true,
+          ...(metadata ?? {}),
+        }),
+      }).run();
+    } catch {
+      /* swallow — logging is best-effort */
+    }
     return true;
   }
   summary.skipped += 1;
