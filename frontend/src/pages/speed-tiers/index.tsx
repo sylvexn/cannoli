@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gauge, RotateCcw, Sparkles } from 'lucide-react';
-import { api, type ApiSpeedTierRow } from '@/lib/api';
+import { api, type ApiSpeedTierRow, type ApiSpeedTierOwnership } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { TYPE_COLORS } from '@/lib/constants';
@@ -11,6 +11,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import type { PokemonType } from '@/lib/pokemon';
 
@@ -44,18 +45,11 @@ export function SpeedTiersPage() {
   const [filters, setFilters] = useState<SpeedFilters>(DEFAULT_FILTERS);
   const [assumptions, setAssumptions] = useState<CalcAssumptions>(DEFAULT_ASSUMPTIONS);
 
-  // League multi-select chips. Default: all active leagues toggled on.
-  const [activeLeagueIds, setActiveLeagueIds] = useState<Set<string>>(new Set());
-  const allLeagueIds = useMemo(() => leagues.map(l => l.id).join(','), [leagues]);
-
-  useEffect(() => {
-    if (leagues.length > 0 && activeLeagueIds.size === 0) {
-      setActiveLeagueIds(new Set(leagues.map(l => l.id)));
-    }
-    // We intentionally only seed when the set is empty — re-seeding on every
-    // leagues update would clobber user toggles. allLeagueIds is included
-    // so that adding a league does revalidate the membership invariant.
-  }, [allLeagueIds, leagues, activeLeagueIds.size]);
+  // League highlight chips. Empty = no highlight applied (every row at full
+  // opacity). Non-empty = rows whose ownerships intersect this set are
+  // emphasized; others fade. Rows are NEVER removed by this filter — every
+  // mon stays visible so the table also reads as a "what's available" board.
+  const [highlightLeagueIds, setHighlightLeagueIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -71,44 +65,51 @@ export function SpeedTiersPage() {
     if (rows) preloadSprites(rows.map(r => r.name));
   }, [rows]);
 
-  // Teams list for the filter dropdown — derived from the rows themselves so
-  // it scopes to the currently-selected leagues.
+  // Teams list for the filter dropdown — derived from every ownership across
+  // every row, so the dropdown spans all active leagues regardless of which
+  // chips are highlighted.
   const teams = useMemo(() => {
     if (!rows) return [];
     const seen = new Map<string, { id: string; teamAbbrev: string; teamName: string; teamColor: string }>();
     for (const r of rows) {
-      if (!r.owner) continue;
-      if (r.league && !activeLeagueIds.has(r.league.id)) continue;
-      if (!seen.has(r.owner.teamId)) {
-        seen.set(r.owner.teamId, {
-          id: r.owner.teamId,
-          teamAbbrev: r.owner.teamAbbrev,
-          teamName: r.owner.teamName,
-          teamColor: r.owner.teamColor,
-        });
+      for (const o of r.ownerships) {
+        if (!seen.has(o.teamId)) {
+          seen.set(o.teamId, {
+            id: o.teamId,
+            teamAbbrev: o.teamAbbrev,
+            teamName: o.teamName,
+            teamColor: o.teamColor,
+          });
+        }
       }
     }
     return [...seen.values()].sort((a, b) => a.teamAbbrev.localeCompare(b.teamAbbrev));
-  }, [rows, activeLeagueIds]);
+  }, [rows]);
 
   const computed = useMemo(() => {
     if (!rows) return [];
-    return rows
-      .filter(r => !r.league || activeLeagueIds.has(r.league.id))
-      .map(r => {
-        const calc = computeRow(r.baseSpeed, r.abilities, assumptions);
-        return { ...r, calc };
-      });
-  }, [rows, assumptions, activeLeagueIds]);
+    return rows.map(r => {
+      const calc = computeRow(r.baseSpeed, r.abilities, assumptions);
+      return { ...r, calc };
+    });
+  }, [rows, assumptions]);
 
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     return computed.filter(r => {
-      if (filters.teamId && r.owner?.teamId !== filters.teamId) return false;
+      // Team filter still HIDES rows (it's a deliberate "show only this team's
+      // mons" mode, not a highlight). Mons with no ownerships fail this check
+      // when a team is selected.
+      if (filters.teamId) {
+        if (!r.ownerships.some(o => o.teamId === filters.teamId)) return false;
+      }
       if (q) {
         const name = r.name.toLowerCase();
-        const owner = r.owner ? `${r.owner.teamAbbrev} ${r.owner.teamName}`.toLowerCase() : '';
-        if (!name.includes(q) && !owner.includes(q)) return false;
+        // Match against any owner identity across leagues.
+        const owners = r.ownerships
+          .map(o => `${o.teamAbbrev} ${o.teamName} ${o.coachName}`.toLowerCase())
+          .join(' ');
+        if (!name.includes(q) && !owners.includes(q)) return false;
       }
       return true;
     });
@@ -135,25 +136,21 @@ export function SpeedTiersPage() {
   const handleReset = () => {
     setAssumptions(DEFAULT_ASSUMPTIONS);
     setFilters(DEFAULT_FILTERS);
-    setActiveLeagueIds(new Set(leagues.map(l => l.id)));
+    setHighlightLeagueIds(new Set());
   };
 
-  function toggleLeague(id: string) {
-    setActiveLeagueIds(prev => {
+  function toggleHighlightLeague(id: string) {
+    setHighlightLeagueIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        // Don't allow zero — it's a guaranteed empty table. Treat the toggle
-        // as a "solo" (this league only) when it's the last enabled chip.
-        if (next.size === 1) return new Set(leagues.map(l => l.id));
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
   if (loading && !rows) return <SpeedTiersSkeleton />;
+
+  const highlightActive = highlightLeagueIds.size > 0;
 
   return (
     <div className="space-y-3">
@@ -165,7 +162,8 @@ export function SpeedTiersPage() {
           </h1>
           <p className="text-xs text-text-muted">
             <Gauge size={11} className="inline mr-1 -mt-0.5" />
-            Every rostered Pokemon across active leagues, sorted by adjusted speed under your assumptions.
+            Every Pokemon in the dex, sorted by adjusted speed under your assumptions.
+            Gem chips show every league a mon is rostered in.
             {filters.trickRoom && (
               <span className="ml-1 text-pink font-semibold">
                 <RotateCcw size={11} className="inline -mt-0.5 mr-0.5" />
@@ -175,25 +173,29 @@ export function SpeedTiersPage() {
           </p>
         </div>
 
-        {/* League filter chips — multi-select, color-coded */}
+        {/* League highlight chips — multi-select. None active = no dimming.
+            Active chips emphasize matching rows, dim the rest (every mon
+            stays visible). */}
         {leagues.length > 1 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             {leagues.map(l => {
-              const active = activeLeagueIds.has(l.id);
+              const active = highlightLeagueIds.has(l.id);
               return (
                 <button
                   key={l.id}
-                  onClick={() => withViewTransition(() => toggleLeague(l.id))}
+                  onClick={() => withViewTransition(() => toggleHighlightLeague(l.id))}
                   className={cn(
                     'px-2 py-1 rounded-full text-[10px] font-mono uppercase tracking-wider border transition-all',
-                    active ? 'opacity-100' : 'opacity-40 hover:opacity-70',
+                    active ? 'opacity-100' : 'opacity-50 hover:opacity-90',
                   )}
                   style={{
                     color: l.color,
                     borderColor: `${l.color}${active ? '80' : '40'}`,
-                    backgroundColor: active ? `${l.color}15` : 'transparent',
+                    backgroundColor: active ? `${l.color}25` : 'transparent',
                   }}
-                  title={`${active ? 'Hide' : 'Show'} ${l.name}`}
+                  title={active
+                    ? `Stop highlighting ${l.name}`
+                    : `Highlight Pokemon owned in ${l.name}`}
                 >
                   {l.name.replace(' League', '')}
                 </button>
@@ -233,8 +235,7 @@ export function SpeedTiersPage() {
                   <th className="w-7" />
                   <th className="px-1 py-1.5 text-left text-[10px] uppercase text-text-muted">Pokemon</th>
                   <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-24">Type</th>
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-14">League</th>
-                  <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-32">Owner</th>
+                  <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-40">Owners</th>
                   <th className="px-2 py-1.5 text-right text-[10px] uppercase text-text-muted w-14">Base</th>
                   <th className="px-2 py-1.5 text-left text-[10px] uppercase text-text-muted w-32">Ability</th>
                   <th className="px-2 py-1.5 text-right text-[10px] uppercase text-neon w-14">+0</th>
@@ -248,9 +249,9 @@ export function SpeedTiersPage() {
               <tbody>
                 {sorted.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="text-center text-text-muted text-xs py-8">
+                    <td colSpan={11} className="text-center text-text-muted text-xs py-8">
                       {rows?.length === 0
-                        ? 'No rostered Pokemon yet — speed tiers populate after the draft.'
+                        ? 'No Pokemon in the dex yet.'
                         : 'No Pokemon match the current filters.'}
                     </td>
                   </tr>
@@ -261,20 +262,32 @@ export function SpeedTiersPage() {
                     ...(r.type2 ? [r.type2.toLowerCase() as PokemonType] : []),
                   ].filter(Boolean) as PokemonType[];
                   const primaryColor = types[0] ? TYPE_COLORS[types[0]] : undefined;
+                  // Highlight = no chips active OR this row touches an active
+                  // league. Rows that don't match get faded.
+                  const matchesHighlight = !highlightActive
+                    || r.ownerships.some(o => highlightLeagueIds.has(o.leagueId));
+                  // Pick a representative nickname for the side-card title —
+                  // first ownership wins, only ever shown in the tooltip.
+                  const firstNickname = r.ownerships.find(o => !!o.nickname)?.nickname ?? null;
                   return (
                     <tr
                       key={r.id}
                       className={cn(
-                        'group border-b border-border-subtle/50 transition-colors hover:bg-surface-overlay/60',
+                        'group border-b border-border-subtle/50 transition-[background,opacity] hover:bg-surface-overlay/60',
                         tied && 'bg-neon/[0.04]',
+                        !matchesHighlight && 'opacity-40 hover:opacity-60',
                       )}
                     >
                       <td className="px-2 py-1 text-center">
                         <span className="text-[10px] font-mono tabular-nums text-text-muted">{i + 1}</span>
                       </td>
                       <td className="py-1">
-                        <button onClick={() => openSideCard(r.name)} title={r.nickname ? `${r.name} — "${r.nickname}"` : 'View details'} className="block">
-                          <PokemonSprite name={r.name} size="xs" shiny={r.isShiny} />
+                        <button
+                          onClick={() => openSideCard(r.name)}
+                          title={firstNickname ? `${r.name} — "${firstNickname}"` : 'View details'}
+                          className="block"
+                        >
+                          <PokemonSprite name={r.name} size="xs" />
                         </button>
                       </td>
                       <td className="px-1 py-1">
@@ -287,47 +300,12 @@ export function SpeedTiersPage() {
                             <Sparkles size={9} className="inline ml-1 -mt-0.5 text-yellow-400" />
                           )}
                         </Link>
-                        {r.nickname && (
-                          <span className="block text-[9px] italic font-mono text-text-muted truncate" title={r.nickname}>
-                            "{r.nickname}"
-                          </span>
-                        )}
                       </td>
                       <td className="px-2 py-1">
                         <TypeChip types={types} size="xs" />
                       </td>
                       <td className="px-2 py-1">
-                        {r.league && (
-                          <Link
-                            to={`/league/${r.league.id}`}
-                            className="inline-flex items-center gap-1 px-1.5 py-px rounded border text-[9px] font-mono font-bold uppercase tracking-wider hover:bg-surface-overlay/60 transition-colors"
-                            style={{ borderColor: `${r.league.color}50`, color: r.league.color }}
-                            title={r.league.name}
-                          >
-                            {r.league.name.replace(' League', '').slice(0, 3)}
-                          </Link>
-                        )}
-                      </td>
-                      <td className="px-2 py-1">
-                        {r.owner && r.league ? (
-                          <Link
-                            to={`/league/${r.league.id}/teams/${r.owner.teamId}`}
-                            viewTransition
-                            className="inline-flex items-center gap-1.5 group/team min-w-0"
-                          >
-                            <TeamLogo
-                              abbrev={r.owner.teamAbbrev}
-                              color={r.owner.teamColor}
-                              logoPath={r.owner.logoPath}
-                              size="sm"
-                            />
-                            <span className="text-[10px] font-mono uppercase tabular-nums text-text-muted group-hover/team:text-neon transition-colors truncate">
-                              {r.owner.teamAbbrev}
-                            </span>
-                          </Link>
-                        ) : (
-                          <span className="text-[10px] text-text-muted">—</span>
-                        )}
+                        <OwnershipChips ownerships={r.ownerships} />
                       </td>
                       <td className="px-2 py-1 text-right">
                         <span
@@ -388,6 +366,80 @@ export function SpeedTiersPage() {
         Toggles update instantly — change weather/item/nature presets to see what
         flips the order. <span className="text-text-muted/70">"Scarf" column = same row at +0 with Choice Scarf forced.</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Inline cluster of league-colored gem chips — one per (league, team) the
+ * mon is rostered on. Each chip uses `league.color` as its background so a
+ * mon claimed by Sapphire reads sapphire-blue regardless of the team logo.
+ * Hovering surfaces the team identity (logo + abbrev + coach) without
+ * needing to leave the row.
+ *
+ * Empty array (free agent in every active league) renders a quiet em-dash so
+ * the column doesn't visually collapse.
+ */
+function OwnershipChips({ ownerships }: { ownerships: ApiSpeedTierOwnership[] }) {
+  if (ownerships.length === 0) {
+    return <span className="text-[10px] text-text-muted/50">—</span>;
+  }
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {ownerships.map(o => (
+        <Tooltip key={`${o.leagueId}:${o.teamId}`}>
+          <TooltipTrigger
+            render={
+              <Link
+                to={`/league/${o.leagueId}/teams/${o.teamId}`}
+                viewTransition
+                onClick={e => e.stopPropagation()}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold uppercase tracking-wider transition-transform hover:scale-105"
+                style={{
+                  borderColor: `${o.leagueColor}80`,
+                  backgroundColor: `${o.leagueColor}20`,
+                  color: o.leagueColor,
+                }}
+                title={undefined}
+              />
+            }
+          >
+            {o.teamAbbrev}
+            {o.isTeraCaptain && (
+              <Sparkles size={8} className="-mt-0.5 text-yellow-300" aria-label="Tera captain" />
+            )}
+          </TooltipTrigger>
+          <TooltipContent
+            side="top"
+            className="bg-surface-overlay border border-border-default text-text-primary"
+          >
+            <div className="flex items-center gap-2 py-0.5">
+              <TeamLogo
+                abbrev={o.teamAbbrev}
+                color={o.teamColor}
+                logoPath={o.logoPath}
+                size="sm"
+              />
+              <div className="flex flex-col leading-tight">
+                <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: o.leagueColor }}>
+                  {o.leagueName.replace(' League', '')}
+                </span>
+                <span className="text-xs font-semibold">
+                  {o.teamAbbrev} — {o.teamName}
+                </span>
+                <span className="text-[10px] text-text-muted">
+                  {o.coachName}
+                  {o.isTeraCaptain && <span className="ml-1 text-yellow-300">· Tera captain</span>}
+                </span>
+                {o.nickname && (
+                  <span className="text-[10px] italic text-text-muted">"{o.nickname}"</span>
+                )}
+              </div>
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      ))}
     </div>
   );
 }
