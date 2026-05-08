@@ -28,6 +28,7 @@ import { StreamPage } from '@/pages/replays/stream';
 import { PokemonDetailPage } from '@/pages/pokemon-detail';
 import { ShowdownPage } from '@/pages/showdown';
 import { CoachProfilePage } from '@/pages/coach-profile';
+import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
 
 // Lazy-loaded heavy routes
 const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
@@ -74,6 +75,7 @@ export default function App() {
 
               <Route path="pokemon/:name" element={<PokemonDetailPage />} />
               <Route path="coach/:username" element={<CoachProfilePage />} />
+              <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
               <Route path="showdown" element={<ShowdownPage />} />
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="archive" element={<ArchivePage />} />
