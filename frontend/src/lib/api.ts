@@ -421,7 +421,7 @@ export interface ApiTierListEntry {
 // ─── Speed Tiers ─────────────────────────────────────────────────────────
 
 export interface ApiSpeedTierRow {
-  /** Stable composite id `<teamId>:<pokemonName>` (rosters.id can churn) */
+  /** Stable composite id (per-league) `<leagueId>:<teamId>:<pokemonName>`. */
   id: string;
   name: string;
   dex: number | null;
@@ -431,6 +431,9 @@ export interface ApiSpeedTierRow {
   tier: number;
   isTeraCaptain: boolean;
   abilities: string[];
+  /** Present when the row is fetched via the global endpoint. Null on the
+   *  legacy per-league endpoint (caller already knows the league). */
+  league?: { id: string; name: string; color: string } | null;
   owner: {
     teamId: string;
     teamAbbrev: string;
@@ -438,6 +441,21 @@ export interface ApiSpeedTierRow {
     teamColor: string;
     logoPath: string | null;
   } | null;
+}
+
+export interface ApiGlobalOwnership {
+  leagueId: string;
+  leagueName: string;
+  leagueColor: string;
+  owner: {
+    teamId: string;
+    teamAbbrev: string;
+    teamName: string;
+    teamColor: string;
+    logoPath: string | null;
+  };
+  isTeraCaptain: boolean;
+  nickname: string | null;
 }
 
 // ─── Pins ────────────────────────────────────────────────────────────────
@@ -958,6 +976,14 @@ export const api = {
   // Speed tiers (rostered pokemon + base speed + ability list, league-wide)
   getSpeedTiers: (leagueId: string) =>
     fetchJson<ApiSpeedTierRow[]>(`/api/leagues/${leagueId}/speed-tiers`),
+
+  // Global speed tiers — all active-season leagues, frontend filters client-side
+  getGlobalSpeedTiers: () =>
+    fetchJson<ApiSpeedTierRow[]>(`/api/speed-tiers`),
+
+  // Cross-league ownership for a single Pokemon (for global pages + side card)
+  getPokemonGlobalOwnership: (name: string) =>
+    fetchJson<ApiGlobalOwnership[]>(`/api/pokemon/${encodeURIComponent(name)}/global-ownership`),
 
   // Player availability
   getAvailability: (leagueId: string) =>
