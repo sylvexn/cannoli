@@ -104,9 +104,20 @@ export function importS9(db: Database) {
         TEAM_COLORS[teamIds.length - 1] ||
         '#888888';
 
-      db.prepare(`INSERT INTO teams (id, league_id, coach_name, team_name, team_abbrev, team_color, rank)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-        teamId, league.id, coach, teamName, abbrev, teamColor, rank
+      // Link to a pre-existing user account by username (slug from coach name)
+      // when one exists. The S10 import already created accounts for any
+      // returning coaches, so this is the path that gives S9 archive teams a
+      // userId — letting profile pages, lifetime stats, and the auto-pin job
+      // recognise the same coach across both seasons.
+      const slug = coach.toLowerCase().replace(/\s+/g, '');
+      const userRow = db.prepare(
+        `SELECT id FROM users WHERE username = ?`,
+      ).get(slug) as { id: number } | undefined;
+      const userId = userRow?.id ?? null;
+
+      db.prepare(`INSERT INTO teams (id, league_id, user_id, coach_name, team_name, team_abbrev, team_color, rank)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        teamId, league.id, userId, coach, teamName, abbrev, teamColor, rank
       );
     }
     console.log(`  ${teamIds.length} teams`);
@@ -260,12 +271,16 @@ export function importS9(db: Database) {
         if (week < 1 || week > 11) continue;
 
         const matchId = `${league.id}-w${week}m${matchCount + 1}`;
-        db.prepare(`INSERT INTO matches (id, league_id, week, home_team_id, away_team_id, home_score, away_score, phase)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        // Mark matches with scores as 'completed' so the auto-award job and
+        // standings views treat them as final (S9 is fully archived).
+        const status = typeof score1 === 'number' && typeof score2 === 'number'
+          ? 'completed' : 'scheduled';
+        db.prepare(`INSERT INTO matches (id, league_id, week, home_team_id, away_team_id, home_score, away_score, phase, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
           matchId, league.id, week, team1Id, team2Id,
           typeof score1 === 'number' ? score1 : null,
           typeof score2 === 'number' ? score2 : null,
-          'regular'
+          'regular', status
         );
         matchCount++;
       }
@@ -372,11 +387,13 @@ export function importS9(db: Database) {
       const week = round === 'qf' ? 12 : round === 'sf' ? 13 : 14;
       const matchId = `${league.id}-${round}-${playoffCount + 1}`;
 
-      db.prepare(`INSERT INTO matches (id, league_id, week, home_team_id, away_team_id, home_score, away_score, phase, playoff_round, home_seed, away_seed)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      const playoffStatus = e1.score != null && e2.score != null
+        ? 'completed' : 'scheduled';
+      db.prepare(`INSERT INTO matches (id, league_id, week, home_team_id, away_team_id, home_score, away_score, phase, playoff_round, home_seed, away_seed, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         matchId, league.id, week, team1Id, team2Id,
         e1.score, e2.score,
-        'playoffs', round, e1.seed, e2.seed
+        'playoffs', round, e1.seed, e2.seed, playoffStatus
       );
       playoffCount++;
     }
