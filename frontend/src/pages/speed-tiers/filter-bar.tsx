@@ -48,7 +48,7 @@ export function SpeedFilterBar({
           <input
             value={filters.search}
             onChange={e => onFiltersChange({ search: e.target.value })}
-            placeholder="Search Pokemon or owner..."
+            placeholder="Search Pokemon, team, or coach..."
             className="w-full pl-7 pr-7 py-1 rounded bg-surface text-xs border border-border-subtle focus:border-neon/40 focus:outline-none"
           />
           {filters.search && (
@@ -63,7 +63,10 @@ export function SpeedFilterBar({
         </div>
 
         <Select value={filters.teamId || 'all'} onValueChange={v => onFiltersChange({ teamId: v === 'all' ? '' : v ?? undefined })}>
-          <SelectTrigger className="h-7 w-[140px] text-xs bg-surface border-border-subtle">
+          <SelectTrigger
+            className="h-7 w-[140px] text-xs bg-surface border-border-subtle"
+            title="Limit table to one team's mons. Use the league chips above to highlight without hiding."
+          >
             <SelectValue placeholder="All teams" />
           </SelectTrigger>
           <SelectContent>
