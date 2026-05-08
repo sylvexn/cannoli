@@ -95,10 +95,6 @@ export interface ApiCoachOwner {
   secondaryColor: string | null;
   tertiaryColor: string | null;
   role: 'dev' | 'admin' | 'user';
-  // Coach flair — surfaced inline so CoachLink can render the type chip
-  // wherever a team owner appears (no extra fetch).
-  title?: string | null;
-  signatureType?: string | null;
 }
 
 export interface ApiTeam {
@@ -314,11 +310,6 @@ export interface ApiPublicProfile {
   secondaryColor: string | null;
   tertiaryColor: string | null;
   createdAt: string | null;
-  // ─── Coach flair ────────────────────────────────────────────────────────
-  /** Short user-set flair string, ≤ 40 chars. */
-  title?: string | null;
-  /** Canonical Pokemon type name — drives chip + optional avatar tint. */
-  signatureType?: string | null;
   /** User's role — surfaced on the profile page as an ADMIN chip when
    *  applicable. Only set on backends that include it (older deploys may
    *  omit it; treat undefined as `'user'`). */
