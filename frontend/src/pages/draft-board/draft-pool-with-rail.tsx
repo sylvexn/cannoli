@@ -160,16 +160,16 @@ export function DraftPoolWithRail(props: DraftPoolWithRailProps) {
 
   if (!showRail) {
     return (
-      <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
+      <div className="flex-1 overflow-y-auto rounded-lg border border-border-subtle bg-surface-raised/40 backdrop-blur-sm min-w-0 min-h-0">
         <DraftPoolGrid {...props} />
       </div>
     );
   }
 
   return (
-    <div className="flex-1 rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0 flex overflow-hidden">
+    <div className="flex-1 rounded-lg border border-border-subtle bg-surface-raised/40 backdrop-blur-sm min-w-0 min-h-0 flex overflow-hidden">
       {/* Tier rail */}
-      <div className="w-[52px] shrink-0 border-r border-border-subtle bg-surface-raised/30 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
+      <div className="w-[52px] shrink-0 border-r border-border-subtle/60 bg-surface-raised/20 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
         {bestInBudgetTier != null && (
           <button
             onClick={() => jumpToTier(bestInBudgetTier)}
