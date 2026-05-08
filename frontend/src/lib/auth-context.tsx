@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import type { User } from './types';
+import { isStaff } from './permissions';
 import { api } from './api';
 
 interface AuthContextValue {
@@ -86,7 +87,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isLoading,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin' || user?.role === 'dev',
+    // `isAdmin` here is the legacy alias for "is staff" — both `admin` and
+    // `dev` roles. New code should prefer `isStaff` / `canManageTeam` from
+    // lib/permissions; this stays for backwards compat with existing callers.
+    isAdmin: isStaff(user),
     userTimezone,
     refreshTimezone: loadTimezone,
     login,
