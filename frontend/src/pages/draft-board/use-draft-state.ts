@@ -324,6 +324,26 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     return Math.max(0, remaining - reserve);
   }, [userConflictRoster, state.pointCap]);
 
+  // Conflict context for the team currently on the clock — used to gray out
+  // illegal picks for everyone watching (drafter, admins, spectators), so the
+  // pool surfaces the same legality view the drafter sees.
+  const currentDrafterConflictRoster = useMemo<ConflictInputRoster | undefined>(() => {
+    const drafterId = currentSlot?.teamId;
+    if (!drafterId) return undefined;
+    return buildConflictRoster(drafterId);
+  }, [currentSlot, buildConflictRoster]);
+
+  // Highest tier the current drafter can pick right now (mirrors userMaxAffordableCost
+  // but for whoever is on the clock).
+  const currentDrafterMaxAffordableCost = useMemo(() => {
+    if (!currentDrafterConflictRoster) return undefined;
+    const remaining = state.pointCap - currentDrafterConflictRoster.pointsUsed;
+    if (currentDrafterConflictRoster.picksLeft == null) return remaining;
+    const futureSlots = Math.max(0, currentDrafterConflictRoster.picksLeft - 1);
+    const reserve = futureSlots + (currentDrafterConflictRoster.captainReserve ?? 0);
+    return Math.max(0, remaining - reserve);
+  }, [currentDrafterConflictRoster, state.pointCap]);
+
   // Raw remaining (unreserved) — kept around for status displays that show
   // budget literally rather than max pickable.
   const userBudgetRemaining = useMemo(() => {
@@ -366,6 +386,15 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     userBudgetRemaining,
     userMaxAffordableCost,
     userConflictRoster,
+    /**
+     * Conflict context (roster + budget) for whoever is currently on the clock.
+     * Drives the pool's "grayed-out illegal picks" hinting for every viewer —
+     * drafter, admins, spectators — so what's legal to take always reflects the
+     * active drafter, not the viewer's own roster.
+     */
+    currentDrafterConflictRoster,
+    /** Highest tier the current drafter can take right now, with reserves applied. */
+    currentDrafterMaxAffordableCost,
     draftTimerEnabled,
     draftDemoVisible,
     /**

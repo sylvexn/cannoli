@@ -59,6 +59,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     rosterLookup, playerLookup, isUserTurn, isDraftComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
     userMaxAffordableCost, userConflictRoster,
+    currentDrafterMaxAffordableCost, currentDrafterConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
     pickQueue, pickAnnouncement,
@@ -419,6 +420,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               showTierBadges={isDraftRunning}
               userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
               userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
+              drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
+              drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
               pointCap={state.pointCap}
               draftQueue={isDraftRunning ? state.draftQueue : undefined}
               density={density}
@@ -437,6 +440,9 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
                 selectedTeamId={state.selectedTeamId}
                 showTierBadges={isDraftRunning}
                 userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
+                drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
+                drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
+                pointCap={state.pointCap}
                 onRowClick={handleCardClick}
               />
             </div>
