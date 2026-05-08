@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { TYPE_COLORS } from '@/lib/constants';
 import type { RosterPokemon } from '@/lib/types';
 import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon';
@@ -87,8 +89,14 @@ function TypeGrid({
           <tr className="border-b border-border-subtle bg-surface-overlay/30">
             <th className="w-10 px-1 py-1.5 text-left text-text-muted font-medium">Type</th>
             {chart.map(p => (
-              <th key={p.name} className="px-0.5 py-1.5 text-center" title={p.name}>
-                <PokemonSprite name={p.name} size="xs" className="mx-auto" />
+              <th key={p.name} className="px-0.5 py-1.5 text-center">
+                <Link
+                  to={pokemonRoute(p.name)}
+                  title={p.name}
+                  className="inline-block hover:scale-110 transition-transform"
+                >
+                  <PokemonSprite name={p.name} size="xs" className="mx-auto" />
+                </Link>
               </th>
             ))}
           </tr>
