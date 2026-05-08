@@ -24,10 +24,11 @@ import {
   Globe, Trophy, LayoutDashboard, Calendar, BarChart3,
   ArrowLeftRight, Swords, Archive, Shield, Settings,
   Users, CalendarCog, List, ScrollText, MessageSquare,
-  Trophy as TrophyIcon,
+  Trophy as TrophyIcon, Award, Bot as BotIcon,
 } from 'lucide-react';
 
 // ─── Admin tab definitions (mirrored from admin/index.tsx) ───────
+// `id` is the URL slug under /admin/.
 const ADMIN_TABS = [
   { id: 'users', label: 'Users', group: 'People', icon: Users },
   { id: 'teams', label: 'Teams', group: 'People', icon: Shield },
@@ -37,8 +38,10 @@ const ADMIN_TABS = [
   { id: 'trades', label: 'Trades', group: 'League', icon: ArrowLeftRight },
   { id: 'tiers', label: 'Tier List', group: 'Config', icon: List },
   { id: 'moves', label: 'Move Categories', group: 'Config', icon: Swords },
+  { id: 'pins', label: 'Pins', group: 'Config', icon: Award },
   { id: 'settings', label: 'Site Settings', group: 'Config', icon: Settings },
   { id: 'activity', label: 'Activity Log', group: 'System', icon: ScrollText },
+  { id: 'bot', label: 'PS Bot', group: 'System', icon: BotIcon },
   { id: 'feedback', label: 'Feedback', group: 'System', icon: MessageSquare },
 ];
 
@@ -397,7 +400,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   <CommandItem
                     key={`admin:${tab.id}`}
                     value={`admin:${tab.id}`}
-                    onSelect={() => go(`/admin?tab=${tab.id}`)}
+                    onSelect={() => go(`/admin/${tab.id}`)}
                     className="flex items-center gap-2.5"
                   >
                     <Icon size={14} className="text-text-muted shrink-0" />

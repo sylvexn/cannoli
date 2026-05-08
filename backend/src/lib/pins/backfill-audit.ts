@@ -45,15 +45,16 @@ export function backfillPinAuditLog(): BackfillSummary {
     // exact (pinDefId, userId, seasonId) triple? json_extract is null-safe in
     // sqlite, and the `seasonId IS NULL ↔ json_extract returns NULL` case is
     // handled with a coalesce.
-    const existing = db.get<{ c: number }>(sql`
-      SELECT COUNT(*) AS c FROM activity_log
-      WHERE type = 'pin_awarded'
-        AND json_extract(metadata, '$.pinDefId') = ${r.pinDefId}
-        AND CAST(json_extract(metadata, '$.userId') AS INTEGER) = ${r.userId}
-        AND COALESCE(CAST(json_extract(metadata, '$.seasonId') AS INTEGER), -1)
+    const existing = db.select({ c: sql<number>`COUNT(*)` })
+      .from(schema.activityLog)
+      .where(sql`
+        ${schema.activityLog.type} = 'pin_awarded'
+        AND json_extract(${schema.activityLog.metadata}, '$.pinDefId') = ${r.pinDefId}
+        AND CAST(json_extract(${schema.activityLog.metadata}, '$.userId') AS INTEGER) = ${r.userId}
+        AND COALESCE(CAST(json_extract(${schema.activityLog.metadata}, '$.seasonId') AS INTEGER), -1)
             = COALESCE(${r.seasonId ?? null}, -1)
-    `);
-
+      `)
+      .get();
     if ((existing?.c ?? 0) > 0) {
       summary.skipped += 1;
       continue;

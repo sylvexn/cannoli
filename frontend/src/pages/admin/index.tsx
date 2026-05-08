@@ -1,35 +1,34 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+/**
+ * Admin panel layout.
+ *
+ * Sub-routed: each tab is its own route under /admin/<slug>. The bare /admin
+ * lands on the People → Users tab (existing default). Sub-routes for heavier
+ * tabs:
+ *   /admin/pins/definitions — pin catalog
+ *   /admin/pins/award       — award/revoke + recent list
+ *
+ * Sidebar persists across all sub-routes; the right pane is a single Outlet
+ * that renders the active tab. Replaces the prior single-page scrollable
+ * stack which had grown to 13 sections with per-section maxHeight overrides.
+ */
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import { AdminUsers } from './admin-users';
-import { AdminLeagues } from './admin-leagues';
-import { AdminTrades } from './admin-trades';
-import { AdminActivityLog } from './admin-activity-log';
-import { AdminMoveCategories } from './admin-move-categories';
-import { AdminSeason } from './admin-season';
-import { AdminTierList } from './admin-tier-list';
-import { AdminSiteSettings } from './admin-site-settings';
-import { AdminTeams } from './admin-teams';
-import { AdminFeedback } from './admin-feedback';
-import { AdminMatches } from './admin-matches';
-import { AdminFreeAgents } from './admin-free-agents';
-import { AdminPins } from './admin-pins';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, ChevronDown, ChevronsUpDown, ChevronsDownUp,
-  UserPlus, Award,
+  Trophy, UserPlus, Award, Bot,
 } from 'lucide-react';
 
 interface NavItem {
-  id: string;
+  /** URL slug under /admin/. */
+  slug: string;
   label: string;
   icon: typeof Users;
-  component: React.ComponentType;
-  /** Max height for the content area — tall sections get internal scroll */
-  maxH?: string;
+  /** When true, NavLink uses `end` so deep sub-routes don't collide. */
+  matchEnd?: boolean;
 }
 
 interface NavGroup {
@@ -41,115 +40,46 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'People',
     items: [
-      { id: 'users', label: 'Users', icon: Users, component: AdminUsers, maxH: 'max-h-[40vh]' },
-      { id: 'teams', label: 'Teams', icon: Shield, component: AdminTeams },
+      { slug: 'users',     label: 'Users',       icon: Users },
+      { slug: 'teams',     label: 'Teams',       icon: Shield },
     ],
   },
   {
     label: 'League',
     items: [
-      { id: 'leagues', label: 'Leagues', icon: Globe, component: AdminLeagues },
-      { id: 'season', label: 'Season', icon: CalendarCog, component: AdminSeason },
-      { id: 'matches', label: 'Matches', icon: Trophy, component: AdminMatches, maxH: 'max-h-[60vh]' },
-      { id: 'trades', label: 'Trades', icon: ArrowLeftRight, component: AdminTrades, maxH: 'max-h-[50vh]' },
-      { id: 'free-agents', label: 'Free Agents', icon: UserPlus, component: AdminFreeAgents, maxH: 'max-h-[60vh]' },
+      { slug: 'leagues',     label: 'Leagues',      icon: Globe },
+      { slug: 'season',      label: 'Season',       icon: CalendarCog },
+      { slug: 'matches',     label: 'Matches',      icon: Trophy },
+      { slug: 'trades',      label: 'Trades',       icon: ArrowLeftRight },
+      { slug: 'free-agents', label: 'Free Agents',  icon: UserPlus },
     ],
   },
   {
     label: 'Config',
     items: [
-      { id: 'tiers', label: 'Tier List', icon: List, component: AdminTierList, maxH: 'max-h-[60vh]' },
-      { id: 'moves', label: 'Move Categories', icon: Swords, component: AdminMoveCategories },
-      { id: 'pins', label: 'Pins', icon: Award, component: AdminPins, maxH: 'max-h-[70vh]' },
-      { id: 'settings', label: 'Settings', icon: Settings, component: AdminSiteSettings },
+      { slug: 'tiers',    label: 'Tier List',       icon: List },
+      { slug: 'moves',    label: 'Move Categories', icon: Swords },
+      { slug: 'pins',     label: 'Pins',            icon: Award },
+      { slug: 'settings', label: 'Settings',        icon: Settings },
     ],
   },
   {
     label: 'System',
     items: [
-      { id: 'activity', label: 'Activity Log', icon: ScrollText, component: AdminActivityLog, maxH: 'max-h-[50vh]' },
-      { id: 'feedback', label: 'Feedback', icon: MessageSquare, component: AdminFeedback },
+      { slug: 'activity', label: 'Activity Log', icon: ScrollText },
+      { slug: 'bot',      label: 'PS Bot',       icon: Bot },
+      { slug: 'feedback', label: 'Feedback',     icon: MessageSquare },
     ],
   },
 ];
 
-const ALL_ITEMS = NAV_GROUPS.flatMap(g => g.items);
-
 export function AdminPage() {
-  const [searchParams] = useSearchParams();
-  const [activeId, setActiveId] = useState('users');
   const [mode, setMode] = useState<'live' | 'mock' | null>(null);
 
   // Probe /api/health once on mount so admins on mock.cannoli.live get a
   // visible reminder they aren't pointing at the live DB.
   useEffect(() => {
-    api.getHealth()
-      .then(h => setMode(h.mode))
-      .catch(() => setMode(null));
-  }, []);
-  // All collapsed except first
-  const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => new Set(ALL_ITEMS.slice(1).map(i => i.id))
-  );
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-  const isScrollingRef = useRef(false);
-
-  // Deep-link from URL ?tab=xxx on mount
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && ALL_ITEMS.some(i => i.id === tab)) {
-      setActiveId(tab);
-      requestAnimationFrame(() => {
-        sectionRefs.current[tab]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-  }, []);
-
-  // Track which section is visible
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (isScrollingRef.current) return;
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const id = entry.target.getAttribute('data-section-id');
-            if (id) setActiveId(id);
-          }
-        }
-      },
-      { rootMargin: '-5% 0px -85% 0px', threshold: 0 },
-    );
-
-    for (const item of ALL_ITEMS) {
-      const el = sectionRefs.current[item.id];
-      if (el) observer.observe(el);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  const scrollTo = useCallback((id: string) => {
-    setActiveId(id);
-    // Expand if collapsed
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    isScrollingRef.current = true;
-    requestAnimationFrame(() => {
-      sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-    setTimeout(() => { isScrollingRef.current = false; }, 800);
-  }, []);
-
-  const toggleCollapse = useCallback((id: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    api.getHealth().then(h => setMode(h.mode)).catch(() => setMode(null));
   }, []);
 
   return (
@@ -184,90 +114,35 @@ export function AdminPage() {
             <div className="space-y-0.5">
               {group.items.map(item => {
                 const Icon = item.icon;
-                const isActive = item.id === activeId;
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => scrollTo(item.id)}
-                    className={cn(
+                  <NavLink
+                    key={item.slug}
+                    to={item.slug}
+                    end={item.matchEnd}
+                    className={({ isActive }) => cn(
                       'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[13px] transition-colors',
                       isActive
                         ? 'bg-surface-overlay text-text-primary font-medium'
                         : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
                     )}
                   >
-                    <Icon size={14} className={isActive ? 'text-neon' : ''} />
-                    {item.label}
-                  </button>
+                    {({ isActive }) => (
+                      <>
+                        <Icon size={14} className={isActive ? 'text-neon' : ''} />
+                        {item.label}
+                      </>
+                    )}
+                  </NavLink>
                 );
               })}
             </div>
           </div>
         ))}
-
-        {/* Expand / Collapse all */}
-        <div className="flex items-center gap-1 px-2 pt-2 border-t border-border-subtle">
-          <button
-            onClick={() => setCollapsed(new Set())}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40 transition-colors"
-          >
-            <ChevronsUpDown size={12} />
-            Expand
-          </button>
-          <button
-            onClick={() => setCollapsed(new Set(ALL_ITEMS.map(i => i.id)))}
-            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40 transition-colors"
-          >
-            <ChevronsDownUp size={12} />
-            Collapse
-          </button>
-        </div>
       </nav>
 
-      {/* All sections — single scrollable column */}
-      <div className="flex-1 min-w-0 pl-6 pt-1 space-y-6 pb-[50vh]">
-        {ALL_ITEMS.map(item => {
-          const Component = item.component;
-          const Icon = item.icon;
-          const isCollapsed = collapsed.has(item.id);
-
-          return (
-            <section
-              key={item.id}
-              ref={el => { sectionRefs.current[item.id] = el; }}
-              data-section-id={item.id}
-              className="rounded-lg border border-border-default bg-surface-raised/30 overflow-hidden"
-            >
-              {/* Collapsible header */}
-              <button
-                onClick={() => toggleCollapse(item.id)}
-                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-surface-overlay/20 transition-colors"
-              >
-                <Icon size={15} className="text-text-muted shrink-0" />
-                <h2 className="text-sm font-mono font-bold tracking-tight uppercase text-text-primary">
-                  {item.label}
-                </h2>
-                <ChevronDown
-                  size={14}
-                  className={cn(
-                    'ml-auto text-text-muted transition-transform duration-200',
-                    isCollapsed && '-rotate-90',
-                  )}
-                />
-              </button>
-
-              {/* Content */}
-              {!isCollapsed && (
-                <div className={cn(
-                  'px-4 pb-4 pt-1',
-                  item.maxH && `${item.maxH} overflow-y-auto`,
-                )}>
-                  <Component />
-                </div>
-              )}
-            </section>
-          );
-        })}
+      {/* Active tab — single content pane */}
+      <div className="flex-1 min-w-0 pl-6 pt-1 pb-12">
+        <Outlet />
       </div>
     </div>
   );
