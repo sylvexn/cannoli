@@ -29,7 +29,7 @@ export const leagueAdminRoutes = new Elysia()
     const {
       name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
       weekDates, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
-      playoffTeamCount,
+      playoffTeamCount, format,
     } = body as Record<string, unknown>;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
@@ -49,6 +49,14 @@ export const leagueAdminRoutes = new Elysia()
     if (weekDates !== undefined) leagueUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
     if (paused !== undefined) leagueUpdates.paused = !!paused;
     if (forfeitPolicy !== undefined) leagueUpdates.forfeitPolicy = forfeitPolicy;
+    if (format !== undefined) {
+      // Whitelist enforcement — see frontend/src/data/pokemon-learnsets.ts.
+      const allowed = ['gen9natdex', 'gen9ou', 'gen9uu', 'gen9ru', 'gen9nu', 'gen9pu', 'gen9lc', 'gen9ubers'];
+      if (typeof format !== 'string' || !allowed.includes(format)) {
+        set.status = 400; return { error: `format must be one of ${allowed.join(', ')}` };
+      }
+      leagueUpdates.format = format;
+    }
     if (playoffTeamCount !== undefined) {
       const n = Number(playoffTeamCount);
       if (![2, 4, 6, 8].includes(n)) {
