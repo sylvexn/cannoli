@@ -20,7 +20,6 @@ import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
 import { SidebarFooter } from './app-shell/sidebar-footer';
-import { WhoIsOnline } from './app-shell/who-is-online';
 import { PageErrorBoundary } from './page-error-boundary';
 
 // Routes that need full-width layout (no max-w constraint)
@@ -384,11 +383,6 @@ export function AppShell() {
             </NavLink>
           )}
         </nav>
-
-        {/* Who's-online — small avatar stack of users seen in the last 15min.
-            Sits between the scrolling nav and the sticky footer so it's always
-            visible without competing with the league accordions for attention. */}
-        <WhoIsOnline />
 
         {/* Footer — My Team + user dropdown (or login for guests) */}
         <SidebarFooter

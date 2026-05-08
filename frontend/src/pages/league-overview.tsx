@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { formatRelativeTime } from '@/lib/format';
 import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
@@ -10,54 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { TeamLink } from '@/components/team-link';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
-import { CoachLink } from '@/components/coach-link';
-import { EventDescription } from '@/components/event-description';
+import { ActivityFeed } from '@/components/activity-feed';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
 import {
-  Megaphone, Users, Swords, ArrowLeftRight, Trophy,
-  ScrollText, Settings, Play, Check, Star, X,
+  Megaphone, Users, Swords, ArrowLeftRight, Trophy, ScrollText,
 } from 'lucide-react';
 import { deriveHeadlines } from './league-overview/headlines';
 import { HeadlinesStrip } from './league-overview/headlines-strip';
-
-const EVENT_ICONS: Record<string, typeof Users> = {
-  draft_started: Play, draft_pick: Trophy, draft_completed: Check,
-  trade_proposed: ArrowLeftRight, trade_approved: Check, trade_rejected: X,
-  match_reported: Swords, tera_captain_set: Star, tera_types_changed: Star,
-  pin_awarded: Trophy,
-};
-
-/**
- * Map an event type to its category-color treatment for the activity feed.
- * Each category gets a distinct accent so the feed reads as a stream of
- * typed moments rather than a flat list of paragraphs.
- */
-type EventTone = {
-  /** CSS color value used for icon tint + left border */
-  color: string;
-  /** Tailwind class fragment for icon */
-  iconClass: string;
-};
-
-const EVENT_TONES: Record<string, EventTone> = {
-  draft:  { color: '#22d3ee', iconClass: 'text-neon' },           // cyan
-  trade:  { color: '#e879f9', iconClass: 'text-pink' },           // pink secondary
-  match:  { color: '#fbbf24', iconClass: 'text-amber-400' },      // amber
-  fa:     { color: '#a78bfa', iconClass: 'text-violet-400' },     // violet (free-agent)
-  team:   { color: '#94a3b8', iconClass: 'text-text-secondary' },
-  admin:  { color: '#5c6070', iconClass: 'text-text-muted' },
-  scrim:  { color: '#a78bfa', iconClass: 'text-violet-400' },
-  pin:    { color: '#fbbf24', iconClass: 'text-amber-400' },
-};
-
-function getEventTone(event: ApiActivityEvent): EventTone {
-  // Pin events use their own tone regardless of category
-  if (event.type === 'pin_awarded' || event.type.startsWith('pin_')) {
-    return EVENT_TONES.pin;
-  }
-  return EVENT_TONES[event.category] ?? EVENT_TONES.admin;
-}
 
 // League-relevant categories for the public feed
 const FEED_CATEGORIES = new Set(['draft', 'trade', 'match', 'team']);
@@ -186,9 +145,10 @@ export function LeagueOverviewPage() {
           dense 3-column league cards become a *secondary* surface rendered
           below the main grid — still discoverable, but no longer the lead. */}
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,720px)_280px] gap-6 items-start">
-        <FeedColumn
+        <ActivityFeed
           activity={recentActivity}
           teamsPerLeague={teamsPerLeague}
+          variant="dense"
         />
 
         <div className="space-y-4 xl:sticky xl:top-4">
@@ -328,66 +288,6 @@ export function LeagueOverviewPage() {
   );
 }
 
-// ─── Feed column (primary) ───────────────────────────────────────────────
-//
-// Bigger avatars, narrative event text, more vertical breathing room than
-// the old sidebar version. Space Grotesk for descriptions, mono for entity
-// tags / counts. Renders inside a single Card so the whole column reads as
-// a stream rather than a stack of segmented widgets.
-function FeedColumn({
-  activity,
-  teamsPerLeague,
-}: {
-  activity: ApiActivityEvent[];
-  teamsPerLeague: Record<string, ApiTeam[]>;
-}) {
-  const { leagues } = useAppData();
-  return (
-    <Card className="bg-surface-raised border-border-default">
-      <CardHeader className="pb-2 border-b border-border-subtle">
-        <CardTitle className="text-sm font-heading flex items-center gap-2">
-          <ScrollText size={14} className="text-text-muted" />
-          Recent Activity
-          {activity.length > 0 && (
-            <span className="text-[10px] font-mono text-text-muted/70 tabular-nums ml-1">
-              {activity.length}
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-border-subtle/40">
-          {activity.length > 0 ? (
-            activity.map((event, i) => {
-              const eventLeague = leagues.find(l => l.id === event.leagueId);
-              return (
-                <div
-                  key={event.id}
-                  className="stagger-item row-interactive"
-                  style={{
-                    ['--i' as never]: Math.min(i, 20),
-                    ['--card-accent' as never]: eventLeague?.color ?? 'var(--color-neon)',
-                  }}
-                >
-                  <ActivityFeedItem event={event} teamsPerLeague={teamsPerLeague} />
-                </div>
-              );
-            })
-          ) : (
-            <EmptyState
-              variant="quiet"
-              title="Quiet around here."
-              subtitle="No league activity yet."
-              spriteSize="md"
-              padding="sm"
-            />
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── League quick card (right rail) ──────────────────────────────────────
 //
 // Top-3 mini standings per league; clicks deep into the league page. Tighter
@@ -504,52 +404,3 @@ function AnnouncementBanner({ text, type }: { text: string; type: 'info' | 'warn
   );
 }
 
-function ActivityFeedItem({
-  event,
-  teamsPerLeague,
-}: {
-  event: ApiActivityEvent;
-  teamsPerLeague?: Record<string, ApiTeam[]>;
-}) {
-  const { leagues } = useAppData();
-  const Icon = EVENT_ICONS[event.type] || Settings;
-  const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
-  const tone = getEventTone(event);
-
-  return (
-    <div
-      className="relative flex items-start gap-3 px-4 py-3 hover:bg-surface-overlay/30 transition-colors overflow-hidden border-l-2"
-      style={{ borderLeftColor: `${tone.color}80` }}
-    >
-      {/* Larger avatar — feed-first layout has room to breathe. */}
-      <CoachLink
-        coach={{ username: event.actor }}
-        showAvatar
-        avatarSize="lg"
-        avatarOnly
-        size="xs"
-        className="shrink-0 mt-0.5"
-      />
-      <div className="flex-1 min-w-0 overflow-hidden">
-        {/* Narrative line — Space Grotesk for the warmer read; entity tags
-            inside <EventDescription> are already mono-styled. */}
-        <div className="text-[13px] font-heading text-text-secondary leading-snug">
-          <CoachLink coach={{ username: event.actor }} size="sm" />
-          {' '}
-          <EventDescription event={event} teamsPerLeague={teamsPerLeague} />
-        </div>
-        <div className="flex items-center gap-1.5 mt-1">
-          <Icon size={11} className={cn('shrink-0', tone.iconClass)} />
-          {league && (
-            <span className="text-[10px] font-medium shrink-0" style={{ color: league.color }}>
-              {league.name.replace(' League', '')}
-            </span>
-          )}
-          <span className="text-[10px] font-mono text-text-muted shrink-0 tabular-nums">
-            {event.timestamp ? formatRelativeTime(event.timestamp) : ''}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
