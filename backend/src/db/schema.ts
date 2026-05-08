@@ -31,19 +31,10 @@ export const users = sqliteTable('users', {
   lastSeenAt: text('last_seen_at'),
   /** Path to uploaded user avatar (relative to backend/uploads/) */
   avatarPath: text('avatar_path'),
-  // ─── Coach Flair (passive identity expressions) ──────────────────────────
-  /** FK → pokemon.id. Mini sprite renders next to the coach's name in
-   *  CoachLink everywhere (feeds, draft order, trades, standings, etc.). */
-  signaturePokemonId: integer('signature_pokemon_id').references(() => pokemon.id),
   /** Short user-set string ≤ 40 chars — e.g. "The Garchomp Curse",
    *  "Late-Round Loyalist". Displayed under display_name on the profile
    *  page and inside the CoachLink hover popover. */
   title: text('title'),
-  /** Pokemon type that subtly accents the coach's identity. Renders as a
-   *  small TYPE_COLORS-tinted chip near the coach name on profile/team
-   *  detail; also feeds the optional `typeAccent` prop on CoachAvatar.
-   *  Validated against the canonical 18-type list at the API layer. */
-  signatureType: text('signature_type'),
 });
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
@@ -149,7 +140,6 @@ export const teams = sqliteTable('teams', {
   teamName: text('team_name').notNull(),
   teamAbbrev: text('team_abbrev').notNull(),
   teamColor: text('team_color').notNull().default('#888888'),
-  showdownUsername: text('showdown_username'),
   rank: integer('rank'),
   /** Path to uploaded team logo (relative to backend/uploads/) */
   logoPath: text('logo_path'),

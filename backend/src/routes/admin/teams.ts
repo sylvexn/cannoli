@@ -13,14 +13,13 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const archived = checkLeagueArchived(params.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
-    const { id, coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = body as {
+    const { id, coachName, teamName, teamAbbrev, teamColor, userId } = body as {
       id?: string;
       coachName: string;
       teamName: string;
       teamAbbrev: string;
       teamColor?: string;
       userId?: number | null;
-      showdownUsername?: string | null;
     };
     if (!coachName || !teamName || !teamAbbrev) {
       set.status = 400; return { error: 'coachName, teamName, teamAbbrev required' };
@@ -38,7 +37,6 @@ export const teamAdminRoutes = new Elysia()
         teamName,
         teamAbbrev,
         teamColor: teamColor ?? '#888888',
-        showdownUsername: showdownUsername ?? null,
       }).run();
       db.insert(schema.activityLog).values({
         type: 'team_created',
@@ -63,7 +61,7 @@ export const teamAdminRoutes = new Elysia()
     if (archived) { set.status = 409; return archived; }
     const staff = isStaff(user);
 
-    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername, bio, motto, captainNote } = body as Record<string, unknown>;
+    const { coachName, teamName, teamAbbrev, teamColor, userId, bio, motto, captainNote } = body as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
     // Owner-allowed fields:
@@ -93,8 +91,6 @@ export const teamAdminRoutes = new Elysia()
       if (typeof teamAbbrev === 'string' && teamAbbrev.trim()) updates.teamAbbrev = teamAbbrev.trim();
       if (userId === null) updates.userId = null;
       else if (typeof userId === 'number') updates.userId = userId;
-      if (showdownUsername === null) updates.showdownUsername = null;
-      else if (typeof showdownUsername === 'string') updates.showdownUsername = showdownUsername.trim() || null;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -250,6 +246,28 @@ export const teamAdminRoutes = new Elysia()
     }).run();
 
     return { success: true, path: `/uploads/${relativePath}` };
+  })
+
+  // ─── Team logo remove ──────────────────────────────────────────────
+
+  .delete('/api/teams/:teamId/logo', ({ params, query, user, set }) => {
+    if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
+
+    db.update(schema.teams).set({ logoPath: null }).where(eq(schema.teams.id, params.teamId)).run();
+    db.insert(schema.activityLog).values({
+      type: 'team_logo_removed',
+      category: 'team',
+      actor: user!.username,
+      leagueId: team.leagueId,
+      description: `Removed logo for ${team.teamName}`,
+      metadata: JSON.stringify({ teamId: params.teamId }),
+    }).run();
+
+    return { success: true };
   })
 
   // ─── Team banner upload ────────────────────────────────────────────

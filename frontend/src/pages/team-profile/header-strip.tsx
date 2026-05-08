@@ -52,7 +52,7 @@ export function HeaderStrip({
       {/* Coach jump-link — sits above the team title so visitors landing
           on a deep team URL can hop back to the human behind it without
           hunting through the page. The avatar of the coach echoes the
-          team color via the typeAccent ring. */}
+          team color via the avatar's outer ring. */}
       {player.owner && (
         <Link
           to={`/coach/${encodeURIComponent(player.owner.username)}`}
@@ -68,7 +68,7 @@ export function HeaderStrip({
             primaryColor={player.owner.primaryColor}
             secondaryColor={player.owner.secondaryColor}
             size="sm"
-            typeAccent={player.teamColor}
+            ringColor={player.teamColor}
           />
           <span className="text-text-secondary group-hover:text-neon transition-colors truncate normal-case tracking-normal">
             {player.owner.displayName ?? player.owner.username}

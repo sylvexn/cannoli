@@ -488,8 +488,17 @@ export const arenaRoutes = new Elysia()
               if (isBotConnected()) {
                 const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
                 const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
-                const p1Name = homeTeam?.showdownUsername || homeTeam?.coachName || match.homeTeamId;
-                const p2Name = awayTeam?.showdownUsername || awayTeam?.coachName || match.awayTeamId;
+                // PS battles are created against the owning user's account
+                // username (that's what they log in as via SSO). Falls back to
+                // coachName / matchId only if the team has no owning user.
+                const homeUser = homeTeam?.userId
+                  ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, homeTeam.userId)).get()
+                  : null;
+                const awayUser = awayTeam?.userId
+                  ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, awayTeam.userId)).get()
+                  : null;
+                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId;
+                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId;
                 createBattle(p1Name, p2Name);
               } else {
                 // Bot not connected — notify players

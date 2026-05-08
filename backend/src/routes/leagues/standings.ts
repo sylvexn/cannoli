@@ -107,7 +107,6 @@ export const standingsRoutes = new Elysia()
         teamAbbrev: team.teamAbbrev,
         teamColor: team.teamColor,
         rank: team.rank,
-        showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
         bannerPath: team.bannerPath,
         bio: team.bio,

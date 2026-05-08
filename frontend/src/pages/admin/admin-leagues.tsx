@@ -70,6 +70,33 @@ export function AdminLeagues() {
   const { leagues, refreshLeagues } = useAppData();
   const [settings, setSettings] = useState<Record<string, LeagueSettings>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
+  // Per-league: { actual: total captains assigned, expected: teamCount * cap }
+  const [captainStats, setCaptainStats] = useState<Record<string, { actual: number; expected: number }>>({});
+
+  // Surface drift between configured Tera Captain slots and the number of
+  // captains actually flagged on team rosters. Pulls each league's teams +
+  // rosters once; cap × team_count gives the expected total.
+  useEffect(() => {
+    let cancelled = false;
+    if (leagues.length === 0) return;
+    Promise.all(
+      leagues.map(async l => {
+        const teams = await api.getTeams(l.id).catch(() => []);
+        const cap = l.season?.teraCaptainSlots ?? 0;
+        let actual = 0;
+        for (const t of teams) {
+          for (const r of t.roster) {
+            if (r.isTeraCaptain) actual += 1;
+          }
+        }
+        return [l.id, { actual, expected: cap * teams.length }] as const;
+      }),
+    ).then(rows => {
+      if (cancelled) return;
+      setCaptainStats(Object.fromEntries(rows));
+    });
+    return () => { cancelled = true; };
+  }, [leagues]);
 
   // Hydrate settings from real league/season data on first load.
   // rosterSize: backend column was added by agent 3; if missing, we still
@@ -203,6 +230,16 @@ export function AdminLeagues() {
                     max={6}
                     locked={locks.teraCaptainSlots}
                     lockReason="Locked once regular season begins"
+                    suffix={
+                      captainStats[league.id]
+                        ? `(${captainStats[league.id].actual}/${captainStats[league.id].expected} set)`
+                        : undefined
+                    }
+                    suffixClassName={
+                      captainStats[league.id] && captainStats[league.id].actual !== captainStats[league.id].expected
+                        ? 'text-draw font-mono text-[9px]'
+                        : 'text-text-muted/70 font-mono text-[9px]'
+                    }
                   />
                   <SettingField
                     label="Trade Deadline"
@@ -321,7 +358,7 @@ export function AdminLeagues() {
 }
 
 function SettingField({
-  label, icon, value, onChange, min, max, step, allowed, locked, lockReason,
+  label, icon, value, onChange, min, max, step, allowed, locked, lockReason, suffix, suffixClassName,
 }: {
   label: string;
   icon?: React.ReactNode;
@@ -334,6 +371,9 @@ function SettingField({
   allowed?: number[];
   locked: boolean;
   lockReason: string;
+  /** Small text rendered after the label — e.g. "(2/24 set)" for drift. */
+  suffix?: string;
+  suffixClassName?: string;
 }) {
   const isInvalid = allowed && !allowed.includes(value);
   return (
@@ -344,6 +384,11 @@ function SettingField({
         {locked && (
           <span title={lockReason} className="text-text-muted/60">
             <Lock size={9} />
+          </span>
+        )}
+        {suffix && (
+          <span className={suffixClassName ?? 'text-text-muted/70 font-mono text-[9px]'}>
+            {suffix}
           </span>
         )}
       </label>
