@@ -13,14 +13,8 @@ export const configRoutes = new Elysia()
     const s = body as Record<string, unknown>;
 
     db.update(schema.siteSettings).set({
-      siteName: (s.siteName as string) ?? 'Cannoli',
       announcement: s.announcementEnabled ? ((s.announcementText as string) ?? null) : null,
       announcementType: ((s.announcementType as string) ?? 'info') as 'info' | 'warning' | 'success',
-      defaultPointCap: (s.defaultPointCap as number) ?? 110,
-      defaultTeraCaptainSlots: (s.defaultTeraCaptainSlots as number) ?? 2,
-      defaultTradeDeadlineWeek: (s.defaultTradeDeadlineWeek as number) ?? 7,
-      defaultRosterSize: (s.defaultRosterSize as number) ?? 10,
-      defaultMaxTeams: (s.defaultMaxTeams as number) ?? 12,
       defaultUserPassword: (s.defaultUserPassword as string) ?? 'password',
       tradeExpiryDays: (s.tradeExpiryDays as number) ?? 7,
       draftTimerEnabled: s.draftTimerEnabled !== undefined ? !!s.draftTimerEnabled : true,

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
-import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -9,35 +8,23 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
-  Save, Megaphone, Settings, Trophy, Swords, Users,
-  Zap, Shield, Loader2,
+  Save, Megaphone, Settings,
+  Zap, Loader2,
 } from 'lucide-react';
 
 interface AllSettings {
-  siteName: string;
   announcementEnabled: boolean;
   announcementText: string;
   announcementType: 'info' | 'warning' | 'success';
-  defaultPointCap: number;
-  defaultTeraCaptainSlots: number;
-  defaultMaxTeams: number;
-  defaultRosterSize: number;
-  defaultTradeDeadlineWeek: number;
   defaultUserPassword: string;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
 }
 
 const INITIAL: AllSettings = {
-  siteName: 'Cannoli',
   announcementEnabled: false,
   announcementText: '',
   announcementType: 'info',
-  defaultPointCap: 110,
-  defaultTeraCaptainSlots: 2,
-  defaultMaxTeams: 12,
-  defaultRosterSize: 10,
-  defaultTradeDeadlineWeek: 7,
   defaultUserPassword: 'password',
   draftTimerEnabled: true,
   draftDemoVisible: true,
@@ -58,15 +45,9 @@ export function AdminSiteSettings() {
     api.getSiteSettings()
       .then(s => {
         setSettings({
-          siteName: s.siteName ?? 'Cannoli',
           announcementEnabled: !!s.announcement,
           announcementText: s.announcement ?? '',
           announcementType: (s.announcementType as AllSettings['announcementType']) ?? 'info',
-          defaultPointCap: s.defaultPointCap ?? 110,
-          defaultTeraCaptainSlots: s.defaultTeraCaptainSlots ?? 2,
-          defaultMaxTeams: s.defaultMaxTeams ?? 12,
-          defaultRosterSize: s.defaultRosterSize ?? 10,
-          defaultTradeDeadlineWeek: s.defaultTradeDeadlineWeek ?? 7,
           defaultUserPassword: s.defaultUserPassword ?? 'password',
           draftTimerEnabled: s.draftTimerEnabled ?? true,
           draftDemoVisible: s.draftDemoVisible ?? true,
@@ -103,13 +84,6 @@ export function AdminSiteSettings() {
       <div>
         <SubHeader icon={Settings} label="General" />
         <div className="space-y-4 mt-3">
-          <Field label="Site Name">
-            <Input
-              value={settings.siteName}
-              onChange={e => update('siteName', e.target.value)}
-              className="max-w-xs"
-            />
-          </Field>
           <Field label="Default User Password" hint="New accounts and password resets use this. Users must change on first login.">
             <Input
               value={settings.defaultUserPassword}
@@ -173,31 +147,6 @@ export function AdminSiteSettings() {
             )}
           </div>
         )}
-      </div>
-
-      {/* ─── League Defaults ──────────────────────────────────── */}
-      <div>
-        <SubHeader icon={Trophy} label="League Defaults" />
-        <p className="text-[11px] text-text-muted mt-1 mb-3">
-          Default values for new leagues/seasons. Individual leagues can override.
-        </p>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          <Field label="Point Cap" icon={Shield}>
-            <NumberInput value={settings.defaultPointCap} onChange={v => update('defaultPointCap', v)} min={50} max={200} />
-          </Field>
-          <Field label="Tera Captain Slots" icon={Swords}>
-            <NumberInput value={settings.defaultTeraCaptainSlots} onChange={v => update('defaultTeraCaptainSlots', v)} min={0} max={6} />
-          </Field>
-          <Field label="Max Teams" icon={Users}>
-            <NumberInput value={settings.defaultMaxTeams} onChange={v => update('defaultMaxTeams', v)} min={2} max={20} />
-          </Field>
-          <Field label="Roster Size">
-            <NumberInput value={settings.defaultRosterSize} onChange={v => update('defaultRosterSize', v)} min={6} max={20} />
-          </Field>
-          <Field label="Trade Deadline Week">
-            <NumberInput value={settings.defaultTradeDeadlineWeek} onChange={v => update('defaultTradeDeadlineWeek', v)} min={1} max={30} />
-          </Field>
-        </div>
       </div>
 
       {/* ─── Draft ────────────────────────────────────────────── */}
