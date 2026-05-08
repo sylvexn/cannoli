@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
-import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
+import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch, ApiActivityEvent } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,8 @@ import { TeamLink } from '@/components/team-link';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
+import { ActivityFeed } from '@/components/activity-feed';
+import { WhoIsOnline } from '@/components/app-shell/who-is-online';
 import { PHASE_COLORS, TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import {
   Calendar, ArrowLeftRight, UserPlus, Star, Hourglass, Swords, ChevronRight,
@@ -37,6 +39,19 @@ export function MePage() {
   const [tradesPerLeague, setTradesPerLeague] = useState<Record<string, ApiTrade[]>>({});
   const [schedulePerLeague, setSchedulePerLeague] = useState<Record<string, ApiSchedule>>({});
   const [loadingData, setLoadingData] = useState(true);
+  const [activity, setActivity] = useState<ApiActivityEvent[]>([]);
+
+  // Pull recent league activity for the hub feed surface (dense main panel
+  // + compact side widget). Same category filter as League Overview so the
+  // two surfaces stay in sync.
+  useEffect(() => {
+    api.getActivityLog({ limit: 40 })
+      .then(({ events }) => {
+        const FEED_CATEGORIES = new Set(['draft', 'trade', 'match', 'team']);
+        setActivity(events.filter(e => FEED_CATEGORIES.has(e.category)).slice(0, 24));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -98,12 +113,8 @@ export function MePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header — title removed by user request; greeting only. */}
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-neon">My</span>{' '}
-          <span className="text-text-primary">Hub</span>
-        </h1>
         <p className="text-sm text-text-muted">
           Welcome back, {user.username}.
         </p>
@@ -114,30 +125,47 @@ export function MePage() {
         <div className="space-y-4">
           <NoTeamHero leagues={leagues} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <PendingTradesCard
-              pendingTradesForMe={pendingTradesForMe}
-              leagues={leagues}
-            />
-            <ActionItemsCard
-              myTeams={myTeams}
-              pendingTradesForMe={pendingTradesForMe}
-            />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 space-y-4">
+              <ActivityFeed
+                activity={activity}
+                teamsPerLeague={teamsPerLeague}
+                variant="dense"
+              />
+            </div>
+            <div className="space-y-3">
+              <PendingTradesCard
+                pendingTradesForMe={pendingTradesForMe}
+                leagues={leagues}
+              />
+              <ActionItemsCard
+                myTeams={myTeams}
+                pendingTradesForMe={pendingTradesForMe}
+              />
+            </div>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* My Teams (2 cols) */}
+          {/* Main panel: dense activity feed leads, then My Teams below. */}
           <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
-              My Teams
-            </h2>
-            {myTeams.map((entry, i) => (
-              <MyTeamCard key={entry.league.id} entry={entry} index={i} />
-            ))}
+            <ActivityFeed
+              activity={activity}
+              teamsPerLeague={teamsPerLeague}
+              variant="dense"
+            />
+
+            <div className="space-y-4 pt-2">
+              <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
+                My Teams
+              </h2>
+              {myTeams.map((entry, i) => (
+                <MyTeamCard key={entry.league.id} entry={entry} index={i} />
+              ))}
+            </div>
           </div>
 
-          {/* Right column: actions */}
+          {/* Right column: actions + compact feed glance + who's online. */}
           <div className="space-y-3">
             <PendingTradesCard
               pendingTradesForMe={pendingTradesForMe}
@@ -146,6 +174,16 @@ export function MePage() {
             <ActionItemsCard
               myTeams={myTeams}
               pendingTradesForMe={pendingTradesForMe}
+            />
+            <div className="rounded-lg border border-border-default bg-surface-raised overflow-hidden empty:hidden">
+              <WhoIsOnline />
+            </div>
+            <ActivityFeed
+              activity={activity}
+              teamsPerLeague={teamsPerLeague}
+              variant="compact"
+              title="Activity Glance"
+              limit={8}
             />
           </div>
         </div>
