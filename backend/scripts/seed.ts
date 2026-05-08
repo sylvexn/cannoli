@@ -32,6 +32,7 @@ import {
   S11_CONFIG,
   IMPORTS_DIR,
 } from './import-xlsx';
+import { S9_AWARDS, S10_AWARDS, mintManualPins } from '../src/lib/pins/awards-data';
 
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 const DRIZZLE_DIR = resolve(import.meta.dir, '../drizzle');
@@ -538,19 +539,131 @@ if (s9Missing.length === 0) {
   importReplays(sqlite);
 }
 
-// ─── S10: rewind to "finals pending" ──────────────────────────────────────
-// Regular season + QF + SF stay reported (results, replays, kill stats);
-// the finals match has both teams seeded but no result yet. Mirrors the
-// state the league actually sits in at the time of a real-life finals.
+// ─── S10: finalize the season ─────────────────────────────────────────────
+// Discord-announced champions are GABE (emerald-abs), TAYLOR (ruby-vgk),
+// DYLAN (sapphire-dwg). The seed playoffs from the XLSX import already put
+// gabe and dylan in the finals; ruby's bracket has the wrong finalist
+// (jack/ruby-egg vs dante/ruby-oni), so we rewrite ruby-sf-5 and the ruby
+// finals matchup so VGK reaches the final and beats ONI.
+//
+// Score: 4-3 in the champion's favor. Phase advances to 'offseason' on each
+// league, but seasons.archived stays 0 — S10 is current.
 if (PRIMARY_CONFIG.seasonNumber === 10) {
-  console.log('\n── Rewinding S10 to finals pending ──');
+  console.log('\n── Finalizing S10 ──');
+
   const s10LeagueIds = S10_CONFIG.files.map((f) => f.id);
+
+  // Step 0. Mark every imported match with a score as completed. The XLSX
+  // importer leaves status='scheduled' on every row; the auto-award job
+  // queries `phase='regular' AND status='completed'`, so without this all
+  // S10 auto-awards would mint zero rows. (The pre-existing mock-data step
+  // does this same UPDATE later, but we need it now — before pin minting.)
+  sqlite.prepare(
+    `UPDATE matches SET status = 'completed'
+      WHERE home_score IS NOT NULL AND status != 'completed'`,
+  ).run();
+
+  // Step 1. Use rewindToFinalsPending to fabricate SFs (where missing) and
+  // create the finals match rows. We'll then overwrite ruby's bracket and
+  // score all finals to match the Discord-announced champions.
   const rewind = rewindToFinalsPending(sqlite, s10LeagueIds);
   console.log(
-    `  fabricated ${rewind.sfFabricated} SF result(s); ` +
-    `cleared ${rewind.finalsCleared} + created ${rewind.finalsCreated} finals match(es); ` +
-    `deleted ${rewind.matchPokemonDeleted} per-mon stat row(s)`,
+    `  rewind: fabricated ${rewind.sfFabricated} SF, ` +
+    `cleared ${rewind.finalsCleared} + created ${rewind.finalsCreated} finals`,
   );
+
+  // Step 2. Ruby's authoritative champion is TAYLOR (ruby-vgk), but the
+  // bracket from the XLSX has EGG (jack) winning ruby-sf-5. Flip it so
+  // VGK reaches the final.
+  sqlite.prepare(
+    `UPDATE matches
+        SET home_score = 2, away_score = 4,
+            status = 'completed',
+            completed_at = COALESCE(completed_at, datetime('now'))
+      WHERE id = 'ruby-sf-5'`,
+  ).run();
+
+  // Re-derive the ruby finals teams from the (now corrected) SF winners.
+  // ruby-sf-5 winner = ruby-vgk; ruby-sf-6 winner is whichever team won
+  // that SF (rewindToFinalsPending fabricated 4-2 home if it was unset).
+  const rubySf6 = sqlite.prepare(
+    `SELECT home_team_id, away_team_id, home_score, away_score
+       FROM matches WHERE id = 'ruby-sf-6'`,
+  ).get() as { home_team_id: string; away_team_id: string; home_score: number | null; away_score: number | null } | undefined;
+  if (!rubySf6 || rubySf6.home_score == null || rubySf6.away_score == null) {
+    throw new Error('ruby-sf-6 missing or unscored after rewind');
+  }
+  const rubyOtherFinalist = rubySf6.home_score > rubySf6.away_score
+    ? rubySf6.home_team_id
+    : rubySf6.away_team_id;
+
+  sqlite.prepare(
+    `UPDATE matches
+        SET home_team_id = 'ruby-vgk', away_team_id = ?,
+            home_seed = 4, away_seed = 2,
+            home_score = 4, away_score = 3,
+            status = 'completed',
+            completed_at = COALESCE(completed_at, datetime('now'))
+      WHERE id = 'ruby-f-1'`,
+  ).run(rubyOtherFinalist);
+
+  // Step 3. Score emerald + sapphire finals so the announced champions win.
+  // The rewind above ordered the home side by seed (best seed = home), so
+  // emerald-abs (gabe) is home in emerald-f-1 and sapphire-llb is home in
+  // sapphire-f-1. emerald: home wins 4-3. sapphire: away (dwg/dylan) wins.
+  sqlite.prepare(
+    `UPDATE matches
+        SET home_team_id = 'emerald-abs',
+            home_score = CASE WHEN home_team_id = 'emerald-abs' THEN 4 ELSE 3 END,
+            away_score = CASE WHEN home_team_id = 'emerald-abs' THEN 3 ELSE 4 END,
+            status = 'completed',
+            completed_at = COALESCE(completed_at, datetime('now'))
+      WHERE id = 'emerald-f-1'`,
+  ).run();
+  // Make sure ABS is home and the score is 4-3 in their favor regardless of
+  // which side rewind put them on.
+  const ef = sqlite.prepare(
+    `SELECT home_team_id, away_team_id FROM matches WHERE id = 'emerald-f-1'`,
+  ).get() as { home_team_id: string; away_team_id: string };
+  if (ef.home_team_id !== 'emerald-abs') {
+    sqlite.prepare(
+      `UPDATE matches
+          SET home_team_id = 'emerald-abs', away_team_id = ?,
+              home_score = 4, away_score = 3,
+              status = 'completed',
+              completed_at = COALESCE(completed_at, datetime('now'))
+        WHERE id = 'emerald-f-1'`,
+    ).run(ef.home_team_id);
+  } else {
+    sqlite.prepare(
+      `UPDATE matches SET home_score = 4, away_score = 3 WHERE id = 'emerald-f-1'`,
+    ).run();
+  }
+
+  const sf = sqlite.prepare(
+    `SELECT home_team_id, away_team_id FROM matches WHERE id = 'sapphire-f-1'`,
+  ).get() as { home_team_id: string; away_team_id: string };
+  // DWG must win, regardless of which side rewind put them on. Score 4-3
+  // in favor of DWG.
+  const dwgIsHome = sf.home_team_id === 'sapphire-dwg';
+  sqlite.prepare(
+    `UPDATE matches
+        SET home_score = ?, away_score = ?,
+            status = 'completed',
+            completed_at = COALESCE(completed_at, datetime('now'))
+      WHERE id = 'sapphire-f-1'`,
+  ).run(dwgIsHome ? 4 : 3, dwgIsHome ? 3 : 4);
+
+  const finish = assignFinishPositions(sqlite, s10LeagueIds);
+  console.log(`  finals scored; stamped ${finish.teamsUpdated} team(s) with finish positions`);
+
+  // Advance phase + bump currentWeek so the offseason surfaces show real
+  // post-final state instead of "in playoffs". Don't archive the season.
+  for (const leagueId of s10LeagueIds) {
+    sqlite.prepare(
+      `UPDATE leagues SET phase = 'offseason', current_week = 11 WHERE id = ?`,
+    ).run(leagueId);
+  }
 }
 
 // ─── S9: complete the bracket (importS9 only produces QF rows) ──────────
@@ -593,6 +706,48 @@ if (s9Missing.length === 0) {
       `  ${lid}: auto ${auto.awarded.length}+${auto.skipped}, ` +
       `archive ${archive.awarded.length}+${archive.skipped}`,
     );
+  }
+
+  // Manual pins from the Discord award announcements (Elite-4 / Mix /
+  // Player categories). The cannoli/cynthia/garchomp slugs overlap with
+  // the auto job above; mintManualPins clears the season's auto rows for
+  // those slugs first so the announced winners take precedence.
+  console.log('\n── Awarding S9 manual pins ──');
+  const s9Manual = mintManualPins(sqlite, 9, S9_AWARDS);
+  console.log(
+    `  inserted ${s9Manual.inserted}, skipped ${s9Manual.skipped}, ` +
+    `unresolved ${s9Manual.unresolved.length}`,
+  );
+  for (const u of s9Manual.unresolved) {
+    console.log(`    [unresolved] ${u.award.pin} ${u.award.leagueId ?? `season=${u.award.season}`} — ${u.reason}`);
+  }
+}
+
+// ─── S10: award pins (auto + archive + manual) ───────────────────────────
+// Runs after the finalize block above. Same shape as S9 but the season
+// stays unarchived.
+if (PRIMARY_CONFIG.seasonNumber === 10) {
+  console.log('\n── Awarding S10 auto-pins ──');
+  const { runAutoAwards } = await import('../src/lib/pins/auto-award');
+  const { mintArchivePins } = await import('../src/lib/pins/archive-mint');
+  const s10LeagueIds = S10_CONFIG.files.map((f) => f.id);
+  for (const lid of s10LeagueIds) {
+    const auto = runAutoAwards(lid, { trigger: 'season-end' });
+    const archive = mintArchivePins(lid);
+    console.log(
+      `  ${lid}: auto ${auto.awarded.length}+${auto.skipped}, ` +
+      `archive ${archive.awarded.length}+${archive.skipped}`,
+    );
+  }
+
+  console.log('\n── Awarding S10 manual pins ──');
+  const s10Manual = mintManualPins(sqlite, 10, S10_AWARDS);
+  console.log(
+    `  inserted ${s10Manual.inserted}, skipped ${s10Manual.skipped}, ` +
+    `unresolved ${s10Manual.unresolved.length}`,
+  );
+  for (const u of s10Manual.unresolved) {
+    console.log(`    [unresolved] ${u.award.pin} ${u.award.leagueId ?? `season=${u.award.season}`} — ${u.reason}`);
   }
 }
 
