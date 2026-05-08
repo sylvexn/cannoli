@@ -273,8 +273,8 @@ export function SpeedTiersPage() {
                         <span className="text-[10px] font-mono tabular-nums text-text-muted">{i + 1}</span>
                       </td>
                       <td className="py-1">
-                        <button onClick={() => openSideCard(r.name)} title="View details" className="block">
-                          <PokemonSprite name={r.name} size="xs" />
+                        <button onClick={() => openSideCard(r.name)} title={r.nickname ? `${r.name} — "${r.nickname}"` : 'View details'} className="block">
+                          <PokemonSprite name={r.name} size="xs" shiny={r.isShiny} />
                         </button>
                       </td>
                       <td className="px-1 py-1">
@@ -287,6 +287,11 @@ export function SpeedTiersPage() {
                             <Sparkles size={9} className="inline ml-1 -mt-0.5 text-yellow-400" />
                           )}
                         </Link>
+                        {r.nickname && (
+                          <span className="block text-[9px] italic font-mono text-text-muted truncate" title={r.nickname}>
+                            "{r.nickname}"
+                          </span>
+                        )}
                       </td>
                       <td className="px-2 py-1">
                         <TypeChip types={types} size="xs" />
