@@ -6,12 +6,12 @@
  * down to the new "personality" fields the surface pass introduced.
  *
  * Two-sided gating: the same panel is reused when a dev/admin staffer is
- * viewing someone else's profile — they can edit bio / status / signature /
- * title / banner on the target's behalf. The save call routes through a
- * different endpoint (`updateUserAsStaff` vs `updateMe`) so the backend
- * emits a distinct `profile_edited_by_staff` audit event with the editor's
- * user id in metadata. Avatar + display-name + colors stay strictly self-
- * service (you can re-color yourself but not your friend).
+ * viewing someone else's profile — they can edit bio / status / banner on
+ * the target's behalf. The save call routes through a different endpoint
+ * (`updateUserAsStaff` vs `updateMe`) so the backend emits a distinct
+ * `profile_edited_by_staff` audit event with the editor's user id in
+ * metadata. Avatar + display-name + colors stay strictly self-service (you
+ * can re-color yourself but not your friend).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -27,12 +27,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon';
-import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 
 const MAX_BIO = 280;
 const MAX_STATUS = 80;
-const MAX_TITLE = 40;
 
 interface ProfileSettingsPanelProps {
   open: boolean;
@@ -59,9 +56,6 @@ export function ProfileSettingsPanel({
   const [bio, setBio] = useState(profile.bio ?? '');
   const [statusMessage, setStatusMessage] = useState(profile.statusMessage ?? '');
   const [bannerPreview, setBannerPreview] = useState<string | null>(profile.bannerUrl ?? null);
-  // ─── Coach flair state ──────────────────────────────────────────────────
-  const [title, setTitle] = useState(profile.title ?? '');
-  const [signatureType, setSignatureType] = useState<string | null>(profile.signatureType ?? null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -72,18 +66,11 @@ export function ProfileSettingsPanel({
     setBio(profile.bio ?? '');
     setStatusMessage(profile.statusMessage ?? '');
     setBannerPreview(profile.bannerUrl ?? null);
-    setTitle(profile.title ?? '');
-    setSignatureType(profile.signatureType ?? null);
-  }, [
-    open, profile.bio, profile.statusMessage, profile.bannerUrl,
-    profile.title, profile.signatureType,
-  ]);
+  }, [open, profile.bio, profile.statusMessage, profile.bannerUrl]);
 
   const dirty =
     bio !== (profile.bio ?? '') ||
-    statusMessage !== (profile.statusMessage ?? '') ||
-    title !== (profile.title ?? '') ||
-    signatureType !== (profile.signatureType ?? null);
+    statusMessage !== (profile.statusMessage ?? '');
 
   async function handleSave() {
     setSaving(true);
@@ -91,8 +78,6 @@ export function ProfileSettingsPanel({
       const payload = {
         bio: bio.trim() === '' ? null : bio,
         statusMessage: statusMessage.trim() === '' ? null : statusMessage.trim(),
-        title: title.trim() === '' ? null : title.trim(),
-        signatureType: signatureType ?? null,
       };
       if (asStaff) {
         await api.updateUserAsStaff(profile.username, payload);
@@ -262,56 +247,6 @@ export function ProfileSettingsPanel({
               className="w-full px-3 py-2 rounded-md border border-border-default bg-surface-overlay/40 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-neon/40 resize-y leading-snug"
             />
           </div>
-
-          {/* ─── Coach flair section ─────────────────────────────────────── */}
-          <div className="space-y-3 pt-3 border-t border-border-subtle/50">
-            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-              Flair
-            </div>
-
-            {/* Title */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                  Title
-                </label>
-                <span className="text-[10px] font-mono tabular-nums text-text-muted">
-                  {title.length}/{MAX_TITLE}
-                </span>
-              </div>
-              <input
-                type="text"
-                value={title}
-                maxLength={MAX_TITLE}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="The Garchomp Curse"
-                className="w-full px-3 py-1.5 rounded-md border border-border-default bg-surface-overlay/40 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-neon/40"
-              />
-            </div>
-
-            {/* Signature type */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                Signature type
-              </label>
-              <div className="flex flex-wrap gap-1">
-                <TypeSwatch
-                  type={null}
-                  selected={signatureType === null}
-                  onClick={() => setSignatureType(null)}
-                />
-                {POKEMON_TYPES.map((t) => (
-                  <TypeSwatch
-                    key={t}
-                    type={t}
-                    selected={signatureType === t}
-                    onClick={() => setSignatureType(t)}
-                  />
-                ))}
-              </div>
-            </div>
-
-          </div>
         </div>
 
         <DialogFooter>
@@ -330,46 +265,3 @@ export function ProfileSettingsPanel({
     </Dialog>
   );
 }
-
-// ─── Sub-components ────────────────────────────────────────────────────────
-
-/** Single colored chip for the type selector. `type` of null renders the
- *  "no signature" choice as a quiet outlined dash. */
-function TypeSwatch({
-  type, selected, onClick,
-}: { type: PokemonType | null; selected: boolean; onClick: () => void }) {
-  if (type === null) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className={
-          'inline-flex items-center justify-center px-2 py-1 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-colors ' +
-          (selected
-            ? 'bg-neon/15 text-neon ring-1 ring-neon/40'
-            : 'bg-surface-overlay/40 text-text-muted ring-1 ring-border-subtle hover:text-text-primary')
-        }
-        title="No signature type"
-      >
-        None
-      </button>
-    );
-  }
-  const color = TYPE_COLORS[type];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center justify-center px-2 py-1 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-transform hover:scale-105"
-      style={{
-        backgroundColor: selected ? color : `${color}26`,
-        color: selected ? '#0a0a14' : color,
-        boxShadow: `inset 0 0 0 ${selected ? 1.5 : 1}px ${color}`,
-      }}
-      title={type}
-    >
-      {TYPE_LABELS[type]}
-    </button>
-  );
-}
-
