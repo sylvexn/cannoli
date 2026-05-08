@@ -13,7 +13,6 @@ import { useAuth } from '@/lib/auth-context';
 import { ProfileSettingsPanel } from './settings-panel';
 import { useCoachExtras, type CoachResult } from './use-coach-extras';
 import { WinRateSparkline } from './win-rate-sparkline';
-import { SignatureMons } from './signature-mons';
 import { RecentHighlights } from './recent-highlights';
 
 const FALLBACK_PRIMARY = '#7dd3fc';
@@ -70,7 +69,7 @@ export function CoachProfilePage() {
     return () => { cancelled = true; };
   }, [username]);
 
-  // Derived data for the enriched panels (sparkline + signature mons).
+  // Derived data for the enriched panels (sparkline + career stats).
   // Lives outside the main fetch so the profile header paints immediately
   // and the extras swap in once the per-league fetches resolve.
   const extras = useCoachExtras(profile);
@@ -133,10 +132,8 @@ export function CoachProfilePage() {
             secondaryColor={secondary}
             size="2xl"
             // Glow ring uses the active team's color when the user is
-            // coaching. When they're not, fall back to their signature
-            // type accent (if set) or just the profile primary via the
-            // built-in `ring` prop.
-            typeAccent={ringColor}
+            // coaching, otherwise the profile primary.
+            ringColor={ringColor}
           />
         </div>
 
@@ -224,13 +221,6 @@ export function CoachProfilePage() {
         />
       </div>
 
-      {/* Signature mons — top-3 most-rostered across current leagues. */}
-      <SignatureMons
-        mons={extras.signatureMons}
-        accent={primary}
-        inAnyLeague={profile.currentTeams.length > 0}
-      />
-
       {/* ─── History — past tenures with finish badges ─────────────────
           Reads `pastTeams` from the public profile (backend-computed,
           archived-season-only). Renders gracefully when empty (new user
@@ -295,12 +285,12 @@ function RoleChip({ role }: { role: 'admin' | 'dev' }) {
   }
   return (
     <span
-      aria-label="admin"
+      aria-label="Elder"
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
-      title="Admin"
+      title="Elder"
     >
       <Shield size={9} />
-      Admin
+      Elder
     </span>
   );
 }

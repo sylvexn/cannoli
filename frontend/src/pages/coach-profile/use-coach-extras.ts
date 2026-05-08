@@ -11,34 +11,20 @@ export interface CoachResult {
   diff: number;
 }
 
-/** A pokemon that's appeared on one or more of the coach's rosters. */
-export interface SignatureMon {
-  name: string;
-  isShiny: boolean;
-  /** Number of distinct (league, team) tenures this mon shows up in. */
-  seasonsUsedIn: number;
-}
-
 export interface CoachExtras {
   loading: boolean;
   /** Completed match results across all currently-managed leagues, oldest first. */
   results: CoachResult[];
-  /** Top 3 most-rostered mons across the coach's current teams. */
-  signatureMons: SignatureMon[];
 }
 
 /**
- * Aggregates the data needed by the win-rate sparkline + signature mons
- * panels on the coach-profile page. Uses only existing endpoints
- * (`getSchedule` + `getTeams` per current league); no new backend work.
- *
- * "Seasons" here is a proxy for distinct league tenures the user has held
- * a roster slot in — the public profile only surfaces their currently-held
- * teams, so historical roster mons aren't recoverable without new endpoints.
+ * Aggregates completed-match results across the coach's currently-managed
+ * leagues for the win-rate sparkline panel on the coach-profile page.
+ * Uses only existing endpoints (`getSchedule` per current league); no new
+ * backend work.
  */
 export function useCoachExtras(profile: ApiPublicProfile | null): CoachExtras {
   const [results, setResults] = useState<CoachResult[]>([]);
-  const [signatureMons, setSignatureMons] = useState<SignatureMon[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,7 +36,6 @@ export function useCoachExtras(profile: ApiPublicProfile | null): CoachExtras {
     const teams = profile.currentTeams;
     if (teams.length === 0) {
       setResults([]);
-      setSignatureMons([]);
       setLoading(false);
       return;
     }
@@ -58,15 +43,12 @@ export function useCoachExtras(profile: ApiPublicProfile | null): CoachExtras {
     let cancelled = false;
     setLoading(true);
 
-    // Fetch schedule + roster data for every league the coach is in,
-    // in parallel. Failures per-league are swallowed so a single broken
-    // league doesn't blank the whole profile.
+    // Fetch schedule data for every league the coach is in, in parallel.
+    // Failures per-league are swallowed so a single broken league doesn't
+    // blank the whole profile.
     const work = teams.map(async t => {
-      const [sched, leagueTeams] = await Promise.all([
-        api.getSchedule(t.leagueId).catch(() => ({ matches: [], byes: [] })),
-        api.getTeams(t.leagueId).catch(() => []),
-      ]);
-      return { tenure: t, schedule: sched, leagueTeams };
+      const sched = await api.getSchedule(t.leagueId).catch(() => ({ matches: [], byes: [] }));
+      return { tenure: t, schedule: sched };
     });
 
     Promise.all(work).then(perLeague => {
@@ -101,39 +83,11 @@ export function useCoachExtras(profile: ApiPublicProfile | null): CoachExtras {
       flat.sort((a, b) => a.week - b.week || a.leagueId.localeCompare(b.leagueId));
       setResults(flat);
 
-      // ─── Signature mons ───────────────────────────────────────────────
-      // For each league, find the user's team and pull its roster. Each
-      // (mon name) gets +1 per league it appears in. Ties broken by
-      // alphabetical name for stable ordering.
-      const counts = new Map<string, { count: number; isShiny: boolean }>();
-      for (const { tenure, leagueTeams } of perLeague) {
-        const myTeam = leagueTeams.find(lt => lt.id === tenure.teamId);
-        if (!myTeam) continue;
-        for (const mon of myTeam.roster) {
-          const prev = counts.get(mon.name);
-          if (prev) {
-            prev.count += 1;
-            // Shiny wins — even one shiny appearance flips the chip on.
-            prev.isShiny = prev.isShiny || mon.isShiny;
-          } else {
-            counts.set(mon.name, { count: 1, isShiny: mon.isShiny });
-          }
-        }
-      }
-      const ranked: SignatureMon[] = Array.from(counts.entries())
-        .map(([name, v]) => ({ name, isShiny: v.isShiny, seasonsUsedIn: v.count }))
-        .sort((a, b) =>
-          b.seasonsUsedIn - a.seasonsUsedIn ||
-          a.name.localeCompare(b.name),
-        )
-        .slice(0, 3);
-      setSignatureMons(ranked);
-
       setLoading(false);
     });
 
     return () => { cancelled = true; };
   }, [profile]);
 
-  return { loading, results, signatureMons };
+  return { loading, results };
 }

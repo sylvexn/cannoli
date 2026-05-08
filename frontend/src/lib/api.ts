@@ -105,7 +105,6 @@ export interface ApiTeam {
   teamAbbrev: string;
   teamColor: string;
   rank: number;
-  showdownUsername: string | null;
   logoPath?: string | null;
   bannerPath?: string | null;
   bio?: string | null;
@@ -945,6 +944,9 @@ export const api = {
     return res.json() as Promise<{ success: boolean; path: string }>;
   },
 
+  removeTeamLogo: (teamId: string) =>
+    deleteJson<{ success: boolean }>(`/api/teams/${teamId}/logo`),
+
   // Team banner
   uploadTeamBanner: async (teamId: string, file: File) => {
     const fd = new FormData();
@@ -1001,7 +1003,6 @@ export const api = {
     teamAbbrev: string;
     teamColor?: string;
     userId?: number | null;
-    showdownUsername?: string | null;
   }) => postJson<{ id: string }>(`/api/leagues/${leagueId}/teams`, data),
 
   updateTeam: (teamId: string, data: {
@@ -1010,7 +1011,6 @@ export const api = {
     teamAbbrev?: string;
     teamColor?: string;
     userId?: number | null;
-    showdownUsername?: string | null;
     bio?: string | null;
     motto?: string | null;
     captainNote?: string | null;
