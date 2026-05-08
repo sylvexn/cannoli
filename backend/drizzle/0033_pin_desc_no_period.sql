@@ -1,0 +1,11 @@
+-- Strip trailing periods from existing pin definition descriptions so live
+-- DBs catch up with the seed/migration source-of-truth (which no longer
+-- writes them). New defs going forward should not include trailing periods
+-- in their descriptions; this migration is the one-shot cleanup for rows
+-- already on disk.
+--
+-- TRIM(x, '.') strips ALL leading/trailing periods, but pin descriptions
+-- never start with a period and the worst case here is a stray "..." which
+-- is not present in any seeded row — the WHERE LIKE '%.' guard keeps the
+-- update narrow even if the trim is broad.
+UPDATE pin_definitions SET description = TRIM(description, '.') WHERE description LIKE '%.';
