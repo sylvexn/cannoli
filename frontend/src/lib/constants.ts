@@ -57,6 +57,42 @@ export const MEDAL_COLORS = {
   bronze: '#cd7f32',
 } as const;
 
+/**
+ * Per-tier accent colors — used by the tier list page header bands and
+ * any "tier banner" surface. Colors descend from blistering neon at the
+ * top tiers (apex / Mega-tier headlines) through cool/warm midrange to
+ * muted earth tones at the very low tiers, so the eye reads tier
+ * importance at a glance even when scrolling a long list.
+ */
+export const TIER_COLORS: Record<number, string> = {
+  20: '#f472b6', // Pink — apex
+  19: '#e879f9', // Magenta
+  18: '#22d3ee', // Cyan — premium
+  17: '#06b6d4', // Cyan-deep
+  16: '#a78bfa', // Violet
+  15: '#8b5cf6', // Violet-deep
+  14: '#60a5fa', // Blue
+  13: '#3b82f6', // Blue-deep
+  12: '#34d399', // Emerald
+  11: '#10b981', // Emerald-deep
+  10: '#facc15', // Amber
+  9:  '#eab308', // Amber-deep
+  8:  '#fb923c', // Orange
+  7:  '#f97316', // Orange-deep
+  6:  '#fb7185', // Rose
+  5:  '#94a3b8', // Slate
+  4:  '#78716c', // Stone
+  3:  '#737373', // Neutral
+  2:  '#57534e', // Stone-deep
+  1:  '#44403c', // Stone-darkest
+};
+
+/** Resolves a tier color, falling back to neutral slate if a tier number is
+ *  outside the canonical range (e.g. legacy data). */
+export function tierColor(tier: number): string {
+  return TIER_COLORS[tier] ?? '#64748b';
+}
+
 /** Phase display config — shared across overview, app-shell, admin */
 export const PHASE_COLORS: Record<string, string> = {
   draft: 'text-draw bg-draw/10',
