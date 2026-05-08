@@ -4,6 +4,14 @@
  * leaving the surface where the changes are visible. The /settings page
  * still owns avatar + colors + display name; this panel deliberately scopes
  * down to the new "personality" fields the surface pass introduced.
+ *
+ * Two-sided gating: the same panel is reused when a dev/admin staffer is
+ * viewing someone else's profile — they can edit bio / status / signature /
+ * title / banner on the target's behalf. The save call routes through a
+ * different endpoint (`updateUserAsStaff` vs `updateMe`) so the backend
+ * emits a distinct `profile_edited_by_staff` audit event with the editor's
+ * user id in metadata. Avatar + display-name + colors stay strictly self-
+ * service (you can re-color yourself but not your friend).
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -32,10 +40,21 @@ interface ProfileSettingsPanelProps {
   profile: ApiPublicProfile;
   /** Called after a successful save so the parent can re-fetch fresh data. */
   onSaved: () => void | Promise<void>;
+  /**
+   * When true, the editor is staff editing someone else's profile (not the
+   * owner). Affects:
+   *   * which API endpoint the save / banner-clear hits
+   *   * the dialog title/header copy ("Editing as staff: {username}")
+   * Banner upload is intentionally not surfaced in staff mode — it routes
+   * through the multipart `/api/users/me/banner` endpoint which always
+   * targets the caller, so allowing it here would silently overwrite the
+   * staffer's own banner. Use the `bannerUrl` text patch to clear.
+   */
+  asStaff?: boolean;
 }
 
 export function ProfileSettingsPanel({
-  open, onClose, profile, onSaved,
+  open, onClose, profile, onSaved, asStaff = false,
 }: ProfileSettingsPanelProps) {
   const [bio, setBio] = useState(profile.bio ?? '');
   const [statusMessage, setStatusMessage] = useState(profile.statusMessage ?? '');
@@ -75,15 +94,20 @@ export function ProfileSettingsPanel({
   async function handleSave() {
     setSaving(true);
     try {
-      await api.updateMe({
+      const payload = {
         bio: bio.trim() === '' ? null : bio,
         statusMessage: statusMessage.trim() === '' ? null : statusMessage.trim(),
         title: title.trim() === '' ? null : title.trim(),
         signatureType: signatureType ?? null,
         signaturePokemonId: signaturePokemonId ?? null,
-      });
+      };
+      if (asStaff) {
+        await api.updateUserAsStaff(profile.username, payload);
+      } else {
+        await api.updateMe(payload);
+      }
       await onSaved();
-      toast.success('Profile saved');
+      toast.success(asStaff ? `Updated ${profile.username}` : 'Profile saved');
       onClose();
     } catch (err: any) {
       toast.error(err?.message || 'Save failed');
@@ -109,7 +133,11 @@ export function ProfileSettingsPanel({
   async function handleClearBanner() {
     setUploading(true);
     try {
-      await api.updateMe({ bannerUrl: null });
+      if (asStaff) {
+        await api.updateUserAsStaff(profile.username, { bannerUrl: null });
+      } else {
+        await api.updateMe({ bannerUrl: null });
+      }
       setBannerPreview(null);
       await onSaved();
       toast.success('Banner cleared');
@@ -126,11 +154,16 @@ export function ProfileSettingsPanel({
         <DialogHeader>
           <DialogTitle className="font-mono uppercase tracking-wider text-sm">
             <span className="text-neon">Edit</span>{' '}
-            <span className="text-text-primary">Profile</span>
+            <span className="text-text-primary">
+              {asStaff ? `@${profile.username}` : 'Profile'}
+            </span>
           </DialogTitle>
           <DialogDescription>
-            Banner, status, and bio. Avatar and colors live in{' '}
-            <span className="font-mono text-text-secondary">/settings</span>.
+            {asStaff
+              ? <>Editing as staff. This action is logged.</>
+              : <>Banner, status, and bio. Avatar and colors live in{' '}
+                  <span className="font-mono text-text-secondary">/settings</span>.</>
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -154,27 +187,31 @@ export function ProfileSettingsPanel({
               )}
             </div>
             <div className="flex items-center gap-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleBannerFile(f);
-                  e.target.value = '';
-                }}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={uploading}
-                onClick={() => fileRef.current?.click()}
-              >
-                <Upload size={12} />
-                {uploading ? 'Uploading…' : 'Upload image'}
-              </Button>
+              {!asStaff && (
+                <>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleBannerFile(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <Upload size={12} />
+                    {uploading ? 'Uploading…' : 'Upload image'}
+                  </Button>
+                </>
+              )}
               {bannerPreview && (
                 <Button
                   type="button"
@@ -187,7 +224,9 @@ export function ProfileSettingsPanel({
                   Clear
                 </Button>
               )}
-              <span className="text-[10px] font-mono text-text-muted ml-auto">≤ 1 MB</span>
+              <span className="text-[10px] font-mono text-text-muted ml-auto">
+                {asStaff ? 'Owner-only upload' : '≤ 1 MB'}
+              </span>
             </div>
           </div>
 
