@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
-import { Sparkles, Plus, X, Check } from 'lucide-react';
+import { Sparkles, Plus, X, Check, Layers } from 'lucide-react';
+import type { ApiDraftTemplate } from '@/lib/api';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -28,6 +29,9 @@ interface WizardLeague {
 
 interface NewSeasonConfig {
   copyPrevious: boolean;
+  /** When set, the wizard was seeded from this template — informational only,
+   *  the user can still tweak any field before submitting. */
+  fromTemplateId: number | null;
   seasonNumber: number;
   totalWeeks: number;
   leagues: WizardLeague[];
@@ -38,6 +42,9 @@ interface NewSeasonConfig {
   rosterSize: number;
   tradeDeadlineWeek: number;
   forfeitPolicy: 'double_forfeit' | 'admin_review';
+  /** Battle format applied to every league created by this wizard. Per-league
+   *  override still happens later via /admin/leagues. */
+  format: string;
   weekDates: Record<string, string>;
   /** Per-league draft date (ISO datetime). Keyed by league id. */
   draftDates: Record<string, string>;
@@ -47,6 +54,7 @@ interface NewSeasonConfig {
 function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
   return {
     copyPrevious: true,
+    fromTemplateId: null,
     seasonNumber: 11,
     totalWeeks: 11,
     leagues: ls.map(l => ({ ...l, included: true })),
@@ -57,6 +65,7 @@ function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
     rosterSize: 11,
     tradeDeadlineWeek: 7,
     forfeitPolicy: 'double_forfeit',
+    format: 'gen9natdex',
     weekDates: {},
     draftDates: {},
     teamsByLeague: [],
@@ -111,6 +120,27 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('#9333ea');
 
+  // Templates — loaded lazily when the wizard opens. Empty array is a valid
+  // state (no templates configured yet); we just don't render the picker.
+  const [templates, setTemplates] = useState<ApiDraftTemplate[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    api.listDraftTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, [open]);
+
+  function applyTemplate(t: ApiDraftTemplate) {
+    setConfig(prev => ({
+      ...prev,
+      copyPrevious: false,
+      fromTemplateId: t.id,
+      pointCap: t.pointCap,
+      teraCaptainSlots: t.captainCount,
+      rosterSize: t.rosterSize,
+      format: t.format,
+    }));
+    toast.success(`Seeded from "${t.name}" — tweak any field before creating.`);
+  }
+
   // Overlap-season confirmation
   const [overlapPrompt, setOverlapPrompt] = useState<{ priorSeasonNumber: number; priorPhase: string } | null>(null);
 
@@ -134,6 +164,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       rosterSize: config.rosterSize,
       tradeDeadlineWeek: config.tradeDeadlineWeek,
       forfeitPolicy: config.forfeitPolicy,
+      format: config.format,
       weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
       overlapOverride,
       leagues: includedList.map(l => {
@@ -299,7 +330,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             <p className="text-sm text-text-secondary">Start from previous season settings or configure from scratch?</p>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => setConfig(p => ({ ...p, copyPrevious: true }))}
+                onClick={() => setConfig(p => ({ ...p, copyPrevious: true, fromTemplateId: null }))}
                 className={`p-4 rounded-lg border text-left transition-colors ${
                   config.copyPrevious
                     ? 'border-pink bg-pink/10 text-text-primary'
@@ -310,9 +341,9 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 <div className="text-xs text-text-muted">Use Season 10 settings as base</div>
               </button>
               <button
-                onClick={() => setConfig(p => ({ ...p, copyPrevious: false }))}
+                onClick={() => setConfig(p => ({ ...p, copyPrevious: false, fromTemplateId: null }))}
                 className={`p-4 rounded-lg border text-left transition-colors ${
-                  !config.copyPrevious
+                  !config.copyPrevious && config.fromTemplateId == null
                     ? 'border-pink bg-pink/10 text-text-primary'
                     : 'border-border hover:border-border-default text-text-secondary'
                 }`}
@@ -321,6 +352,45 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 <div className="text-xs text-text-muted">Configure everything from scratch</div>
               </button>
             </div>
+
+            {/* Template picker — when at least one is configured. Selecting a
+             *  template seeds format + captain count + cap/roster + name into
+             *  the wizard state so the admin doesn't retype them. Tweakable
+             *  after seeding. */}
+            {templates.length > 0 && (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                  <Layers size={11} />
+                  <span>Or start from a saved template:</span>
+                </div>
+                <div className="space-y-1.5">
+                  {templates.map(t => {
+                    const active = config.fromTemplateId === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => applyTemplate(t)}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
+                          active
+                            ? 'border-neon bg-neon/10 text-text-primary'
+                            : 'border-border hover:border-border-default text-text-secondary'
+                        }`}
+                      >
+                        <Layers size={14} className={active ? 'text-neon' : 'text-text-muted'} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{t.name}</div>
+                          <div className="text-[10px] text-text-muted truncate">
+                            {t.format} · {t.captainCount} captains · {t.pointCap} pts · {t.rosterSize} roster
+                          </div>
+                        </div>
+                        {active && <Check size={14} className="text-neon shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-1 pt-2">
               <label className="text-xs text-text-muted">Season Number</label>
               <NumberInput
