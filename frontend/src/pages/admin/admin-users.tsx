@@ -138,7 +138,7 @@ export function AdminUsers() {
                   : 'text-text-muted hover:text-text-secondary',
               )}
             >
-              {r === 'all' ? `All (${users.length})` : r}
+              {r === 'all' ? `All (${users.length})` : r === 'admin' ? 'elder' : r}
             </button>
           ))}
         </div>
@@ -206,7 +206,7 @@ export function AdminUsers() {
                   : 'text-text-muted border-border-subtle',
               )}
             >
-              {user.role}
+              {user.role === 'admin' ? 'elder' : user.role}
             </Badge>
 
             {/* Status dot */}
