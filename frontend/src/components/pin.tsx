@@ -2,7 +2,7 @@ import { memo } from 'react';
 import * as LucideIcons from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { formatRelativeTime } from '@/lib/format';
+import { formatPinMetadata } from '@/lib/pin-metadata-schema';
 
 /**
  * Definition shape returned by /api/admin/pin-definitions and embedded in
@@ -24,8 +24,12 @@ interface PinProps {
   def: PinDefinitionLike;
   /** xs (12px inline icon), sm (24px circular), lg (48px trophy w/ glint). */
   size?: PinSize;
-  /** ISO timestamp — surfaced in the tooltip when present. */
-  awardedAt?: string | null;
+  /** Season the pin was earned in — rendered as "Earned S{n}" in the tooltip
+   *  when present. Pin contexts no longer surface relative-time strings. */
+  seasonId?: number | null;
+  /** Award metadata blob (pokemon/nickname/leagueId/etc.) — rendered per
+   *  the per-pin schema in `lib/pin-metadata-schema.ts`. */
+  metadata?: Record<string, unknown> | null;
   className?: string;
   /** Hide the tooltip wrapper (e.g., when the parent already provides one). */
   noTooltip?: boolean;
@@ -41,7 +45,7 @@ function resolveIcon(name: string): LucideIconComponent {
   return LUCIDE_MAP[name] ?? LUCIDE_MAP.Award ?? LUCIDE_MAP.Trophy!;
 }
 
-export const Pin = memo(function Pin({ def, size = 'sm', awardedAt, className, noTooltip }: PinProps) {
+export const Pin = memo(function Pin({ def, size = 'sm', seasonId, metadata, className, noTooltip }: PinProps) {
   const Icon = resolveIcon(def.iconName);
   const color = def.color || '#fbbf24';
 
@@ -106,14 +110,21 @@ export const Pin = memo(function Pin({ def, size = 'sm', awardedAt, className, n
           {body}
         </TooltipTrigger>
         <TooltipContent>
-          <PinTooltipBody def={def} awardedAt={awardedAt} />
+          <PinTooltipBody def={def} seasonId={seasonId} metadata={metadata} />
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
 });
 
-function PinTooltipBody({ def, awardedAt }: { def: PinDefinitionLike; awardedAt?: string | null }) {
+function PinTooltipBody({
+  def, seasonId, metadata,
+}: {
+  def: PinDefinitionLike;
+  seasonId?: number | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const detail = formatPinMetadata(def.id, metadata ?? null);
   return (
     <div className="flex flex-col gap-0.5 max-w-[220px]">
       <div className="font-mono text-[11px] font-bold uppercase tracking-wide" style={{ color: def.color }}>
@@ -122,8 +133,11 @@ function PinTooltipBody({ def, awardedAt }: { def: PinDefinitionLike; awardedAt?
       {def.description && (
         <div className="text-[11px] leading-snug opacity-90">{def.description}</div>
       )}
-      {awardedAt && (
-        <div className="text-[10px] opacity-60 mt-0.5">Earned {formatRelativeTime(awardedAt)}</div>
+      {detail && (
+        <div className="text-[11px] leading-snug opacity-90 italic">{detail}</div>
+      )}
+      {seasonId != null && (
+        <div className="text-[10px] opacity-60 mt-0.5">Earned S{seasonId}</div>
       )}
     </div>
   );

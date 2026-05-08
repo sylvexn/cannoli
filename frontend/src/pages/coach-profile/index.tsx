@@ -404,7 +404,8 @@ function TrophyCase({ pins }: { pins: ApiPin[] }) {
               key={pin.id}
               def={pin.definition}
               size="lg"
-              awardedAt={pin.awardedAt}
+              seasonId={pin.seasonId}
+              metadata={pin.metadata}
             />
           ))}
         </div>

@@ -351,7 +351,8 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
                 key={p.id}
                 def={p.definition}
                 size="sm"
-                awardedAt={p.awardedAt}
+                seasonId={p.seasonId}
+                metadata={p.metadata}
               />
             ))}
             {pins.length > 6 && (
