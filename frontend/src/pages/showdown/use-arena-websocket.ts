@@ -77,6 +77,8 @@ export interface ArenaState {
   liveMatches: LiveMatch[];
   scrimLobbies: ScrimLobby[];
   liveStats: LiveMatchStats | null;
+  /** Spectator count keyed by matchId — updated via `spectator_count` events. */
+  spectatorCounts: Record<string, number>;
   connected: boolean;
 }
 
@@ -91,6 +93,7 @@ export function useArenaWebSocket() {
     liveMatches: [],
     scrimLobbies: [],
     liveStats: null,
+    spectatorCounts: {},
     connected: false,
   });
 
@@ -177,6 +180,13 @@ export function useArenaWebSocket() {
 
           case 'arena_stats':
             setState(s => ({ ...s, liveStats: msg.stats }));
+            break;
+
+          case 'spectator_count':
+            setState(s => ({
+              ...s,
+              spectatorCounts: { ...s.spectatorCounts, [msg.matchId]: msg.count },
+            }));
             break;
 
           case 'match_error':
