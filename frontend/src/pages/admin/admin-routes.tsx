@@ -26,7 +26,7 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminFeedback } from './admin-feedback';
 import { AdminBot } from './admin-bot';
-import { DefinitionsTab, AwardTab } from './admin-pins';
+import { PinsTab } from './admin-pins';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
@@ -84,24 +84,15 @@ export const AdminBotRoute = () => (
   <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>
 );
 
-const PIN_SUBTABS = [
-  { to: '/admin/pins/definitions', label: 'Definitions' },
-  { to: '/admin/pins/award',       label: 'Award' },
-];
-
-export const AdminPinsDefinitionsRoute = () => (
-  <AdminSection icon={Award} title="Pins" subTabs={PIN_SUBTABS}>
-    <DefinitionsTab />
+/** Single-tab pins admin (was Definitions / Award; merged into one
+ *  season-scoped grid with per-card metadata-aware award dialogs). The
+ *  legacy sub-routes redirect here so existing bookmarks still work. */
+export const AdminPinsRoute = () => (
+  <AdminSection icon={Award} title="Pins">
+    <PinsTab />
   </AdminSection>
 );
-export const AdminPinsAwardRoute = () => (
-  <AdminSection icon={Award} title="Pins" subTabs={PIN_SUBTABS}>
-    <AwardTab />
-  </AdminSection>
-);
-
-/** Bare /admin/pins lands on the definitions sub-tab. */
-export const AdminPinsIndexRoute = () => <Navigate to="definitions" replace />;
+export const AdminPinsLegacyRedirect = () => <Navigate to="/admin/pins" replace />;
 
 /**
  * Header action for the Activity Log: trigger pin audit-log backfill.
