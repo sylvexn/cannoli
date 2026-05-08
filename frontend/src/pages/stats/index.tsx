@@ -70,7 +70,7 @@ export function StatsPage() {
   const allStats = useMemo(() => computeLeagueStats(players), [players]);
   const [filters, setFilters] = useState<StatsFilters>(defaultFilters);
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
-  usePokemonSideCard();
+  const { openSideCard } = usePokemonSideCard();
 
   const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
@@ -159,9 +159,13 @@ export function StatsPage() {
                   </span>
                 )}
                 {/* Sprite */}
-                <div className="transition-transform duration-200 group-hover:scale-110">
+                <button
+                  onClick={() => openSideCard(stat.name)}
+                  className="transition-transform duration-200 group-hover:scale-110"
+                  title="View details"
+                >
                   <PokemonSprite name={stat.name} size="md" />
-                </div>
+                </button>
                 {/* Name */}
                 <Link
                   to={pokemonRoute(stat.name)}
@@ -242,7 +246,12 @@ export function StatsPage() {
                       </td>
                       {/* Sprite */}
                       <td className="py-1.5">
-                        <PokemonSprite name={stat.name} size="xs" />
+                        <button
+                          onClick={() => openSideCard(stat.name)}
+                          title="View details"
+                        >
+                          <PokemonSprite name={stat.name} size="xs" />
+                        </button>
                       </td>
                       {/* Name + Team */}
                       <td className="px-2 py-1.5">
