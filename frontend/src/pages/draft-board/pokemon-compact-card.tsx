@@ -146,19 +146,43 @@ export function PokemonCompactCard({
       : undefined,
   };
 
+  // Conflict tooltip — surfaces the legality reason on hover for keyboard /
+  // pointer users alike. Card-level popover fills in the full detail; this
+  // gives an instant, native fallback when the click is suppressed.
+  const conflictTitle = hasConflict
+    ? conflictKind === 'mega-cap'
+      ? 'Mega cap reached — drafter already has a Mega'
+      : conflictKind === 'duplicate-species'
+        ? 'Drafter already has this species'
+        : 'Would leave too few points for remaining picks'
+    : unaffordable && !owner
+      ? 'Costs more than the drafter can afford'
+      : undefined;
+
+  // Block the click when the card is illegal for the current drafter — keeps
+  // the card un-clickable while leaving the hover popover available for the
+  // full reason. Owned cards still open the detail sheet via onClick.
+  const handleClick = () => {
+    if (hasConflict || (unaffordable && !owner)) return;
+    onClick(name);
+  };
+
   return (
     <button
       ref={ref}
-      onClick={() => onClick(name)}
+      onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={onHoverEnd}
       onFocus={handleFocus}
       onBlur={onHoverEnd}
+      title={conflictTitle}
+      aria-disabled={hasConflict || (unaffordable && !owner) ? true : undefined}
       data-conflict={hasConflict ? conflictKind : undefined}
       data-density={density}
       data-pokemon={name}
       className={cn(
-        'pkmn-card group relative flex flex-col items-center justify-start gap-0.5 rounded-md cursor-pointer',
+        'pkmn-card group relative flex flex-col items-center justify-start gap-0.5 rounded-md',
+        (hasConflict || (unaffordable && !owner)) ? 'cursor-not-allowed' : 'cursor-pointer',
         'p-1 pl-1.5 pb-[6px]',
         'bg-surface',
         'border transition-[box-shadow,border-color,transform,opacity] duration-180 ease-out',

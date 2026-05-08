@@ -12,11 +12,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import type { TierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { findPickConflict, type ConflictInputRoster } from '@/lib/draft-rules';
 
 interface DraftPoolTableProps {
   pool: TierEntry[];
@@ -28,6 +29,12 @@ interface DraftPoolTableProps {
   showTierBadges?: boolean;
   /** Highest tier the user can pick now after reserving for remaining slots */
   userMaxAffordableCost?: number;
+  /** Highest tier the *current drafter* can pick now — drives row dim/disable. */
+  drafterMaxAffordableCost?: number;
+  /** Current drafter's roster — surfaces dup-species, mega-cap, reserve conflicts. */
+  drafterConflictRoster?: ConflictInputRoster;
+  /** Point cap (for conflict detection). */
+  pointCap?: number;
   onRowClick: (name: string) => void;
 }
 
@@ -39,8 +46,12 @@ export function DraftPoolTable({
   selectedTeamId,
   showTierBadges,
   userMaxAffordableCost,
+  drafterMaxAffordableCost,
+  drafterConflictRoster,
+  pointCap = 110,
   onRowClick,
 }: DraftPoolTableProps) {
+  const affordCap = drafterMaxAffordableCost ?? userMaxAffordableCost;
   return (
     <Table>
       <TableHeader>
@@ -65,19 +76,44 @@ export function DraftPoolTable({
           const abilities = mon?.abilities ?? pokeData?.abilities ?? [];
           const isHighlighted = selectedTeamId ? ownership?.teamId === selectedTeamId : false;
           const dimmed = selectedTeamId ? (ownership ? ownership.teamId !== selectedTeamId : false) : false;
-          const unaffordable = showTierBadges && !ownership && userMaxAffordableCost != null && entry.tier > userMaxAffordableCost;
+          const unaffordable = showTierBadges && !ownership && affordCap != null && entry.tier > affordCap;
+
+          // Hard conflict (illegal pick) for the current drafter — mirrors the
+          // grid's conflictKind treatment so both views read the same.
+          let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
+          if (showTierBadges && !ownership && drafterConflictRoster) {
+            const c = findPickConflict(entry.name, entry.tier, drafterConflictRoster, pointCap);
+            if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
+              conflictKind = c.kind;
+            }
+          }
+          const blocked = !!conflictKind || unaffordable;
+          const conflictTitle = conflictKind === 'mega-cap'
+            ? 'Mega cap reached — drafter already has a Mega'
+            : conflictKind === 'duplicate-species'
+              ? 'Drafter already has this species'
+              : conflictKind === 'roster-reserve'
+                ? 'Would leave too few points for remaining picks'
+                : unaffordable
+                  ? 'Costs more than the drafter can afford'
+                  : undefined;
+
           const bst = stats ? stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe : null;
 
           return (
             <TableRow
               key={entry.name}
-              onClick={() => onRowClick(entry.name)}
+              onClick={() => { if (!blocked) onRowClick(entry.name); }}
+              title={conflictTitle}
+              aria-disabled={blocked ? true : undefined}
+              data-conflict={conflictKind ?? undefined}
               className={cn(
-                'cursor-pointer transition-all duration-150 border-b border-border-subtle/50',
-                'hover:bg-surface-overlay/60',
+                'transition-all duration-150 border-b border-border-subtle/50',
+                blocked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-surface-overlay/60',
                 isHighlighted && 'bg-surface-overlay/40 hover:bg-surface-overlay/60',
                 dimmed && 'opacity-30',
-                unaffordable && 'opacity-30 line-through decoration-loss/40',
+                conflictKind && 'opacity-60 grayscale-[35%]',
+                unaffordable && !conflictKind && 'opacity-40 line-through decoration-loss/40',
               )}
               style={{
                 borderLeftWidth: owner ? '2px' : undefined,
@@ -88,7 +124,21 @@ export function DraftPoolTable({
                 <PokemonSprite name={entry.name} size="xs" shiny={mon?.isShiny} />
               </TableCell>
               <TableCell className="px-2 py-1">
-                <span className="text-xs font-medium text-text-primary">{entry.name}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-text-primary">{entry.name}</span>
+                  {conflictKind && (
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-0.5 px-1 h-3.5 rounded-sm text-[8px] font-mono font-bold uppercase',
+                        'border border-loss/40 bg-loss/10 text-loss',
+                      )}
+                      aria-label={conflictTitle}
+                    >
+                      <AlertTriangle size={8} aria-hidden />
+                      {conflictKind === 'mega-cap' ? 'MEGA' : conflictKind === 'duplicate-species' ? 'DUP' : 'RESERVE'}
+                    </span>
+                  )}
+                </div>
                 {mon?.nickname && (
                   <span className="block text-[10px] italic font-mono text-text-muted truncate max-w-[140px]" title={mon.nickname}>
                     "{mon.nickname}"

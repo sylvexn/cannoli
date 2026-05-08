@@ -19,6 +19,12 @@ interface DraftPoolWithRailProps {
   /** Highest tier the user can take right now after reserving for remaining picks + captain markup */
   userMaxAffordableCost?: number;
   userConflictRoster?: ConflictInputRoster;
+  /** Conflict context for whoever is currently on the clock. Drives card-level
+   *  dim/disable for illegal picks (mega-cap, dup species, over budget) so all
+   *  viewers see the same legality picture as the drafter. */
+  drafterConflictRoster?: ConflictInputRoster;
+  /** Highest tier the current drafter can take right now (mirrors userMaxAffordableCost). */
+  drafterMaxAffordableCost?: number;
   pointCap?: number;
   draftQueue?: string[];
   /** Card layout density — threaded through to DraftPoolGrid */
