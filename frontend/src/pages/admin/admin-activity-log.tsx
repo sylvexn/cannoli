@@ -22,6 +22,7 @@ import {
   Search, Filter, X, UserPlus, KeyRound, ShieldCheck, UserX, LogIn,
   Settings, Play, Trophy, ArrowLeftRight, Check, Swords, Star,
   Sparkles, ChevronDown, FolderPlus, FolderPen, FolderX, Plus, Pencil, Minus,
+  Award, Bot,
 } from 'lucide-react';
 
 const CATEGORY_COLORS: Record<EventCategory, string> = {
@@ -63,6 +64,12 @@ const EVENT_ICONS: Record<string, typeof UserPlus> = {
   move_category_entry_added: Plus,
   move_category_entry_updated: Pencil,
   move_category_entry_deleted: Minus,
+  pin_awarded: Award,
+  pin_revoked: X,
+  pin_def_created: Plus,
+  pin_def_updated: Pencil,
+  pin_audit_backfilled: Sparkles,
+  bot_reconnect: Bot,
 };
 
 const PAGE_SIZE = 15;
@@ -251,6 +258,14 @@ function EventRow({ event }: { event: ApiActivityEvent }) {
   const isToday = new Date().toDateString() === ts.toDateString();
   const timeStr = isToday ? fmtTime(ts) : fmtDate(ts, { year: 'hide' });
 
+  // Pin events get a richer description with recipient + pin name + season
+  // pulled from metadata. Falls back to the canned description for safety.
+  const isPin = event.type === 'pin_awarded' || event.type === 'pin_revoked';
+  const pinName = isPin ? (event.metadata?.pinName as string | undefined) : undefined;
+  const pinRecipient = isPin ? (event.metadata?.username as string | undefined) : undefined;
+  const pinSeason = isPin ? (event.metadata?.seasonId as number | null | undefined) : undefined;
+  const pinAuto = isPin ? (event.metadata?.auto as boolean | undefined) : undefined;
+
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/50 transition-colors group">
       {/* Icon */}
@@ -260,12 +275,43 @@ function EventRow({ event }: { event: ApiActivityEvent }) {
 
       {/* Description */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="font-medium text-text-primary">{event.actor}</span>
-          <span className="text-text-secondary truncate">{event.description}</span>
-        </div>
+        {isPin ? (
+          <div className="flex items-center gap-2 text-sm flex-wrap">
+            <span className="font-medium text-text-primary">{event.actor}</span>
+            <span className="text-text-muted">
+              {event.type === 'pin_awarded' ? 'awarded' : 'revoked'}
+            </span>
+            {pinName && (
+              <span className="font-medium text-text-primary inline-flex items-center gap-1">
+                <Award size={11} className="text-draw" />
+                {pinName}
+              </span>
+            )}
+            {pinRecipient && (
+              <>
+                <span className="text-text-muted">{event.type === 'pin_awarded' ? 'to' : 'from'}</span>
+                <span className="font-mono text-text-primary">{pinRecipient}</span>
+              </>
+            )}
+            {pinSeason != null && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-mono border-text-muted/30 text-text-muted">
+                S{pinSeason}
+              </Badge>
+            )}
+            {pinAuto && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-mono border-text-muted/30 text-text-muted/70">
+                auto
+              </Badge>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium text-text-primary">{event.actor}</span>
+            <span className="text-text-secondary truncate">{event.description}</span>
+          </div>
+        )}
         {/* Metadata chips */}
-        {'targetUser' in event.metadata && (
+        {!isPin && 'targetUser' in event.metadata && (
           <span className="text-xs text-text-muted">
             Target: {String(event.metadata.targetUser)}
           </span>
