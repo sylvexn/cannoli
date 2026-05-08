@@ -74,8 +74,15 @@ export function StatsPage() {
   const [sort, setSort] = useState<SortState>({ key: 'kills', dir: 'desc' });
   const { openSideCard } = usePokemonSideCard();
 
-  const filtered = useMemo(() => filterStats(allStats, filters), [allStats, filters]);
-  const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
+  // Sort first, then filter — preserves each row's league-wide rank
+  // when a team filter is active.
+  const sortedAll = useMemo(() => sortStats(allStats, sort), [allStats, sort]);
+  const rankByKey = useMemo(() => {
+    const m = new Map<string, number>();
+    sortedAll.forEach((s, i) => m.set(`${s.teamId}-${s.name}`, i));
+    return m;
+  }, [sortedAll]);
+  const sorted = useMemo(() => filterStats(sortedAll, filters), [sortedAll, filters]);
 
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
@@ -204,7 +211,7 @@ export function StatsPage() {
         filters={filters}
         onUpdate={handleFilterUpdate}
         totalCount={allStats.length}
-        filteredCount={filtered.length}
+        filteredCount={sorted.length}
       />
 
       <Card className="bg-surface-raised border-border-default overflow-hidden">
@@ -238,6 +245,7 @@ export function StatsPage() {
               <tbody>
                 {sorted.map((stat, i) => {
                   const team = playerMap.get(stat.teamId);
+                  const rank = (rankByKey.get(`${stat.teamId}-${stat.name}`) ?? i) + 1;
                   return (
                     <tr
                       key={`${stat.teamId}-${stat.name}`}
@@ -246,12 +254,12 @@ export function StatsPage() {
                     >
                       {/* Rank */}
                       <td className="px-3 py-1.5 text-center">
-                        {i < 3 ? (
-                          <span className={`rank-badge rank-badge-${i + 1} w-5 h-5 text-[9px]`}>
-                            {i + 1}
+                        {rank <= 3 ? (
+                          <span className={`rank-badge rank-badge-${rank} w-5 h-5 text-[9px]`}>
+                            {rank}
                           </span>
                         ) : (
-                          <span className="text-xs font-bold tabular-nums text-text-muted">{i + 1}</span>
+                          <span className="text-xs font-bold tabular-nums text-text-muted">{rank}</span>
                         )}
                       </td>
                       {/* Sprite */}
