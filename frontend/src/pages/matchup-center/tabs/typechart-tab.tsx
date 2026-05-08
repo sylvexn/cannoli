@@ -87,42 +87,48 @@ function TypeGrid({
   }
 
   return (
-    <div className="rounded-lg border border-border-default overflow-hidden">
-      <table className="w-full text-xs table-fixed">
+    <div className="rounded-lg border border-border-default overflow-x-auto">
+      <table className="text-xs border-separate border-spacing-0">
         <thead>
-          <tr className="border-b border-border-subtle bg-surface-overlay/30">
-            <th className="w-10 px-1 py-1.5 text-left text-text-muted font-medium">Type</th>
-            {chart.map(p => (
-              <th key={p.name} className="px-0.5 py-1.5 text-center">
-                <Link
-                  to={pokemonRoute(p.name)}
-                  title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
-                  className="inline-block hover:scale-110 transition-transform"
-                >
-                  <PokemonSprite name={p.name} size="xs" shiny={p.isShiny} className="mx-auto" />
-                </Link>
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {POKEMON_TYPES.map(type => (
-            <tr key={type} className="border-b border-border-subtle/30">
-              <td className="px-1 py-[3px]">
+          <tr className="bg-surface-overlay/30">
+            <th className="sticky left-0 z-10 bg-surface-raised w-28 px-1.5 py-1.5 text-left text-text-muted font-medium border-b border-r border-border-subtle">
+              Pokemon
+            </th>
+            {POKEMON_TYPES.map(type => (
+              <th key={type} className="px-0.5 py-1.5 text-center border-b border-border-subtle w-9">
                 <span
                   className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase text-white leading-none"
                   style={{ backgroundColor: TYPE_COLORS[type] }}
                 >
                   {type.slice(0, 3)}
                 </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {chart.map(p => (
+            <tr key={p.name} className="group/row">
+              <td className="sticky left-0 z-10 bg-surface-raised group-hover/row:bg-surface-overlay/40 px-1.5 py-[3px] border-b border-r border-border-subtle/30 transition-colors">
+                <Link
+                  to={pokemonRoute(p.name)}
+                  title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
+                  className="flex items-center gap-1.5 hover:text-text-primary"
+                >
+                  <PokemonSprite name={p.name} size="xs" shiny={p.isShiny} className="shrink-0" />
+                  <span className="text-[10px] font-mono truncate">{p.name}</span>
+                </Link>
               </td>
-              {chart.map(p => {
+              {POKEMON_TYPES.map(type => {
                 const matchup = p.matchups.find(m => m.type === type);
                 const mult = matchup?.multiplier ?? 1;
                 return (
                   <td
-                    key={p.name}
-                    className={cn('py-[3px] text-center font-mono font-bold text-[11px]', multColor(mult))}
+                    key={type}
+                    className={cn(
+                      'py-[3px] text-center font-mono font-bold text-[11px] border-b border-border-subtle/30',
+                      multColor(mult),
+                    )}
                   >
                     {multLabel(mult)}
                   </td>
