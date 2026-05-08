@@ -59,8 +59,19 @@ export const leagueRoutes = new Elysia()
   // ─── Site Settings ──────────────────────────────────────────────────
 
   .get('/api/site-settings', () => {
+    // Practice draft visibility defaults to true on mock (so the simulator is
+    // discoverable in dev) and false on live (so it's hidden until the admin
+    // explicitly opts in via /admin/site-settings). The DB column itself
+    // defaults to true in the schema; this fallback only applies when the
+    // value is genuinely missing (NULL / no row).
+    const isMock = (process.env.CANNOLI_MODE || 'mock') === 'mock';
     const row = db.select().from(schema.siteSettings).get();
-    if (!row) return { siteName: 'Cannoli', announcement: null, announcementType: 'info' };
+    if (!row) return {
+      siteName: 'Cannoli',
+      announcement: null,
+      announcementType: 'info',
+      draftDemoVisible: isMock,
+    };
     return {
       siteName: row.siteName,
       announcement: row.announcement,
@@ -72,7 +83,7 @@ export const leagueRoutes = new Elysia()
       defaultMaxTeams: row.defaultMaxTeams,
       defaultUserPassword: row.defaultUserPassword,
       draftTimerEnabled: row.draftTimerEnabled ?? true,
-      draftDemoVisible: row.draftDemoVisible ?? true,
+      draftDemoVisible: row.draftDemoVisible ?? isMock,
       faDeadlineWeek: row.faDeadlineWeek ?? 7,
       defaultPlayoffTeamCount: row.defaultPlayoffTeamCount ?? 6,
     };
