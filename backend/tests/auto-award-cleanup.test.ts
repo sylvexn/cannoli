@@ -64,10 +64,11 @@ describe('runAutoAwards season-end re-run cleanup (Fix 4)', () => {
       ]).run();
 
       // Pre-existing stale auto pin for X (the "old" cannoli winner).
+      // metadata.teamId is set because the cleanup DELETE scopes by it.
       db.insert(schema.pins).values({
         userId: userX, pinDefId: 'cannoli', seasonId: host.seasonId,
         awardedBy: null, // <- auto
-        metadata: JSON.stringify({ stale: true }),
+        metadata: JSON.stringify({ stale: true, teamId: teamX }),
       }).run();
       // Pre-existing admin-minted cannoli pin for Z. awardedBy is NOT NULL.
       // Use userZ as the awardedBy too — just needs a non-null user FK.
@@ -104,6 +105,86 @@ describe('runAutoAwards season-end re-run cleanup (Fix 4)', () => {
       // Z's admin-minted pin survives (awardedBy IS NOT NULL)
       expect(byUser.has(userZ)).toBe(true);
       expect(byUser.get(userZ)!.awardedBy).toBe(userZ);
+    } finally {
+      sqlite.exec('ROLLBACK');
+    }
+  });
+
+  // Regression for the multi-league bug: a coach who plays in two leagues
+  // in the same season must not have their sibling-league pin clobbered
+  // when one of their leagues finalizes. Pre-fix the DELETE matched by
+  // user_id, which would wipe both. Post-fix it scopes by metadata.teamId
+  // so only the finalizing league's pin is replaced.
+  test('cross-league: finalizing league M does not clobber a coach\'s pin from sibling league L', () => {
+    sqlite.exec('BEGIN');
+    try {
+      const leagueL = `${PFX}lgL`;
+      const leagueM = `${PFX}lgM`;
+      const [userU, userV, userW] = host.userIds;
+
+      // Two leagues in the same season. Only league M will be finalized.
+      db.insert(schema.leagues).values([
+        { id: leagueL, name: 'Sibling League L', color: '#aa0000', seasonId: host.seasonId, phase: 'offseason' },
+        { id: leagueM, name: 'Finalizing League M', color: '#00aa00', seasonId: host.seasonId, phase: 'offseason' },
+      ]).run();
+
+      // User U coaches a team in BOTH leagues. V and W round out league M
+      // so runAutoAwards has a complete bracket to score.
+      const teamL = `${PFX}tL`;   // U's team in L
+      const teamMu = `${PFX}tMu`; // U's team in M
+      const teamMv = `${PFX}tMv`;
+      const teamMw = `${PFX}tMw`;
+      db.insert(schema.teams).values([
+        { id: teamL,  leagueId: leagueL, userId: userU, coachName: 'U', teamName: 'UL', teamAbbrev: 'UL', teamColor: '#111' },
+        { id: teamMu, leagueId: leagueM, userId: userU, coachName: 'U', teamName: 'UM', teamAbbrev: 'UM', teamColor: '#222' },
+        { id: teamMv, leagueId: leagueM, userId: userV, coachName: 'V', teamName: 'VM', teamAbbrev: 'VM', teamColor: '#333' },
+        { id: teamMw, leagueId: leagueM, userId: userW, coachName: 'W', teamName: 'WM', teamAbbrev: 'WM', teamColor: '#444' },
+      ]).run();
+
+      // Rigged league M matches: V wins (so V should be the new auto winner,
+      // not U). U's M-scoped stale pin should still be cleared.
+      db.insert(schema.matches).values([
+        { id: `${PFX}xm1`, leagueId: leagueM, week: 1, homeTeamId: teamMv, awayTeamId: teamMu, homeScore: 5, awayScore: 1, status: 'completed', phase: 'regular' },
+        { id: `${PFX}xm2`, leagueId: leagueM, week: 2, homeTeamId: teamMv, awayTeamId: teamMw, homeScore: 6, awayScore: 0, status: 'completed', phase: 'regular' },
+        { id: `${PFX}xm3`, leagueId: leagueM, week: 3, homeTeamId: teamMu, awayTeamId: teamMw, homeScore: 4, awayScore: 2, status: 'completed', phase: 'regular' },
+      ]).run();
+
+      // Auto pin for U from league L's prior finalize. MUST SURVIVE when
+      // league M finalizes. There's a UNIQUE(user_id, pin_def_id, season_id)
+      // index so we can't also stage a separate M-scoped row for U — but
+      // the bug is precisely that the pre-fix DELETE matched by user_id
+      // and would wipe THIS row, never mind which league it came from.
+      db.insert(schema.pins).values({
+        userId: userU, pinDefId: 'cannoli', seasonId: host.seasonId,
+        awardedBy: null,
+        metadata: JSON.stringify({ teamId: teamL, source: 'L' }),
+      }).run();
+
+      // === finalize league M only ===
+      runAutoAwards(leagueM, { trigger: 'season-end' });
+
+      const userUPins = db.select().from(schema.pins).where(and(
+        eq(schema.pins.pinDefId, 'cannoli'),
+        eq(schema.pins.seasonId, host.seasonId),
+        eq(schema.pins.userId, userU),
+      )).all();
+
+      // U's league-L pin must still be there (post-fix). Pre-fix this row
+      // would have been deleted because the DELETE scoped by user_id and
+      // U is a coach in league M.
+      expect(userUPins.length).toBe(1);
+      const surviving = JSON.parse(userUPins[0].metadata as string) as { teamId?: string; source?: string };
+      expect(surviving.teamId).toBe(teamL);
+      expect(surviving.source).toBe('L');
+
+      // V is the new league-M auto winner.
+      const userVPins = db.select().from(schema.pins).where(and(
+        eq(schema.pins.pinDefId, 'cannoli'),
+        eq(schema.pins.seasonId, host.seasonId),
+        eq(schema.pins.userId, userV),
+      )).all();
+      expect(userVPins.length).toBe(1);
+      expect(userVPins[0].awardedBy).toBeNull();
     } finally {
       sqlite.exec('ROLLBACK');
     }

@@ -67,16 +67,21 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
   }
 
   // trigger === 'season-end'
-  // Clear prior auto-awarded season-end pins for this league/season so a
-  // re-run after a data correction picks the new winners cleanly. Only
-  // touches awarded_by IS NULL rows (auto pins) — admin-minted pins are
-  // preserved.
+  // Clear prior auto-awarded season-end pins for THIS league/season so a
+  // re-run after a data correction picks the new winners cleanly. Scope
+  // by metadata.teamId (set by all three awarders) rather than user_id —
+  // a season runs 3 concurrent leagues, and a coach who plays in multiple
+  // leagues would otherwise have their sibling-league pins clobbered when
+  // any one league finalizes. Only touches awarded_by IS NULL rows (auto
+  // pins) — admin-minted pins are preserved.
   db.run(sql`
     DELETE FROM pins
     WHERE pin_def_id IN (${PIN.garchomp}, ${PIN.cannoli}, ${PIN.cynthia})
       AND season_id = ${seasonId}
       AND awarded_by IS NULL
-      AND user_id IN (SELECT user_id FROM teams WHERE league_id = ${leagueId} AND user_id IS NOT NULL)
+      AND json_extract(metadata, '$.teamId') IN (
+        SELECT id FROM teams WHERE league_id = ${leagueId}
+      )
   `);
 
   awardGarchomp(leagueId, seasonId, opts.awardedBy ?? null, summary);
