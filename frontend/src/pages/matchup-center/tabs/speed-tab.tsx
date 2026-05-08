@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { NumberInput } from '@/components/ui/number-input';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,6 +46,7 @@ function calcSpeed(
 }
 
 export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdateSlot }: SpeedTabProps) {
+  const { openSideCard } = usePokemonSideCard();
   const speedList = useMemo(() => {
     return [
       ...teamA.map(p => ({ name: p.name, spe: p.stats.spe, side: 'a' as const })),
@@ -98,8 +102,15 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
                   entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
                 )}
               >
-                <PokemonSprite name={entry.name} size="xs" />
-                <span className="text-xs font-mono text-text-primary whitespace-nowrap">{entry.name}</span>
+                <button onClick={() => openSideCard(entry.name)} title="View details">
+                  <PokemonSprite name={entry.name} size="xs" />
+                </button>
+                <Link
+                  to={pokemonRoute(entry.name)}
+                  className="text-xs font-mono text-text-primary hover:text-neon hover:underline transition-colors whitespace-nowrap"
+                >
+                  {entry.name}
+                </Link>
                 <span className="flex-1" />
                 <span className={cn(
                   'text-xs font-mono font-bold tabular-nums shrink-0',
@@ -127,6 +138,7 @@ function SpeedCalcCard({
   onUpdate: (updates: Partial<SpeedCalcSlot>) => void;
   onRemove?: () => void;
 }) {
+  const { openSideCard } = usePokemonSideCard();
   const pokemon = allPokemon.find(p => p.name === slot.pokemonName);
   const baseSpe = pokemon?.stats.spe ?? 0;
   const computed = pokemon
@@ -138,7 +150,11 @@ function SpeedCalcCard({
       {/* Header: sprite + computed speed + remove */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          {pokemon && <PokemonSprite name={pokemon.name} size="sm" />}
+          {pokemon && (
+            <button onClick={() => openSideCard(pokemon.name)} title="View details">
+              <PokemonSprite name={pokemon.name} size="sm" />
+            </button>
+          )}
           <span className="text-xl font-bold font-mono text-neon tabular-nums">{computed}</span>
         </div>
         {onRemove && (
