@@ -83,6 +83,28 @@ bun run scripts/import-replays.ts
 
 `import-replays.ts` walks the cache, finds the matching `matches` row by (league_id, week|playoff_round, home_team_id, away_team_id), and writes `replay_url` + `replay_log`. It's already wired into `seed.ts` for the S10 path, but the standalone runner is the right entry point after a re-scrape.
 
+## Finalize a season
+
+```sh
+bun run scripts/finalize-season.ts --dry-run             # preview plan, no writes
+bun run scripts/finalize-season.ts                        # finalize S10 (default)
+bun run scripts/finalize-season.ts --season=11            # explicit season
+bun run scripts/finalize-season.ts --league=sapphire      # one league only
+```
+
+`finalize-season.ts` walks the season's leagues and, per league:
+
+1. If the finals match is `scheduled` with NULL scores, stamps a synthetic 4-3 result (higher seed wins). Skip if already completed.
+2. Calls `assignFinishPositions` so champion / runner-up / SF / QF / regular-season labels stamp onto `teams.finish_position` / `finish_label`.
+3. Advances `leagues.phase = 'offseason'`.
+4. Marks `seasons.archived = 1`.
+5. Runs `runAutoAwards(season-end)` — mints garchomp / cannoli / cynthia.
+6. Runs `mintArchivePins` — mints champion / high-score / steal-of-the-draft / sweeper.
+
+Idempotent: re-running on an already-finalized season simply re-runs steps 5/6 (which are themselves `INSERT OR IGNORE` + scoped `DELETE`). Intended for the mock DB or a clean dev cycle; running on prod requires an explicit deploy and a paired check that the actual finals replay logs were imported (otherwise high-score/sweeper/steal-of-the-draft mint zero rows for the finals — they only see regular-season + earlier-playoff per-mon stats).
+
+Manual award pins (baxcalibur / kingambit / ash / best-draft / dragapult / charizard / florges / rotom / pikachu / red) are NOT touched by this script — those need a hand-curated list and ship via the admin UI's "Award Pin" action.
+
 ## Other utilities
 
 - `import-xlsx.ts` — XLSX → DB importer for an active season; exports `importSeason`, `rewindToFinalsPending`, `assignFinishPositions`, and the per-season configs.
