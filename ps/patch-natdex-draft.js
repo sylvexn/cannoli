@@ -39,15 +39,21 @@ if (src.includes(MARKER)) {
 }
 
 // The banlist follows plan/rules: clauses-of-record + per-Pokemon move bans.
-// Standard Draft already includes Species/OHKO/Endless Battle/Sleep clauses;
-// we add the rest as explicit bans so the format ships ban-complete.
+// Standard Draft already includes Species/OHKO/Endless Battle/Sleep + the
+// full Evasion Clause (which already bans Bright Powder + Lax Incense via
+// Evasion Items Clause, and Acupressure/Minimize/Double Team via Evasion
+// Moves Clause). Re-listing those triggers a hard crash on every socket
+// connect — `Rule "-item:brightpowder" already exists in "Evasion Items
+// Clause"` thrown out of getRuleTable, which kills the format-list build
+// that runs on each handleConnect, so the client never gets |challstr|
+// and /trn auto-login never fires.
 const banlist = [
 	// Abilities
 	'Shadow Tag', 'Arena Trap', 'Moody',
-	// Items
-	'Bright Powder', 'Lax Incense', "King's Rock", 'Razor Fang',
-	// Moves
-	'Acupressure', 'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
+	// Items (Bright Powder + Lax Incense already in Evasion Items Clause)
+	"King's Rock", 'Razor Fang',
+	// Moves (Acupressure already in Evasion Moves Clause)
+	'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
 	'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail',
 	'Swagger',
 	// Per-Pokemon clauses
