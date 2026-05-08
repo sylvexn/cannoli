@@ -22,7 +22,16 @@ import { existsSync } from 'fs';
 import { hashSync } from 'bcryptjs';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import * as schema from '../src/db/schema';
-import { importSeason, S9_CONFIG, S10_CONFIG, S11_CONFIG, IMPORTS_DIR } from './import-xlsx';
+import {
+  importSeason,
+  rewindToFinalsPending,
+  assignFinishPositions,
+  fabricatePlayoffBracket,
+  S9_CONFIG,
+  S10_CONFIG,
+  S11_CONFIG,
+  IMPORTS_DIR,
+} from './import-xlsx';
 
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 const DRIZZLE_DIR = resolve(import.meta.dir, '../drizzle');
@@ -438,17 +447,29 @@ const { coachTeamIds } = importSeason(sqlite, PRIMARY_CONFIG, {
   clearExisting: false,
 });
 
-// Live mode: also import S9 historical data (only if S9 XLSX files are present)
-if (MODE === 'live') {
-  const s9Missing = S9_CONFIG.files
-    .map((f) => f.file)
-    .filter((f) => !existsSync(resolve(IMPORTS_DIR, f)));
-  if (s9Missing.length === 0) {
-    console.log('\n── Importing Season 9 ──');
-    importSeason(sqlite, S9_CONFIG, { createUsers: false, clearExisting: false });
-  } else {
-    console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
-  }
+// S9 historical data — imported in BOTH modes as an archive when the XLSX
+// files are present. The season selector / archive view picks it up via the
+// seasons.archived flag below. (Previously live-only; mock now ships with a
+// fully-played S9 so the history surfaces have something to render.)
+//
+// S9 uses a different sheet layout from S10, so it routes through importS9
+// (which also prefixes its league IDs with `s9-` to avoid colliding with the
+// active S10 sapphire/ruby/emerald leagues).
+const s9Missing = S9_CONFIG.files
+  .map((f) => f.file)
+  .filter((f) => !existsSync(resolve(IMPORTS_DIR, f)));
+if (s9Missing.length === 0) {
+  console.log('\n── Importing Season 9 (archive) ──');
+  const { importS9 } = await import('./import-s9');
+  importS9(sqlite);
+
+  // Mark S9 as archived. assignFinishPositions runs below so the finals
+  // winners are determinable from the matches table.
+  sqlite.prepare(
+    `UPDATE seasons SET archived = 1 WHERE season_number = 9`,
+  ).run();
+} else {
+  console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
 }
 
 // Attach scraped replay protocol logs to S10 matches (when cache is present)
@@ -456,6 +477,53 @@ if (PRIMARY_CONFIG.seasonNumber === 10) {
   const { importReplays } = await import('./import-replays');
   console.log('\n── Attaching S10 replays ──');
   importReplays(sqlite);
+}
+
+// ─── S10: rewind to "finals pending" ──────────────────────────────────────
+// Regular season + QF + SF stay reported (results, replays, kill stats);
+// the finals match has both teams seeded but no result yet. Mirrors the
+// state the league actually sits in at the time of a real-life finals.
+if (PRIMARY_CONFIG.seasonNumber === 10) {
+  console.log('\n── Rewinding S10 to finals pending ──');
+  const s10LeagueIds = S10_CONFIG.files.map((f) => f.id);
+  const rewind = rewindToFinalsPending(sqlite, s10LeagueIds);
+  console.log(
+    `  fabricated ${rewind.sfFabricated} SF result(s); ` +
+    `cleared ${rewind.finalsCleared} + created ${rewind.finalsCreated} finals match(es); ` +
+    `deleted ${rewind.matchPokemonDeleted} per-mon stat row(s)`,
+  );
+}
+
+// ─── S9: complete the bracket (importS9 only produces QF rows) ──────────
+// fabricatePlayoffBracket is a no-op for any league that already has SF/F
+// rows; for S9 it walks the QF results and stamps synthetic SF + finals
+// matches so the archive can render a complete bracket and the
+// finish_position pass below has Champion / Runner-up to assign.
+if (s9Missing.length === 0) {
+  const s9LeagueIds = S9_CONFIG.files.map((f) => `s9-${f.id}`);
+
+  console.log('\n── Fabricating S9 SF + finals rows ──');
+  const bracket = fabricatePlayoffBracket(sqlite, s9LeagueIds);
+  console.log(
+    `  created ${bracket.sfsCreated} SF and ${bracket.finalsCreated} finals match(es)`,
+  );
+
+  console.log('\n── Assigning S9 finish positions ──');
+  const finish = assignFinishPositions(sqlite, s9LeagueIds);
+  console.log(`  stamped ${finish.teamsUpdated} team(s) with finish position/label`);
+
+  // Award S9 pins (auto-stat pins via the runtime job; champion-style
+  // standing lives in finish_position/finish_label, but we still route
+  // Cannoli/Garchomp/Cynthia through auto-award so archive surfaces show
+  // the same pin set live S9 would. The job is idempotent.)
+  console.log('\n── Awarding S9 auto-pins ──');
+  const { runAutoAwards } = await import('../src/lib/pins/auto-award');
+  for (const lid of s9LeagueIds) {
+    const summary = runAutoAwards(lid, { trigger: 'season-end' });
+    console.log(
+      `  ${lid}: awarded ${summary.awarded.length}, skipped ${summary.skipped}`,
+    );
+  }
 }
 
 // Seed supplementary data (both modes)

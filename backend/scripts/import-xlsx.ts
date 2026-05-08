@@ -85,7 +85,11 @@ interface SeasonConfig {
 
 export const S10_CONFIG: SeasonConfig = {
   seasonNumber: 10,
-  phase: 'offseason',
+  // Mock seed sits at "finals pending" — regular season + QF + SF reported,
+  // finals matches still scheduled with no result. The rewindToFinalsPending
+  // post-step (called from seed.ts) clears the finals score/replay/status
+  // after the XLSX has populated the full bracket.
+  phase: 'playoffs',
   currentWeek: 11,
   totalWeeks: 11,
   files: [
@@ -896,6 +900,369 @@ export function importSeason(
 
   sqlite.exec('PRAGMA foreign_keys = ON');
   return { coachUserIds: allCoachUserIds, coachTeamIds: allCoachTeamIds };
+}
+
+// ─── Post-import: rewind a season's finals to "pending" ─────────────────────
+
+/**
+ * Roll a season's bracket forward to "finals pending":
+ *   - QF results stay as imported (XLSX has them).
+ *   - SF matches that don't have results yet get synthetic results filled
+ *     in (higher seed wins 4-2). SF matches that ALREADY have results are
+ *     left alone.
+ *   - The finals match is then either updated or created, seeded with the
+ *     two SF winners, and explicitly left WITHOUT a score / replay / status
+ *     so the bracket renders as "finals pending".
+ *
+ * Idempotent — re-running re-derives the same SF winners, leaves SF rows
+ * with their now-filled scores, and re-clears the finals match.
+ *
+ * Returns counts so callers can sanity-check.
+ */
+export function rewindToFinalsPending(sqlite: Database, leagueIds: string[]): {
+  sfFabricated: number;
+  finalsCleared: number;
+  finalsCreated: number;
+  matchPokemonDeleted: number;
+} {
+  let sfFabricated = 0;
+  let finalsCleared = 0;
+  let finalsCreated = 0;
+  let matchPokemonDeleted = 0;
+
+  for (const leagueId of leagueIds) {
+    // ─── 1. Make sure semifinals have results ───────────────────────────
+    type SfRow = {
+      id: string;
+      home_team_id: string;
+      away_team_id: string;
+      home_seed: number | null;
+      away_seed: number | null;
+      home_score: number | null;
+      away_score: number | null;
+    };
+    const sfs = sqlite.prepare(
+      `SELECT id, home_team_id, away_team_id, home_seed, away_seed, home_score, away_score
+         FROM matches
+        WHERE league_id = ? AND phase = 'playoffs' AND playoff_round = 'sf'
+        ORDER BY id`,
+    ).all(leagueId) as SfRow[];
+
+    const sfWinners: string[] = [];
+    for (const sf of sfs) {
+      let winnerId: string | null = null;
+      if (sf.home_score != null && sf.away_score != null && sf.home_score !== sf.away_score) {
+        winnerId = sf.home_score > sf.away_score ? sf.home_team_id : sf.away_team_id;
+      } else {
+        // Fabricate: higher seed (= lower seed number) wins 4-2. If seeds
+        // missing, default the home team as winner.
+        const homeBetter = sf.home_seed != null && sf.away_seed != null
+          ? sf.home_seed <= sf.away_seed
+          : true;
+        const homeScore = homeBetter ? 4 : 2;
+        const awayScore = homeBetter ? 2 : 4;
+        sqlite.prepare(
+          `UPDATE matches
+              SET home_score = ?, away_score = ?, status = 'completed',
+                  completed_at = COALESCE(completed_at, datetime('now'))
+            WHERE id = ?`,
+        ).run(homeScore, awayScore, sf.id);
+        winnerId = homeBetter ? sf.home_team_id : sf.away_team_id;
+        sfFabricated++;
+      }
+      sfWinners.push(winnerId);
+    }
+
+    if (sfWinners.length < 2) continue;
+
+    // ─── 2. Seed the finals match ───────────────────────────────────────
+    const [winnerA, winnerB] = sfWinners;
+    // Ordering: best seed (lowest number) on home side, when both seeds are
+    // known. Falls back to the first SF winner as home.
+    const teamA = sqlite.prepare(
+      `SELECT id, rank FROM teams WHERE id = ?`,
+    ).get(winnerA) as { id: string; rank: number | null } | undefined;
+    const teamB = sqlite.prepare(
+      `SELECT id, rank FROM teams WHERE id = ?`,
+    ).get(winnerB) as { id: string; rank: number | null } | undefined;
+    const aRank = teamA?.rank ?? 99;
+    const bRank = teamB?.rank ?? 99;
+    const homeId = aRank <= bRank ? winnerA : winnerB;
+    const awayId = aRank <= bRank ? winnerB : winnerA;
+    const homeSeed = aRank <= bRank ? aRank : bRank;
+    const awaySeed = aRank <= bRank ? bRank : aRank;
+
+    const existingFinal = sqlite.prepare(
+      `SELECT id FROM matches WHERE league_id = ? AND phase = 'playoffs' AND playoff_round = 'f' LIMIT 1`,
+    ).get(leagueId) as { id: string } | undefined;
+
+    if (existingFinal) {
+      // Wipe any per-mon stats and clear the result back to scheduled.
+      const delResult = sqlite.prepare(
+        `DELETE FROM match_pokemon WHERE match_id = ?`,
+      ).run(existingFinal.id);
+      matchPokemonDeleted += (delResult as unknown as { changes?: number }).changes ?? 0;
+
+      sqlite.prepare(
+        `UPDATE matches
+            SET home_team_id = ?, away_team_id = ?,
+                home_seed = ?, away_seed = ?,
+                home_score = NULL, away_score = NULL,
+                replay_url = NULL, replay_log = NULL,
+                status = 'scheduled',
+                started_at = NULL, completed_at = NULL,
+                warnings = NULL, forfeited_by = NULL,
+                ready_home = 0, ready_away = 0,
+                ps_room_id = NULL
+          WHERE id = ?`,
+      ).run(homeId, awayId, homeSeed, awaySeed, existingFinal.id);
+      finalsCleared++;
+    } else {
+      // Build a stable finals match ID. Week 14 mirrors the playoff convention.
+      const finalsId = `${leagueId}-f-1`;
+      sqlite.prepare(
+        `INSERT INTO matches
+            (id, league_id, week, home_team_id, away_team_id,
+             phase, playoff_round, home_seed, away_seed, status)
+         VALUES (?, ?, 14, ?, ?, 'playoffs', 'f', ?, ?, 'scheduled')`,
+      ).run(finalsId, leagueId, homeId, awayId, homeSeed, awaySeed);
+      finalsCreated++;
+    }
+  }
+
+  return { sfFabricated, finalsCleared, finalsCreated, matchPokemonDeleted };
+}
+
+// ─── Post-import: fabricate a complete playoff bracket ─────────────────────
+
+/**
+ * Fill in missing semifinal + final matches so a league archive can render a
+ * "fully played" bracket. The S9 importer produces only QF rows from its
+ * messy playoff sheet; running this afterwards stamps SF (winners-of-QF
+ * pairings) and a finals (SF winners) so `assignFinishPositions` can place
+ * Champion / Runner-up / Semifinalist labels correctly.
+ *
+ * Heuristics (intentionally simple — this is mock data):
+ *   - Walk QF rows in insert order (id ASC). Pair (1,2) → SF1, (3,4) → SF2.
+ *     If a QF row has no scores, the higher seed (lower seed number) is
+ *     treated as the winner.
+ *   - SF winners: higher seed wins; synthetic 4-2 score.
+ *   - Finals: higher seed wins; synthetic 4-3 score.
+ *
+ * Skips any league that already has SF or final rows — caller can rely on
+ * "either the bracket exists or we built it".
+ */
+export function fabricatePlayoffBracket(
+  sqlite: Database,
+  leagueIds: string[],
+): { sfsCreated: number; finalsCreated: number } {
+  let sfsCreated = 0;
+  let finalsCreated = 0;
+
+  for (const leagueId of leagueIds) {
+    type QfRow = {
+      id: string;
+      home_team_id: string;
+      away_team_id: string;
+      home_seed: number | null;
+      away_seed: number | null;
+      home_score: number | null;
+      away_score: number | null;
+    };
+    const qfs = sqlite.prepare(
+      `SELECT id, home_team_id, away_team_id, home_seed, away_seed, home_score, away_score
+         FROM matches
+        WHERE league_id = ? AND phase = 'playoffs' AND playoff_round = 'qf'
+        ORDER BY id`,
+    ).all(leagueId) as QfRow[];
+
+    if (qfs.length === 0) continue;
+
+    // Bail if SF or F already exist — don't double-stamp.
+    const existing = sqlite.prepare(
+      `SELECT COUNT(*) as c FROM matches
+        WHERE league_id = ? AND phase = 'playoffs' AND playoff_round IN ('sf', 'f')`,
+    ).get(leagueId) as { c: number };
+    if (existing.c > 0) continue;
+
+    // Resolve QF winner per row (fabricate if missing).
+    const qfWinners: { teamId: string; seed: number }[] = [];
+    for (const q of qfs) {
+      let winnerTeam = q.home_team_id;
+      let winnerSeed = q.home_seed ?? 99;
+      if (q.home_score != null && q.away_score != null && q.home_score !== q.away_score) {
+        if (q.away_score > q.home_score) {
+          winnerTeam = q.away_team_id;
+          winnerSeed = q.away_seed ?? 99;
+        }
+      } else {
+        // No usable score: default to higher seed (lower seed number).
+        const homeBetter = (q.home_seed ?? 99) <= (q.away_seed ?? 99);
+        if (!homeBetter) {
+          winnerTeam = q.away_team_id;
+          winnerSeed = q.away_seed ?? 99;
+        }
+        // Also stamp a synthetic QF score so the standings page doesn't show
+        // "match without result" later.
+        const homeScore = homeBetter ? 4 : 2;
+        const awayScore = homeBetter ? 2 : 4;
+        sqlite.prepare(
+          `UPDATE matches SET home_score = ?, away_score = ?, status = 'completed',
+              completed_at = COALESCE(completed_at, datetime('now'))
+            WHERE id = ?`,
+        ).run(homeScore, awayScore, q.id);
+      }
+      qfWinners.push({ teamId: winnerTeam, seed: winnerSeed });
+    }
+
+    // Pair QF winners into semifinals. With an even count we just walk in
+    // order: (qf1,qf2)→sf1, (qf3,qf4)→sf2. With an odd count (small leagues
+    // with byes — common for 6-team brackets), the BEST-seeded QF winner
+    // gets a bye straight to the finals, and the remaining N-1 QF winners
+    // are paired into SFs as before.
+    const sfWinners: { teamId: string; seed: number }[] = [];
+    let sfIdx = 0;
+    let pool = qfWinners;
+    let byeFinalist: { teamId: string; seed: number } | null = null;
+    if (pool.length % 2 === 1) {
+      const bestIdx = pool.reduce(
+        (best, w, i, arr) => (w.seed < arr[best].seed ? i : best),
+        0,
+      );
+      byeFinalist = pool[bestIdx];
+      pool = pool.filter((_, i) => i !== bestIdx);
+    }
+    for (let i = 0; i < pool.length - 1; i += 2) {
+      const a = pool[i];
+      const b = pool[i + 1];
+      const aBetter = a.seed <= b.seed;
+      const homeTeam = aBetter ? a.teamId : b.teamId;
+      const awayTeam = aBetter ? b.teamId : a.teamId;
+      const homeSeed = aBetter ? a.seed : b.seed;
+      const awaySeed = aBetter ? b.seed : a.seed;
+      const sfId = `${leagueId}-sf-${++sfIdx}`;
+      sqlite.prepare(
+        `INSERT INTO matches
+           (id, league_id, week, home_team_id, away_team_id,
+            phase, playoff_round, home_seed, away_seed,
+            home_score, away_score, status, completed_at)
+         VALUES (?, ?, 13, ?, ?, 'playoffs', 'sf', ?, ?, 4, 2, 'completed', datetime('now'))`,
+      ).run(sfId, leagueId, homeTeam, awayTeam, homeSeed, awaySeed);
+      sfWinners.push({ teamId: homeTeam, seed: homeSeed });
+      sfsCreated++;
+    }
+
+    // Assemble finalist pool: SF winners + any bye finalist.
+    const finalists = byeFinalist ? [byeFinalist, ...sfWinners] : sfWinners;
+    if (finalists.length < 2) continue;
+
+    // Final: best two finalists by seed.
+    const sortedFinalists = [...finalists].sort((x, y) => x.seed - y.seed);
+    const [a, b] = sortedFinalists;
+    const homeTeam = a.teamId;
+    const awayTeam = b.teamId;
+    const homeSeed = a.seed;
+    const awaySeed = b.seed;
+    sqlite.prepare(
+      `INSERT INTO matches
+         (id, league_id, week, home_team_id, away_team_id,
+          phase, playoff_round, home_seed, away_seed,
+          home_score, away_score, status, completed_at)
+       VALUES (?, ?, 14, ?, ?, 'playoffs', 'f', ?, ?, 4, 3, 'completed', datetime('now'))`,
+    ).run(`${leagueId}-f-1`, leagueId, homeTeam, awayTeam, homeSeed, awaySeed);
+    finalsCreated++;
+  }
+
+  return { sfsCreated, finalsCreated };
+}
+
+// ─── Post-import: assign finish_position + finish_label to teams ────────────
+
+/**
+ * Walk a season's playoff brackets per league and stamp `finish_position` /
+ * `finish_label` on every team. Designed for archived (fully-played)
+ * seasons: a finals match with no result will leave both finalists at
+ * NULL (caller can opt to mark them as finalists differently if desired).
+ *
+ * Position scheme (single-elim, no third-place game):
+ *   1  Champion        — finals winner
+ *   2  Runner-up       — finals loser
+ *   3  Semifinalist    — both SF losers (tied 3rd/4th)
+ *   5  Quarterfinalist — all QF losers (tied 5th-8th)
+ *   9+ Regular Season  — non-playoff teams; ranked by `teams.rank`
+ */
+export function assignFinishPositions(sqlite: Database, leagueIds: string[]): {
+  teamsUpdated: number;
+} {
+  let teamsUpdated = 0;
+
+  for (const leagueId of leagueIds) {
+    const teams = sqlite.prepare(
+      `SELECT id, rank FROM teams WHERE league_id = ? ORDER BY rank ASC`,
+    ).all(leagueId) as { id: string; rank: number | null }[];
+    if (teams.length === 0) continue;
+
+    const playoffMatches = sqlite.prepare(
+      `SELECT id, playoff_round, home_team_id, away_team_id, home_score, away_score
+         FROM matches
+         WHERE league_id = ? AND phase = 'playoffs'`,
+    ).all(leagueId) as {
+      id: string;
+      playoff_round: string;
+      home_team_id: string;
+      away_team_id: string;
+      home_score: number | null;
+      away_score: number | null;
+    }[];
+
+    const eliminatedAt = new Map<string, 'qf' | 'sf' | 'f'>(); // round in which team lost
+    let champion: string | null = null;
+    let runnerUp: string | null = null;
+
+    for (const m of playoffMatches) {
+      if (m.home_score == null || m.away_score == null) continue;
+      if (m.home_score === m.away_score) continue;
+      const winner = m.home_score > m.away_score ? m.home_team_id : m.away_team_id;
+      const loser = m.home_score > m.away_score ? m.away_team_id : m.home_team_id;
+      const round = m.playoff_round as 'qf' | 'sf' | 'f';
+      eliminatedAt.set(loser, round);
+      if (round === 'f') {
+        champion = winner;
+        runnerUp = loser;
+      }
+    }
+
+    const update = sqlite.prepare(
+      `UPDATE teams SET finish_position = ?, finish_label = ? WHERE id = ?`,
+    );
+
+    let regularRank = 9; // first non-playoff slot
+    for (const t of teams) {
+      let pos: number | null = null;
+      let label: string | null = null;
+      if (champion === t.id) {
+        pos = 1;
+        label = 'Champion';
+      } else if (runnerUp === t.id) {
+        pos = 2;
+        label = 'Runner-up';
+      } else if (eliminatedAt.get(t.id) === 'sf') {
+        pos = 3;
+        label = 'Semifinalist';
+      } else if (eliminatedAt.get(t.id) === 'qf') {
+        pos = 5;
+        label = 'Quarterfinalist';
+      } else {
+        // Non-playoff team: position based on regular-season rank.
+        pos = regularRank++;
+        label = 'Regular Season';
+      }
+      update.run(pos, label, t.id);
+      teamsUpdated++;
+    }
+  }
+
+  return { teamsUpdated };
 }
 
 // ─── Standalone runner ──────────────────────────────────────────────────────
