@@ -5,6 +5,7 @@ import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { runAutoAwards } from '../../lib/pins/auto-award';
+import { checkLeagueArchived } from '../../lib/archive-guard';
 
 export const leagueAdminRoutes = new Elysia()
 
@@ -37,16 +38,8 @@ export const leagueAdminRoutes = new Elysia()
     // Archived seasons are read-only by default. Writes to a league belonging
     // to an archived season require ?force=1 (mirrors the schedule-regen and
     // delete-league guards).
-    const force = query.force === '1' || query.force === 'true';
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
-    if (season?.archived && !force) {
-      set.status = 409;
-      return {
-        error: `Season ${season.seasonNumber} is archived — pass ?force=1 to edit`,
-        code: 'season_archived',
-        seasonNumber: season.seasonNumber,
-      };
-    }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const leagueUpdates: Record<string, unknown> = {};
     if (name) leagueUpdates.name = name;
@@ -130,6 +123,9 @@ export const leagueAdminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
+
     // Phase-aware destructive guard. A league mid-regular-season or in-playoffs
     // has live trades, match results, standings — silent deletion would wipe
     // all of that. Require ?force=1 + a typed-name confirm body, mirroring the
@@ -192,11 +188,14 @@ export const leagueAdminRoutes = new Elysia()
 
   // ─── Season Management ──────────────────────────────────────────────
 
-  .post('/api/leagues/:leagueId/phase', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/phase', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     // Phase now lives on the league — advancing one league no longer drags
     // the others in the same season along with it.
@@ -312,10 +311,13 @@ export const leagueAdminRoutes = new Elysia()
     return { success: true, scheduleGenerated, pinsAwarded };
   })
 
-  .post('/api/leagues/:leagueId/week', ({ params, user, set }) => {
+  .post('/api/leagues/:leagueId/week', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const newWeek = league.currentWeek + 1;
     tx(() => {
@@ -332,12 +334,15 @@ export const leagueAdminRoutes = new Elysia()
     return { success: true, week: newWeek };
   })
 
-  .post('/api/leagues/:leagueId/draft-order', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
     // Lock once we're past draft phase
     if (league.phase !== 'predraft' && league.phase !== 'draft') {
       set.status = 400; return { error: `Cannot change draft order in ${league.phase} phase` };
