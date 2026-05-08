@@ -17,11 +17,12 @@ interface BattleHudProps {
   isOfficial: boolean;
   label: string; // e.g. "Week 5: Sass Ketchums vs Power Rangers"
   liveStats: LiveMatchStats | null;
+  spectatorCount?: number;
   onBackToLobby: () => void;
 }
 
 export function BattleHud(props: BattleHudProps) {
-  const { psRoomId, isOfficial, label, liveStats, onBackToLobby } = props;
+  const { psRoomId, isOfficial, label, liveStats, spectatorCount, onBackToLobby } = props;
   const [leftOpen, setLeftOpen] = useLocalStorageState<boolean>('arena-panel-left', true);
   const [rightOpen, setRightOpen] = useLocalStorageState<boolean>('arena-panel-right', true);
 
@@ -135,9 +136,9 @@ export function BattleHud(props: BattleHudProps) {
           >
             Toggle Panels
           </button>
-          <div className="flex items-center gap-1 text-xs text-text-muted">
+          <div className="flex items-center gap-1 text-xs text-text-muted" title="Spectators">
             <Eye size={12} />
-            <span>0</span>
+            <span className="tabular-nums">{spectatorCount ?? 0}</span>
           </div>
         </div>
       </div>
