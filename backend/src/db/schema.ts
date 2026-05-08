@@ -463,6 +463,8 @@ export const userPreferences = sqliteTable('user_preferences', {
   notifyAnnouncements: integer('notify_announcements', { mode: 'boolean' }).notNull().default(true),
   /** IANA timezone string (e.g. 'America/New_York'). Null = use browser-detected zone. */
   timezone: text('timezone'),
+  /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
+  colorblindMode: integer('colorblind_mode', { mode: 'boolean' }).notNull().default(false),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 

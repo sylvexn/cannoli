@@ -278,6 +278,8 @@ export interface ApiUserPreferences {
   notifyAnnouncements: boolean;
   /** IANA zone (e.g. "America/New_York"); null means use the browser zone. */
   timezone: string | null;
+  /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
+  colorblindMode: boolean;
   updatedAt: string | null;
 }
 

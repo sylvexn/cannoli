@@ -37,6 +37,24 @@ export const MATCHUP_COLORS = {
   statLow: '#f87171',      // <60
 } as const;
 
+/** Deuteranopia-safe variant — sideB red→orange, stat ladder green→blue.
+ *  Yellow midband stays (deuteranopia-safe). Used by callsites that pass
+ *  these as inline `style` colors, where CSS-var overrides don't reach. */
+export const MATCHUP_COLORS_CB = {
+  sideA: '#3b82f6',
+  sideB: '#f97316',
+  statHigh: '#60a5fa',
+  statGood: '#93c5fd',
+  statWeak: '#fbbf24',
+  statLow: '#fdba74',
+} as const;
+
+/** Returns the deuteranopia-safe palette when `cb` is true. Cheap enough to
+ *  call inline; callers are typically a handful of leaf components. */
+export function getMatchupColors(cb: boolean) {
+  return cb ? MATCHUP_COLORS_CB : MATCHUP_COLORS;
+}
+
 /**
  * Type-effectiveness multiplier colors — used by the defensive matchup tooltip.
  * Mirrors the win/loss/draw and neon palette so the ladder reads at a glance:
