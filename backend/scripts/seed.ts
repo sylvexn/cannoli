@@ -530,10 +530,11 @@ if (s9Missing.length === 0) {
   console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
 }
 
-// Attach scraped replay protocol logs to S10 matches (when cache is present)
-if (PRIMARY_CONFIG.seasonNumber === 10) {
+// Attach scraped replay protocol logs to matches across every cached season
+// (S9, S10, …). Each season's cache lives under backend/imports/replays/sN/.
+{
   const { importReplays } = await import('./import-replays');
-  console.log('\n── Attaching S10 replays ──');
+  console.log('\n── Attaching replays ──');
   importReplays(sqlite);
 }
 
