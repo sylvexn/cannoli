@@ -1,0 +1,289 @@
+/**
+ * Single-tab redesigned Pins admin. Replaces the old Definitions/Award
+ * tab pair with a season-scoped grid of pin cards plus a recent-awards
+ * sidebar. Each card opens its own metadata-aware award dialog (driven by
+ * `lib/pin-metadata-schema.ts`); inline-edit lives in a popover on each
+ * card. New definitions still use the legacy DefinitionDialog (kept in
+ * `admin-pins.tsx`) via the "New Pin" button.
+ *
+ * Bulk season-mint is a single button that opens the wizard for the
+ * currently selected season; backed by the `/api/admin/pins/mint-season`
+ * endpoint which calls `mintManualPins` server-side.
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { LoadingSprite } from '@/components/loading-sprite';
+import { EmptyState } from '@/components/empty-state';
+import { Pin } from '@/components/pin';
+import { Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import type {
+  ApiPinDefinition, ApiPinRecent, ApiAuthUser, ApiLeague,
+} from '@/lib/api';
+import { formatPinMetadata } from '@/lib/pin-metadata-schema';
+import { DefinitionCard } from './definition-card';
+import { AwardDialog } from './award-dialog';
+import { BulkMintWizard } from './bulk-mint-wizard';
+import { NewDefinitionDialog } from '../admin-pins';
+
+interface SeasonRow {
+  id: number;
+  seasonNumber: number;
+}
+
+export function PinsTab() {
+  const [defs, setDefs] = useState<ApiPinDefinition[]>([]);
+  const [users, setUsers] = useState<ApiAuthUser[]>([]);
+  const [leagues, setLeagues] = useState<ApiLeague[]>([]);
+  const [seasons, setSeasons] = useState<SeasonRow[]>([]);
+  const [recent, setRecent] = useState<ApiPinRecent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState('');
+  const [seasonId, setSeasonId] = useState<number | null>(null);
+  const [awardDef, setAwardDef] = useState<ApiPinDefinition | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [mintWizardOpen, setMintWizardOpen] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      api.getPinDefinitions(),
+      api.getUsers(),
+      api.getLeagues(),
+      api.getSeasons(),
+      api.getRecentPins(200),
+    ])
+      .then(([d, u, l, s, r]) => {
+        setDefs(d);
+        setUsers(u);
+        setLeagues(l);
+        setSeasons(s.map(row => ({ id: row.id, seasonNumber: row.seasonNumber })));
+        setRecent(r);
+      })
+      .catch(() => toast.error('Failed to load pins data'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Default season: highest seasonNumber. Re-applied only on initial load —
+  // user picks override stick.
+  useEffect(() => {
+    if (seasonId != null || seasons.length === 0) return;
+    const highest = seasons.reduce((acc, s) => s.seasonNumber > acc.seasonNumber ? s : acc, seasons[0]);
+    setSeasonId(highest.seasonNumber);
+  }, [seasons, seasonId]);
+
+  const filteredDefs = useMemo(() => {
+    if (!search) return defs;
+    const q = search.toLowerCase();
+    return defs.filter(d =>
+      d.id.includes(q) || d.name.toLowerCase().includes(q) || d.category.includes(q),
+    );
+  }, [defs, search]);
+
+  // Award counts for the active season, keyed by pin def id. Computed from
+  // the recent-awards fetch (200 most recent — enough for any normal
+  // season). When the season is undefined we fall back to all-time counts.
+  const seasonAwardCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of recent) {
+      if (seasonId != null && r.seasonId !== seasonId) continue;
+      counts[r.pinDefId] = (counts[r.pinDefId] ?? 0) + 1;
+    }
+    return counts;
+  }, [recent, seasonId]);
+
+  const seasonRecent = useMemo(() => {
+    if (seasonId == null) return recent;
+    return recent.filter(r => r.seasonId === seasonId);
+  }, [recent, seasonId]);
+
+  async function handleRevoke(id: number) {
+    if (!confirm('Revoke this pin?')) return;
+    try {
+      await api.revokePin(id);
+      toast.success('Pin revoked');
+      load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Revoke failed';
+      toast.error(msg);
+    }
+  }
+
+  const seasonLabel = seasonId != null ? `S${seasonId}` : null;
+
+  return (
+    <div className="space-y-3">
+      {/* ─── Top bar: season selector + bulk mint + search + new pin ───── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[11px] text-text-muted">
+          Season
+          <select
+            value={seasonId ?? ''}
+            onChange={e => setSeasonId(e.target.value ? parseInt(e.target.value) : null)}
+            className="h-7 rounded-md border border-border-default bg-surface-raised text-xs px-2"
+          >
+            <option value="">All seasons</option>
+            {seasons
+              .slice()
+              .sort((a, b) => b.seasonNumber - a.seasonNumber)
+              .map(s => (
+                <option key={s.id} value={s.seasonNumber}>S{s.seasonNumber}</option>
+              ))}
+          </select>
+        </label>
+
+        {seasonId != null && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px]"
+            onClick={() => setMintWizardOpen(true)}
+            title="Replay the hand-curated award list for this season"
+          >
+            <Sparkles size={11} />
+            Mint S{seasonId} Awards
+          </Button>
+        )}
+
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search pins"
+            className="pl-7 h-7 text-xs"
+          />
+        </div>
+
+        <Button size="sm" onClick={() => setCreating(true)} className="h-7">
+          <Plus size={12} />
+          New Pin
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
+        {/* ─── Pin grid ───────────────────────────────────────────────── */}
+        <div>
+          {loading ? (
+            <LoadingSprite size="md" padding="md" />
+          ) : filteredDefs.length === 0 ? (
+            <EmptyState
+              variant="nothing-here"
+              title="No pins match."
+              spriteSize="md"
+              padding="sm"
+            />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+              {filteredDefs.map(def => (
+                <DefinitionCard
+                  key={def.id}
+                  def={def}
+                  seasonAwardCount={seasonAwardCounts[def.id] ?? 0}
+                  seasonLabel={seasonLabel}
+                  onAward={() => setAwardDef(def)}
+                  onEdited={load}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ─── Recent awards sidebar ──────────────────────────────────── */}
+        <aside className="space-y-2 rounded-md border border-border-default bg-surface-raised/30 p-3 self-start">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-mono uppercase tracking-wider text-text-secondary">
+              {seasonLabel ? `${seasonLabel} awards` : 'Recent awards'}
+            </h3>
+            <span className="text-[10px] font-mono text-text-muted tabular-nums">
+              {seasonRecent.length}
+            </span>
+          </div>
+          {loading ? (
+            <LoadingSprite size="sm" padding="sm" />
+          ) : seasonRecent.length === 0 ? (
+            <EmptyState
+              variant="quiet"
+              title="No pins awarded yet."
+              spriteSize="md"
+              padding="sm"
+            />
+          ) : (
+            <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
+              {seasonRecent.map(r => {
+                const detail = formatPinMetadata(r.pinDefId, r.metadata);
+                return (
+                  <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-overlay/30 transition-colors">
+                    <Pin
+                      def={{ id: r.pinDefId, name: r.defName, iconName: r.defIconName, color: r.defColor }}
+                      size="sm"
+                      noTooltip
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] truncate">
+                        <span style={{ color: r.defColor }}>{r.defName}</span>
+                        <span className="text-text-muted"> → </span>
+                        <span className="font-mono">{r.username}</span>
+                      </div>
+                      {detail && (
+                        <div className="text-[11px] text-text-secondary truncate italic">{detail}</div>
+                      )}
+                      <div className="text-[10px] text-text-muted">
+                        {r.awardedBy ? 'manual' : 'auto'}
+                        {r.seasonId != null && ` · Earned S${r.seasonId}`}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0 text-text-muted hover:text-loss"
+                      onClick={() => handleRevoke(r.id)}
+                      title="Revoke"
+                    >
+                      <Trash2 size={11} />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </aside>
+      </div>
+
+      {/* ─── Per-pin award dialog ─────────────────────────────────────── */}
+      {awardDef && (
+        <AwardDialog
+          def={awardDef}
+          defaultSeasonId={seasonId}
+          users={users}
+          leagues={leagues}
+          onClose={() => setAwardDef(null)}
+          onAwarded={load}
+        />
+      )}
+
+      {/* ─── New-definition dialog (legacy, reused from admin-pins.tsx) ─ */}
+      {creating && (
+        <NewDefinitionDialog
+          onClose={() => setCreating(false)}
+          onSaved={() => { setCreating(false); load(); }}
+        />
+      )}
+
+      {/* ─── Bulk season-mint wizard ──────────────────────────────────── */}
+      {mintWizardOpen && seasonId != null && (
+        <BulkMintWizard
+          season={seasonId}
+          defs={defs}
+          onClose={() => setMintWizardOpen(false)}
+          onMinted={load}
+        />
+      )}
+    </div>
+  );
+}

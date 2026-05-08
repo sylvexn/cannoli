@@ -1152,4 +1152,30 @@ export const api = {
 
   getRecentPins: (limit = 50) =>
     fetchJson<ApiPinRecent[]>(`/api/admin/pins/recent?limit=${limit}`),
+
+  // Bulk-mint wizard: preview then confirm.
+  getManualAwards: (season: number) =>
+    fetchJson<{ season: number; awards: ApiManualAward[] }>(
+      `/api/admin/pins/manual-awards/${season}`,
+    ),
+
+  mintSeasonAwards: (season: number) =>
+    postJson<{
+      success: boolean;
+      inserted: number;
+      skipped: number;
+      unresolved: { award: ApiManualAward; reason: string }[];
+    }>('/api/admin/pins/mint-season', { season }),
 };
+
+/** Mirrors `ManualAward` in backend/src/lib/pins/awards-data.ts. The discriminated
+ *  union over `username` vs `pokemon` is flattened to optional fields here
+ *  because the wizard renders both shapes generically. */
+export interface ApiManualAward {
+  pin: string;
+  leagueId?: string;
+  season?: number;
+  username?: string;
+  pokemon?: string;
+  nickname?: string;
+}

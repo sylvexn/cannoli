@@ -17,21 +17,21 @@
 -- Elite 4 awards (auto-stats for garchomp / cannoli / cynthia; admin for the
 -- subjective ones).
 INSERT INTO `pin_definitions` (`id`, `name`, `description`, `icon_name`, `color`, `category`, `is_auto`) VALUES
-  ('garchomp',   'Garchomp',   'Most KOs in the season.',                                       'Skull',      '#84cc16', 'season',    1),
-  ('baxcalibur', 'Baxcalibur', 'Best individual sweep of the season.',                          'Snowflake',  '#38bdf8', 'season',    0),
-  ('kingambit',  'Kingambit',  'Best comeback of the season.',                                  'TrendingUp', '#dc2626', 'season',    0),
-  ('ash',        'Ash',        'Most Improved Player (across all leagues).',                    'Sprout',     '#22c55e', 'career',    0),
-  ('cannoli',    'Cannoli',    'Best regular-season record.',                                   'Trophy',     '#fbbf24', 'season',    1),
-  ('cynthia',    'Cynthia',    'Longest win streak of the season.',                             'Flame',      '#f97316', 'season',    1),
-  ('best-draft', 'Best Draft', 'Best drafted team, awarded at the start of the season.',        'Gem',        '#a855f7', 'draft',     0),
+  ('garchomp',   'Garchomp',   'Most KOs in the season',                                        'Skull',      '#84cc16', 'season',    1),
+  ('baxcalibur', 'Baxcalibur', 'Best individual sweep of the season',                           'Snowflake',  '#38bdf8', 'season',    0),
+  ('kingambit',  'Kingambit',  'Best comeback of the season',                                   'TrendingUp', '#dc2626', 'season',    0),
+  ('ash',        'Ash',        'Most Improved Player (across all leagues)',                     'Sprout',     '#22c55e', 'career',    0),
+  ('cannoli',    'Cannoli',    'Best regular-season record',                                    'Trophy',     '#fbbf24', 'season',    1),
+  ('cynthia',    'Cynthia',    'Longest win streak of the season',                              'Flame',      '#f97316', 'season',    1),
+  ('best-draft', 'Best Draft', 'Best drafted team, awarded at the start of the season',         'Gem',        '#a855f7', 'draft',     0),
 -- Mix awards (admin-decided; coaches vote, Elite 4 ratifies).
-  ('dragapult',  'Dragapult',  'Most Valuable Player.',                                         'Star',       '#facc15', 'season',    0),
-  ('charizard',  'Charizard',  'Low-Tier MVP.',                                                 'Coins',      '#fb923c', 'season',    0),
-  ('florges',    'Florges',    'Best Tera Captain.',                                            'Flower2',    '#ec4899', 'season',    0),
-  ('rotom',      'Rotom',      'Best Nickname.',                                                'Quote',      '#06b6d4', 'season',    0),
+  ('dragapult',  'Dragapult',  'Most Valuable Player',                                          'Star',       '#facc15', 'season',    0),
+  ('charizard',  'Charizard',  'Low-Tier MVP',                                                  'Coins',      '#fb923c', 'season',    0),
+  ('florges',    'Florges',    'Best Tera Captain',                                             'Flower2',    '#ec4899', 'season',    0),
+  ('rotom',      'Rotom',      'Best Nickname',                                                 'Quote',      '#06b6d4', 'season',    0),
 -- Player awards (player-voted).
-  ('pikachu',    'Pikachu',    'Best Mascot.',                                                  'PartyPopper','#fde047', 'community', 0),
-  ('red',        'Red',        'Best New Coach (across all leagues).',                          'UserPlus',   '#ef4444', 'career',    0);
+  ('pikachu',    'Pikachu',    'Best Mascot',                                                   'PartyPopper','#fde047', 'community', 0),
+  ('red',        'Red',        'Best New Coach (across all leagues)',                           'UserPlus',   '#ef4444', 'career',    0);
 --> statement-breakpoint
 
 -- ─── Remap historical pins onto the new slugs ──────────────────────────────
