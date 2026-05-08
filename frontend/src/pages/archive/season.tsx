@@ -159,6 +159,7 @@ export function ArchiveSeasonPage() {
       ) : (
         <>
           <SeasonLeaderStrip leagues={leagues} />
+          <SeasonWideAwards awards={(awards?.pins ?? []).filter(awardIsSeasonWide)} />
           <div className="space-y-8">
             {leagues.map(league => (
               <LeagueArchiveCard
@@ -183,6 +184,15 @@ function leagueOwnsAward(award: SeasonAward, league: ArchiveLeague): boolean {
   const teamId = award.metadata?.teamId;
   if (typeof teamId !== 'string') return false;
   return league.teams.some(t => t.id === teamId);
+}
+
+/** Pins minted at season scope without a teamId — typically admin-minted
+ *  pins where metadata was forgotten, or genuinely team-less pins like a
+ *  "Season Idol". These would otherwise be invisible because per-league
+ *  filters require a teamId match. */
+function awardIsSeasonWide(award: SeasonAward): boolean {
+  const teamId = award.metadata?.teamId;
+  return typeof teamId !== 'string';
 }
 
 /** Cross-league top-5 by total kills — quick "who's the season MVP" answer
@@ -466,6 +476,44 @@ function LeagueArchiveCard({
             )}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Top-of-page panel for season-scoped pins that have no teamId — admin
+ *  minted pins (where the human forgot the metadata) or genuinely team-less
+ *  pins like a hypothetical "Season Idol". Renders nothing if no such pins
+ *  exist so the hub stays clean. Reuses the same chip styling as the
+ *  per-league AwardsStrip for visual consistency. */
+function SeasonWideAwards({ awards }: { awards: SeasonAward[] }) {
+  if (awards.length === 0) return null;
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardContent className="p-3 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-text-muted shrink-0">
+          <Award size={12} className="text-purple-400" />
+          Season-wide awards
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {awards.map(a => (
+            <Link
+              key={a.pinId}
+              to={`/coach/${a.username}`}
+              className="flex items-center gap-1.5 px-2 py-1 rounded border bg-surface-overlay/40 hover:bg-surface-overlay transition-colors"
+              style={{ borderColor: `${a.defColor}33` }}
+              title={`${a.defName} — ${a.displayName ?? a.username}`}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: a.defColor }}
+              />
+              <span className="text-[11px] font-medium text-text-primary">{a.defName}</span>
+              <span className="text-[10px] text-text-muted">·</span>
+              <span className="text-[10px] text-text-muted">{a.displayName ?? a.username}</span>
+            </Link>
+          ))}
+        </div>
       </CardContent>
     </Card>
   );
