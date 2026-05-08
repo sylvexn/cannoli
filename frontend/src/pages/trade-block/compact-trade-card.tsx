@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Player, Trade } from '@/lib/types';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useAuth } from '@/lib/auth-context';
+import { canManageTeam } from '@/lib/permissions';
 import { api } from '@/lib/api';
 import { TeamLink } from '@/components/team-link';
 import { useLeague } from '@/lib/league-context';
@@ -51,22 +52,19 @@ export function CompactTradeCard({
   const isFreeAgent = trade.recipient === 'pool';
   const recipient = isFreeAgent ? null : playerMap.get(trade.recipient);
 
-  // Counterparty action eligibility: pending trade + current user owns the recipient team
+  // Counterparty action eligibility: pending trade + current user can
+  // manage the recipient team (owner OR staff). Staff bypass ownership
+  // gates per backend isStaff() — the UI must mirror that.
   const canRespond = !!(
     trade.status === 'pending' &&
-    user &&
-    recipient &&
-    recipient.userId != null &&
-    String(recipient.userId) === user.id
+    canManageTeam(user, recipient)
   );
 
-  // Proposer-side withdraw eligibility: pending/awaiting_admin + current user owns the proposer team
+  // Proposer-side withdraw eligibility: pending/awaiting_admin + current
+  // user can manage the proposer team (owner OR staff).
   const canWithdraw = !!(
     (trade.status === 'pending' || trade.status === 'awaiting_admin') &&
-    user &&
-    proposer &&
-    proposer.userId != null &&
-    String(proposer.userId) === user.id
+    canManageTeam(user, proposer)
   );
 
   // Stale-listing detection: render-side cheap pre-validation. Flags any
