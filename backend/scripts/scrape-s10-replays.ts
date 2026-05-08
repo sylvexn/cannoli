@@ -146,7 +146,10 @@ function parseMatchPage(html: string): {
   // Decode twice — Google Sites wraps content inside JS strings.
   const decoded = decodeEntities(decodeEntities(html));
 
-  const idMatch = decoded.match(/name="replayid"\s+value="(gen9[a-z]+-\d+)"/);
+  // Older PS replays embed as `unregisteredserver-gen9natdexdraft-NNN`; newer
+  // ones drop the server prefix. Capture whatever's between the quotes so
+  // either form (and any future variant) carries through unchanged.
+  const idMatch = decoded.match(/name="replayid"\s+value="([^"]+)"/);
   const replayId = idMatch ? idMatch[1] : null;
 
   const logMatch = decoded.match(
