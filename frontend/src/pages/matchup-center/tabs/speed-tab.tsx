@@ -49,8 +49,8 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
   const { openSideCard } = usePokemonSideCard();
   const speedList = useMemo(() => {
     return [
-      ...teamA.map(p => ({ name: p.name, spe: p.stats.spe, side: 'a' as const })),
-      ...teamB.map(p => ({ name: p.name, spe: p.stats.spe, side: 'b' as const })),
+      ...teamA.map(p => ({ name: p.name, spe: p.stats.spe, side: 'a' as const, isShiny: p.isShiny, nickname: p.nickname })),
+      ...teamB.map(p => ({ name: p.name, spe: p.stats.spe, side: 'b' as const, isShiny: p.isShiny, nickname: p.nickname })),
     ].sort((a, b) => b.spe - a.spe);
   }, [teamA, teamB]);
 
@@ -102,8 +102,8 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
                   entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
                 )}
               >
-                <button onClick={() => openSideCard(entry.name)} title="View details">
-                  <PokemonSprite name={entry.name} size="xs" />
+                <button onClick={() => openSideCard(entry.name)} title={entry.nickname ? `${entry.name} — "${entry.nickname}"` : 'View details'}>
+                  <PokemonSprite name={entry.name} size="xs" shiny={entry.isShiny} />
                 </button>
                 <Link
                   to={pokemonRoute(entry.name)}
@@ -111,6 +111,11 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
                 >
                   {entry.name}
                 </Link>
+                {entry.nickname && (
+                  <span className="text-[10px] italic font-mono text-text-muted truncate" title={entry.nickname}>
+                    "{entry.nickname}"
+                  </span>
+                )}
                 <span className="flex-1" />
                 <span className={cn(
                   'text-xs font-mono font-bold tabular-nums shrink-0',
@@ -151,8 +156,8 @@ function SpeedCalcCard({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {pokemon && (
-            <button onClick={() => openSideCard(pokemon.name)} title="View details">
-              <PokemonSprite name={pokemon.name} size="sm" />
+            <button onClick={() => openSideCard(pokemon.name)} title={pokemon.nickname ? `${pokemon.name} — "${pokemon.nickname}"` : 'View details'}>
+              <PokemonSprite name={pokemon.name} size="sm" shiny={pokemon.isShiny} />
             </button>
           )}
           <span className="text-xl font-bold font-mono text-neon tabular-nums">{computed}</span>

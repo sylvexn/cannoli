@@ -78,7 +78,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               title={`${pokemon.name} · ${pokemon.types.join('/')} · ${pokemon.stats.spe} SPE`}
             >
               <div className="w-10 h-10 flex items-center justify-center">
-                <PokemonSprite name={pokemon.name} size="md" className="!w-10 !h-10" />
+                <PokemonSprite name={pokemon.name} size="md" shiny={pokemon.isShiny} className="!w-10 !h-10" />
               </div>
               <span className={cn(
                 'text-[10px] font-mono leading-tight w-full truncate text-center transition-colors duration-200',
@@ -88,6 +88,14 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               )}>
                 {pokemon.name}
               </span>
+              {pokemon.nickname && (
+                <span
+                  className="text-[9px] italic font-mono leading-tight w-full truncate text-center text-text-muted/70"
+                  title={pokemon.nickname}
+                >
+                  "{pokemon.nickname}"
+                </span>
+              )}
             </button>
           );
         })}

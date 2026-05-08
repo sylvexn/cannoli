@@ -46,7 +46,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
                 {pokemon.side === 'a' && (
                   <div className="flex items-center gap-1 justify-end whitespace-nowrap">
                     <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
-                    <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
+                    <PokemonSprite name={pokemon.name} size="xs" shiny={pokemon.isShiny} className="shrink-0" />
                   </div>
                 )}
               </div>
@@ -59,7 +59,7 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               <div>
                 {pokemon.side === 'b' && (
                   <div className="flex items-center gap-1 whitespace-nowrap">
-                    <PokemonSprite name={pokemon.name} size="xs" className="shrink-0" />
+                    <PokemonSprite name={pokemon.name} size="xs" shiny={pokemon.isShiny} className="shrink-0" />
                     <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
                   </div>
                 )}
@@ -106,7 +106,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
           {team.map(pokemon => (
             <TableRow key={pokemon.name}>
               <TableCell className="px-1 py-1">
-                <PokemonSprite name={pokemon.name} size="sm" />
+                <PokemonSprite name={pokemon.name} size="sm" shiny={pokemon.isShiny} />
               </TableCell>
               <TableCell className="py-1">
                 <TeraIndicator
@@ -116,6 +116,11 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
                   className="text-sm font-mono font-medium"
                   asLink
                 />
+                {pokemon.nickname && (
+                  <div className="text-[10px] italic font-mono text-text-muted truncate" title={pokemon.nickname}>
+                    "{pokemon.nickname}"
+                  </div>
+                )}
               </TableCell>
               <TableCell className="py-1">
                 <TypeChip types={pokemon.types as PokemonType[]} size="xs" />

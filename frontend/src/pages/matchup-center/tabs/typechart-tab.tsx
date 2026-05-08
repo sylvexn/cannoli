@@ -42,6 +42,8 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   const chartA = useMemo(() =>
     teamA.map(p => ({
       name: p.name,
+      nickname: p.nickname,
+      isShiny: p.isShiny,
       matchups: getDefensiveMatchups(p.types as PokemonType[], p.abilities?.[0]),
     })),
     [teamA],
@@ -50,6 +52,8 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   const chartB = useMemo(() =>
     teamB.map(p => ({
       name: p.name,
+      nickname: p.nickname,
+      isShiny: p.isShiny,
       matchups: getDefensiveMatchups(p.types as PokemonType[], p.abilities?.[0]),
     })),
     [teamB],
@@ -72,7 +76,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
 function TypeGrid({
   chart,
 }: {
-  chart: { name: string; matchups: { type: PokemonType; multiplier: number }[] }[];
+  chart: { name: string; nickname?: string | null; isShiny?: boolean; matchups: { type: PokemonType; multiplier: number }[] }[];
 }) {
   if (chart.length === 0) {
     return (
@@ -92,10 +96,10 @@ function TypeGrid({
               <th key={p.name} className="px-0.5 py-1.5 text-center">
                 <Link
                   to={pokemonRoute(p.name)}
-                  title={p.name}
+                  title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
                   className="inline-block hover:scale-110 transition-transform"
                 >
-                  <PokemonSprite name={p.name} size="xs" className="mx-auto" />
+                  <PokemonSprite name={p.name} size="xs" shiny={p.isShiny} className="mx-auto" />
                 </Link>
               </th>
             ))}

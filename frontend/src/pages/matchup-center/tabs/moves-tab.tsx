@@ -66,10 +66,10 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
             >
               <Link
                 to={pokemonRoute(p.name)}
-                title={p.name}
+                title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
                 className="hover:scale-110 transition-transform"
               >
-                <PokemonSprite name={p.name} size="sm" />
+                <PokemonSprite name={p.name} size="sm" shiny={p.isShiny} />
               </Link>
             </div>
           ))}
@@ -85,10 +85,10 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
             >
               <Link
                 to={pokemonRoute(p.name)}
-                title={p.name}
+                title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
                 className="hover:scale-110 transition-transform"
               >
-                <PokemonSprite name={p.name} size="sm" />
+                <PokemonSprite name={p.name} size="sm" shiny={p.isShiny} />
               </Link>
             </div>
           ))}
