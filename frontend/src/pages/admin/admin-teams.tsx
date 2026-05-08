@@ -17,7 +17,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { toast } from 'sonner';
 import {
   Upload, ImageIcon, Plus, Pencil, Trash2,
-  UserCog, Gamepad2, Palette,
+  UserCog, Palette, X,
 } from 'lucide-react';
 
 const QUICK_COLORS = [
@@ -32,7 +32,7 @@ interface TeamFormState {
   teamAbbrev: string;
   teamColor: string;
   userId: number | null;
-  showdownUsername: string;
+  logoPath: string | null;
 }
 
 function emptyForm(): TeamFormState {
@@ -42,7 +42,7 @@ function emptyForm(): TeamFormState {
     teamAbbrev: '',
     teamColor: QUICK_COLORS[0],
     userId: null,
-    showdownUsername: '',
+    logoPath: null,
   };
 }
 
@@ -100,13 +100,13 @@ export function AdminTeams() {
       teamAbbrev: team.teamAbbrev,
       teamColor: team.teamColor,
       userId: team.userId ?? null,
-      showdownUsername: team.showdownUsername ?? '',
+      logoPath: team.logoPath ?? null,
     });
     setFormOpen(true);
   }
 
   async function submitForm() {
-    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = form;
+    const { coachName, teamName, teamAbbrev, teamColor, userId } = form;
     if (!coachName.trim() || !teamName.trim() || !teamAbbrev.trim()) {
       toast.error('Coach, team name, and abbreviation are required');
       return;
@@ -120,7 +120,6 @@ export function AdminTeams() {
           teamAbbrev: teamAbbrev.trim().toUpperCase(),
           teamColor,
           userId: userId ?? null,
-          showdownUsername: showdownUsername.trim() || null,
         });
         toast.success(`Created ${teamName}`);
       } else if (formTeamId) {
@@ -130,7 +129,6 @@ export function AdminTeams() {
           teamAbbrev: teamAbbrev.trim().toUpperCase(),
           teamColor,
           userId: userId ?? null,
-          showdownUsername: showdownUsername.trim() || null,
         });
         toast.success(`Updated ${teamName}`);
       }
@@ -170,19 +168,45 @@ export function AdminTeams() {
     }
     try {
       const result = await api.uploadTeamLogo(teamId, file);
-      const cacheBust = `?v=${Date.now()}`;
+      const newPath = result.path.replace(/^\/uploads\//, '') + `?v=${Date.now()}`;
       setTeamsPerLeague(prev => {
         const next: Record<string, ApiTeam[]> = {};
         for (const [lid, teams] of Object.entries(prev)) {
           next[lid] = teams.map(t =>
-            t.id === teamId ? { ...t, logoPath: result.path.replace(/^\/uploads\//, '') + cacheBust } : t
+            t.id === teamId ? { ...t, logoPath: newPath } : t
           );
         }
         return next;
       });
+      // Sync the in-flight form preview when the upload happened from the
+      // dialog field (edit mode for the team currently in the form).
+      if (formTeamId === teamId) {
+        setForm(f => ({ ...f, logoPath: newPath }));
+      }
       toast.success(`Logo uploaded for ${teamId.split('-').pop()?.toUpperCase()}`);
     } catch (err: any) {
       toast.error(err.message || 'Upload failed');
+    }
+  }
+
+  async function handleLogoRemove(teamId: string) {
+    try {
+      await api.removeTeamLogo(teamId);
+      setTeamsPerLeague(prev => {
+        const next: Record<string, ApiTeam[]> = {};
+        for (const [lid, teams] of Object.entries(prev)) {
+          next[lid] = teams.map(t =>
+            t.id === teamId ? { ...t, logoPath: null } : t
+          );
+        }
+        return next;
+      });
+      if (formTeamId === teamId) {
+        setForm(f => ({ ...f, logoPath: null }));
+      }
+      toast.success('Logo removed');
+    } catch (err: any) {
+      toast.error(err.message || 'Remove failed');
     }
   }
 
@@ -286,6 +310,17 @@ export function AdminTeams() {
               />
             </FormField>
 
+            <FormField label="Team Logo" icon={<ImageIcon size={11} />}>
+              <LogoFormRow
+                logoPath={form.logoPath}
+                teamColor={form.teamColor}
+                teamAbbrev={form.teamAbbrev}
+                disabled={formMode === 'create'}
+                onUpload={file => formTeamId && handleLogoUpload(formTeamId, file)}
+                onRemove={() => formTeamId && handleLogoRemove(formTeamId)}
+              />
+            </FormField>
+
             <FormField label="Team Color" icon={<Palette size={11} />}>
               <div className="flex items-center gap-2">
                 <div className="flex flex-wrap gap-1.5">
@@ -330,13 +365,6 @@ export function AdminTeams() {
               </Select>
             </FormField>
 
-            <FormField label="Showdown Username" icon={<Gamepad2 size={11} />}>
-              <Input
-                value={form.showdownUsername}
-                onChange={e => setForm(f => ({ ...f, showdownUsername: e.target.value }))}
-                placeholder="(optional, used by live battle bot)"
-              />
-            </FormField>
           </div>
 
           <DialogFooter>
@@ -417,6 +445,65 @@ function FormField({ label, icon, children }: { label: string; icon?: React.Reac
   );
 }
 
+function LogoFormRow({ logoPath, teamColor, teamAbbrev, disabled, onUpload, onRemove }: {
+  logoPath: string | null;
+  teamColor: string;
+  teamAbbrev: string;
+  disabled: boolean;
+  onUpload: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="shrink-0 w-16 h-16 rounded-md border border-border-subtle bg-surface-overlay flex items-center justify-center">
+        <TeamLogo abbrev={teamAbbrev || '??'} color={teamColor} size="lg" logoPath={logoPath} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          onClick={() => fileRef.current?.click()}
+          disabled={disabled}
+          title={disabled ? 'Save the team first to upload a logo' : 'Upload a new logo'}
+        >
+          <Upload size={11} />
+          {logoPath ? 'Replace' : 'Upload'}
+        </Button>
+        {logoPath && !disabled && (
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={onRemove}
+            className="text-loss border-loss/30 hover:bg-loss/10"
+          >
+            <X size={11} />
+            Remove
+          </Button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) onUpload(file);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      {disabled && (
+        <span className="text-[10px] text-text-muted">
+          Save the team first to upload a logo.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function TeamRow({ team, manager, onUpload, onEdit, onDelete }: {
   team: ApiTeam;
   manager: ApiAuthUser | undefined;
@@ -468,12 +555,6 @@ function TeamRow({ team, manager, onUpload, onEdit, onDelete }: {
             <span className="flex items-center gap-1 text-loss/70">
               <UserCog size={9} />
               No manager
-            </span>
-          )}
-          {team.showdownUsername && (
-            <span className="flex items-center gap-1 text-text-secondary truncate">
-              <Gamepad2 size={9} />
-              {team.showdownUsername}
             </span>
           )}
         </div>
