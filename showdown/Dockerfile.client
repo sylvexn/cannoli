@@ -66,6 +66,22 @@ RUN sed -i \
         -e 's|\.\./config/testclient-key.js|config/testclient-key.js|g' \
         play.pokemonshowdown.com/testclient.html play.pokemonshowdown.com/index.html
 
+# Dereference symlinks in the served tree. Upstream ships
+# play.pokemonshowdown.com/config/{config,colors,coil,config-test}.* as
+# relative symlinks into ../../config/. Docker COPY preserves symlinks, so
+# once /client/play.pokemonshowdown.com is copied into the nginx image those
+# targets land outside the destination root and the symlinks dangle —
+# /config/config.js then 404s and nginx serves testclient.html as the body,
+# which the browser tries to parse as JS. Replace each symlink with the
+# resolved file content so it survives the multistage copy.
+RUN find play.pokemonshowdown.com -type l | while read -r link; do \
+        target=$(readlink -f "$link"); \
+        if [ -e "$target" ]; then \
+            rm "$link"; \
+            cp "$target" "$link"; \
+        fi; \
+    done
+
 FROM nginx:alpine
 
 # Copy built client files
