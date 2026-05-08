@@ -313,40 +313,15 @@ function DefensiveMatchupsCard({ types }: { types: PokemonType[] }) {
 
 interface SpeedBand {
   label: string;
-  blurb: string;
   color: string;
 }
 
 function classifySpeed(base: number): SpeedBand {
-  if (base >= 121)
-    return {
-      label: 'Blistering',
-      blurb: 'Outspeeds nearly everything that isn’t Choice Scarfed.',
-      color: '#22d3ee',
-    };
-  if (base >= 101)
-    return {
-      label: 'Fast',
-      blurb: 'Will outpace most of the meta unscarfed.',
-      color: '#4ade80',
-    };
-  if (base >= 81)
-    return {
-      label: 'Mid',
-      blurb: 'Speed creeps will matter — watch the tier sheet.',
-      color: '#fbbf24',
-    };
-  if (base >= 61)
-    return {
-      label: 'Slow',
-      blurb: 'Wants Trick Room support, priority, or bulk to function.',
-      color: '#fb923c',
-    };
-  return {
-    label: 'Lethargic',
-    blurb: 'Bring it in safely — Trick Room or pivot moves only.',
-    color: '#f87171',
-  };
+  if (base >= 121) return { label: 'Blistering', color: '#22d3ee' };
+  if (base >= 101) return { label: 'Fast',       color: '#4ade80' };
+  if (base >= 81)  return { label: 'Mid',        color: '#fbbf24' };
+  if (base >= 61)  return { label: 'Slow',       color: '#fb923c' };
+  return            { label: 'Lethargic',   color: '#f87171' };
 }
 
 function SpeedTierStrip({ baseSpeed }: { baseSpeed: number }) {
@@ -372,7 +347,6 @@ function SpeedTierStrip({ baseSpeed }: { baseSpeed: number }) {
               base {baseSpeed}
             </span>
           </div>
-          <p className="text-xs text-text-muted leading-snug truncate">{band.blurb}</p>
         </div>
         <Link
           to="/speed-tiers"

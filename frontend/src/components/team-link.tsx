@@ -6,6 +6,7 @@ import { CoachLink } from '@/components/coach-link';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { api, type ApiTeam } from '@/lib/api';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { cn } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
 
@@ -230,7 +231,8 @@ function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: Te
           )}
         </div>
 
-        {/* Roster sprites */}
+        {/* Roster sprites — every sprite links to its Pokemon detail page so
+            the popover doubles as a quick scouting jumpoff. */}
         {roster.length > 0 && (
           <div
             className="border-t border-border-subtle/50 px-3 py-2 flex items-center gap-0.5 flex-wrap"
@@ -239,7 +241,12 @@ function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: Te
             }}
           >
             {roster.slice(0, 12).map(mon => (
-              <div key={mon.name} className="relative shrink-0" title={mon.name}>
+              <Link
+                key={mon.name}
+                to={pokemonRoute(mon.name)}
+                className="relative shrink-0 hover:scale-110 transition-transform"
+                title={mon.name}
+              >
                 <PokemonSprite name={mon.name} size="sm" shiny={mon.isShiny} />
                 {mon.isTeraCaptain && (
                   <span
@@ -247,7 +254,7 @@ function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: Te
                     style={{ backgroundColor: '#e879f9' }}
                   />
                 )}
-              </div>
+              </Link>
             ))}
           </div>
         )}
