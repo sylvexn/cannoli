@@ -108,7 +108,7 @@ export function SpriteShowcase({
             return (
               <div
                 key={`${mon.name}-${i}`}
-                className="relative group"
+                className="relative group flex flex-col items-center"
                 ref={(el) => { if (el) spriteRefs.current.set(i, el); else spriteRefs.current.delete(i); }}
               >
                 <Tooltip>
@@ -166,6 +166,9 @@ export function SpriteShowcase({
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-surface-overlay border-border-default text-xs">
                     <span className="font-semibold text-text-primary">{mon.name}</span>
+                    {mon.nickname && (
+                      <span className="italic text-text-muted ml-2 font-mono">"{mon.nickname}"</span>
+                    )}
                     <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
@@ -190,6 +193,15 @@ export function SpriteShowcase({
                   >
                     <X size={11} strokeWidth={3} />
                   </button>
+                )}
+                {/* Nickname under sprite */}
+                {mon.nickname && (
+                  <div
+                    className="max-w-[88px] truncate text-center text-[9px] italic font-mono text-text-muted leading-tight -mt-0.5"
+                    title={mon.nickname}
+                  >
+                    "{mon.nickname}"
+                  </div>
                 )}
               </div>
             );
