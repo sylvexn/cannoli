@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useLeagueData } from '@/lib/league-data-context';
+import { useLeagueUrl } from '@/lib/use-league-url';
 import { TeamLogo } from '@/components/team-logo';
 import { cn } from '@/lib/utils';
 import { Trophy } from 'lucide-react';
@@ -22,6 +24,7 @@ const ROUND_LABEL: Record<RoundKey, string> = {
 
 export function PlayoffBracket() {
   const { matches, players } = useLeagueData();
+  const leagueUrl = useLeagueUrl();
 
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
 
@@ -95,10 +98,15 @@ export function PlayoffBracket() {
               const champ = playerMap.get(finalsWinnerId);
               if (!champ) return null;
               return (
-                <div className="flex items-center gap-2">
+                <Link
+                  to={leagueUrl(`/teams/${champ.id}`)}
+                  className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+                >
                   <TeamLogo abbrev={champ.teamAbbrev} color={champ.teamColor} size="md" />
-                  <span className="text-sm font-bold text-text-primary">{champ.teamName}</span>
-                </div>
+                  <span className="text-sm font-bold text-text-primary hover:text-draw transition-colors">
+                    {champ.teamName}
+                  </span>
+                </Link>
               );
             })()}
           </div>
@@ -222,13 +230,7 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
         {seed}
       </span>
 
-      <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-      <span className={cn(
-        'text-xs font-medium flex-1 min-w-0 truncate',
-        isWinner ? 'text-win' : isLoser ? 'text-text-muted' : 'text-text-primary',
-      )}>
-        {player.teamAbbrev}
-      </span>
+      <BracketTeamLink player={player} isWinner={isWinner} isLoser={isLoser} />
 
       {hasResult && (
         <span className={cn(
@@ -243,5 +245,30 @@ function BracketTeamRow({ player, seed, score, isWinner, isLoser, hasResult }: {
         <div className="w-1 h-4 rounded-full bg-win shrink-0" />
       )}
     </div>
+  );
+}
+
+/** Logo + abbrev pair that links to the team profile. Inline so it can pull
+ *  the league context via `useLeagueUrl` without forcing every caller in the
+ *  bracket tree to thread the leagueId. */
+function BracketTeamLink({ player, isWinner, isLoser }: {
+  player: Player;
+  isWinner: boolean;
+  isLoser: boolean;
+}) {
+  const leagueUrl = useLeagueUrl();
+  return (
+    <Link
+      to={leagueUrl(`/teams/${player.id}`)}
+      className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-90 transition-opacity"
+    >
+      <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+      <span className={cn(
+        'text-xs font-medium flex-1 min-w-0 truncate hover:underline',
+        isWinner ? 'text-win' : isLoser ? 'text-text-muted' : 'text-text-primary',
+      )}>
+        {player.teamAbbrev}
+      </span>
+    </Link>
   );
 }
