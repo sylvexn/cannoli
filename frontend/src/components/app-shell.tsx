@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Swords, Shield, Globe, Gamepad2,
+  Swords, Globe, Gamepad2,
   Archive, Film, ScrollText, ListTree, Home, Gauge,
 } from 'lucide-react';
 import {
@@ -368,20 +368,6 @@ export function AppShell() {
             Rules
           </NavLink>
 
-          {isAdmin && (
-            <NavLink viewTransition
-              to="/admin"
-              className={({ isActive }) => cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-neon/10 text-neon'
-                  : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-              )}
-            >
-              <Shield size={16} />
-              Admin
-            </NavLink>
-          )}
         </nav>
 
         {/* Footer — My Team + user dropdown (or login for guests) */}
