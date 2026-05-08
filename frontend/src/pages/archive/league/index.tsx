@@ -44,19 +44,36 @@ export function ArchiveLeaguePage() {
       .catch(e => { setError(String(e)); setLoading(false); });
   }, [leagueId]);
 
-  // Champion derivation — finals winner. Mirrors archive-mint.ts logic so
-  // the banner shows what the auto-minter would award.
+  // Champion derivation — prefer the stamped finishPosition === 1 team
+  // (set post-archive by assignFinishPositions), falling back to the
+  // finals-winner derivation when teams haven't been stamped yet (live
+  // leagues mid-playoffs). Loser/score still come from the schedule so
+  // the "def. RUN 4–2" tagline keeps working in both branches.
   const championInfo = useMemo(() => {
     if (!data) return null;
     const finals = data.schedule.filter(m => m.phase === 'playoffs' && m.playoffRound === 'f' && m.homeScore != null && m.awayScore != null);
-    if (finals.length === 0) return null;
     let homeSum = 0, awaySum = 0;
     for (const f of finals) {
       homeSum += f.homeScore ?? 0;
       awaySum += f.awayScore ?? 0;
     }
-    if (homeSum === awaySum) return null;
     const ref = finals[0];
+
+    const stampedWinner = data.teams.find(t => t.finishPosition === 1);
+    const stampedRunnerUp = data.teams.find(t => t.finishPosition === 2);
+
+    if (stampedWinner) {
+      const score = finals.length > 0 && homeSum !== awaySum
+        ? { winner: Math.max(homeSum, awaySum), loser: Math.min(homeSum, awaySum) }
+        : null;
+      return {
+        winner: stampedWinner,
+        loser: stampedRunnerUp ?? null,
+        score,
+      };
+    }
+
+    if (finals.length === 0 || homeSum === awaySum || !ref) return null;
     const winnerId = homeSum > awaySum ? ref.homeTeamId : ref.awayTeamId;
     const loserId = homeSum > awaySum ? ref.awayTeamId : ref.homeTeamId;
     const winner = data.teams.find(t => t.id === winnerId);
@@ -64,7 +81,7 @@ export function ArchiveLeaguePage() {
     if (!winner) return null;
     return {
       winner,
-      loser,
+      loser: loser ?? null,
       score: { winner: Math.max(homeSum, awaySum), loser: Math.min(homeSum, awaySum) },
     };
   }, [data]);
@@ -118,6 +135,7 @@ export function ArchiveLeaguePage() {
             teamColor: championInfo.loser.teamColor,
           } : null}
           roster={championInfo.winner.roster.map(r => ({ name: r.name, isTeraCaptain: r.isTeraCaptain }))}
+          finishLabel={championInfo.winner.finishLabel}
         />
       )}
 
