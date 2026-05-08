@@ -7,10 +7,11 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { RecordDisplay } from '@/components/record-display';
+import { ChampionBanner } from '@/components/champion-banner';
 import { cn } from '@/lib/utils';
 import { MEDAL_COLORS } from '@/lib/constants';
 import {
-  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon, ArrowRight,
+  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon, ArrowRight, Award,
 } from 'lucide-react';
 
 /**
@@ -76,11 +77,33 @@ interface ArchiveLeague {
   mvps: ArchiveMvp[];
 }
 
+interface SeasonAward {
+  pinId: number;
+  pinDefId: string;
+  userId: number;
+  username: string;
+  displayName: string | null;
+  defName: string;
+  defIconName: string;
+  defColor: string;
+  defCategory: string;
+  defIsAuto: boolean;
+  metadata: any;
+}
+
+interface SeasonAwardsPayload {
+  seasonId: number;
+  seasonNumber: number;
+  archived: boolean;
+  pins: SeasonAward[];
+}
+
 export function ArchiveSeasonPage() {
   const { seasonId: seasonIdParam } = useParams<{ seasonId: string }>();
   const seasonId = seasonIdParam ? parseInt(seasonIdParam) : null;
   const [season, setSeason] = useState<ArchiveSeason | null>(null);
   const [leagues, setLeagues] = useState<ArchiveLeague[]>([]);
+  const [awards, setAwards] = useState<SeasonAwardsPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -89,10 +112,12 @@ export function ArchiveSeasonPage() {
     Promise.all([
       fetch('/api/seasons').then(r => r.json() as Promise<ArchiveSeason[]>),
       fetch(`/api/seasons/${seasonId}/leagues`).then(r => r.json() as Promise<ArchiveLeague[]>),
+      fetch(`/api/archive/seasons/${seasonId}/awards`).then(r => r.json() as Promise<SeasonAwardsPayload>).catch(() => null),
     ])
-      .then(([seasons, lg]) => {
+      .then(([seasons, lg, aw]) => {
         setSeason(seasons.find(s => s.id === seasonId) ?? null);
         setLeagues(lg);
+        setAwards(aw);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -128,17 +153,89 @@ export function ArchiveSeasonPage() {
           <h2 className="text-base font-medium text-text-primary mb-1">No data for this season</h2>
         </div>
       ) : (
-        <div className="space-y-8">
-          {leagues.map(league => (
-            <LeagueArchiveCard key={league.id} seasonId={seasonId} league={league} />
-          ))}
-        </div>
+        <>
+          <SeasonLeaderStrip leagues={leagues} />
+          <div className="space-y-8">
+            {leagues.map(league => (
+              <LeagueArchiveCard
+                key={league.id}
+                seasonId={seasonId}
+                seasonNumber={season?.seasonNumber ?? null}
+                league={league}
+                awards={(awards?.pins ?? []).filter(p => leagueOwnsAward(p, league))}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: ArchiveLeague }) {
+/** True if the award's metadata.teamId points at a team in this league.
+ *  Falls back to false (not displayed in this league's section) so awards
+ *  with no teamId — career-scoped pins — don't get fanned out 3x. */
+function leagueOwnsAward(award: SeasonAward, league: ArchiveLeague): boolean {
+  const teamId = award.metadata?.teamId;
+  if (typeof teamId !== 'string') return false;
+  return league.teams.some(t => t.id === teamId);
+}
+
+/** Cross-league top-5 by total kills — quick "who's the season MVP" answer
+ *  before drilling into per-league details. */
+function SeasonLeaderStrip({ leagues }: { leagues: ArchiveLeague[] }) {
+  const top = useMemo(() => {
+    const all = leagues.flatMap(l => l.mvps.map(m => ({
+      ...m,
+      leagueId: l.id,
+      leagueColor: l.color,
+      team: l.teams.find(t => t.id === m.teamId),
+    })));
+    return all.sort((a, b) => (b.kills ?? 0) - (a.kills ?? 0)).slice(0, 5);
+  }, [leagues]);
+
+  if (top.length === 0) return null;
+
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardContent className="p-3 flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-text-muted shrink-0">
+          <Medal size={12} className="text-purple-400" />
+          Season top kills
+        </div>
+        {top.map((m, i) => (
+          <div key={`${m.leagueId}-${m.pokemonName}`} className="flex items-center gap-1.5 text-xs">
+            <span
+              className={cn(
+                'font-mono font-bold w-3',
+                i === 0 ? 'text-draw' : i === 1 ? 'text-text-secondary' : '',
+              )}
+              style={i === 2 ? { color: MEDAL_COLORS.bronze } : undefined}
+            >
+              #{i + 1}
+            </span>
+            <PokemonSprite name={m.pokemonName} size="xs" />
+            <span className="text-text-primary">{m.pokemonName}</span>
+            <span className="font-mono text-text-muted text-[10px]">{m.kills}K/{m.deaths}D</span>
+            {m.team && (
+              <TeamLogo abbrev={m.team.teamAbbrev} color={m.team.teamColor} size="sm" />
+            )}
+            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: m.leagueColor }} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeagueArchiveCard({
+  seasonId, seasonNumber, league, awards,
+}: {
+  seasonId: number;
+  seasonNumber: number | null;
+  league: ArchiveLeague;
+  awards: SeasonAward[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const teamMap = useMemo(() => new Map(league.teams.map(t => [t.id, t])), [league.teams]);
   const champion = league.champion ? teamMap.get(league.champion) : null;
@@ -157,6 +254,27 @@ function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: Arc
 
   const leagueDeepLink = `/archive/${seasonId}/${league.id}`;
 
+  // Find the runner-up (loser of the finals) so the ChampionBanner can show it.
+  const runnerUp = useMemo(() => {
+    const finals = league.playoffs.find(m => m.playoffRound === 'f' && m.homeScore != null);
+    if (!finals || !derivedChampion) return null;
+    const isHomeWinner = derivedChampion.id === finals.homeTeamId;
+    const loserId = isHomeWinner ? finals.awayTeamId : finals.homeTeamId;
+    return teamMap.get(loserId) ?? null;
+  }, [derivedChampion, league.playoffs, teamMap]);
+
+  const finalsScore = useMemo(() => {
+    const finals = league.playoffs.filter(m => m.playoffRound === 'f' && m.homeScore != null && m.awayScore != null);
+    if (finals.length === 0 || !derivedChampion) return null;
+    let winnerSum = 0, loserSum = 0;
+    for (const f of finals) {
+      const isHomeWinner = derivedChampion.id === f.homeTeamId;
+      winnerSum += isHomeWinner ? (f.homeScore ?? 0) : (f.awayScore ?? 0);
+      loserSum += isHomeWinner ? (f.awayScore ?? 0) : (f.homeScore ?? 0);
+    }
+    return { winner: winnerSum, loser: loserSum };
+  }, [derivedChampion, league.playoffs]);
+
   return (
     <Card className="bg-surface-raised border-border-default overflow-hidden">
       <div className="h-1.5" style={{ backgroundColor: league.color }} />
@@ -174,24 +292,46 @@ function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: Arc
             </Badge>
           </div>
 
-          <div className="flex items-center gap-3">
-            {derivedChampion && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-draw/5 border border-draw/20">
-                <Crown size={14} className="text-draw" />
-                <TeamLogo abbrev={derivedChampion.teamAbbrev} color={derivedChampion.teamColor} size="sm" />
-                <span className="text-sm font-bold text-draw">{derivedChampion.teamName}</span>
-              </div>
-            )}
-            <Link
-              to={leagueDeepLink}
-              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
-            >
-              View league
-              <ArrowRight size={12} />
-            </Link>
-          </div>
+          <Link
+            to={leagueDeepLink}
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+          >
+            View league archive
+            <ArrowRight size={12} />
+          </Link>
         </div>
       </CardHeader>
+
+      {derivedChampion && (
+        <div className="px-4 pb-4">
+          <ChampionBanner
+            team={{
+              id: derivedChampion.id,
+              coachName: derivedChampion.coachName,
+              teamName: derivedChampion.teamName,
+              teamAbbrev: derivedChampion.teamAbbrev,
+              teamColor: derivedChampion.teamColor,
+              coachUsername: derivedChampion.coachName.toLowerCase().replace(/\s+/g, ''),
+            }}
+            league={{
+              id: league.id,
+              name: league.name,
+              color: league.color,
+              seasonNumber,
+              seasonId,
+            }}
+            finalScore={finalsScore}
+            runnerUp={runnerUp ? {
+              id: runnerUp.id,
+              teamAbbrev: runnerUp.teamAbbrev,
+              teamName: runnerUp.teamName,
+              teamColor: runnerUp.teamColor,
+            } : null}
+            roster={derivedChampion.roster.map(r => ({ name: r.name, isTeraCaptain: r.isTeraCaptain }))}
+            compact
+          />
+        </div>
+      )}
 
       <CardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -233,6 +373,10 @@ function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: Arc
               })}
             </div>
           </div>
+        )}
+
+        {awards.length > 0 && (
+          <AwardsStrip awards={awards} />
         )}
 
         {league.teams.length > 6 && (
@@ -314,6 +458,40 @@ function LeagueArchiveCard({ seasonId, league }: { seasonId: number; league: Arc
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Inline awards display — one chip per pin, lucide-icon tinted by the
+ *  pin def's color. Click links to the recipient's coach profile. */
+function AwardsStrip({ awards }: { awards: SeasonAward[] }) {
+  // Lazy-resolve lucide icon at render time. Falls back to Award if the
+  // def references something we don't ship.
+  return (
+    <div className="flex items-center gap-3 pt-2 border-t border-border-subtle flex-wrap">
+      <div className="flex items-center gap-1.5 text-[10px] text-text-muted uppercase tracking-wider shrink-0">
+        <Award size={12} />
+        Awards
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        {awards.map(a => (
+          <Link
+            key={a.pinId}
+            to={`/coach/${a.username}`}
+            className="flex items-center gap-1.5 px-2 py-1 rounded border bg-surface-overlay/40 hover:bg-surface-overlay transition-colors"
+            style={{ borderColor: `${a.defColor}33` }}
+            title={`${a.defName} — ${a.displayName ?? a.username}`}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: a.defColor }}
+            />
+            <span className="text-[11px] font-medium text-text-primary">{a.defName}</span>
+            <span className="text-[10px] text-text-muted">·</span>
+            <span className="text-[10px] text-text-muted">{a.displayName ?? a.username}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 
