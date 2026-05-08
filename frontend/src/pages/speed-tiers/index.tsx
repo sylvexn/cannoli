@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gauge, RotateCcw, Sparkles } from 'lucide-react';
+import { useWindowVirtualizer } from '@tanstack/react-virtual';
 import { api, type ApiSpeedTierRow, type ApiSpeedTierOwnership } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
@@ -36,6 +37,11 @@ const DEFAULT_FILTERS: SpeedFilters = {
   trickRoom: false,
 };
 
+// Estimated row height for the virtualizer. The actual row is ~28px (xs
+// sprite + py-1), and react-virtual measures real rendered rows after
+// mount, so this is just the initial guess.
+const ROW_HEIGHT_PX = 32;
+
 export function SpeedTiersPage() {
   const { leagues } = useAppData();
   const { openSideCard } = usePokemonSideCard();
@@ -62,7 +68,24 @@ export function SpeedTiersPage() {
   }, []);
 
   useEffect(() => {
-    if (rows) preloadSprites(rows.map(r => r.name));
+    if (!rows) return;
+    // Defer the bulk sprite preload to browser idle time so the initial
+    // paint of the table isn't blocked by ~700 image fetch kickoffs. The
+    // PokemonSprite cache dedupes any in-flight URLs so per-row mounts
+    // still benefit from anything that already finished.
+    const names = rows.map(r => r.name);
+    const ric: typeof window.requestIdleCallback | undefined =
+      typeof window !== 'undefined' ? window.requestIdleCallback : undefined;
+    if (ric) {
+      const handle = ric(() => preloadSprites(names), { timeout: 2000 });
+      return () => {
+        if (typeof window.cancelIdleCallback === 'function') {
+          window.cancelIdleCallback(handle);
+        }
+      };
+    }
+    const t = setTimeout(() => preloadSprites(names), 200);
+    return () => clearTimeout(t);
   }, [rows]);
 
   // Teams list for the filter dropdown — derived from every ownership across
@@ -148,6 +171,22 @@ export function SpeedTiersPage() {
     });
   }
 
+  // Virtualize the body rows — at ~700 mons across the dex, rendering every
+  // <tr> on every filter change melted the page. We render only the rows in
+  // the visible window plus a small overscan buffer, using window scroll so
+  // the sticky filter bar above continues to behave naturally.
+  const tableContainerRef = useRef<HTMLDivElement | null>(null);
+  const virtualizer = useWindowVirtualizer({
+    count: sorted.length,
+    estimateSize: () => ROW_HEIGHT_PX,
+    overscan: 12,
+    scrollMargin: tableContainerRef.current?.offsetTop ?? 0,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = virtualItems[0]?.start ?? 0;
+  const paddingBottom = totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0);
+
   if (loading && !rows) return <SpeedTiersSkeleton />;
 
   const highlightActive = highlightLeagueIds.size > 0;
@@ -227,7 +266,7 @@ export function SpeedTiersPage() {
 
       <Card className="bg-surface-raised border-border-default overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          <div ref={tableContainerRef} className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-[5] bg-surface-raised">
                 <tr className="border-b border-border-subtle">
@@ -255,104 +294,123 @@ export function SpeedTiersPage() {
                         : 'No Pokemon match the current filters.'}
                     </td>
                   </tr>
-                ) : sorted.map((r, i) => {
-                  const tied = (tieGroups.get(r.calc.speed0) ?? 0) > 1;
-                  const types: PokemonType[] = [
-                    r.type1?.toLowerCase() as PokemonType,
-                    ...(r.type2 ? [r.type2.toLowerCase() as PokemonType] : []),
-                  ].filter(Boolean) as PokemonType[];
-                  const primaryColor = types[0] ? TYPE_COLORS[types[0]] : undefined;
-                  // Highlight = no chips active OR this row touches an active
-                  // league. Rows that don't match get faded.
-                  const matchesHighlight = !highlightActive
-                    || r.ownerships.some(o => highlightLeagueIds.has(o.leagueId));
-                  // Pick a representative nickname for the side-card title —
-                  // first ownership wins, only ever shown in the tooltip.
-                  const firstNickname = r.ownerships.find(o => !!o.nickname)?.nickname ?? null;
-                  return (
-                    <tr
-                      key={r.id}
-                      className={cn(
-                        'group border-b border-border-subtle/50 transition-[background,opacity] hover:bg-surface-overlay/60',
-                        tied && 'bg-neon/[0.04]',
-                        !matchesHighlight && 'opacity-40 hover:opacity-60',
-                      )}
-                    >
-                      <td className="px-2 py-1 text-center">
-                        <span className="text-[10px] font-mono tabular-nums text-text-muted">{i + 1}</span>
-                      </td>
-                      <td className="py-1">
-                        <button
-                          onClick={() => openSideCard(r.name)}
-                          title={firstNickname ? `${r.name} — "${firstNickname}"` : 'View details'}
-                          className="block"
-                        >
-                          <PokemonSprite name={r.name} size="xs" />
-                        </button>
-                      </td>
-                      <td className="px-1 py-1">
-                        <Link
-                          to={pokemonRoute(r.name)}
-                          className="text-xs font-medium text-text-primary hover:text-neon hover:underline truncate block"
-                        >
-                          {r.name}
-                          {r.isTeraCaptain && (
-                            <Sparkles size={9} className="inline ml-1 -mt-0.5 text-yellow-400" />
+                ) : (
+                  <>
+                    {paddingTop > 0 && (
+                      <tr aria-hidden style={{ height: paddingTop }}>
+                        <td colSpan={11} />
+                      </tr>
+                    )}
+                    {virtualItems.map(virtualRow => {
+                      const i = virtualRow.index;
+                      const r = sorted[i];
+                      if (!r) return null;
+                      const tied = (tieGroups.get(r.calc.speed0) ?? 0) > 1;
+                      const types: PokemonType[] = [
+                        r.type1?.toLowerCase() as PokemonType,
+                        ...(r.type2 ? [r.type2.toLowerCase() as PokemonType] : []),
+                      ].filter(Boolean) as PokemonType[];
+                      const primaryColor = types[0] ? TYPE_COLORS[types[0]] : undefined;
+                      // Highlight = no chips active OR this row touches an active
+                      // league. Rows that don't match get faded.
+                      const matchesHighlight = !highlightActive
+                        || r.ownerships.some(o => highlightLeagueIds.has(o.leagueId));
+                      // Pick a representative nickname for the side-card title —
+                      // first ownership wins, only ever shown in the tooltip.
+                      const firstNickname = r.ownerships.find(o => !!o.nickname)?.nickname ?? null;
+                      return (
+                        <tr
+                          key={r.id}
+                          ref={virtualizer.measureElement}
+                          data-index={i}
+                          className={cn(
+                            'group border-b border-border-subtle/50 transition-[background,opacity] hover:bg-surface-overlay/60',
+                            tied && 'bg-neon/[0.04]',
+                            !matchesHighlight && 'opacity-40 hover:opacity-60',
                           )}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-1">
-                        <TypeChip types={types} size="xs" />
-                      </td>
-                      <td className="px-2 py-1">
-                        <OwnershipChips ownerships={r.ownerships} />
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <span
-                          className="text-xs font-mono tabular-nums"
-                          style={{ color: primaryColor }}
                         >
-                          {r.baseSpeed}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1">
-                        {r.calc.activeAbility ? (
-                          <span className="text-[10px] text-neon font-mono truncate block" title={`${r.calc.activeAbility} is active`}>
-                            {r.calc.activeAbility}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-text-muted/70 font-mono truncate block">
-                            {r.abilities.join(' / ') || '—'}
-                          </span>
-                        )}
-                      </td>
-                      {/* Stage cells — +0 is the headline (sort key) */}
-                      <td className="px-2 py-1 text-right">
-                        <span className={cn(
-                          'text-sm font-mono tabular-nums font-semibold',
-                          tied ? 'text-neon' : 'text-text-primary',
-                        )}>
-                          {r.calc.speed0}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <span className="text-xs font-mono tabular-nums text-text-secondary">
-                          {r.calc.speed1}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <span className="text-xs font-mono tabular-nums text-text-secondary">
-                          {r.calc.speed2}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        <span className="text-xs font-mono tabular-nums text-purple-300">
-                          {r.calc.scarfEquivalent}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          <td className="px-2 py-1 text-center">
+                            <span className="text-[10px] font-mono tabular-nums text-text-muted">{i + 1}</span>
+                          </td>
+                          <td className="py-1">
+                            <button
+                              onClick={() => openSideCard(r.name)}
+                              title={firstNickname ? `${r.name} — "${firstNickname}"` : 'View details'}
+                              className="block"
+                            >
+                              <PokemonSprite name={r.name} size="xs" />
+                            </button>
+                          </td>
+                          <td className="px-1 py-1">
+                            <Link
+                              to={pokemonRoute(r.name)}
+                              className="text-xs font-medium text-text-primary hover:text-neon hover:underline truncate block"
+                            >
+                              {r.name}
+                              {r.isTeraCaptain && (
+                                <Sparkles size={9} className="inline ml-1 -mt-0.5 text-yellow-400" />
+                              )}
+                            </Link>
+                          </td>
+                          <td className="px-2 py-1">
+                            <TypeChip types={types} size="xs" />
+                          </td>
+                          <td className="px-2 py-1">
+                            <OwnershipChips ownerships={r.ownerships} />
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            <span
+                              className="text-xs font-mono tabular-nums"
+                              style={{ color: primaryColor }}
+                            >
+                              {r.baseSpeed}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1">
+                            {r.calc.activeAbility ? (
+                              <span className="text-[10px] text-neon font-mono truncate block" title={`${r.calc.activeAbility} is active`}>
+                                {r.calc.activeAbility}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-text-muted/70 font-mono truncate block">
+                                {r.abilities.join(' / ') || '—'}
+                              </span>
+                            )}
+                          </td>
+                          {/* Stage cells — +0 is the headline (sort key) */}
+                          <td className="px-2 py-1 text-right">
+                            <span className={cn(
+                              'text-sm font-mono tabular-nums font-semibold',
+                              tied ? 'text-neon' : 'text-text-primary',
+                            )}>
+                              {r.calc.speed0}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            <span className="text-xs font-mono tabular-nums text-text-secondary">
+                              {r.calc.speed1}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            <span className="text-xs font-mono tabular-nums text-text-secondary">
+                              {r.calc.speed2}
+                            </span>
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            <span className="text-xs font-mono tabular-nums text-purple-300">
+                              {r.calc.scarfEquivalent}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {paddingBottom > 0 && (
+                      <tr aria-hidden style={{ height: paddingBottom }}>
+                        <td colSpan={11} />
+                      </tr>
+                    )}
+                  </>
+                )}
               </tbody>
             </table>
           </div>
