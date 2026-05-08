@@ -53,8 +53,11 @@ export function AdminSeason() {
   // Playoff bracket detection + generate/regenerate flow
   const playoff = usePlayoffControls(defaultLeagues as unknown as ApiLeague[], refreshLeagues);
 
-  // Season archive list (read-only, with toggle + full ceremony)
-  const { seasonsList, toggleArchive, archiveCeremony } = useSeasonArchive();
+  // Season archive list (read-only, with toggle + full ceremony).
+  // Pass refreshLeagues so a successful ceremony also refreshes the app-wide
+  // league cache — otherwise league pages don't show the read-only badge
+  // until a manual reload.
+  const { seasonsList, toggleArchive, archiveCeremony } = useSeasonArchive(refreshLeagues);
 
   return (
     <div className="space-y-4">
