@@ -9,7 +9,6 @@ import type { FullLeagueData, DraftPick, TeamRow } from '../types';
 /** Pick-by-pick draft history. Two views: by pick order (timeline) and
  *  by team (each team's draft list). */
 export function DraftTab({ data }: { data: FullLeagueData }) {
-  const teamMap = new Map(data.teams.map(t => [t.id, t]));
   const byTeam = new Map<string, DraftPick[]>();
   for (const p of data.draft) {
     if (!byTeam.has(p.teamId)) byTeam.set(p.teamId, []);

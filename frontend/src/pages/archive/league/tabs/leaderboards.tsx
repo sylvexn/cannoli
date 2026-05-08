@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
-import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { Skull, Heart, BarChart3, Activity, Flame, Sparkles } from 'lucide-react';
@@ -81,7 +80,7 @@ function LeaderTable({
   title, icon: Icon, tint, rows, teamMap, format, hint,
 }: {
   title: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number; className?: string; color?: string }>;
   tint: string;
   rows: LeaderboardAggregate[];
   teamMap: Map<string, TeamRow>;
@@ -94,7 +93,7 @@ function LeaderTable({
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5">
-            <Icon size={12} style={{ color: tint }} />
+            <Icon size={12} color={tint} />
             <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">{title}</span>
           </div>
           {hint && <span className="text-[9px] text-text-muted/70 italic">{hint}</span>}
