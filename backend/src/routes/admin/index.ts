@@ -4,6 +4,7 @@ import { configRoutes } from './config';
 import { seasonRoutes } from './seasons';
 import { leagueAdminRoutes } from './leagues';
 import { teamAdminRoutes } from './teams';
+import { templateAdminRoutes } from './templates';
 import { miscRoutes } from './misc';
 
 export const adminRoutes = new Elysia()
@@ -12,4 +13,5 @@ export const adminRoutes = new Elysia()
   .use(seasonRoutes)
   .use(leagueAdminRoutes)
   .use(teamAdminRoutes)
+  .use(templateAdminRoutes)
   .use(miscRoutes);

@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot,
+  Trophy, UserPlus, Award, Bot, Layers,
 } from 'lucide-react';
 
 interface NavItem {
@@ -57,10 +57,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Config',
     items: [
-      { slug: 'tiers',    label: 'Tier List',       icon: List },
-      { slug: 'moves',    label: 'Move Categories', icon: Swords },
-      { slug: 'pins',     label: 'Pins',            icon: Award },
-      { slug: 'settings', label: 'Settings',        icon: Settings },
+      { slug: 'tiers',     label: 'Tier List',       icon: List },
+      { slug: 'templates', label: 'Templates',       icon: Layers },
+      { slug: 'moves',     label: 'Move Categories', icon: Swords },
+      { slug: 'pins',      label: 'Pins',            icon: Award },
+      { slug: 'settings',  label: 'Settings',        icon: Settings },
     ],
   },
   {

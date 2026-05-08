@@ -25,6 +25,7 @@ import { AdminPage } from '@/pages/admin';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminLeaguesRoute, AdminSeasonRoute,
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
+  AdminTemplatesRoute,
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
   AdminFeedbackRoute, AdminBotRoute, AdminPinsIndexRoute,
   AdminPinsDefinitionsRoute, AdminPinsAwardRoute,
@@ -115,6 +116,7 @@ export default function App() {
                     <Route path="trades" element={<AdminTradesRoute />} />
                     <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
                     <Route path="tiers" element={<AdminTierListRoute />} />
+                    <Route path="templates" element={<AdminTemplatesRoute />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
                     <Route path="pins" element={<AdminPinsIndexRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsDefinitionsRoute />} />
