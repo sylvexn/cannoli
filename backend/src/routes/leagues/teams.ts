@@ -5,16 +5,20 @@ import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { effectiveCost } from '../../lib/tera-cost';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
+import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 
 export const teamRoutes = new Elysia()
 
   // ─── Tera Captain Management ──────────────────────────────────────
 
-  .put('/api/teams/:teamId/tera-captains', ({ params, body, user, set }) => {
+  .put('/api/teams/:teamId/tera-captains', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     // Check authorization: team owner or staff (admin/dev can override any team)
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
@@ -201,11 +205,14 @@ export const teamRoutes = new Elysia()
 
   // ─── Shiny Toggle ─────────────────────────────────────────────────
 
-  .put('/api/teams/:teamId/shiny', ({ params, body, user, set }) => {
+  .put('/api/teams/:teamId/shiny', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
       set.status = 403;

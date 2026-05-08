@@ -126,6 +126,64 @@ function seedSiteSettings() {
   console.log('Site settings seeded.');
 }
 
+// ─── Seed pin definitions ───────────────────────────────────────────────────
+//
+// Net-new auto-pin defs added when the archive feature shipped. The earlier
+// award set (garchomp/cannoli/cynthia/kingslayer/flawless + manual pins) lives
+// in migration 0022_real_awards.sql; that's where the canonical defs come
+// from. These four close the gaps: Champion (was DELETEd in 0022, restored
+// here for finals-winner recognition), High Score (single-game kill record),
+// Steal of the Draft (auto-derived best K/point value, distinct from the
+// manual `best-draft`), and Sweeper (most 6-0 sweeps, distinct from the
+// per-match `flawless`). Mint logic lives in lib/pins/archive-mint.ts.
+
+const ARCHIVE_PIN_DEFINITIONS = [
+  {
+    id: 'champion',
+    name: 'Champion',
+    description: 'Won the league finals',
+    iconName: 'Crown',
+    color: '#fbbf24',
+  },
+  {
+    id: 'high-score',
+    name: 'High Score',
+    description: 'Most kills by a single Pokemon in a single match',
+    iconName: 'Flame',
+    color: '#ef4444',
+  },
+  {
+    id: 'steal-of-the-draft',
+    name: 'Steal of the Draft',
+    description: 'Best kills-per-point value on a drafted Pokemon',
+    iconName: 'TrendingUp',
+    color: '#10b981',
+  },
+  {
+    id: 'sweeper',
+    name: 'Sweeper',
+    description: 'Most 6-0 sweeps recorded across the season',
+    iconName: 'Swords',
+    color: '#a855f7',
+  },
+] as const;
+
+function seedPinDefinitions() {
+  let inserted = 0;
+  for (const def of ARCHIVE_PIN_DEFINITIONS) {
+    const existing = sqlite.prepare('SELECT id FROM pin_definitions WHERE id = ?').get(def.id) as any;
+    if (existing) continue;
+    db.insert(schema.pinDefinitions).values({
+      ...def,
+      category: 'season',
+      isAuto: true,
+    }).run();
+    inserted++;
+  }
+  if (inserted > 0) console.log(`Pin definitions seeded (+${inserted}).`);
+  else console.log('Pin definitions already exist, skipping.');
+}
+
 // ─── Seed move categories ───────────────────────────────────────────────────
 
 function seedMoveCategories() {
@@ -472,10 +530,11 @@ if (s9Missing.length === 0) {
   console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
 }
 
-// Attach scraped replay protocol logs to S10 matches (when cache is present)
-if (PRIMARY_CONFIG.seasonNumber === 10) {
+// Attach scraped replay protocol logs to matches across every cached season
+// (S9, S10, …). Each season's cache lives under backend/imports/replays/sN/.
+{
   const { importReplays } = await import('./import-replays');
-  console.log('\n── Attaching S10 replays ──');
+  console.log('\n── Attaching replays ──');
   importReplays(sqlite);
 }
 
@@ -529,6 +588,7 @@ if (s9Missing.length === 0) {
 // Seed supplementary data (both modes)
 seedSiteSettings();
 seedMoveCategories();
+seedPinDefinitions();
 
 // Mock-only data
 if (MODE === 'mock') {

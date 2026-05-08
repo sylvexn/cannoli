@@ -4,6 +4,7 @@ import { eq, and, desc, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { getLeague, getTeamRoster } from '../lib/queries';
+import { checkLeagueArchived } from '../lib/archive-guard';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -248,12 +249,14 @@ export const tradeRoutes = new Elysia()
 
   // ─── Counterparty respond (accept → awaiting_admin, reject → rejected) ─
 
-  .post('/api/trades/:id/respond', ({ params, body, user, set }) => {
+  .post('/api/trades/:id/respond', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, recipientTeam } = ctx;
+    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
 
     const { action, reason } = body as { action: 'accept' | 'reject'; reason?: string };
@@ -315,12 +318,14 @@ export const tradeRoutes = new Elysia()
 
   // ─── Trade Approve/Reject (admin) ──────────────────────────────
 
-  .post('/api/trades/:id/approve', ({ params, user, set }) => {
+  .post('/api/trades/:id/approve', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season } = ctx;
+    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
     }
@@ -382,7 +387,7 @@ export const tradeRoutes = new Elysia()
     return { success: true };
   })
 
-  .post('/api/trades/:id/reject', ({ params, body, user, set }) => {
+  .post('/api/trades/:id/reject', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const tradeId = parseInt(params.id);
     const { reason } = (body || {}) as { reason?: string };
@@ -390,6 +395,8 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade } = ctx;
+    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
     }
@@ -417,8 +424,10 @@ export const tradeRoutes = new Elysia()
 
   // ─── Trade Block Listings (user writes) ────────────────────────────
 
-  .post('/api/leagues/:leagueId/trade-block', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/trade-block', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
@@ -440,13 +449,16 @@ export const tradeRoutes = new Elysia()
     return { id: result.id };
   })
 
-  .delete('/api/trade-block-listings/:id', ({ params, user, set }) => {
+  .delete('/api/trade-block-listings/:id', ({ params, query, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
     const listing = db.select().from(schema.tradeBlockListings)
       .where(eq(schema.tradeBlockListings.id, parseInt(params.id)))
       .get();
     if (!listing) { set.status = 404; return { error: 'Listing not found' }; }
+
+    const archived = checkLeagueArchived(listing.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     if (!isStaff(user)) {
       const team = db.select().from(schema.teams)
@@ -461,8 +473,10 @@ export const tradeRoutes = new Elysia()
 
   // ─── Trade Proposals (user writes) ─────────────────────────────────
 
-  .post('/api/leagues/:leagueId/trades/propose', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/trades/propose', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
@@ -541,12 +555,14 @@ export const tradeRoutes = new Elysia()
 
   // ─── Withdraw (proposer cancels their own pending trade) ───────────────
 
-  .post('/api/trades/:id/withdraw', ({ params, user, set }) => {
+  .post('/api/trades/:id/withdraw', ({ params, query, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, proposerTeam } = ctx;
+    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
@@ -585,12 +601,14 @@ export const tradeRoutes = new Elysia()
   // original trade is closed (status='rejected', reason='Countered') and a
   // new trade is created in the *reverse* direction (the original recipient
   // becomes the new proposer).
-  .post('/api/trades/:id/counter', ({ params, body, user, set }) => {
+  .post('/api/trades/:id/counter', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season, recipientTeam } = ctx;
+    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending') {
       set.status = 400; return { error: `Trade is ${trade.status}; only pending trades can be countered` };

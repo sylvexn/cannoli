@@ -3,6 +3,8 @@ import { db, schema } from '../../db';
 import { eq, sql, desc } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
+import { runAutoAwards } from '../../lib/pins/auto-award';
+import { mintArchivePins, type ArchiveMintSummary } from '../../lib/pins/archive-mint';
 
 export const seasonRoutes = new Elysia()
 
@@ -221,6 +223,75 @@ export const seasonRoutes = new Elysia()
     });
 
     return { success: true };
+  })
+
+  // ─── Archive ceremony ───────────────────────────────────────────────
+  // The "Archive Season" admin button. Wraps three things into one
+  // transactional action:
+  //   1. Set seasons.archived = 1 (writes now require ?force=1).
+  //   2. Force every league in the season to phase=offseason. Once a season
+  //      is archived no league should still report itself as in-progress.
+  //   3. Mint the season-end auto-award pins (existing garchomp/cannoli/cynthia
+  //      via runAutoAwards, plus the four new pins via mintArchivePins).
+  //
+  // Idempotent: re-running on an already-archived season simply re-runs the
+  // pin minters (which themselves are INSERT OR IGNORE + scoped DELETE),
+  // useful when stats are corrected post-archive and you want to recompute.
+  .post('/api/admin/seasons/:seasonId/archive', ({ params, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const seasonId = parseInt(params.seasonId);
+    if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
+    if (!season) { set.status = 404; return { error: 'Season not found' }; }
+
+    const leagues = db.select().from(schema.leagues).where(eq(schema.leagues.seasonId, seasonId)).all();
+    const awardedBy = user?.id ? parseInt(user.id) : null;
+
+    const existingAwards: { leagueId: string; awarded: number; skipped: number }[] = [];
+    const newAwards: ArchiveMintSummary[] = [];
+
+    tx(() => {
+      db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
+      for (const l of leagues) {
+        if (l.phase !== 'offseason') {
+          db.update(schema.leagues).set({ phase: 'offseason' }).where(eq(schema.leagues.id, l.id)).run();
+        }
+        const existing = runAutoAwards(l.id, { trigger: 'season-end', awardedBy });
+        existingAwards.push({ leagueId: l.id, awarded: existing.awarded.length, skipped: existing.skipped });
+        const archive = mintArchivePins(l.id, { awardedBy });
+        newAwards.push(archive);
+      }
+      db.insert(schema.activityLog).values({
+        type: 'season_archived',
+        category: 'config',
+        actor: user.username,
+        leagueId: null,
+        description: `Archived Season ${season.seasonNumber} (${leagues.length} league${leagues.length === 1 ? '' : 's'})`,
+        metadata: JSON.stringify({
+          seasonId,
+          seasonNumber: season.seasonNumber,
+          existingAwards,
+          newAwards: newAwards.map(a => ({
+            leagueId: a.leagueId,
+            awarded: a.awarded.length,
+            skipped: a.skipped,
+          })),
+        }),
+      }).run();
+    });
+
+    return {
+      success: true,
+      seasonId,
+      seasonNumber: season.seasonNumber,
+      leagues: leagues.length,
+      existingAwards,
+      newAwards: newAwards.map(a => ({
+        leagueId: a.leagueId,
+        awarded: a.awarded,
+        skipped: a.skipped,
+      })),
+    };
   })
 
 ;

@@ -19,6 +19,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
+import { checkSeasonArchived } from '../lib/archive-guard';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -179,12 +180,16 @@ export const pinRoutes = new Elysia()
   })
 
   // ─── POST /api/admin/pins/award ────────────────────────────────────────
-  .post('/api/admin/pins/award', ({ body, user, set }) => {
+  .post('/api/admin/pins/award', ({ query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const b = body as { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null };
     if (!b.userId || !b.pinDefId) {
       set.status = 400;
       return { error: 'userId and pinDefId are required' };
+    }
+    if (b.seasonId != null) {
+      const archived = checkSeasonArchived(b.seasonId, query.force);
+      if (archived) { set.status = 409; return archived; }
     }
     const targetUser = db.select().from(schema.users).where(eq(schema.users.id, b.userId)).get();
     if (!targetUser) { set.status = 404; return { error: 'Target user not found' }; }
@@ -240,12 +245,17 @@ export const pinRoutes = new Elysia()
   })
 
   // ─── DELETE /api/admin/pins/:id ────────────────────────────────────────
-  .delete('/api/admin/pins/:id', ({ params, user, set }) => {
+  .delete('/api/admin/pins/:id', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = parseInt(params.id);
     if (!Number.isFinite(id)) { set.status = 400; return { error: 'Invalid pin id' }; }
     const existing = db.select().from(schema.pins).where(eq(schema.pins.id, id)).get();
     if (!existing) { set.status = 404; return { error: 'Pin not found' }; }
+
+    if (existing.seasonId != null) {
+      const archived = checkSeasonArchived(existing.seasonId, query.force);
+      if (archived) { set.status = 409; return archived; }
+    }
 
     const targetUser = db.select().from(schema.users).where(eq(schema.users.id, existing.userId)).get();
     const def = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, existing.pinDefId)).get();

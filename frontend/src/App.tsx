@@ -29,7 +29,11 @@ import {
   AdminFeedbackRoute, AdminBotRoute, AdminPinsIndexRoute,
   AdminPinsDefinitionsRoute, AdminPinsAwardRoute,
 } from '@/pages/admin/admin-routes';
-import { ArchivePage } from '@/pages/archive';
+import { ArchiveLayout } from '@/pages/archive/layout';
+import { ArchiveHubPage } from '@/pages/archive/hub';
+import { ArchiveSeasonPage } from '@/pages/archive/season';
+import { ArchiveLeaguePage } from '@/pages/archive/league';
+import { ArchiveTeamPage } from '@/pages/archive/team';
 import { ReplaysPage } from '@/pages/replays';
 import { StreamPage } from '@/pages/replays/stream';
 import { PokemonDetailPage } from '@/pages/pokemon-detail';
@@ -85,7 +89,12 @@ export default function App() {
               <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
               <Route path="showdown" element={<ShowdownPage />} />
               <Route path="replays" element={<ReplaysPage />} />
-              <Route path="archive" element={<ArchivePage />} />
+              <Route path="archive" element={<ArchiveLayout />}>
+                <Route index element={<ArchiveHubPage />} />
+                <Route path=":seasonId" element={<ArchiveSeasonPage />} />
+                <Route path=":seasonId/:leagueId" element={<ArchiveLeaguePage />} />
+                <Route path=":seasonId/:leagueId/:teamId" element={<ArchiveTeamPage />} />
+              </Route>
               <Route path="rules" element={<RulesPage />} />
               <Route path="tiers" element={<TierListPage />} />
               <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
