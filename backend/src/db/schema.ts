@@ -137,6 +137,23 @@ export const teams = sqliteTable('teams', {
    * `false` for teams in seasons predating this column (default).
    */
   captainsLocked: integer('captains_locked', { mode: 'boolean' }).notNull().default(false),
+  /**
+   * Final placement for the team's league run. NULL for teams whose league
+   * has not yet finished (regular/playoffs in progress). Filled in once the
+   * league wraps:
+   *   1 = Champion, 2 = Runner-up, 3 = Semifinalist (tied 3rd/4th when no
+   *   3rd-place game), 5 = Quarterfinalist (tied 5th-8th), and so on.
+   * Profile pages and history widgets read this directly so finishing-badge
+   * rendering doesn't have to recompute from the playoff bracket.
+   */
+  finishPosition: integer('finish_position'),
+  /**
+   * Human label that pairs with `finishPosition` — e.g. 'Champion',
+   * 'Runner-up', 'Semifinalist', 'Quarterfinalist', 'Regular Season'.
+   * Stored alongside the numeric position so frontend can render badges
+   * without a position→label table.
+   */
+  finishLabel: text('finish_label'),
 });
 
 // ─── Pokemon (reference table — full national dex) ──────────────────────────
