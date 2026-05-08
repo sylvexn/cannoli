@@ -140,7 +140,6 @@ export const seasonRoutes = new Elysia()
               teamName,
               teamAbbrev,
               teamColor: t.teamColor ?? '#888888',
-              showdownUsername: null,
             }).run();
             db.insert(schema.activityLog).values({
               type: 'team_created',
