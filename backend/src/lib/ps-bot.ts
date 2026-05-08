@@ -439,8 +439,8 @@ function replayFromDisk(match: { id: string; homeTeamId: string; awayTeamId: str
 
   const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
   const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
-  const p1Userid = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : '';
-  const p2Userid = awayTeam?.showdownUsername ? toUserid(awayTeam.showdownUsername) : '';
+  const p1Userid = teamPsUserid(homeTeam);
+  const p2Userid = teamPsUserid(awayTeam);
 
   const battle: MonitoredBattle = {
     roomId,
@@ -529,8 +529,8 @@ function rejoinInProgressBattles() {
     // that happened while the bot was offline, but we can still record |win|.
     const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
     const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
-    const p1 = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : '';
-    const p2 = awayTeam?.showdownUsername ? toUserid(awayTeam.showdownUsername) : '';
+    const p1 = teamPsUserid(homeTeam);
+    const p2 = teamPsUserid(awayTeam);
 
     // Orientation: compare each PS userid to the home team's mapping.
     // p1 mapped to homeTeamId → home plays p1; otherwise home plays p2.
@@ -959,6 +959,14 @@ function authenticate() {
 
 /**
  * Build a map from showdown userids → team IDs.
+ *
+ * After the showdownUsername column was dropped, the only mapping path is
+ * via the team's owning user account: PS authentication routes through our
+ * SSO login server (`backend/src/routes/ps-login.ts`) which signs assertions
+ * for `toUserid(users.username)`. So a battle frame's PS name normalizes to
+ * the same `userid` we get from `toUserid(user.username)` — that's the join
+ * key.
+ *
  * Called on startup and can be refreshed when rosters change.
  */
 export function refreshUserMap() {
@@ -967,15 +975,10 @@ export function refreshUserMap() {
   const teams = db.select({
     id: schema.teams.id,
     leagueId: schema.teams.leagueId,
-    showdownUsername: schema.teams.showdownUsername,
     userId: schema.teams.userId,
   }).from(schema.teams).all();
 
   for (const team of teams) {
-    if (team.showdownUsername) {
-      useridToTeam.set(toUserid(team.showdownUsername), { teamId: team.id, leagueId: team.leagueId });
-    }
-    // Also map by user account username
     if (team.userId) {
       const user = db.select().from(schema.users).where(eq(schema.users.id, team.userId)).get();
       if (user) {
@@ -985,4 +988,18 @@ export function refreshUserMap() {
   }
 
   console.log(`[PS Bot] User map loaded: ${useridToTeam.size} players`);
+}
+
+/**
+ * Resolve a team's expected PS userid by walking team → user → username.
+ * Returns '' when the team has no owning user account (rare — orphaned
+ * roster), which mirrors the previous "no showdown username" fallback.
+ */
+function teamPsUserid(team: { userId: string | null } | null | undefined): string {
+  if (!team?.userId) return '';
+  const user = db.select({ username: schema.users.username })
+    .from(schema.users)
+    .where(eq(schema.users.id, team.userId))
+    .get();
+  return user ? toUserid(user.username) : '';
 }
