@@ -89,7 +89,7 @@ export function AdminBot() {
       <EmptyState
         variant="quiet"
         title="Bot status unavailable."
-        description="Backend may be unreachable, or bot is disabled in this environment."
+        subtitle="Backend may be unreachable, or bot is disabled in this environment."
         spriteSize="md"
       />
     );
@@ -159,8 +159,8 @@ export function AdminBot() {
           <EmptyState
             variant="quiet"
             title="No active battle observers."
-            description="Bot only joins rooms when a Cannoli match goes live."
-            spriteSize="sm"
+            subtitle="Bot only joins rooms when a Cannoli match goes live."
+            spriteSize="md"
             padding="sm"
           />
         ) : (
