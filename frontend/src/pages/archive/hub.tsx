@@ -308,7 +308,7 @@ function LeaderCard({
   title, icon: Icon, tint, rows, format, hint,
 }: {
   title: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number; className?: string; color?: string }>;
   tint: string;
   rows: LeaderRow[];
   format: (r: LeaderRow) => string;
@@ -319,7 +319,7 @@ function LeaderCard({
       <CardContent className="p-3 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Icon size={12} style={{ color: tint }} />
+            <Icon size={12} color={tint} />
             <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">{title}</span>
           </div>
           {hint && <span className="text-[9px] text-text-muted/70 italic">{hint}</span>}

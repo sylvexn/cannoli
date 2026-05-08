@@ -11,7 +11,7 @@ import { ChampionBanner } from '@/components/champion-banner';
 import { cn } from '@/lib/utils';
 import { MEDAL_COLORS } from '@/lib/constants';
 import {
-  Trophy, Crown, ChevronDown, Medal, Archive as ArchiveIcon, ArrowRight, Award,
+  Trophy, ChevronDown, Medal, Archive as ArchiveIcon, ArrowRight, Award,
 } from 'lucide-react';
 
 /**

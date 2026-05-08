@@ -22,9 +22,8 @@ const TAB_ORDER = ['standings', 'schedule', 'draft', 'transactions', 'leaderboar
 type TabKey = (typeof TAB_ORDER)[number];
 
 export function ArchiveLeaguePage() {
-  const { seasonId, leagueId } = useParams<{ seasonId: string; leagueId: string }>();
+  const { leagueId } = useParams<{ seasonId: string; leagueId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [data, setData] = useState<FullLeagueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
