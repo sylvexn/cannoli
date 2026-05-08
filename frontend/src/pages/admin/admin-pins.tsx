@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Pin } from '@/components/pin';
 import { EmptyState } from '@/components/empty-state';
-import { formatRelativeTime } from '@/lib/format';
+import { formatPinMetadata } from '@/lib/pin-metadata-schema';
 import { PinIconPicker, RECENT_LUCIDE_NAMES } from './pins/pin-icon-picker';
 
 const CATEGORIES: PinCategory[] = ['career', 'season', 'week', 'draft', 'community', 'custom'];
@@ -463,36 +463,41 @@ export function AwardTab() {
           />
         ) : (
           <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
-            {recent.map(r => (
-              <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-overlay/30 transition-colors">
-                <Pin
-                  def={{ id: r.pinDefId, name: r.defName, iconName: r.defIconName, color: r.defColor }}
-                  size="sm"
-                  noTooltip
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12px] truncate">
-                    <span style={{ color: r.defColor }}>{r.defName}</span>
-                    <span className="text-text-muted"> → </span>
-                    <span className="font-mono">{r.username}</span>
+            {recent.map(r => {
+              const detail = formatPinMetadata(r.pinDefId, r.metadata);
+              return (
+                <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-overlay/30 transition-colors">
+                  <Pin
+                    def={{ id: r.pinDefId, name: r.defName, iconName: r.defIconName, color: r.defColor }}
+                    size="sm"
+                    noTooltip
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] truncate">
+                      <span style={{ color: r.defColor }}>{r.defName}</span>
+                      <span className="text-text-muted"> → </span>
+                      <span className="font-mono">{r.username}</span>
+                    </div>
+                    {detail && (
+                      <div className="text-[11px] text-text-secondary truncate italic">{detail}</div>
+                    )}
+                    <div className="text-[10px] text-text-muted">
+                      {r.awardedBy ? 'manual' : 'auto'}
+                      {r.seasonId != null && ` · Earned S${r.seasonId}`}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-text-muted">
-                    {r.awardedBy ? 'manual' : 'auto'}
-                    {r.seasonId != null && ` · S${r.seasonId}`}
-                    {r.awardedAt && ` · ${formatRelativeTime(r.awardedAt)}`}
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-text-muted hover:text-loss"
+                    onClick={() => handleRevoke(r.id)}
+                    title="Revoke"
+                  >
+                    <Trash2 size={11} />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0 text-text-muted hover:text-loss"
-                  onClick={() => handleRevoke(r.id)}
-                  title="Revoke"
-                >
-                  <Trash2 size={11} />
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
