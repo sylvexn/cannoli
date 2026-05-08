@@ -23,6 +23,8 @@ import { verifyPassword } from './auth';
 import { hashSync, compareSync } from 'bcryptjs';
 import { randomBytes } from 'crypto';
 
+const CANNOLI_MODE = process.env.CANNOLI_MODE || 'mock';
+
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const PS_HOSTNAME = process.env.PS_HOSTNAME || 'cannoli.live';
@@ -217,6 +219,14 @@ export function toUserid(name: string): string {
 
 /**
  * Look up a user and verify password. Returns the user row or null.
+ *
+ * Mock mode: if the user doesn't exist in Cannoli's `users` table, auto-create
+ * them on first PS login. The Cannoli backend is the PS server's login server
+ * (PS runs with `--no-security`, so PS itself has no separate user store to
+ * keep in sync) — every PS auth check resolves through `authenticateUser`.
+ * Without this, anyone whose coach name wasn't covered by the XLSX import gets
+ * a hard 401 the moment the PS client posts to `/api/ps/login`, which makes
+ * casual mock testing painful. Live mode keeps the strict lookup.
  */
 export function authenticateUser(name: string, password: string) {
   const userid = toUserid(name);
@@ -233,10 +243,38 @@ export function authenticateUser(name: string, password: string) {
     user = allUsers.find(u => toUserid(u.username) === userid) ?? null;
   }
 
-  if (!user || !user.active) return null;
+  if (!user) {
+    if (CANNOLI_MODE !== 'mock') return null;
+    return autoCreateMockUser(userid, password);
+  }
+
+  if (!user.active) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
 
   return user;
+}
+
+/**
+ * Mock-only: create a fresh Cannoli user account on first PS login.
+ * Username is the PS-normalized userid (lowercased, alnum-only) so the
+ * follow-up assertion-signing path lines up with what PS will see.
+ */
+function autoCreateMockUser(userid: string, password: string) {
+  if (!userid || !password) return null;
+  // Sanity-check: don't auto-create reserved names
+  if (userid === 'root' || userid === 'syl' || userid === 'cannolibot') return null;
+
+  const passwordHash = hashSync(password, 10);
+  const inserted = db.insert(schema.users).values({
+    username: userid,
+    passwordHash,
+    role: 'user',
+    mustChangePassword: false,
+    active: true,
+  }).returning().get();
+
+  console.log(`[PS Login] auto-created mock user "${userid}" on first login`);
+  return inserted;
 }
 
 // ─── Parse PS sid from cookie header ────────────────────────────────────────
