@@ -1,4 +1,4 @@
-# Cannoli — Pokemon Showdown Server Setup
+# Cannoli - Pokemon Showdown Server Setup
 
 No fork needed. Clone the official repos, drop in config + plugin.
 
@@ -47,7 +47,7 @@ git clone https://github.com/smogon/pokemon-showdown-client.git showdown-client
 ## Reverse Proxy (nginx/Traefik)
 
 ```nginx
-# sim.cannoli.live — PS client static files
+# sim.cannoli.live - PS client static files
 server {
     server_name sim.cannoli.live;
 
@@ -83,14 +83,14 @@ server {
 
 ```
 cannoli.live (Elysia)
-  ├── /api/ps/login      — PS login protocol (assertion signing)
-  ├── /api/ps/upkeep     — Session renewal
+  ├── /api/ps/login      - PS login protocol (assertion signing)
+  ├── /api/ps/upkeep     - Session renewal
   ├── /api/ps/getassertion
   └── /api/ps/logout
 
 sim.cannoli.live (static client + game server)
-  ├── / — PS client (auto-authenticates via sid cookie on .cannoli.live)
-  └── /showdown/websocket — PS game server (verifies assertions with RSA public key)
+  ├── / - PS client (auto-authenticates via sid cookie on .cannoli.live)
+  └── /showdown/websocket - PS game server (verifies assertions with RSA public key)
 ```
 
 No separate login server service needed. Cannoli IS the login server.

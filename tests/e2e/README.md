@@ -24,13 +24,9 @@ bun run test:e2e -- -u    # update snapshots
 
 ## Layout
 
-- `smoke.spec.ts` — sanity: app boots, login page reachable, /health responds
-- `profile-colors.spec.ts` — §2g profile-color round-trip
-- `__screenshots__/` — visual regression baselines (created on first run)
+- `smoke.spec.ts` - sanity: app boots, login page reachable, /health responds
+- `profile-colors.spec.ts` - profile-color round-trip
+- `__screenshots__/` - visual regression baselines (created on first run)
 
-## What's still missing
-
-The plan calls out specs for: onboarding, draft (two managers over WS),
-trade approval (two-step), match flow with ready-up timeout, league
-config persistence with phase locks. Those are scaffolded in the plan but not
-yet written here — add them before the season goes live.
+todo: onboarding, draft (two managers over WS), trade approval, match flow,
+league config persistence.

@@ -82,7 +82,7 @@ We tried two architectures before settling here:
 - **GitHub Actions → ghcr.io → Coolify pull**: works for the build-offload, but
   Coolify v4 has no "Private Docker Registries" UI for external registries
   (issue [#6364](https://github.com/coollabsio/coolify/issues/6364)). Pull auth
-  for private ghcr images was the blocker — host-level `docker login` doesn't
+  for private ghcr images was the blocker - host-level `docker login` doesn't
   propagate into Coolify's helper container.
 
 Per-service Dockerfile apps + Coolify-native build server + Docker Hub
@@ -91,7 +91,7 @@ combo that stays inside Coolify's golden path.
 
 ## Going live (the swap)
 
-When the live league opens, run these — order matters:
+When the live league opens, run these - order matters:
 
 ```bash
 # 1. Move FQDN: cannoli.live → cannoli-frontend-live
@@ -129,16 +129,16 @@ move FQDN back, repoint showdown env to `cannoli-backend-mock`.
 Selected env vars consumed by the backend container (full list in
 `backend/src/index.ts` boot guards):
 
-- `CANNOLI_MODE` — `mock` | `live` (per-deployment).
-- `CANNOLI_DB_PATH` — override SQLite path (defaults to `backend/data/cannoli.db`).
-- `PS_SERVER_WS_URL` — bot connects here. Unset = bot disabled.
-- `PS_RSA_PRIVATE_KEY` — required when `PS_SERVER_WS_URL` is set; signs PS auth assertions.
-- `PS_LOGS_DIR` — root for PS autosaved replay logs (`{format}/{YYYY-MM-DD}/{roomId}.log.json`).
+- `CANNOLI_MODE` - `mock` | `live` (per-deployment).
+- `CANNOLI_DB_PATH` - override SQLite path (defaults to `backend/data/cannoli.db`).
+- `PS_SERVER_WS_URL` - bot connects here. Unset = bot disabled.
+- `PS_RSA_PRIVATE_KEY` - required when `PS_SERVER_WS_URL` is set; signs PS auth assertions.
+- `PS_LOGS_DIR` - root for PS autosaved replay logs (`{format}/{YYYY-MM-DD}/{roomId}.log.json`).
   Used by the disk-replay fallback when the bot was offline at the moment a match
   finished. Defaults to `./showdown/server/logs` (in-repo PS checkout). In production
-  point at the mounted `ps-logs` volume — the same volume `cannoli-ps-server` writes to,
+  point at the mounted `ps-logs` volume - the same volume `cannoli-ps-server` writes to,
   mounted read-only into `cannoli-backend-{mock,live}`.
-- `BOT_USERNAME` / `BOT_PASSWORD` — credentials for the bot's `users` row, seeded
+- `BOT_USERNAME` / `BOT_PASSWORD` - credentials for the bot's `users` row, seeded
   on every boot when bot env is set.
 
 ## Initial seeding
