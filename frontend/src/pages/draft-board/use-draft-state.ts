@@ -104,6 +104,19 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     }
   }, [seasonPicks, trades]);
 
+  // Simulator (practice) source: auto-enter the active+configuring view on
+  // mount so the pre-start config panel (team picker, timer) is the first
+  // thing the user sees. The default initial state is view=history; without
+  // this nudge the simulator route would render the season recap.
+  const didEnterSimulatorActive = useRef(false);
+  useEffect(() => {
+    if (source !== 'simulator') return;
+    if (didEnterSimulatorActive.current) return;
+    if (state.view === 'active') return;
+    didEnterSimulatorActive.current = true;
+    dispatch({ type: 'SET_VIEW', view: 'active', source: 'simulator' });
+  }, [source, state.view]);
+
   // ─── Pool, ownership, lookups ────────────────────────────────────
   const { rosterLookup, playerLookup, ownershipMap, filteredPool, poolByTier }
     = useDraftPool(state, players);

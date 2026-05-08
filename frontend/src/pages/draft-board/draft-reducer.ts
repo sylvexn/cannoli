@@ -65,11 +65,17 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
 
     // ─── History view: sync season data ───────────────────────────────
     case 'SYNC_DATA':
+      // Trades are always tracked (the team sidebar surfaces them outside an
+      // active draft too), but historical picks must NEVER overwrite an active
+      // draft's picks — that would clobber the simulator/server state.
+      if (state.view !== 'history') {
+        return { ...state, trades: action.trades };
+      }
       return {
         ...state,
         allPicks: action.allPicks,
         trades: action.trades,
-        currentPickIndex: state.view === 'history' ? action.allPicks.length : state.currentPickIndex,
+        currentPickIndex: action.allPicks.length,
       };
 
     // ─── Active draft lifecycle ───────────────────────────────────────

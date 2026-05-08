@@ -176,7 +176,8 @@ export function DraftControlBar({
             {timerEnabled && (
               <div className="flex items-center gap-1.5">
                 <Timer size={13} className="text-text-muted" />
-                {isAdmin ? (
+                {/* Simulator/practice: anyone can set timer; live: admin-only */}
+                {(isAdmin || !isServer) ? (
                   <>
                     <NumberInput
                       value={state.timerDuration}
@@ -395,8 +396,11 @@ export function DraftControlBar({
 
         <div className="flex-1" />
 
-        {/* Admin timer chrome (hidden when timer disabled or draft complete) */}
-        {isAdmin && !isDraftComplete && timerEnabled && (
+        {/* Admin timer chrome (hidden when timer disabled or draft complete).
+            Suppressed in simulator/practice mode — practice has no playback
+            controls (no pause/step/speed); the user just runs the draft to
+            completion or hits Reset. */}
+        {isAdmin && isServer && !isDraftComplete && timerEnabled && (
           <>
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
