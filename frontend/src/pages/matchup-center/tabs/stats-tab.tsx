@@ -114,10 +114,15 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
                 >
                   {pokemon.name}
                 </Link>
+                {pokemon.nickname && (
+                  <span className="block text-[10px] italic font-mono text-text-muted truncate" title={pokemon.nickname}>
+                    "{pokemon.nickname}"
+                  </span>
+                )}
               </td>
               <td className="py-[3px]">
-                <button onClick={() => openSideCard(pokemon.name)} title="View details">
-                  <PokemonSprite name={pokemon.name} size="xs" />
+                <button onClick={() => openSideCard(pokemon.name)} title={pokemon.nickname ? `${pokemon.name} — "${pokemon.nickname}"` : 'View details'}>
+                  <PokemonSprite name={pokemon.name} size="xs" shiny={pokemon.isShiny} />
                 </button>
               </td>
               {STAT_KEYS.map(key => (
