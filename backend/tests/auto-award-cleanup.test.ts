@@ -24,9 +24,25 @@ const PFX = 'tfix4-';
 function pickHost(): { seasonId: number; userIds: number[] } | null {
   const seasons = db.select().from(schema.seasons).limit(1).all();
   if (seasons.length === 0) return null;
-  const users = db.select().from(schema.users).limit(3).all();
+  const seasonId = seasons[0].id;
+  // Need 3 users who don't already hold a cannoli pin for this season —
+  // the test inserts cannoli pins by hand and would hit the unique
+  // (user_id, pin_def_id, season_id) index otherwise. Any user with a
+  // pre-seeded pin (e.g. the Discord-announced manual awards) gets
+  // filtered out.
+  const taken = new Set(
+    db.select({ userId: schema.pins.userId })
+      .from(schema.pins)
+      .where(and(
+        eq(schema.pins.pinDefId, 'cannoli'),
+        eq(schema.pins.seasonId, seasonId),
+      ))
+      .all()
+      .map(r => r.userId),
+  );
+  const users = db.select().from(schema.users).all().filter(u => !taken.has(u.id));
   if (users.length < 3) return null;
-  return { seasonId: seasons[0].id, userIds: users.map(u => u.id) };
+  return { seasonId, userIds: users.slice(0, 3).map(u => u.id) };
 }
 
 describe('runAutoAwards season-end re-run cleanup (Fix 4)', () => {
