@@ -191,6 +191,8 @@ export interface ApiAdminMatch {
 export interface ApiMatchPokemon {
   name: string;
   nickname?: string | null;
+  /** True when the owner has flipped the shiny toggle on this team's roster slot. */
+  isShiny?: boolean;
   kills: number;
   deaths: number;
   teraUsed: boolean;
@@ -200,7 +202,7 @@ export interface ApiMatchPokemon {
 export interface ApiReplaySummary {
   matchId: string;
   isComplete: boolean;
-  mvp: { name: string; nickname?: string | null; kills: number; deaths: number; teamId: string } | null;
+  mvp: { name: string; nickname?: string | null; isShiny?: boolean; kills: number; deaths: number; teamId: string } | null;
   teraCount: number;
   sweep: boolean;
   margin: number;
@@ -449,6 +451,10 @@ export interface ApiSpeedTierRow {
   /** Stable composite id (per-league) `<leagueId>:<teamId>:<pokemonName>`. */
   id: string;
   name: string;
+  /** Owner-set nickname (per rosters.nickname). Null when not set. */
+  nickname?: string | null;
+  /** Owner-set shiny flag (per rosters.isShiny). */
+  isShiny?: boolean;
   dex: number | null;
   baseSpeed: number;
   type1: string | null;

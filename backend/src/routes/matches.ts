@@ -26,9 +26,9 @@ export const matchRoutes = new Elysia()
     if (!match) return null;
 
     // LEFT JOIN to rosters (team_id, pokemon_name) so each replay row can
-    // surface the team's chosen nickname for that mon. match_pokemon rows
-    // for traded-out mons may not match a current roster — those just get
-    // null nickname.
+    // surface the team's chosen nickname + shiny flag for that mon. match_pokemon
+    // rows for traded-out mons may not match a current roster — those just get
+    // null nickname / false isShiny.
     const entries = db.select({
       id: schema.matchPokemon.id,
       matchId: schema.matchPokemon.matchId,
@@ -39,6 +39,7 @@ export const matchRoutes = new Elysia()
       teraUsed: schema.matchPokemon.teraUsed,
       teraType: schema.matchPokemon.teraType,
       nickname: schema.rosters.nickname,
+      isShiny: schema.rosters.isShiny,
     }).from(schema.matchPokemon)
       .leftJoin(
         schema.rosters,
@@ -65,6 +66,7 @@ export const matchRoutes = new Elysia()
     const mvp = mvpEntry ? {
       name: mvpEntry.pokemonName,
       nickname: mvpEntry.nickname ?? null,
+      isShiny: !!mvpEntry.isShiny,
       kills: mvpEntry.kills,
       deaths: mvpEntry.deaths,
       teamId: mvpEntry.teamId,
@@ -94,6 +96,7 @@ export const matchRoutes = new Elysia()
       home: homeMons.map(m => ({
         name: m.pokemonName,
         nickname: m.nickname ?? null,
+        isShiny: !!m.isShiny,
         kills: m.kills,
         deaths: m.deaths,
         teraUsed: m.teraUsed,
@@ -102,6 +105,7 @@ export const matchRoutes = new Elysia()
       away: awayMons.map(m => ({
         name: m.pokemonName,
         nickname: m.nickname ?? null,
+        isShiny: !!m.isShiny,
         kills: m.kills,
         deaths: m.deaths,
         teraUsed: m.teraUsed,
@@ -122,6 +126,7 @@ export const matchRoutes = new Elysia()
       teraUsed: schema.matchPokemon.teraUsed,
       teraType: schema.matchPokemon.teraType,
       nickname: schema.rosters.nickname,
+      isShiny: schema.rosters.isShiny,
     }).from(schema.matchPokemon)
       .leftJoin(
         schema.rosters,
@@ -143,6 +148,7 @@ export const matchRoutes = new Elysia()
       home: entries.filter(e => e.teamId === match.homeTeamId).map(e => ({
         name: e.pokemonName,
         nickname: e.nickname ?? null,
+        isShiny: !!e.isShiny,
         kills: e.kills,
         deaths: e.deaths,
         teraUsed: e.teraUsed,
@@ -151,6 +157,7 @@ export const matchRoutes = new Elysia()
       away: entries.filter(e => e.teamId === match.awayTeamId).map(e => ({
         name: e.pokemonName,
         nickname: e.nickname ?? null,
+        isShiny: !!e.isShiny,
         kills: e.kills,
         deaths: e.deaths,
         teraUsed: e.teraUsed,
