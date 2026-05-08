@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Trophy, Pencil } from 'lucide-react';
+import { ArrowLeft, Trophy, Pencil, Shield, ChevronRight, Crown, Medal } from 'lucide-react';
 import { api, type ApiPublicProfile, type ApiPin, type ApiActivityEvent } from '@/lib/api';
 import { CoachAvatar } from '@/components/coach-avatar';
 import { Pin } from '@/components/pin';
@@ -8,7 +8,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { TeamLink } from '@/components/team-link';
 import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
-import { formatRelativeTime, formatRecord, formatTenure } from '@/lib/format';
+import { formatRelativeTime, formatRecord } from '@/lib/format';
 import { spriteUrl, type PokemonType } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -21,11 +21,10 @@ import { RecentHighlights } from './recent-highlights';
 
 const FALLBACK_PRIMARY = '#7dd3fc';
 const FALLBACK_SECONDARY = '#a78bfa';
-const FALLBACK_TERTIARY = '#fb7185';
 
 export function CoachProfilePage() {
   const { username = '' } = useParams<{ username: string }>();
-  const { user: viewer } = useAuth();
+  const { user: viewer, isAdmin } = useAuth();
   const [profile, setProfile] = useState<ApiPublicProfile | null>(null);
   const [pins, setPins] = useState<ApiPin[]>([]);
   const [activity, setActivity] = useState<ApiActivityEvent[]>([]);
@@ -33,8 +32,12 @@ export function CoachProfilePage() {
   const [notFound, setNotFound] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Self-only settings: viewer is the same person as the profile being viewed.
+  // Self vs staff edit. `isAdmin` already covers dev|admin via the auth
+  // context, mirroring the backend's `isStaff()`. Owners always edit; staff
+  // get a separate write path that emits a `profile_edited_by_staff` audit
+  // event so the activity feed can distinguish the two cases.
   const isSelf = !!viewer && viewer.username.toLowerCase() === username.toLowerCase();
+  const canEdit = isSelf || (!!viewer && isAdmin);
 
   async function refetch() {
     const prof = await api.getPublicProfile(username).catch(() => null);
@@ -95,25 +98,15 @@ export function CoachProfilePage() {
 
   const primary = profile.primaryColor ?? FALLBACK_PRIMARY;
   const secondary = profile.secondaryColor ?? FALLBACK_SECONDARY;
-  const tertiary = profile.tertiaryColor ?? FALLBACK_TERTIARY;
   const display = profile.displayName?.trim() || profile.username;
-  const seasonNumber = seasonFromCreatedAt(profile.createdAt);
 
-  // Banner — when the user has uploaded a custom banner_url, layer it on top
-  // of the gemstone gradient (the gradient peeks through transparent edges
-  // and acts as a graceful fallback if the image 404s). Default falls back
-  // to the pure gradient.
-  const bannerGradient =
-    `linear-gradient(135deg, ${primary}55 0%, ${secondary}40 45%, ${tertiary}35 100%),` +
-    `radial-gradient(ellipse 60% 70% at 30% 30%, ${primary}30 0%, transparent 60%),` +
-    `radial-gradient(ellipse 60% 70% at 70% 80%, ${tertiary}25 0%, transparent 60%)`;
-  const bannerStyle = profile.bannerUrl
-    ? {
-        backgroundImage: `linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.35) 100%), url(${profile.bannerUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }
-    : { background: bannerGradient };
+  // Pick the first current-team tenure as the user's "active team" — spec:
+  // 1 user / 1 league / 1 season. The backend filters currentTeams to teams
+  // belonging to non-archived seasons, so any entry here is current. The
+  // team's color drives the avatar glow ring and a small chip; falls back
+  // to the user's profile primary when the user isn't coaching.
+  const heroTeam = profile.currentTeams[0] ?? null;
+  const ringColor = heroTeam?.teamColor ?? primary;
 
   const nameStyle = {
     backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
@@ -124,111 +117,123 @@ export function CoachProfilePage() {
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-8">
-      {/* Banner + identity strip */}
+      {/* ─── Identity strip ──────────────────────────────────────────────
+          Replaces the old gemstone-gradient banner. The avatar gets a
+          team-color glow ring (or the user's primary if they're not
+          coaching this season). A small team-color chip sits in the
+          header so the team affiliation reads even when the avatar ring
+          is subtle. ADMIN/DEV chips surface staff status. */}
       <div
-        className="identity-glow relative rounded-xl overflow-hidden border border-border-default bg-surface-raised"
-        style={{ ['--identity-color' as never]: primary }}
+        className="identity-glow relative rounded-xl border border-border-default bg-surface-raised px-5 py-4 flex items-start gap-4"
+        style={{ ['--identity-color' as never]: ringColor }}
       >
-        <div className="h-32 w-full" style={bannerStyle} />
+        <div className="shrink-0">
+          <CoachAvatar
+            username={profile.username}
+            displayName={profile.displayName}
+            avatarPath={profile.avatarPath}
+            primaryColor={primary}
+            secondaryColor={secondary}
+            size="2xl"
+            // Glow ring uses the active team's color when the user is
+            // coaching. When they're not, fall back to their signature
+            // type accent (if set) or just the profile primary via the
+            // built-in `ring` prop.
+            typeAccent={ringColor}
+          />
+        </div>
 
-        {/* Identity overlay */}
-        <div className="px-5 pt-3 pb-4 flex items-start gap-4 relative">
-          <div className="-mt-12 shrink-0">
-            <CoachAvatar
-              username={profile.username}
-              displayName={profile.displayName}
-              avatarPath={profile.avatarPath}
-              primaryColor={primary}
-              secondaryColor={secondary}
-              size="2xl"
-              className="ring-4 ring-surface-raised"
-              typeAccent={
-                profile.signatureType
-                  ? TYPE_COLORS[profile.signatureType as PokemonType]
-                  : null
-              }
-            />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <h1
+              className="text-2xl font-bold leading-tight truncate font-heading"
+              style={nameStyle}
+            >
+              {display}
+            </h1>
+            {profile.signaturePokemonName && (
+              <img
+                src={spriteUrl(profile.signaturePokemonName)}
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                title={profile.signaturePokemonName}
+                className="shrink-0"
+                style={{ width: 36, height: 36, imageRendering: 'pixelated', marginTop: -6, marginBottom: -6 }}
+              />
+            )}
+            {profile.signatureType && (
+              <ProfileTypeChip type={profile.signatureType as PokemonType} />
+            )}
+            {(profile.role === 'admin' || profile.role === 'dev') && (
+              <RoleChip role={profile.role} />
+            )}
+            {heroTeam && (
+              <TeamColorChip
+                color={heroTeam.teamColor}
+                abbrev={heroTeam.teamAbbrev}
+              />
+            )}
           </div>
-          <div className="flex-1 min-w-0 pt-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <h1
-                className="text-2xl font-bold leading-tight truncate font-heading"
-                style={nameStyle}
-              >
-                {display}
-              </h1>
-              {profile.signaturePokemonName && (
-                <img
-                  src={spriteUrl(profile.signaturePokemonName)}
-                  alt=""
-                  aria-hidden="true"
-                  draggable={false}
-                  title={profile.signaturePokemonName}
-                  className="shrink-0"
-                  style={{ width: 36, height: 36, imageRendering: 'pixelated', marginTop: -6, marginBottom: -6 }}
-                />
-              )}
-              {profile.signatureType && (
-                <ProfileTypeChip type={profile.signatureType as PokemonType} />
-              )}
+
+          {profile.displayName && profile.displayName !== profile.username && (
+            <div className="text-xs font-mono text-text-muted mt-0.5">@{profile.username}</div>
+          )}
+          {profile.title && (
+            <div className="text-[11px] font-mono text-text-secondary mt-1 leading-tight">
+              {profile.title}
             </div>
-            {profile.displayName && profile.displayName !== profile.username && (
-              <div className="text-xs font-mono text-text-muted mt-0.5">@{profile.username}</div>
-            )}
-            {/* Coach title — small mono line under display_name; stays
-                quiet so it doesn't compete with the status message below. */}
-            {profile.title && (
-              <div className="text-[11px] font-mono text-text-secondary mt-1 leading-tight">
-                {profile.title}
-              </div>
-            )}
-            {profile.statusMessage && (
-              // Status one-liner — Space Grotesk for the warmer, more
-              // conversational read; sits visually above the longer bio.
-              <p
-                className="mt-2 text-sm font-heading italic text-text-primary/90 leading-snug max-w-prose"
-                style={{ color: secondary }}
-              >
-                {profile.statusMessage}
-              </p>
-            )}
-            {profile.bio && (
-              <p className="text-sm text-text-secondary mt-2 leading-snug max-w-prose whitespace-pre-line">
-                {profile.bio}
-              </p>
-            )}
-          </div>
-          <div className="shrink-0 flex flex-col items-end gap-2">
-            {isSelf && (
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-neon/40 hover:text-neon text-[10px] font-mono uppercase tracking-wider text-text-muted transition-colors"
-                title="Edit your profile"
-              >
-                <Pencil size={10} />
-                Edit
-              </button>
-            )}
-            {seasonNumber != null && (
-              <div className="text-right">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                  {formatTenure(seasonNumber)}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
+          {profile.statusMessage && (
+            <p
+              className="mt-2 text-sm font-heading italic text-text-primary/90 leading-snug max-w-prose"
+              style={{ color: secondary }}
+            >
+              {profile.statusMessage}
+            </p>
+          )}
+          {profile.bio && (
+            <p className="text-sm text-text-secondary mt-2 leading-snug max-w-prose whitespace-pre-line">
+              {profile.bio}
+            </p>
+          )}
+        </div>
+
+        <div className="shrink-0 flex flex-col items-end gap-2">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-neon/40 hover:text-neon text-[10px] font-mono uppercase tracking-wider text-text-muted transition-colors"
+              title={isSelf ? 'Edit your profile' : 'Edit as staff (logged)'}
+            >
+              <Pencil size={10} />
+              {isSelf ? 'Edit' : 'Edit (staff)'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Settings panel — modal overlay, only rendered for the profile owner. */}
-      {isSelf && (
+      {/* Settings panel — open for owner OR staff. Backend disambiguates
+          via the route used (PATCH /me vs PATCH /:username). */}
+      {canEdit && (
         <ProfileSettingsPanel
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
           profile={profile}
           onSaved={refetch}
+          asStaff={!isSelf}
         />
+      )}
+
+      {/* ─── Current team hero ─────────────────────────────────────────
+          Shown only when the user has an active-season team. Spec:
+          1 user / 1 league / 1 season — so we anchor on the first entry
+          in `currentTeams`. S10 (finals pending) gets a "Finals Pending"
+          pill but no champion badge; that promotes only after the season
+          archives and the finals match completes. */}
+      {heroTeam && (
+        <CurrentTeamHero team={heroTeam} />
       )}
 
       {/* Trophy case + Career stats — side by side on lg */}
@@ -248,10 +253,15 @@ export function CoachProfilePage() {
         inAnyLeague={profile.currentTeams.length > 0}
       />
 
-      {/* Current teams */}
-      {profile.currentTeams.length > 0 && (
-        <CurrentTeams teams={profile.currentTeams} />
-      )}
+      {/* ─── History — past tenures with finish badges ─────────────────
+          Reads `pastTeams` from the public profile (backend-computed,
+          archived-season-only). Renders gracefully when empty (new user
+          or backend hasn't backfilled yet). A4 is seeding S9 finish
+          data in parallel — finish may be null on rows pending backfill. */}
+      <HistorySection
+        username={profile.username}
+        pastTeams={profile.pastTeams ?? []}
+      />
 
       {/* Recent highlights — top 1-3 events as larger cards. Sits above
           the long-tail wall so the most recent moments read as portraits
@@ -265,6 +275,142 @@ export function CoachProfilePage() {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────
+
+/** Small team-color square + abbrev pill placed in the identity header so
+ *  the team affiliation reads even when the avatar's glow is subtle. The
+ *  chip itself is a link to the canonical team URL — quick jump for
+ *  visitors. */
+function TeamColorChip({ color, abbrev }: { color: string; abbrev: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0"
+      style={{
+        backgroundColor: `${color}22`,
+        color,
+        boxShadow: `inset 0 0 0 1px ${color}80`,
+      }}
+      title={`Team: ${abbrev}`}
+    >
+      <span
+        className="w-2 h-2 rounded-sm shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      {abbrev}
+    </span>
+  );
+}
+
+/** ADMIN / DEV chip in the identity strip. Mirrors the styling used in
+ *  CoachLink so the chip reads consistently across surfaces. */
+function RoleChip({ role }: { role: 'admin' | 'dev' }) {
+  if (role === 'dev') {
+    return (
+      <span
+        aria-label="dev"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-neon/15 text-neon ring-1 ring-neon/30"
+        title="Dev"
+      >
+        <Shield size={9} />
+        Dev
+      </span>
+    );
+  }
+  return (
+    <span
+      aria-label="admin"
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
+      title="Admin"
+    >
+      <Shield size={9} />
+      Admin
+    </span>
+  );
+}
+
+/** Active-season team panel. One canonical team per spec ("1 user / 1
+ *  league / 1 season"). Shows team logo, name, league/season, season
+ *  phase pill, and links to the canonical team URL. The next-match
+ *  banner + roster preview live on the team page itself — surfacing
+ *  them here too would duplicate state and force two fetches; the panel
+ *  is a hand-off, not a mirror. */
+function CurrentTeamHero({
+  team,
+}: {
+  team: NonNullable<ApiPublicProfile['currentTeams']>[number];
+}) {
+  const teamUrl = `/league/${team.leagueId}/teams/${team.teamId}`;
+  // S10 finals-pending: the league has finished its regular season but
+  // the finals match hasn't completed yet. Until then we explicitly
+  // suppress champion-style badges — the season has to archive first.
+  const finalsPending =
+    team.leaguePhase === 'playoffs' || team.leaguePhase === 'offseason';
+  const seasonLabel = team.seasonNumber != null ? `S${team.seasonNumber}` : null;
+
+  return (
+    <div
+      className="rounded-xl border border-border-default bg-surface-raised p-4 relative overflow-hidden"
+      style={{
+        background:
+          `linear-gradient(180deg, ${team.teamColor}10 0%, transparent 60%), ` +
+          `var(--surface-raised, #16161e)`,
+      }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted flex items-center gap-1.5">
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: team.teamColor }}
+          />
+          Current team
+        </h2>
+        {seasonLabel && (
+          <span className="text-[9px] font-mono uppercase tracking-wider text-text-muted">
+            {seasonLabel} · {team.leagueId}
+          </span>
+        )}
+      </div>
+
+      <Link
+        to={teamUrl}
+        className="card-interactive flex items-center gap-4 rounded-lg border border-border-default bg-surface-overlay/40 px-4 py-3 hover:border-neon/40 transition-colors group"
+      >
+        <TeamLogo
+          abbrev={team.teamAbbrev}
+          color={team.teamColor}
+          logoPath={team.logoPath}
+          size="xl"
+          className="shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="text-base font-bold leading-tight truncate"
+              style={{ color: team.teamColor }}
+            >
+              {team.teamName}
+            </span>
+            <span className="text-[10px] font-mono text-text-muted">{team.teamAbbrev}</span>
+            {finalsPending && seasonLabel && (
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
+                title="Playoffs in progress — champion badge awarded after the finals."
+              >
+                {seasonLabel} — Finals Pending
+              </span>
+            )}
+          </div>
+          <div className="mt-1 text-[11px] font-mono text-text-muted">
+            View full team
+          </div>
+        </div>
+        <ChevronRight
+          size={16}
+          className="text-text-muted shrink-0 group-hover:text-neon group-hover:translate-x-0.5 transition-all"
+        />
+      </Link>
+    </div>
+  );
+}
 
 function TrophyCase({ pins }: { pins: ApiPin[] }) {
   return (
@@ -368,45 +514,130 @@ function Stat({
   );
 }
 
-function CurrentTeams({ teams }: { teams: ApiPublicProfile['currentTeams'] }) {
+/** Past-team history strip. Compact card per archived tenure with a finish
+ *  badge when available. Trailing "View all" link routes to the dedicated
+ *  teams index page. */
+function HistorySection({
+  username,
+  pastTeams,
+}: {
+  username: string;
+  pastTeams: NonNullable<ApiPublicProfile['pastTeams']>;
+}) {
+  // Show the most recent 6 tenures inline; the rest live on the teams page.
+  const visible = pastTeams.slice(0, 6);
+  const remaining = pastTeams.length - visible.length;
+
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
-        Current teams
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {teams.map(t => (
-          <div
-            key={t.teamId}
-            style={{
-              ['--card-accent' as never]: t.teamColor,
-              ['--card-glow' as never]: `${t.teamColor}30`,
-            }}
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
+          History
+        </h2>
+        {pastTeams.length > 0 && (
+          <Link
+            to={`/coach/${encodeURIComponent(username)}/teams`}
+            viewTransition
+            className="text-[10px] font-mono uppercase tracking-wider text-text-muted hover:text-neon transition-colors flex items-center gap-1"
           >
-            <TeamLink
-              team={{
-                leagueId: t.leagueId,
-                teamId: t.teamId,
-                teamName: t.teamName,
-                teamAbbrev: t.teamAbbrev,
-                teamColor: t.teamColor,
-                logoPath: t.logoPath,
-              }}
-              asCard
-              className={cn(
-                'card-interactive flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5',
-              )}
-            >
-              <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} logoPath={t.logoPath} size="md" />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-text-primary truncate">{t.teamName}</div>
-                <div className="text-[10px] font-mono text-text-muted">{t.teamAbbrev}</div>
-              </div>
-            </TeamLink>
-          </div>
-        ))}
+            View all
+            {remaining > 0 && <span className="text-text-muted/70">({pastTeams.length})</span>}
+            <ChevronRight size={11} />
+          </Link>
+        )}
       </div>
+      {pastTeams.length === 0 ? (
+        <EmptyState
+          variant="quiet"
+          title="No past seasons yet."
+          subtitle="Archived tenures and finishing positions show up here once a season closes."
+          spriteSize="md"
+          padding="sm"
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+          {visible.map(t => (
+            <PastTeamCard key={`${t.leagueId}-${t.seasonNumber}`} tenure={t} />
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function PastTeamCard({
+  tenure,
+}: {
+  tenure: NonNullable<ApiPublicProfile['pastTeams']>[number];
+}) {
+  return (
+    <TeamLink
+      team={{
+        leagueId: tenure.leagueId,
+        teamId: tenure.teamId,
+        teamName: tenure.teamName,
+        teamAbbrev: tenure.teamAbbrev,
+        teamColor: tenure.teamColor,
+        logoPath: tenure.logoPath,
+      }}
+      asCard
+      className="card-interactive flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5"
+    >
+      <TeamLogo
+        abbrev={tenure.teamAbbrev}
+        color={tenure.teamColor}
+        logoPath={tenure.logoPath}
+        size="md"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-sm font-medium text-text-primary truncate">
+            {tenure.teamName}
+          </span>
+          <span className="text-[9px] font-mono text-text-muted shrink-0">
+            S{tenure.seasonNumber}
+          </span>
+        </div>
+        <div className="mt-0.5">
+          {tenure.finish ? (
+            <FinishBadge finish={tenure.finish} />
+          ) : (
+            <span className="text-[10px] font-mono text-text-muted/70">
+              Archived
+            </span>
+          )}
+        </div>
+      </div>
+    </TeamLink>
+  );
+}
+
+function FinishBadge({
+  finish,
+}: {
+  finish: { position: number; label: string };
+}) {
+  // Champion: gold + crown. Runner-up: silver + medal. Below: muted.
+  if (finish.position === 1) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400">
+        <Crown size={10} />
+        {finish.label}
+      </span>
+    );
+  }
+  if (finish.position === 2) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-300">
+        <Medal size={10} />
+        {finish.label}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-text-secondary">
+      {finish.label}
+    </span>
   );
 }
 
@@ -464,7 +695,9 @@ function ProfileTypeChip({ type }: { type: PokemonType }) {
   if (!color || !label) return null;
   return (
     <span
-      className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider shrink-0"
+      className={cn(
+        'inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider shrink-0',
+      )}
       style={{
         backgroundColor: `${color}22`,
         color,
@@ -475,20 +708,4 @@ function ProfileTypeChip({ type }: { type: PokemonType }) {
       {label}
     </span>
   );
-}
-
-/**
- * Approximate season number from account creation date.
- * Cannoli S1 began roughly mid-2023; treating each season as ~3 months.
- * TODO: replace with a real `joinedSeasonNumber` field from the backend.
- */
-function seasonFromCreatedAt(createdAt: string | null): number | null {
-  if (!createdAt) return null;
-  const d = new Date(createdAt);
-  if (isNaN(d.getTime())) return null;
-  const epoch = new Date('2023-06-01').getTime();
-  const elapsedMs = d.getTime() - epoch;
-  if (elapsedMs < 0) return 1;
-  const seasons = Math.floor(elapsedMs / (90 * 24 * 60 * 60 * 1000));
-  return Math.max(1, seasons + 1);
 }

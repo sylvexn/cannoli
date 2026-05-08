@@ -13,6 +13,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
+import { isStaff } from '../lib/auth';
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_BIO = 280;
@@ -146,6 +147,124 @@ export const userRoutes = new Elysia()
     }
 
     db.update(schema.users).set(updates).where(eq(schema.users.id, parseInt(user.id))).run();
+    return { success: true };
+  })
+
+  // ─── PATCH /api/users/:username (staff-only profile edit) ─────────────
+  // Mirrors the field set of PATCH /api/users/me, but lets dev/admin edit
+  // someone else's bio / signature / status / title / banner. Owner edits
+  // still go through /me — this route hard-rejects owner self-targeting so
+  // we don't silently route around the owner-only audit trail.
+  // Emits an audit-log event `profile_edited_by_staff` per call with
+  // metadata { targetUserId, fields, editorId } so admin actions are
+  // distinguishable from owner self-edits in the activity feed.
+  .patch('/api/users/:username', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    if (!isStaff(user)) { set.status = 403; return { error: 'Staff only' }; }
+
+    const targetUsername = params.username.toLowerCase().trim();
+    if (targetUsername === 'me') { set.status = 400; return { error: 'Use /api/users/me for self edits' }; }
+
+    const target = db.select({ id: schema.users.id, username: schema.users.username, active: schema.users.active })
+      .from(schema.users)
+      .where(eq(schema.users.username, targetUsername))
+      .get();
+    if (!target || !target.active) { set.status = 404; return { error: 'User not found' }; }
+
+    if (target.id === parseInt(user.id)) {
+      set.status = 400;
+      return { error: 'Owner self-edit must use PATCH /api/users/me (so the audit log distinguishes it).' };
+    }
+
+    const {
+      bio, statusMessage, bannerUrl,
+      signaturePokemonId, title, signatureType,
+    } = (body ?? {}) as Record<string, unknown>;
+
+    const updates: Record<string, unknown> = {};
+    if (bio !== undefined) {
+      if (bio === null || bio === '') {
+        updates.bio = null;
+      } else if (typeof bio !== 'string' || bio.length > MAX_BIO) {
+        set.status = 400;
+        return { error: `bio must be a string ≤ ${MAX_BIO} chars` };
+      } else {
+        updates.bio = bio;
+      }
+    }
+    if (statusMessage !== undefined) {
+      if (statusMessage === null || statusMessage === '') {
+        updates.statusMessage = null;
+      } else if (typeof statusMessage !== 'string' || statusMessage.length > MAX_STATUS) {
+        set.status = 400;
+        return { error: `statusMessage must be a string ≤ ${MAX_STATUS} chars` };
+      } else {
+        updates.statusMessage = statusMessage.trim();
+      }
+    }
+    if (bannerUrl !== undefined) {
+      if (bannerUrl === null || bannerUrl === '') {
+        updates.bannerUrl = null;
+      } else if (typeof bannerUrl !== 'string' || bannerUrl.length > MAX_BANNER_URL) {
+        set.status = 400;
+        return { error: `bannerUrl must be a string ≤ ${MAX_BANNER_URL} chars` };
+      } else {
+        updates.bannerUrl = bannerUrl.trim();
+      }
+    }
+    if (signaturePokemonId !== undefined) {
+      if (signaturePokemonId === null) {
+        updates.signaturePokemonId = null;
+      } else if (typeof signaturePokemonId !== 'number' || !Number.isInteger(signaturePokemonId)) {
+        set.status = 400;
+        return { error: 'signaturePokemonId must be an integer or null' };
+      } else {
+        const exists = db.select({ id: schema.pokemon.id }).from(schema.pokemon)
+          .where(eq(schema.pokemon.id, signaturePokemonId)).get();
+        if (!exists) { set.status = 400; return { error: `Pokemon ${signaturePokemonId} not found` }; }
+        updates.signaturePokemonId = signaturePokemonId;
+      }
+    }
+    if (title !== undefined) {
+      if (title === null || title === '') {
+        updates.title = null;
+      } else if (typeof title !== 'string' || title.length > MAX_TITLE) {
+        set.status = 400;
+        return { error: `title must be a string ≤ ${MAX_TITLE} chars` };
+      } else {
+        updates.title = title.trim();
+      }
+    }
+    if (signatureType !== undefined) {
+      if (signatureType === null || signatureType === '') {
+        updates.signatureType = null;
+      } else if (typeof signatureType !== 'string' || !VALID_TYPES.has(signatureType.toLowerCase())) {
+        set.status = 400;
+        return { error: 'signatureType must be one of the 18 canonical Pokemon types' };
+      } else {
+        updates.signatureType = signatureType.toLowerCase();
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      set.status = 400;
+      return { error: 'No fields to update' };
+    }
+
+    db.update(schema.users).set(updates).where(eq(schema.users.id, target.id)).run();
+    db.insert(schema.activityLog).values({
+      type: 'profile_edited_by_staff',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Edited ${target.username}'s profile`,
+      metadata: JSON.stringify({
+        targetUserId: target.id,
+        targetUsername: target.username,
+        editorId: parseInt(user.id),
+        fields: Object.keys(updates),
+      }),
+    }).run();
+
     return { success: true };
   })
 
@@ -313,14 +432,104 @@ export const userRoutes = new Elysia()
     const row = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
     if (!row || !row.active) { set.status = 404; return { error: 'User not found' }; }
 
-    const currentTeams = db.select({
+    // Pull every team this user has ever owned, joined with the season the
+    // team belonged to. Active-season tenures populate `currentTeams`;
+    // archived-season tenures populate `pastTeams` with finish data so the
+    // history list can render finishing-position badges. Auto-award + S9
+    // backfill are seeding rank info on `teams.rank` in parallel — we read
+    // defensively (rank may be null on un-archived seasons or rows that
+    // pre-date that column).
+    const allTeams = db.select({
       teamId: schema.teams.id,
       leagueId: schema.teams.leagueId,
       teamName: schema.teams.teamName,
       teamAbbrev: schema.teams.teamAbbrev,
       teamColor: schema.teams.teamColor,
       logoPath: schema.teams.logoPath,
-    }).from(schema.teams).where(eq(schema.teams.userId, row.id)).all();
+      rank: schema.teams.rank,
+      seasonId: schema.leagues.seasonId,
+      leaguePhase: schema.leagues.phase,
+      seasonNumber: schema.seasons.seasonNumber,
+      seasonArchived: schema.seasons.archived,
+    })
+      .from(schema.teams)
+      .innerJoin(schema.leagues, eq(schema.teams.leagueId, schema.leagues.id))
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(eq(schema.teams.userId, row.id))
+      .all();
+
+    const currentTeams = allTeams
+      .filter(t => !t.seasonArchived)
+      .map(t => ({
+        teamId: t.teamId,
+        leagueId: t.leagueId,
+        teamName: t.teamName,
+        teamAbbrev: t.teamAbbrev,
+        teamColor: t.teamColor,
+        logoPath: t.logoPath,
+        seasonNumber: t.seasonNumber,
+        leaguePhase: t.leaguePhase,
+      }));
+
+    // Past tenures: archived seasons only. For each, derive a finish
+    // descriptor from the finals match (champion/finalist) or fall back to
+    // `teams.rank` (set when playoff seeding ran). Missing data renders as
+    // `null` on the client so a partially-seeded archive doesn't crash the
+    // history wall.
+    const pastTeams = allTeams
+      .filter(t => t.seasonArchived)
+      .map(t => {
+        const finals = db.select({
+          homeTeamId: schema.matches.homeTeamId,
+          awayTeamId: schema.matches.awayTeamId,
+          homeScore: schema.matches.homeScore,
+          awayScore: schema.matches.awayScore,
+          status: schema.matches.status,
+        })
+          .from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, t.leagueId),
+            eq(schema.matches.phase, 'playoffs'),
+            eq(schema.matches.playoffRound, 'f'),
+          ))
+          .get();
+
+        let finish: { position: number; label: string } | null = null;
+        if (finals && finals.status === 'completed' &&
+            finals.homeScore != null && finals.awayScore != null) {
+          const isHome = finals.homeTeamId === t.teamId;
+          const isAway = finals.awayTeamId === t.teamId;
+          if (isHome || isAway) {
+            const myScore = isHome ? finals.homeScore : finals.awayScore;
+            const oppScore = isHome ? finals.awayScore : finals.homeScore;
+            if (myScore > oppScore) finish = { position: 1, label: 'Champion' };
+            else finish = { position: 2, label: 'Runner-up' };
+          }
+        }
+        // Fallback to seeding rank if the team didn't make finals (e.g.
+        // SF/QF exit, or finished outside the bracket entirely).
+        if (!finish && typeof t.rank === 'number' && t.rank > 0) {
+          const r = t.rank;
+          const label = r === 3 ? 'Semifinalist'
+            : r === 4 ? 'Semifinalist'
+            : r <= 6 ? 'Quarterfinalist'
+            : `Rank ${r}`;
+          finish = { position: r, label };
+        }
+
+        return {
+          teamId: t.teamId,
+          leagueId: t.leagueId,
+          teamName: t.teamName,
+          teamAbbrev: t.teamAbbrev,
+          teamColor: t.teamColor,
+          logoPath: t.logoPath,
+          seasonNumber: t.seasonNumber,
+          finish,
+        };
+      })
+      // Most recent season first.
+      .sort((a, b) => b.seasonNumber - a.seasonNumber);
 
     // Resolve signature pokemon's display name once so callers don't have to
     // round-trip a second lookup just to render the sprite (sprite filename
@@ -351,7 +560,11 @@ export const userRoutes = new Elysia()
       signaturePokemonName,
       title: row.title,
       signatureType: row.signatureType,
+      // Surface role so the identity strip can show an ADMIN chip without
+      // a second auth round-trip. Only dev/admin → chip on the frontend.
+      role: row.role,
       currentTeams,
+      pastTeams,
       careerSummary: {
         seasonsPlayed: stats.seasonsPlayed,
         careerWins: stats.totalRecord.wins,

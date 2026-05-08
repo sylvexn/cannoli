@@ -6,7 +6,8 @@ import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -97,6 +98,11 @@ export function DraftPokemonPopover({
   onOpenDetailSheet,
 }: DraftPokemonPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
+  // League id is needed to render canonical /league/:id/teams/:id links on
+  // ownership badges. The popover is portaled to document.body but React
+  // context tunnels through portals — useLeague resolves against the
+  // LeagueLayout that wraps the draft board route.
+  const league = useLeague();
 
   // Close on Escape
   useEffect(() => {
@@ -294,22 +300,68 @@ export function DraftPokemonPopover({
           </>
         )}
 
-        {/* Ownership block (always when present) */}
+        {/* Ownership block (always when present). Team chips here link to
+            the canonical team URL — both the current owner AND the
+            "traded from" team get the same link/popover treatment. */}
         {owner && (
           <>
             <Separator className="my-2 bg-border-subtle" />
-            <div className="flex items-center gap-2">
-              <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="sm" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <TeamLink
+                team={{
+                  leagueId: league.id,
+                  teamId: owner.id,
+                  teamName: owner.teamName,
+                  teamAbbrev: owner.teamAbbrev,
+                  teamColor: owner.teamColor,
+                  logoPath: owner.bannerPath ?? null,
+                }}
+                logoSize="sm"
+                noHoverCard
+              />
               <span className="text-[11px] text-text-secondary">
                 {ownership!.acquisition.method === 'traded' ? (
                   <span className="flex items-center gap-1">
                     <ArrowRightLeft size={10} className="text-pink" />
-                    Traded from {playerLookup.get(ownership!.acquisition.fromTeamId!)?.teamAbbrev}
+                    Traded from{' '}
+                    {(() => {
+                      const fromId = ownership!.acquisition.fromTeamId;
+                      const from = fromId ? playerLookup.get(fromId) : null;
+                      if (!from) return '—';
+                      return (
+                        <TeamLink
+                          team={{
+                            leagueId: league.id,
+                            teamId: from.id,
+                            teamName: from.teamName,
+                            teamAbbrev: from.teamAbbrev,
+                            teamColor: from.teamColor,
+                            logoPath: from.bannerPath ?? null,
+                          }}
+                          showLogo={false}
+                          size="xs"
+                          noHoverCard
+                        />
+                      );
+                    })()}
                     {ownership!.acquisition.week && ` (Week ${ownership!.acquisition.week})`}
                   </span>
                 ) : (
                   <span>
-                    Drafted by {owner.teamAbbrev}
+                    Drafted by{' '}
+                    <TeamLink
+                      team={{
+                        leagueId: league.id,
+                        teamId: owner.id,
+                        teamName: owner.teamName,
+                        teamAbbrev: owner.teamAbbrev,
+                        teamColor: owner.teamColor,
+                        logoPath: owner.bannerPath ?? null,
+                      }}
+                      showLogo={false}
+                      size="xs"
+                      noHoverCard
+                    />
                     {ownership!.acquisition.round && ` (R${ownership!.acquisition.round}P${ownership!.acquisition.pick})`}
                   </span>
                 )}
