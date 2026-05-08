@@ -4,6 +4,7 @@
  * Connects to Arena WS for real-time ready-up and lobby state.
  */
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useArenaWebSocket, type ArenaMatch, type LiveMatch, type ScrimLobby } from './use-arena-websocket';
 import { BattleHud } from './battle-hud';
@@ -82,6 +83,7 @@ export function ArenaTab() {
         isOfficial={viewingBattle.isOfficial}
         label={viewingBattle.label}
         liveStats={arena.liveStats}
+        spectatorCount={arena.spectatorCounts[viewingBattle.matchId]}
         onBackToLobby={() => setViewingBattle(null)}
       />
     );
@@ -164,9 +166,9 @@ function OfficialMatchCard({
       ) : (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <TeamDisplay team={match.homeTeam} isReady={match.readyHome} />
+            <TeamDisplay team={match.homeTeam} isReady={match.readyHome} leagueId={match.leagueId} />
             <span className="text-text-muted text-xs font-mono uppercase">vs</span>
-            <TeamDisplay team={match.awayTeam} isReady={match.readyAway} />
+            <TeamDisplay team={match.awayTeam} isReady={match.readyAway} leagueId={match.leagueId} />
           </div>
 
           <div className="text-xs text-text-muted text-center">
@@ -226,7 +228,7 @@ function OfficialMatchCard({
   );
 }
 
-function TeamDisplay({ team, isReady }: { team: ArenaMatch['homeTeam']; isReady: boolean }) {
+function TeamDisplay({ team, isReady, leagueId }: { team: ArenaMatch['homeTeam']; isReady: boolean; leagueId: string }) {
   if (!team) return <div className="text-text-muted text-sm">TBD</div>;
   return (
     <div className="flex items-center gap-2">
@@ -237,7 +239,12 @@ function TeamDisplay({ team, isReady }: { team: ArenaMatch['homeTeam']; isReady:
         {team.abbrev.toUpperCase()}
       </div>
       <div>
-        <div className="text-sm font-medium text-text-primary">{team.name}</div>
+        <Link
+          to={`/league/${leagueId}/teams/${team.id}`}
+          className="text-sm font-medium text-text-primary hover:text-neon hover:underline transition-colors"
+        >
+          {team.name}
+        </Link>
         <div className={`text-xs ${isReady ? 'text-green-400' : 'text-text-muted'}`}>
           {isReady ? '\u25cf Ready' : '\u25cb Not ready'}
         </div>
