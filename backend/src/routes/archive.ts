@@ -341,6 +341,46 @@ export const archiveDeepRoutes = new Elysia()
     };
   })
 
+  // ─── Season awards (every pin awarded with this seasonId) ──────────
+  .get('/api/archive/seasons/:seasonId/awards', ({ params, set }) => {
+    const seasonId = parseInt(params.seasonId);
+    if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
+    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
+    if (!season) { set.status = 404; return { error: 'Season not found' }; }
+
+    const rows = db.select({
+      pinId: schema.pins.id,
+      pinDefId: schema.pins.pinDefId,
+      userId: schema.pins.userId,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+      defName: schema.pinDefinitions.name,
+      defDescription: schema.pinDefinitions.description,
+      defIconName: schema.pinDefinitions.iconName,
+      defColor: schema.pinDefinitions.color,
+      defCategory: schema.pinDefinitions.category,
+      defIsAuto: schema.pinDefinitions.isAuto,
+      metadata: schema.pins.metadata,
+      awardedAt: schema.pins.awardedAt,
+      awardedBy: schema.pins.awardedBy,
+    })
+      .from(schema.pins)
+      .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
+      .innerJoin(schema.users, eq(schema.users.id, schema.pins.userId))
+      .where(eq(schema.pins.seasonId, seasonId))
+      .all();
+
+    return {
+      seasonId,
+      seasonNumber: season.seasonNumber,
+      archived: !!season.archived,
+      pins: rows.map(r => ({
+        ...r,
+        metadata: r.metadata ? JSON.parse(r.metadata) : null,
+      })),
+    };
+  })
+
   // ─── All-time aggregates ────────────────────────────────────────────
   .get('/api/archive/all-time', () => {
     // Champions per (season, league) — finals winner. Single query, then
