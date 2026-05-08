@@ -8,6 +8,7 @@ import { pokemonRoute } from '@/lib/pokemon-route';
 import { cn } from '@/lib/utils';
 import { Sparkles, TrendingUp, TrendingDown, Repeat, UserPlus, Crown, Award, Play } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { MEDAL_COLORS } from '@/lib/constants';
 
 /**
  * Team-season report at /archive/:seasonId/:leagueId/:teamId. Renders
@@ -28,6 +29,11 @@ interface TeamSeason {
     teamAbbrev: string;
     teamColor: string;
     userId: number | null;
+    /** Final placement (1 = Champion, 2 = Runner-up, 3/4 = Semifinalist,
+     *  5–8 = Quarterfinalist, 9+ = Regular Season). NULL pre-archive. */
+    finishPosition: number | null;
+    /** Pre-formatted label paired with finishPosition. */
+    finishLabel: string | null;
   };
   league: {
     id: string;
@@ -170,12 +176,15 @@ export function ArchiveTeamPage() {
         </div>
 
         {aggregate && (
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-stretch flex-wrap">
             <StatChip label="W-L" value={`${aggregate.wins}-${aggregate.losses}${aggregate.ties ? `-${aggregate.ties}` : ''}`} />
             <StatChip label="Kills" value={String(aggregate.totalKills)} accent="#ef4444" />
             <StatChip label="Deaths" value={String(aggregate.totalDeaths)} accent="#94a3b8" />
             {aggregate.playoffMatches.length > 0 && (
               <StatChip label="Playoffs" value={`${aggregate.playoffMatches.filter(m => m.result === 'W').length}-${aggregate.playoffMatches.filter(m => m.result === 'L').length}`} accent="#fbbf24" />
+            )}
+            {team.finishLabel && (
+              <FinishChip position={team.finishPosition} label={team.finishLabel} />
             )}
           </div>
         )}
@@ -315,6 +324,33 @@ function StatChip({ label, value, accent }: { label: string; value: string; acce
     <div className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 min-w-[60px]">
       <div className="text-[9px] font-mono uppercase tracking-wider text-text-muted">{label}</div>
       <div className="text-base font-mono font-bold" style={accent ? { color: accent } : undefined}>{value}</div>
+    </div>
+  );
+}
+
+/** Chip flavoured by playoff placement — gold/silver/bronze for top 3,
+ *  purple for QF, neutral for regular-season. Lives next to the W-L stat
+ *  chips on the team-season header. */
+function FinishChip({ position, label }: { position: number | null; label: string }) {
+  let color = 'var(--text-secondary)';
+  let bg = 'transparent';
+  let border = 'var(--border-default)';
+  if (position === 1) {
+    color = MEDAL_COLORS.gold; bg = `${MEDAL_COLORS.gold}15`; border = `${MEDAL_COLORS.gold}55`;
+  } else if (position === 2) {
+    color = MEDAL_COLORS.silver; bg = `${MEDAL_COLORS.silver}15`; border = `${MEDAL_COLORS.silver}55`;
+  } else if (position === 3 || position === 4) {
+    color = MEDAL_COLORS.bronze; bg = `${MEDAL_COLORS.bronze}15`; border = `${MEDAL_COLORS.bronze}55`;
+  } else if (position != null && position <= 8) {
+    color = '#a78bfa'; bg = '#a78bfa15'; border = '#a78bfa44';
+  }
+  return (
+    <div
+      className="rounded-lg border px-3 py-2 min-w-[60px] flex flex-col justify-center"
+      style={{ backgroundColor: bg, borderColor: border }}
+    >
+      <div className="text-[9px] font-mono uppercase tracking-wider text-text-muted">Finish</div>
+      <div className="text-sm font-mono font-bold" style={{ color }}>{label}</div>
     </div>
   );
 }

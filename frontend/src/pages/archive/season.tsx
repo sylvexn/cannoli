@@ -44,6 +44,10 @@ interface ArchiveTeam {
   teamAbbrev: string;
   teamColor: string;
   rank: number;
+  /** Final placement (1 = Champion, 2 = Runner-up, etc.). NULL pre-archive. */
+  finishPosition: number | null;
+  /** Pre-formatted finish label paired with finishPosition. */
+  finishLabel: string | null;
   roster: ArchiveRosterMon[];
   record: { wins: number; losses: number; differential: number };
 }
@@ -241,6 +245,11 @@ function LeagueArchiveCard({
   const champion = league.champion ? teamMap.get(league.champion) : null;
 
   const derivedChampion = useMemo(() => {
+    // Prefer stamped finishPosition === 1 (set post-archive); fall back to
+    // backend's `champion` (finals-derived) and finally to the most-recent
+    // playoff-match winner for in-progress brackets.
+    const stamped = league.teams.find(t => t.finishPosition === 1);
+    if (stamped) return stamped;
     if (champion) return champion;
     const sorted = [...league.playoffs].reverse();
     for (const m of sorted) {
@@ -250,7 +259,7 @@ function LeagueArchiveCard({
       }
     }
     return null;
-  }, [champion, league.playoffs, teamMap]);
+  }, [champion, league.playoffs, league.teams, teamMap]);
 
   const leagueDeepLink = `/archive/${seasonId}/${league.id}`;
 
@@ -328,6 +337,7 @@ function LeagueArchiveCard({
               teamColor: runnerUp.teamColor,
             } : null}
             roster={derivedChampion.roster.map(r => ({ name: r.name, isTeraCaptain: r.isTeraCaptain }))}
+            finishLabel={derivedChampion.finishLabel}
             compact
           />
         </div>

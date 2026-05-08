@@ -47,10 +47,14 @@ export interface ChampionBannerData {
   href?: string;
   /** Compact variant trims the roster wall + tightens vertical rhythm. */
   compact?: boolean;
+  /** Optional placement label from teams.finish_label (e.g. "Champion",
+   *  "Runner-up"). When present, replaces the static "Champion" header so
+   *  the banner can reuse for non-champion finishes if the caller decides. */
+  finishLabel?: string | null;
 }
 
 export function ChampionBanner({
-  team, league, finalScore, runnerUp, roster, href, compact,
+  team, league, finalScore, runnerUp, roster, href, compact, finishLabel,
 }: ChampionBannerData) {
   const linkTarget = href ?? (league.seasonId != null
     ? `/archive/${league.seasonId}/${league.id}/${team.id}`
@@ -90,7 +94,7 @@ export function ChampionBanner({
         <div className="flex-1 min-w-0 space-y-1.5">
           <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider">
             <Crown size={12} className="text-draw shrink-0" />
-            <span className="text-draw">Champion</span>
+            <span className="text-draw">{finishLabel ?? 'Champion'}</span>
             <span className="text-text-muted">·</span>
             <span style={{ color: league.color }}>{league.name}</span>
             {league.seasonNumber != null && (
