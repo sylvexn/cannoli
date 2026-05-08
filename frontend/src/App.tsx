@@ -61,7 +61,6 @@ export default function App() {
                 <Route index element={<StandingsPage />} />
                 <Route path="schedule" element={<SchedulePage />} />
                 <Route path="stats" element={<Suspense fallback={<PageLoadingSpinner />}><StatsPage /></Suspense>} />
-                <Route path="speed" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
                 <Route path="teams/:id" element={<TeamProfilePage />} />
 
                 {/* Protected league routes */}
@@ -80,6 +79,7 @@ export default function App() {
               <Route path="archive" element={<ArchivePage />} />
               <Route path="rules" element={<RulesPage />} />
               <Route path="tiers" element={<TierListPage />} />
+              <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
 
               {/* Protected global routes */}
               <Route element={<ProtectedRoute />}>

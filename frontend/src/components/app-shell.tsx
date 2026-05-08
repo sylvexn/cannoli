@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Swords, Shield, Globe, Gamepad2,
-  Archive, Film, ScrollText, ListTree, Home,
+  Archive, Film, ScrollText, ListTree, Home, Gauge,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -341,6 +341,19 @@ export function AppShell() {
           >
             <ListTree size={16} />
             Tier List
+          </NavLink>
+
+          <NavLink viewTransition
+            to="/speed-tiers"
+            className={({ isActive }) => cn(
+              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-cyan-300/10 text-cyan-300'
+                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <Gauge size={16} />
+            Speed Tiers
           </NavLink>
 
           <NavLink
