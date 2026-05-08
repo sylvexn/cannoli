@@ -21,6 +21,7 @@ import { useLeague } from '@/lib/league-context';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
+import { pokemonRoute } from '@/lib/pokemon-route';
 
 interface RecentEventsProps {
   player: Player;
@@ -151,7 +152,9 @@ function EventTile({
         <Header icon={ArrowLeftRight} label="Trade" week={tile.week} accent={leagueColor} />
         <div className="flex items-center gap-1 flex-wrap">
           {tile.in.slice(0, 3).map(p => (
-            <PokemonSprite key={p} name={p} size="xs" />
+            <Link key={p} to={pokemonRoute(p)} title={p} className="hover:scale-110 transition-transform">
+              <PokemonSprite name={p} size="xs" />
+            </Link>
           ))}
           {tile.in.length > 3 && (
             <span className="text-[9px] font-mono text-text-muted">+{tile.in.length - 3}</span>
@@ -175,10 +178,10 @@ function EventTile({
     return (
       <div className="shrink-0 w-[140px] rounded-md border border-border-default bg-surface-overlay/40 px-2.5 py-2 flex flex-col gap-1.5">
         <Header icon={UserPlus} label="FA pickup" week={tile.week} accent="#a78bfa" />
-        <div className="flex items-center gap-1.5">
+        <Link to={pokemonRoute(tile.pokemon)} className="flex items-center gap-1.5 hover:text-neon transition-colors">
           <PokemonSprite name={tile.pokemon} size="sm" />
-          <span className="text-[11px] truncate text-text-secondary">{tile.pokemon}</span>
-        </div>
+          <span className="text-[11px] truncate text-text-secondary hover:text-neon">{tile.pokemon}</span>
+        </Link>
       </div>
     );
   }
@@ -187,10 +190,10 @@ function EventTile({
     return (
       <div className="shrink-0 w-[140px] rounded-md border border-border-default bg-surface-overlay/40 px-2.5 py-2 flex flex-col gap-1.5">
         <Header icon={UserMinus} label="Released" week={tile.week} accent="#f87171" />
-        <div className="flex items-center gap-1.5">
+        <Link to={pokemonRoute(tile.pokemon)} className="flex items-center gap-1.5 hover:text-neon transition-colors">
           <PokemonSprite name={tile.pokemon} size="sm" />
-          <span className="text-[11px] truncate text-text-secondary">{tile.pokemon}</span>
-        </div>
+          <span className="text-[11px] truncate text-text-secondary hover:text-neon">{tile.pokemon}</span>
+        </Link>
       </div>
     );
   }
@@ -199,10 +202,10 @@ function EventTile({
     return (
       <div className="shrink-0 w-[140px] rounded-md border border-border-default bg-surface-overlay/40 px-2.5 py-2 flex flex-col gap-1.5">
         <Header icon={Star} label="Tera change" week={tile.week} accent="#fbbf24" />
-        <div className="flex items-center gap-1.5">
+        <Link to={pokemonRoute(tile.pokemon)} className="flex items-center gap-1.5 hover:text-neon transition-colors">
           <PokemonSprite name={tile.pokemon} size="sm" />
-          <span className="text-[11px] truncate text-text-secondary">{tile.pokemon}</span>
-        </div>
+          <span className="text-[11px] truncate text-text-secondary hover:text-neon">{tile.pokemon}</span>
+        </Link>
       </div>
     );
   }
