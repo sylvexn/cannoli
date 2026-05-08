@@ -28,7 +28,7 @@ export const leagueAdminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const {
       name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
-      weekDates, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
+      weekDates, weekDatesAutoFilled, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
       playoffTeamCount, format,
     } = body as Record<string, unknown>;
 
@@ -47,6 +47,7 @@ export const leagueAdminRoutes = new Elysia()
     if (draftDate !== undefined) leagueUpdates.draftDate = draftDate;
     if (tradeDeadlineWeek !== undefined) leagueUpdates.tradeDeadlineWeek = tradeDeadlineWeek;
     if (weekDates !== undefined) leagueUpdates.weekDates = typeof weekDates === 'string' ? weekDates : JSON.stringify(weekDates);
+    if (weekDatesAutoFilled !== undefined) leagueUpdates.weekDatesAutoFilled = !!weekDatesAutoFilled;
     if (paused !== undefined) leagueUpdates.paused = !!paused;
     if (forfeitPolicy !== undefined) leagueUpdates.forfeitPolicy = forfeitPolicy;
     if (format !== undefined) {

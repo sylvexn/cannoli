@@ -145,6 +145,10 @@ export interface LeagueSeason {
   paused?: boolean;
   archived?: boolean;
   weekDates?: Record<string, string> | null;
+  /** Once true, the season-schedule editor's one-time week 2..N auto-fill
+   *  has either run or been pre-empted by a manual edit. Stops the editor
+   *  from clobbering hand-tuned dates on subsequent week-1 saves. */
+  weekDatesAutoFilled?: boolean;
 }
 
 export interface Trade {

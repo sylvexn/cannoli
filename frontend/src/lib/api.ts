@@ -84,6 +84,7 @@ export interface ApiLeague {
     paused?: boolean;
     archived?: boolean;
     weekDates?: Record<string, string> | null;
+    weekDatesAutoFilled?: boolean;
   } | null;
 }
 
