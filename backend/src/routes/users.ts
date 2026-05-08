@@ -435,10 +435,12 @@ export const userRoutes = new Elysia()
     // Pull every team this user has ever owned, joined with the season the
     // team belonged to. Active-season tenures populate `currentTeams`;
     // archived-season tenures populate `pastTeams` with finish data so the
-    // history list can render finishing-position badges. Auto-award + S9
-    // backfill are seeding rank info on `teams.rank` in parallel — we read
-    // defensively (rank may be null on un-archived seasons or rows that
-    // pre-date that column).
+    // history list can render finishing-position badges. Prefer the
+    // pre-stamped `teams.finishPosition`/`teams.finishLabel` columns
+    // (set during season-end archival in A4); fall back to the dynamic
+    // finals-match + seeding-rank computation for rows that haven't been
+    // stamped yet (un-archived seasons in mid-flight, or older rows that
+    // pre-date the columns).
     const allTeams = db.select({
       teamId: schema.teams.id,
       leagueId: schema.teams.leagueId,
@@ -447,6 +449,8 @@ export const userRoutes = new Elysia()
       teamColor: schema.teams.teamColor,
       logoPath: schema.teams.logoPath,
       rank: schema.teams.rank,
+      finishPosition: schema.teams.finishPosition,
+      finishLabel: schema.teams.finishLabel,
       seasonId: schema.leagues.seasonId,
       leaguePhase: schema.leagues.phase,
       seasonNumber: schema.seasons.seasonNumber,
@@ -472,42 +476,53 @@ export const userRoutes = new Elysia()
       }));
 
     // Past tenures: archived seasons only. For each, derive a finish
-    // descriptor from the finals match (champion/finalist) or fall back to
-    // `teams.rank` (set when playoff seeding ran). Missing data renders as
-    // `null` on the client so a partially-seeded archive doesn't crash the
-    // history wall.
+    // descriptor. Prefer the stamped `teams.finishPosition` /
+    // `teams.finishLabel` columns when present (A4's archive flow stamps
+    // them at season-end). Otherwise compute dynamically from the finals
+    // match (champion/finalist), then fall back to `teams.rank` (set when
+    // playoff seeding ran). Missing data renders as `null` on the client
+    // so a partially-seeded archive doesn't crash the history wall.
     const pastTeams = allTeams
       .filter(t => t.seasonArchived)
       .map(t => {
-        const finals = db.select({
-          homeTeamId: schema.matches.homeTeamId,
-          awayTeamId: schema.matches.awayTeamId,
-          homeScore: schema.matches.homeScore,
-          awayScore: schema.matches.awayScore,
-          status: schema.matches.status,
-        })
-          .from(schema.matches)
-          .where(and(
-            eq(schema.matches.leagueId, t.leagueId),
-            eq(schema.matches.phase, 'playoffs'),
-            eq(schema.matches.playoffRound, 'f'),
-          ))
-          .get();
-
         let finish: { position: number; label: string } | null = null;
-        if (finals && finals.status === 'completed' &&
-            finals.homeScore != null && finals.awayScore != null) {
-          const isHome = finals.homeTeamId === t.teamId;
-          const isAway = finals.awayTeamId === t.teamId;
-          if (isHome || isAway) {
-            const myScore = isHome ? finals.homeScore : finals.awayScore;
-            const oppScore = isHome ? finals.awayScore : finals.homeScore;
-            if (myScore > oppScore) finish = { position: 1, label: 'Champion' };
-            else finish = { position: 2, label: 'Runner-up' };
+
+        // 1. Pre-stamped columns (A4 archive flow).
+        if (typeof t.finishPosition === 'number' && t.finishLabel) {
+          finish = { position: t.finishPosition, label: t.finishLabel };
+        }
+
+        // 2. Dynamic from finals match.
+        if (!finish) {
+          const finals = db.select({
+            homeTeamId: schema.matches.homeTeamId,
+            awayTeamId: schema.matches.awayTeamId,
+            homeScore: schema.matches.homeScore,
+            awayScore: schema.matches.awayScore,
+            status: schema.matches.status,
+          })
+            .from(schema.matches)
+            .where(and(
+              eq(schema.matches.leagueId, t.leagueId),
+              eq(schema.matches.phase, 'playoffs'),
+              eq(schema.matches.playoffRound, 'f'),
+            ))
+            .get();
+
+          if (finals && finals.status === 'completed' &&
+              finals.homeScore != null && finals.awayScore != null) {
+            const isHome = finals.homeTeamId === t.teamId;
+            const isAway = finals.awayTeamId === t.teamId;
+            if (isHome || isAway) {
+              const myScore = isHome ? finals.homeScore : finals.awayScore;
+              const oppScore = isHome ? finals.awayScore : finals.homeScore;
+              if (myScore > oppScore) finish = { position: 1, label: 'Champion' };
+              else finish = { position: 2, label: 'Runner-up' };
+            }
           }
         }
-        // Fallback to seeding rank if the team didn't make finals (e.g.
-        // SF/QF exit, or finished outside the bracket entirely).
+
+        // 3. Fallback to seeding rank.
         if (!finish && typeof t.rank === 'number' && t.rank > 0) {
           const r = t.rank;
           const label = r === 3 ? 'Semifinalist'
