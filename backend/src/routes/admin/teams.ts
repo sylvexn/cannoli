@@ -3,13 +3,16 @@ import { db, schema } from '../../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { isStaff, isStaffOrTeamOwner } from '../../lib/auth';
 import { tx } from '../../lib/tx';
+import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 
 export const teamAdminRoutes = new Elysia()
 
   // ─── Team creation (per-league) ────────────────────────────────────
 
-  .post('/api/leagues/:leagueId/teams', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/teams', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
     const { id, coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername } = body as {
       id?: string;
       coachName: string;
@@ -52,10 +55,12 @@ export const teamAdminRoutes = new Elysia()
 
   // ─── Team update ──────────────────────────────────────────────────
 
-  .put('/api/teams/:teamId', ({ params, body, user, set }) => {
+  .put('/api/teams/:teamId', ({ params, query, body, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
     const staff = isStaff(user);
 
     const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername, bio, motto, captainNote } = body as Record<string, unknown>;
@@ -113,8 +118,10 @@ export const teamAdminRoutes = new Elysia()
 
   // ─── Roster nickname (owner or admin) ──────────────────────────────
 
-  .put('/api/teams/:teamId/rosters/:rosterId/nickname', ({ params, body, user, set }) => {
+  .put('/api/teams/:teamId/rosters/:rosterId/nickname', ({ params, query, body, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
     const rosterId = parseInt(params.rosterId);
     if (!Number.isFinite(rosterId)) { set.status = 400; return { error: 'Invalid rosterId' }; }
 
@@ -156,6 +163,9 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const force = query.force === '1' || query.force === 'true';
 
@@ -208,10 +218,12 @@ export const teamAdminRoutes = new Elysia()
 
   // ─── Team logo upload ──────────────────────────────────────────────
 
-  .post('/api/teams/:teamId/logo', async ({ params, request, user, set }) => {
+  .post('/api/teams/:teamId/logo', async ({ params, query, request, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const form = await request.formData().catch(() => null);
     const file = form?.get('logo');
@@ -242,10 +254,12 @@ export const teamAdminRoutes = new Elysia()
 
   // ─── Team banner upload ────────────────────────────────────────────
 
-  .post('/api/teams/:teamId/banner', async ({ params, request, user, set }) => {
+  .post('/api/teams/:teamId/banner', async ({ params, query, request, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const form = await request.formData().catch(() => null);
     const file = form?.get('banner');
