@@ -162,9 +162,14 @@ export function TeraCaptainStrip({
             >
               {/* Captain info row */}
               <div className="flex items-center gap-2.5 px-3 py-2">
-                <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
+                <PokemonSprite name={mon.name} size="sm" shiny={mon.isShiny} className="shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-semibold text-text-primary truncate">{mon.name}</div>
+                  {mon.nickname && (
+                    <div className="text-[10px] italic text-text-muted truncate font-mono" title={mon.nickname}>
+                      "{mon.nickname}"
+                    </div>
+                  )}
                   <div className="text-[10px] text-text-muted">
                     {getEffectiveCost(mon.name, true)}pt
                     <span className="text-text-muted/40 ml-1">(base {mon.tier})</span>
@@ -285,7 +290,7 @@ export function TeraCaptainStrip({
                         }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-pink/5 transition-colors text-left"
                       >
-                        <PokemonSprite name={mon.name} size="xs" className="shrink-0" />
+                        <PokemonSprite name={mon.name} size="xs" shiny={mon.isShiny} className="shrink-0" />
                         <span className="text-[11px] text-text-primary font-medium flex-1 truncate">{mon.name}</span>
                         <span className="text-[10px] text-text-muted font-mono">T{mon.tier}</span>
                         {costDelta > 0 && (
