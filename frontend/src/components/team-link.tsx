@@ -27,7 +27,7 @@ interface TeamLinkProps {
   /** Show the logo before the abbreviation. Default true. */
   showLogo?: boolean;
   /** Logo size. Default 'sm'. */
-  logoSize?: 'sm' | 'md' | 'lg';
+  logoSize?: 'sm' | 'md' | 'lg' | 'xl';
   /** Render only the logo (no abbreviation). */
   logoOnly?: boolean;
   /** Disable the hover card entirely (still renders the link). */
