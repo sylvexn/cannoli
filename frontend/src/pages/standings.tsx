@@ -219,6 +219,9 @@ export function StandingsPage() {
                       <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
+                      <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
+                        {homeWon ? 'W' : 'L'}
+                      </span>
                     </Link>
                     <div className="flex items-center gap-2 px-3">
                       <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
@@ -230,6 +233,9 @@ export function StandingsPage() {
                       </span>
                     </div>
                     <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
+                      <span className={`text-[10px] font-mono font-bold tabular-nums ${!homeWon ? 'text-win' : 'text-loss'}`}>
+                        {!homeWon ? 'W' : 'L'}
+                      </span>
                       <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
