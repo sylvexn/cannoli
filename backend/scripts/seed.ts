@@ -571,16 +571,27 @@ if (s9Missing.length === 0) {
   const finish = assignFinishPositions(sqlite, s9LeagueIds);
   console.log(`  stamped ${finish.teamsUpdated} team(s) with finish position/label`);
 
-  // Award S9 pins (auto-stat pins via the runtime job; champion-style
-  // standing lives in finish_position/finish_label, but we still route
-  // Cannoli/Garchomp/Cynthia through auto-award so archive surfaces show
-  // the same pin set live S9 would. The job is idempotent.)
+  // Award S9 pins. Two passes:
+  //   1. runAutoAwards(season-end) → garchomp / cannoli / cynthia. S9 has
+  //      no per-match Pokemon kill data (match_pokemon is empty for the
+  //      historical import), so garchomp won't have eligible rows; cannoli
+  //      and cynthia fire from match-level scores alone.
+  //   2. mintArchivePins → champion / high-score / steal-of-the-draft /
+  //      sweeper. The first three (high-score/steal/sweeper) need
+  //      match_pokemon and will mint zero rows for S9, but champion only
+  //      needs finals scores → fires correctly. Mirrors what the admin
+  //      "Archive Season" button does live; we run both at seed time so
+  //      the historical archive surface has the same pin set as a live
+  //      finalize would.
   console.log('\n── Awarding S9 auto-pins ──');
   const { runAutoAwards } = await import('../src/lib/pins/auto-award');
+  const { mintArchivePins } = await import('../src/lib/pins/archive-mint');
   for (const lid of s9LeagueIds) {
-    const summary = runAutoAwards(lid, { trigger: 'season-end' });
+    const auto = runAutoAwards(lid, { trigger: 'season-end' });
+    const archive = mintArchivePins(lid);
     console.log(
-      `  ${lid}: awarded ${summary.awarded.length}, skipped ${summary.skipped}`,
+      `  ${lid}: auto ${auto.awarded.length}+${auto.skipped}, ` +
+      `archive ${archive.awarded.length}+${archive.skipped}`,
     );
   }
 }
