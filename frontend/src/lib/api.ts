@@ -669,6 +669,22 @@ export const api = {
   archiveSeason: (seasonId: number, archived: boolean) =>
     putJson<{ success: boolean }>(`/api/seasons/${seasonId}/archived`, { archived }),
 
+  /**
+   * The full archive ceremony: flips the archived flag, sets every league
+   * in the season to phase=offseason, and runs both runAutoAwards
+   * (existing pins) and mintArchivePins (champion / high-score / steal /
+   * sweeper). Idempotent — safe to re-run after a stat correction.
+   */
+  archiveSeasonCeremony: (seasonId: number) =>
+    postJson<{
+      success: boolean;
+      seasonId: number;
+      seasonNumber: number;
+      leagues: number;
+      existingAwards: { leagueId: string; awarded: number; skipped: number }[];
+      newAwards: { leagueId: string; awarded: { pinDefId: string; userId: number }[]; skipped: number }[];
+    }>(`/api/admin/seasons/${seasonId}/archive`),
+
   advanceWeek: (leagueId: string) =>
     postJson<{ success: boolean; week: number }>(`/api/leagues/${leagueId}/week`),
 

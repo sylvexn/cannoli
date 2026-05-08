@@ -6,6 +6,7 @@ import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
+import { checkMatchArchived } from '../../lib/archive-guard';
 
 export const miscRoutes = new Elysia()
 
@@ -67,8 +68,10 @@ export const miscRoutes = new Elysia()
 
   // ─── Force match result (admin override for forfeits / disputes) ────
 
-  .post('/api/admin/matches/:matchId/force-result', ({ params, body, user, set }) => {
+  .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
     const { homeScore, awayScore, forfeitedBy, note, pokemonData } = body as {
       homeScore: number; awayScore: number;
       forfeitedBy?: 'home' | 'away' | 'both' | null;

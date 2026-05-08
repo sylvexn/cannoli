@@ -9,6 +9,7 @@ import { computeStandings } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
 import { validatePokemonDataForMatch } from '../lib/match-validation';
+import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 
 export const matchRoutes = new Elysia()
 
@@ -201,8 +202,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Record match result ─────────────────────────────────────────────
 
-  .post('/api/matches/:matchId/result', ({ params, body, user, set }) => {
+  .post('/api/matches/:matchId/result', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -328,8 +331,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Dismiss match warnings ──────────────────────────────────────────
 
-  .post('/api/matches/:matchId/dismiss-warnings', ({ params, user, set }) => {
+  .post('/api/matches/:matchId/dismiss-warnings', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -367,8 +372,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Void match result (clear scores + per-pokemon, back to scheduled) ────
 
-  .post('/api/matches/:matchId/void', ({ params, user, set }) => {
+  .post('/api/matches/:matchId/void', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -498,8 +505,10 @@ export const matchRoutes = new Elysia()
   // Unlike void this does NOT clear scores, pokemon data, or per-match pins —
   // it only flags the match for review. Use void to roll back.
 
-  .post('/api/matches/:matchId/dispute', ({ params, body, user, set }) => {
+  .post('/api/matches/:matchId/dispute', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
     const { reason } = body as { reason: string };
     if (!reason || typeof reason !== 'string') { set.status = 400; return { error: 'reason required' }; }
 
@@ -531,8 +540,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Move match (week / deadline) ───────────────────────────────────────
 
-  .patch('/api/matches/:matchId', ({ params, body, user, set }) => {
+  .patch('/api/matches/:matchId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -579,8 +590,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Delete match ────────────────────────────────────────────────────
 
-  .delete('/api/matches/:matchId', ({ params, user, set }) => {
+  .delete('/api/matches/:matchId', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
@@ -647,8 +660,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Schedule generation ─────────────────────────────────────────────
 
-  .post('/api/leagues/:leagueId/schedule/generate', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/schedule/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const { force, confirmName } = (body || {}) as { force?: boolean; confirmName?: string };
 
@@ -723,8 +738,10 @@ export const matchRoutes = new Elysia()
 
   // ─── Playoff bracket generation ──────────────────────────────────────
 
-  .post('/api/leagues/:leagueId/playoffs/generate', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/playoffs/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const { topN } = (body || {}) as { topN?: number };
 
