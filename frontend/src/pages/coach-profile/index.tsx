@@ -9,9 +9,6 @@ import { TeamLink } from '@/components/team-link';
 import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { formatRelativeTime, formatRecord } from '@/lib/format';
-import { spriteUrl, type PokemonType } from '@/lib/pokemon';
-import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { ProfileSettingsPanel } from './settings-panel';
 import { useCoachExtras, type CoachResult } from './use-coach-extras';
@@ -151,20 +148,6 @@ export function CoachProfilePage() {
             >
               {display}
             </h1>
-            {profile.signaturePokemonName && (
-              <img
-                src={spriteUrl(profile.signaturePokemonName)}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                title={profile.signaturePokemonName}
-                className="shrink-0"
-                style={{ width: 36, height: 36, imageRendering: 'pixelated', marginTop: -6, marginBottom: -6 }}
-              />
-            )}
-            {profile.signatureType && (
-              <ProfileTypeChip type={profile.signatureType as PokemonType} />
-            )}
             {(profile.role === 'admin' || profile.role === 'dev') && (
               <RoleChip role={profile.role} />
             )}
@@ -178,11 +161,6 @@ export function CoachProfilePage() {
 
           {profile.displayName && profile.displayName !== profile.username && (
             <div className="text-xs font-mono text-text-muted mt-0.5">@{profile.username}</div>
-          )}
-          {profile.title && (
-            <div className="text-[11px] font-mono text-text-secondary mt-1 leading-tight">
-              {profile.title}
-            </div>
           )}
           {profile.statusMessage && (
             <p
@@ -687,25 +665,3 @@ function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
   );
 }
 
-/** Larger version of the popover TypeChip for the profile header — same
- *  TYPE_COLORS palette, bigger touch target. */
-function ProfileTypeChip({ type }: { type: PokemonType }) {
-  const color = TYPE_COLORS[type];
-  const label = TYPE_LABELS[type];
-  if (!color || !label) return null;
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider shrink-0',
-      )}
-      style={{
-        backgroundColor: `${color}22`,
-        color,
-        boxShadow: `inset 0 0 0 1px ${color}80`,
-      }}
-      title={`Signature type: ${type}`}
-    >
-      {label}
-    </span>
-  );
-}

@@ -124,9 +124,6 @@ export const authRoutes = new Elysia()
         displayName: user.displayName,
         bio: user.bio,
         avatarPath: user.avatarPath,
-        signaturePokemonId: user.signaturePokemonId,
-        title: user.title,
-        signatureType: user.signatureType,
       },
     }), { headers });
   })

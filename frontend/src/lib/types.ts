@@ -14,14 +14,6 @@ export interface User {
   displayName?: string | null;
   bio?: string | null;
   avatarPath?: string | null;
-  // ─── Coach flair (passive identity expressions) ──────────────────────
-  /** pokemon.id of chosen signature mon — renders as a 14–16px sprite next
-   *  to the coach's name in CoachLink. Null = no signature. */
-  signaturePokemonId?: number | null;
-  /** Short user-set string (≤ 40), shown under display_name + in popover. */
-  title?: string | null;
-  /** Canonical Pokemon type name — drives chip + optional avatar tint. */
-  signatureType?: PokemonType | null;
 }
 
 /** League-level configuration (admin-managed) */
@@ -45,12 +37,6 @@ export interface CoachOwner {
   secondaryColor: string | null;
   tertiaryColor: string | null;
   role: 'dev' | 'admin' | 'user';
-  // Coach flair — surfaced on owner objects so CoachLink can render the
-  // signature sprite + type chip everywhere a team owner appears.
-  signaturePokemonId?: number | null;
-  signaturePokemonName?: string | null;
-  title?: string | null;
-  signatureType?: PokemonType | null;
 }
 
 export interface Player {
