@@ -25,6 +25,7 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       paused: a.season.paused,
       archived: a.season.archived,
       weekDates: a.season.weekDates,
+      weekDatesAutoFilled: a.season.weekDatesAutoFilled,
     } : {
       id: 'unknown',
       seasonNumber: 0,

@@ -44,6 +44,7 @@ export const leagueRoutes = new Elysia()
         forfeitPolicy: l.forfeitPolicy,
         paused: l.paused,
         weekDates: l.weekDates ? JSON.parse(l.weekDates) : null,
+        weekDatesAutoFilled: !!l.weekDatesAutoFilled,
         archived: !!season.archived,
       } : null,
     }));
