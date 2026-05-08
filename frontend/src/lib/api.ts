@@ -321,6 +321,10 @@ export interface ApiPublicProfile {
   title?: string | null;
   /** Canonical Pokemon type name — drives chip + optional avatar tint. */
   signatureType?: string | null;
+  /** User's role — surfaced on the profile page as an ADMIN chip when
+   *  applicable. Only set on backends that include it (older deploys may
+   *  omit it; treat undefined as `'user'`). */
+  role?: 'dev' | 'admin' | 'user' | null;
   currentTeams: Array<{
     teamId: string;
     leagueId: string;
@@ -328,6 +332,27 @@ export interface ApiPublicProfile {
     teamAbbrev: string;
     teamColor: string;
     logoPath: string | null;
+    /** Season number this team belongs to — needed when the hero panel
+     *  renders the league/season pill. Optional for back-compat with older
+     *  backends that haven't redeployed yet. */
+    seasonNumber?: number;
+    /** League phase at fetch time — drives "Finals Pending" pill in S10. */
+    leaguePhase?: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
+  }>;
+  /** Past tenures — one row per archived (league × season) the user has
+   *  owned a team in. Populated lazily as A4 backfills S9 archives; the
+   *  profile page reads defensively. */
+  pastTeams?: Array<{
+    teamId: string;
+    leagueId: string;
+    teamName: string;
+    teamAbbrev: string;
+    teamColor: string;
+    logoPath: string | null;
+    seasonNumber: number;
+    /** Finishing position + display label (e.g. `{ position: 1, label: 'Champion' }`).
+     *  Null when the league finished without playoffs or before rank was tracked. */
+    finish: { position: number; label: string } | null;
   }>;
   careerSummary: {
     seasonsPlayed: number;
@@ -714,6 +739,26 @@ export const api = {
     title?: string | null;
     signatureType?: string | null;
   }) => mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
+
+  // Staff override — edit another user's profile fields. Backend gates on
+  // dev/admin role and emits a `profile_edited_by_staff` audit event with
+  // { targetUserId, fields, editorId } metadata. The owner's own edits
+  // continue to go through `updateMe` (preserves the audit distinction).
+  updateUserAsStaff: (
+    username: string,
+    data: {
+      bio?: string | null;
+      statusMessage?: string | null;
+      bannerUrl?: string | null;
+      signaturePokemonId?: number | null;
+      title?: string | null;
+      signatureType?: string | null;
+    },
+  ) => mutateJson<{ success: boolean }>(
+    'PATCH',
+    `/api/users/${encodeURIComponent(username)}`,
+    data,
+  ),
 
   // User banner upload — image, ≤ 1MB. Resolves to a stable
   // `/uploads/user-banners/<id>.<ext>` path stored on users.banner_url.
