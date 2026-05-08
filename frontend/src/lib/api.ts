@@ -378,14 +378,8 @@ export interface ApiActivityEvent {
 }
 
 export interface ApiSiteSettings {
-  siteName: string | null;
   announcement: string | null;
   announcementType: string | null;
-  defaultPointCap: number | null;
-  defaultTeraCaptainSlots: number | null;
-  defaultTradeDeadlineWeek: number | null;
-  defaultRosterSize: number | null;
-  defaultMaxTeams: number | null;
   defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
