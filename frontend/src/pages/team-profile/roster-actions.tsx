@@ -4,6 +4,7 @@ import type { ApiTradeBlockListing } from '@/lib/api';
 import type { Player } from '@/lib/types';
 import { useLeague } from '@/lib/league-context';
 import { useAuth } from '@/lib/auth-context';
+import { canManageTeam } from '@/lib/permissions';
 import { useLeagueData } from '@/lib/league-data-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,9 +24,12 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 /**
- * Owner-only actions on a team's own roster: list a Pokemon on the trade
+ * Manager-only actions on a team's roster: list a Pokemon on the trade
  * block (with optional note), delist, and release a mon outright. Designed
  * to live below the roster table on the team-profile page.
+ *
+ * Visible to the team's owner and to staff (admin/dev) — both have
+ * manager authority. See `lib/permissions.ts`.
  *
  * Trade block: only enabled during league.phase==='regular' and before the
  * trade deadline. Listings disappear automatically when a mon is traded
@@ -43,19 +47,19 @@ export function RosterActions({ player }: { player: Player }) {
   const [listings, setListings] = useState<ApiTradeBlockListing[]>([]);
   const [loadingListings, setLoadingListings] = useState(false);
 
-  const isOwner = !!(user && player.userId != null && String(player.userId) === user.id);
+  const canManage = canManageTeam(user, player);
   const phase = league.season.phase;
   const isRegular = phase === 'regular';
   const tradeDeadlinePassed = league.season.currentWeek > (league.season.tradeDeadlineWeek ?? 0);
 
   useEffect(() => {
-    if (!isOwner) return;
+    if (!canManage) return;
     setLoadingListings(true);
     api.getTradeBlock(league.id)
       .then(all => setListings(all.filter(l => l.teamId === player.id)))
       .catch(() => {})
       .finally(() => setLoadingListings(false));
-  }, [league.id, player.id, isOwner]);
+  }, [league.id, player.id, canManage]);
 
   // ─── List on the block ──────────────────────────────────────────────
   const [listOpen, setListOpen] = useState(false);
@@ -127,7 +131,7 @@ export function RosterActions({ player }: { player: Player }) {
     }
   }
 
-  if (!isOwner) return null;
+  if (!canManage) return null;
 
   const canList = isRegular && !tradeDeadlinePassed;
   const canRelease = isRegular; // FA deadline gate enforced server-side

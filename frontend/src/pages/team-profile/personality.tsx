@@ -10,6 +10,7 @@ import type { Player } from '@/lib/types';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth-context';
+import { canManageTeam } from '@/lib/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -24,11 +25,11 @@ const MAX_MOTTO = 80;
 const MAX_NOTE = 280;
 
 export function Personality({ player, onSaved }: PersonalityProps) {
-  const { user, isAdmin } = useAuth();
-  const isOwner = !!user && (
-    isAdmin ||
-    (player.userId != null && String(player.userId) === user.id)
-  );
+  const { user } = useAuth();
+  // Edit access: team owner OR staff. Variable kept named `isOwner` because
+  // the surrounding UI strings ("you own this team") read better that way —
+  // see canManageTeam from lib/permissions.
+  const isOwner = canManageTeam(user, player);
 
   const [editing, setEditing] = useState(false);
   const [motto, setMotto] = useState(player.motto ?? '');
