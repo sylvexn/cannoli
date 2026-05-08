@@ -106,6 +106,18 @@ export function DraftTopBar({
                   </DropdownMenuItem>
                 </>
               )}
+              {isPractice && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => navigate(`/league/${leagueId}/draft`)}
+                    className="text-xs"
+                  >
+                    <Radio size={12} className="mr-2 text-text-muted" />
+                    <span>Back to draft</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -125,13 +137,23 @@ export function DraftTopBar({
             />
           )}
           {isPractice && (
-            <Badge
-              variant="outline"
-              className="text-[10px] gap-1.5 px-2 py-0.5 font-mono text-pink border-pink/30 bg-pink/10"
-            >
-              <Zap size={10} aria-hidden />
-              Simulator
-            </Badge>
+            <Tooltip>
+              <TooltipTrigger
+                onClick={() => navigate(`/league/${leagueId}/draft`)}
+                aria-label="Exit practice — back to draft"
+                className={cn(
+                  'inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[10px] font-mono',
+                  'border border-pink/30 bg-pink/10 text-pink',
+                  'hover:bg-pink/20 hover:border-pink/50 transition-colors',
+                )}
+              >
+                <Zap size={10} aria-hidden />
+                Simulator
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Click to exit practice and go back to the draft board
+              </TooltipContent>
+            </Tooltip>
           )}
           {!isPractice && state.view === 'active' && state.source === 'server' && (
             <Badge
@@ -155,6 +177,29 @@ export function DraftTopBar({
                 </>
               )}
             </Badge>
+          )}
+
+          {/* Inline practice entry — surfaces the simulator from the top bar
+              instead of burying it in the kebab. Only shown outside an
+              active draft so it doesn't compete with live controls. */}
+          {!isPractice && draftDemoVisible && !isDraftRunning && (
+            <Tooltip>
+              <TooltipTrigger
+                onClick={() => navigate(`/league/${leagueId}/draft/practice`)}
+                aria-label="Try a practice draft"
+                className={cn(
+                  'inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[10px] font-mono uppercase tracking-wider',
+                  'border border-pink/30 bg-pink/10 text-pink',
+                  'hover:bg-pink/20 hover:border-pink/50 transition-colors',
+                )}
+              >
+                <FlaskConical size={11} aria-hidden />
+                Practice
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Run a solo simulator draft to test strategy
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
 
