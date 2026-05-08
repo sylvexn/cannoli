@@ -347,6 +347,7 @@ export const userRoutes = new Elysia()
         notifyMatches: row.notifyMatches,
         notifyAnnouncements: row.notifyAnnouncements,
         timezone: row.timezone,
+        colorblindMode: row.colorblindMode,
         updatedAt: row.updatedAt,
       };
     }
@@ -359,6 +360,7 @@ export const userRoutes = new Elysia()
       notifyMatches: true,
       notifyAnnouncements: true,
       timezone: null,
+      colorblindMode: false,
       updatedAt: null,
     };
   })
@@ -366,7 +368,7 @@ export const userRoutes = new Elysia()
   // ─── PUT /api/users/me/preferences ────────────────────────────────────
   .put('/api/users/me/preferences', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const { theme, density, defaultLandingPath, notifyTrades, notifyMatches, notifyAnnouncements, timezone } =
+    const { theme, density, defaultLandingPath, notifyTrades, notifyMatches, notifyAnnouncements, timezone, colorblindMode } =
       (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -404,6 +406,10 @@ export const userRoutes = new Elysia()
       } else {
         updates.timezone = timezone;
       }
+    }
+    if (colorblindMode !== undefined) {
+      if (typeof colorblindMode !== 'boolean') { set.status = 400; return { error: 'colorblindMode must be boolean' }; }
+      updates.colorblindMode = colorblindMode;
     }
 
     const userId = parseInt(user.id);

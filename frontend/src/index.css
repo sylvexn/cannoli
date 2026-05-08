@@ -998,3 +998,54 @@ aside {
       0 0 18px -2px color-mix(in oklab, var(--user-primary, #22d3ee) 35%, transparent);
   }
 }
+
+/* ─── Colorblind mode (deuteranopia-safe) ───────────────────────────────────
+ *
+ * Activated by AuthProvider stamping <html data-colorblind="true"> when the
+ * user opts in. Retargets the red/green semantic tokens to an orange/blue
+ * pairing — both hues stay maximally distinguishable for deuteranopia and
+ * keep the brightness ladder of the original palette.
+ *
+ *   win  / positive / x½  → blue   (#3b82f6)
+ *   loss / negative / x2  → orange (#f97316)
+ *
+ * Scope:
+ *   - Semantic CSS vars (--color-win, --color-loss, --color-draw stays).
+ *   - MATCHUP_COLORS / EFFECTIVENESS_COLORS callsites that use literal Tailwind
+ *     arbitrary classes (`bg-[#3b82f6]`, `text-[#4ade80]`, `bg-[#3b1515]`, etc.).
+ *     Because JIT bakes those literals into the bundle, we override them here
+ *     with explicit selectors instead of refactoring constants.
+ *
+ * Tier colors are left alone — the warm→cool gradient still reads as a
+ * monotonic ladder for deuteranopia and the apex pinks/purples are
+ * already non-confusable.
+ */
+[data-colorblind='true'] {
+  --color-win: #3b82f6;
+  --color-loss: #f97316;
+}
+
+/* MATCHUP_COLORS — sideA stays blue (already safe). sideB swaps red→orange. */
+[data-colorblind='true'] .bg-\[\#ef4444\]\/5      { background-color: rgb(249 115 22 / 0.05); }
+[data-colorblind='true'] .bg-\[\#ef4444\]\/10     { background-color: rgb(249 115 22 / 0.10); }
+[data-colorblind='true'] .bg-\[\#ef4444\]\/20     { background-color: rgb(249 115 22 / 0.20); }
+[data-colorblind='true'] .border-\[\#ef4444\]     { border-color: #f97316; }
+[data-colorblind='true'] .border-\[\#ef4444\]\/10 { border-color: rgb(249 115 22 / 0.10); }
+[data-colorblind='true'] .border-\[\#ef4444\]\/20 { border-color: rgb(249 115 22 / 0.20); }
+[data-colorblind='true'] .border-\[\#ef4444\]\/30 { border-color: rgb(249 115 22 / 0.30); }
+[data-colorblind='true'] .text-\[\#ef4444\]       { color: #f97316; }
+
+/* MATCHUP_COLORS stat ladder — green/red ends swap to blue/orange (yellow midband stays). */
+[data-colorblind='true'] .text-\[\#4ade80\]       { color: #60a5fa; }
+[data-colorblind='true'] .text-\[\#4ade80\]\/80   { color: rgb(96 165 250 / 0.8); }
+[data-colorblind='true'] .text-\[\#86efac\]       { color: #93c5fd; }
+[data-colorblind='true'] .text-\[\#f87171\]       { color: #fdba74; }
+[data-colorblind='true'] .text-\[\#fca5a5\]       { color: #fed7aa; }
+[data-colorblind='true'] .text-\[\#fca5a5\]\/80   { color: rgb(254 215 170 / 0.8); }
+
+/* Type-chart cell tints (typechart-tab.tsx) — dark-green resist, dark-red weak. */
+[data-colorblind='true'] .bg-\[\#0d3320\]         { background-color: #0a1f3d; }
+[data-colorblind='true'] .bg-\[\#0d2e1a\]\/70     { background-color: rgb(10 31 61 / 0.7); }
+[data-colorblind='true'] .bg-\[\#2e1515\]         { background-color: #3b240a; }
+[data-colorblind='true'] .bg-\[\#3b1515\]         { background-color: #4a2c0a; }
+[data-colorblind='true'] .bg-\[\#5c1a1a\]         { background-color: #6b3410; }
