@@ -19,15 +19,7 @@ const MAX_DISPLAY_NAME = 32;
 const MAX_BIO = 280;
 const MAX_STATUS = 80;
 const MAX_BANNER_URL = 255;
-const MAX_TITLE = 40;
 const MAX_AVATAR_BYTES = 512 * 1024;
-
-/** Canonical 18-type list — kept in sync with frontend POKEMON_TYPES. */
-const VALID_TYPES = new Set([
-  'normal', 'fire', 'water', 'electric', 'grass', 'ice',
-  'fighting', 'poison', 'ground', 'flying', 'psychic', 'bug',
-  'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy',
-]);
 
 // IANA zone validator. Modern Bun ships Intl.supportedValuesOf, but if a
 // future runtime drops it we fall back to a try/catch DateTimeFormat probe
@@ -55,16 +47,12 @@ export const userRoutes = new Elysia()
   //   bio                — markdown-light, ≤ 280
   //   statusMessage      — one-liner, ≤ 80
   //   bannerUrl          — relative or absolute URL, ≤ 255 (null clears)
-  //   signaturePokemonId — pokemon.id of the coach's signature mon (null clears)
-  //   title              — short flair string, ≤ 40 (null clears)
-  //   signatureType      — canonical Pokemon type (null clears)
   // Banner uploads should go through POST /api/users/me/banner (multipart);
   // this PATCH is for clearing the banner or pasting an external image URL.
   .patch('/api/users/me', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const {
       displayName, bio, statusMessage, bannerUrl,
-      signaturePokemonId, title, signatureType,
     } = (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
@@ -108,39 +96,6 @@ export const userRoutes = new Elysia()
         updates.bannerUrl = bannerUrl.trim();
       }
     }
-    if (signaturePokemonId !== undefined) {
-      if (signaturePokemonId === null) {
-        updates.signaturePokemonId = null;
-      } else if (typeof signaturePokemonId !== 'number' || !Number.isInteger(signaturePokemonId)) {
-        set.status = 400;
-        return { error: 'signaturePokemonId must be an integer or null' };
-      } else {
-        const exists = db.select({ id: schema.pokemon.id }).from(schema.pokemon)
-          .where(eq(schema.pokemon.id, signaturePokemonId)).get();
-        if (!exists) { set.status = 400; return { error: `Pokemon ${signaturePokemonId} not found` }; }
-        updates.signaturePokemonId = signaturePokemonId;
-      }
-    }
-    if (title !== undefined) {
-      if (title === null || title === '') {
-        updates.title = null;
-      } else if (typeof title !== 'string' || title.length > MAX_TITLE) {
-        set.status = 400;
-        return { error: `title must be a string ≤ ${MAX_TITLE} chars` };
-      } else {
-        updates.title = title.trim();
-      }
-    }
-    if (signatureType !== undefined) {
-      if (signatureType === null || signatureType === '') {
-        updates.signatureType = null;
-      } else if (typeof signatureType !== 'string' || !VALID_TYPES.has(signatureType.toLowerCase())) {
-        set.status = 400;
-        return { error: 'signatureType must be one of the 18 canonical Pokemon types' };
-      } else {
-        updates.signatureType = signatureType.toLowerCase();
-      }
-    }
     if (Object.keys(updates).length === 0) {
       set.status = 400;
       return { error: 'No fields to update' };
@@ -152,9 +107,9 @@ export const userRoutes = new Elysia()
 
   // ─── PATCH /api/users/:username (staff-only profile edit) ─────────────
   // Mirrors the field set of PATCH /api/users/me, but lets dev/admin edit
-  // someone else's bio / signature / status / title / banner. Owner edits
-  // still go through /me — this route hard-rejects owner self-targeting so
-  // we don't silently route around the owner-only audit trail.
+  // someone else's bio / status / banner. Owner edits still go through /me —
+  // this route hard-rejects owner self-targeting so we don't silently route
+  // around the owner-only audit trail.
   // Emits an audit-log event `profile_edited_by_staff` per call with
   // metadata { targetUserId, fields, editorId } so admin actions are
   // distinguishable from owner self-edits in the activity feed.
@@ -178,7 +133,6 @@ export const userRoutes = new Elysia()
 
     const {
       bio, statusMessage, bannerUrl,
-      signaturePokemonId, title, signatureType,
     } = (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
@@ -210,39 +164,6 @@ export const userRoutes = new Elysia()
         return { error: `bannerUrl must be a string ≤ ${MAX_BANNER_URL} chars` };
       } else {
         updates.bannerUrl = bannerUrl.trim();
-      }
-    }
-    if (signaturePokemonId !== undefined) {
-      if (signaturePokemonId === null) {
-        updates.signaturePokemonId = null;
-      } else if (typeof signaturePokemonId !== 'number' || !Number.isInteger(signaturePokemonId)) {
-        set.status = 400;
-        return { error: 'signaturePokemonId must be an integer or null' };
-      } else {
-        const exists = db.select({ id: schema.pokemon.id }).from(schema.pokemon)
-          .where(eq(schema.pokemon.id, signaturePokemonId)).get();
-        if (!exists) { set.status = 400; return { error: `Pokemon ${signaturePokemonId} not found` }; }
-        updates.signaturePokemonId = signaturePokemonId;
-      }
-    }
-    if (title !== undefined) {
-      if (title === null || title === '') {
-        updates.title = null;
-      } else if (typeof title !== 'string' || title.length > MAX_TITLE) {
-        set.status = 400;
-        return { error: `title must be a string ≤ ${MAX_TITLE} chars` };
-      } else {
-        updates.title = title.trim();
-      }
-    }
-    if (signatureType !== undefined) {
-      if (signatureType === null || signatureType === '') {
-        updates.signatureType = null;
-      } else if (typeof signatureType !== 'string' || !VALID_TYPES.has(signatureType.toLowerCase())) {
-        set.status = 400;
-        return { error: 'signatureType must be one of the 18 canonical Pokemon types' };
-      } else {
-        updates.signatureType = signatureType.toLowerCase();
       }
     }
     if (Object.keys(updates).length === 0) {
@@ -552,16 +473,6 @@ export const userRoutes = new Elysia()
       // Most recent season first.
       .sort((a, b) => b.seasonNumber - a.seasonNumber);
 
-    // Resolve signature pokemon's display name once so callers don't have to
-    // round-trip a second lookup just to render the sprite (sprite filename
-    // derives from name, not id).
-    let signaturePokemonName: string | null = null;
-    if (row.signaturePokemonId != null) {
-      const sp = db.select({ name: schema.pokemon.name }).from(schema.pokemon)
-        .where(eq(schema.pokemon.id, row.signaturePokemonId)).get();
-      signaturePokemonName = sp?.name ?? null;
-    }
-
     const stats = computeLifetimeStats(row.id);
 
     return {
@@ -576,11 +487,6 @@ export const userRoutes = new Elysia()
       secondaryColor: row.secondaryColor,
       tertiaryColor: row.tertiaryColor,
       createdAt: row.createdAt,
-      // ─── Coach flair ─────────────────────────────────────────────────
-      signaturePokemonId: row.signaturePokemonId,
-      signaturePokemonName,
-      title: row.title,
-      signatureType: row.signatureType,
       // Surface role so the identity strip can show an ADMIN chip without
       // a second auth round-trip. Only dev/admin → chip on the frontend.
       role: row.role,
