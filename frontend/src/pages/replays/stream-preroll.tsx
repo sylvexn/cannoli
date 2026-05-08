@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bookmark, Crown, Pause, Play, RotateCcw, SkipForward } from 'lucide-react';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import type { League } from '@/lib/types';
 import type { ApiTeam } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -126,6 +126,7 @@ export function StreamPreroll({
             record={homeRecord}
             rank={homeRank}
             align="right"
+            leagueId={league.id}
           />
 
           {/* VS divider */}
@@ -140,6 +141,7 @@ export function StreamPreroll({
             record={awayRecord}
             rank={awayRank}
             align="left"
+            leagueId={league.id}
           />
         </div>
 
@@ -177,14 +179,15 @@ function TeamSide({
   record,
   rank,
   align,
+  leagueId,
 }: {
   team: ApiTeam | undefined;
   record: string;
   rank?: number;
   align: 'left' | 'right';
+  leagueId: string;
 }) {
   const color = team?.teamColor ?? '#6b7280';
-  const abbrev = team?.teamAbbrev ?? '???';
   const name = team?.teamName ?? 'Unknown';
 
   return (
@@ -194,12 +197,21 @@ function TeamSide({
         align === 'right' ? 'md:items-end' : 'md:items-start',
       )}
     >
-      <TeamLogo
-        abbrev={abbrev}
-        color={color}
-        logoPath={team?.logoPath ?? null}
-        size="xl"
-      />
+      {team ? (
+        <TeamLink
+          team={{
+            leagueId,
+            teamId: team.id,
+            teamName: team.teamName,
+            teamAbbrev: team.teamAbbrev,
+            teamColor: team.teamColor,
+            logoPath: team.logoPath,
+            record: team.record,
+          }}
+          logoOnly
+          logoSize="xl"
+        />
+      ) : null}
       <div
         className={cn(
           'flex flex-col gap-0.5',
