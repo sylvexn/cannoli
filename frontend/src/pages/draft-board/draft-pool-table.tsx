@@ -85,10 +85,15 @@ export function DraftPoolTable({
               }}
             >
               <TableCell className="px-2 py-1">
-                <PokemonSprite name={entry.name} size="xs" />
+                <PokemonSprite name={entry.name} size="xs" shiny={mon?.isShiny} />
               </TableCell>
               <TableCell className="px-2 py-1">
                 <span className="text-xs font-medium text-text-primary">{entry.name}</span>
+                {mon?.nickname && (
+                  <span className="block text-[10px] italic font-mono text-text-muted truncate max-w-[140px]" title={mon.nickname}>
+                    "{mon.nickname}"
+                  </span>
+                )}
               </TableCell>
               <TableCell className="px-2 py-1 text-center">
                 <TierBadge points={entry.tier} />
