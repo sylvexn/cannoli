@@ -995,7 +995,7 @@ export function refreshUserMap() {
  * Returns '' when the team has no owning user account (rare — orphaned
  * roster), which mirrors the previous "no showdown username" fallback.
  */
-function teamPsUserid(team: { userId: string | null } | null | undefined): string {
+function teamPsUserid(team: { userId: number | null } | null | undefined): string {
   if (!team?.userId) return '';
   const user = db.select({ username: schema.users.username })
     .from(schema.users)
