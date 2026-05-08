@@ -452,31 +452,42 @@ export interface ApiDraftTemplate {
 
 // ─── Speed Tiers ─────────────────────────────────────────────────────────
 
+/**
+ * One ownership entry per (league, team) the Pokemon is rostered on. Rendered
+ * as a colored gem chip in the speed-tier table; multiple chips per row when
+ * the same mon is drafted in more than one active league.
+ */
+export interface ApiSpeedTierOwnership {
+  leagueId: string;
+  leagueName: string;
+  leagueColor: string;
+  teamId: string;
+  teamAbbrev: string;
+  teamName: string;
+  teamColor: string;
+  coachName: string;
+  logoPath: string | null;
+  isTeraCaptain: boolean;
+  nickname: string | null;
+}
+
 export interface ApiSpeedTierRow {
-  /** Stable composite id (per-league) `<leagueId>:<teamId>:<pokemonName>`. */
+  /** Stable id = the canonical `pokemon.name` (e.g. "Charizard-Mega-Y"). */
   id: string;
   name: string;
-  /** Owner-set nickname (per rosters.nickname). Null when not set. */
-  nickname?: string | null;
-  /** Owner-set shiny flag (per rosters.isShiny). */
-  isShiny?: boolean;
   dex: number | null;
   baseSpeed: number;
   type1: string | null;
   type2: string | null;
   tier: number;
+  formCategory: 'base' | 'mega' | 'regional' | 'other';
+  /** True when the mon is a tera captain on AT LEAST ONE roster. Per-league
+   *  captain status lives on individual ownership entries. */
   isTeraCaptain: boolean;
   abilities: string[];
-  /** Present when the row is fetched via the global endpoint. Null on the
-   *  legacy per-league endpoint (caller already knows the league). */
-  league?: { id: string; name: string; color: string } | null;
-  owner: {
-    teamId: string;
-    teamAbbrev: string;
-    teamName: string;
-    teamColor: string;
-    logoPath: string | null;
-  } | null;
+  /** Every (league, team) this mon is currently rostered on. Empty array =
+   *  free agent in the active season. */
+  ownerships: ApiSpeedTierOwnership[];
 }
 
 export interface ApiGlobalOwnership {

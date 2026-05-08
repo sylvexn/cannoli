@@ -3,73 +3,111 @@ import { db, schema } from '../../db';
 import { eq, inArray, desc } from 'drizzle-orm';
 
 /**
- * Build the per-row payload from a (rosters, teams, leagues, pokemon) join.
- * Returns one row per rostered Pokemon with the data the frontend needs to
- * compute adjusted speed under user-controlled assumptions (item, ability,
- * nature, weather, stage, Trick Room).
+ * Ownership entry for a single Pokemon — one per (league, team) it's rostered
+ * on. The frontend renders these as gem chips so a single mon row can show
+ * cross-league coverage at a glance.
+ */
+interface Ownership {
+  leagueId: string;
+  leagueName: string;
+  leagueColor: string;
+  teamId: string;
+  teamAbbrev: string;
+  teamName: string;
+  teamColor: string;
+  coachName: string;
+  logoPath: string | null;
+  isTeraCaptain: boolean;
+  nickname: string | null;
+}
+
+/**
+ * Build deduped speed-tier rows for the given leagues.
  *
- * Computation is deliberately client-side so toggles update with zero RTT —
- * the endpoint just returns the static reference data plus owner identity.
+ * One row per unique Pokemon (by `pokemon.name`, which is unique and already
+ * encodes form — "Charizard", "Charizard-Mega-Y", "Tauros-Paldea-Combat",
+ * etc.). Each row carries an `ownerships` array listing every (league, team)
+ * the mon is rostered on within the supplied league set.
+ *
+ * Pokemon NOT drafted in any of the supplied leagues still appear with
+ * `ownerships: []` so the speed-tier table doubles as a free-agent browser.
+ *
+ * Computation is deliberately client-side so toggles (item, ability, nature,
+ * weather, stage, Trick Room) update with zero RTT.
  */
 function buildSpeedRows(leagueIds: string[]) {
-  if (leagueIds.length === 0) return [];
+  // Always source the canonical Pokemon list — even with no leagues we want
+  // a full undrafted dex.
+  const pokemonRows = db.select().from(schema.pokemon).all();
 
-  const teams = db.select().from(schema.teams)
-    .where(inArray(schema.teams.leagueId, leagueIds))
-    .all();
-  if (teams.length === 0) return [];
+  // Build the ownerships map keyed by pokemonName.
+  const ownershipsByName = new Map<string, Ownership[]>();
 
-  const leagues = db.select().from(schema.leagues)
-    .where(inArray(schema.leagues.id, leagueIds))
-    .all();
-  const leagueById = new Map(leagues.map(l => [l.id, l]));
+  if (leagueIds.length > 0) {
+    const teams = db.select().from(schema.teams)
+      .where(inArray(schema.teams.leagueId, leagueIds))
+      .all();
+    if (teams.length > 0) {
+      const leagues = db.select().from(schema.leagues)
+        .where(inArray(schema.leagues.id, leagueIds))
+        .all();
+      const leagueById = new Map(leagues.map(l => [l.id, l]));
+      const teamById = new Map(teams.map(t => [t.id, t]));
+      const teamIds = teams.map(t => t.id);
 
-  const teamById = new Map(teams.map(t => [t.id, t]));
-  const teamIds = teams.map(t => t.id);
+      const rosters = db.select().from(schema.rosters)
+        .where(inArray(schema.rosters.teamId, teamIds))
+        .all();
 
-  const rosters = db.select().from(schema.rosters)
-    .where(inArray(schema.rosters.teamId, teamIds))
-    .all();
-  if (rosters.length === 0) return [];
+      for (const r of rosters) {
+        const team = teamById.get(r.teamId);
+        if (!team) continue;
+        const league = leagueById.get(team.leagueId);
+        if (!league) continue;
 
-  const names = Array.from(new Set(rosters.map(r => r.pokemonName)));
-  const pokemonRows = db.select().from(schema.pokemon)
-    .where(inArray(schema.pokemon.name, names))
-    .all();
-  const pokeByName = new Map(pokemonRows.map(p => [p.name, p]));
+        const entry: Ownership = {
+          leagueId: league.id,
+          leagueName: league.name,
+          leagueColor: league.color,
+          teamId: team.id,
+          teamAbbrev: team.teamAbbrev,
+          teamName: team.teamName,
+          teamColor: team.teamColor,
+          coachName: team.coachName,
+          logoPath: team.logoPath,
+          isTeraCaptain: !!r.isTeraCaptain,
+          nickname: r.nickname ?? null,
+        };
 
-  return rosters.map(r => {
-    const p = pokeByName.get(r.pokemonName);
-    const team = teamById.get(r.teamId);
-    const league = team ? leagueById.get(team.leagueId) : undefined;
-    const abilities = p
-      ? [p.ability1, p.ability2, p.hiddenAbility].filter((a): a is string => !!a)
-      : [];
+        const list = ownershipsByName.get(r.pokemonName);
+        if (list) list.push(entry);
+        else ownershipsByName.set(r.pokemonName, [entry]);
+      }
+    }
+  }
+
+  return pokemonRows.map(p => {
+    const ownerships = ownershipsByName.get(p.name) ?? [];
+    const abilities = [p.ability1, p.ability2, p.hiddenAbility]
+      .filter((a): a is string => !!a);
+    // True if the mon is a captain on ANY league — used for the Sparkles glyph
+    // next to its name. Per-league captain status still lives on each
+    // ownership entry for finer rendering if needed.
+    const isTeraCaptain = ownerships.some(o => o.isTeraCaptain);
     return {
-      // Composite id includes leagueId so cross-league rows don't collide.
-      id: `${team?.leagueId ?? ''}:${r.teamId}:${r.pokemonName}`,
-      name: r.pokemonName,
-      nickname: r.nickname ?? null,
-      isShiny: !!r.isShiny,
-      dex: p?.nationalDexNumber ?? null,
-      baseSpeed: p?.spe ?? 0,
-      type1: p?.type1 ?? null,
-      type2: p?.type2 ?? null,
-      tier: r.costAtDraft || r.tier,
-      isTeraCaptain: !!r.isTeraCaptain,
+      // Stable id = pokemon name (unique). Drops the leagueId/teamId composite
+      // since rows are now per-mon, not per-roster-entry.
+      id: p.name,
+      name: p.name,
+      dex: p.nationalDexNumber ?? null,
+      baseSpeed: p.spe ?? 0,
+      type1: p.type1 ?? null,
+      type2: p.type2 ?? null,
+      tier: p.tier,
+      formCategory: p.formCategory,
+      isTeraCaptain,
       abilities,
-      league: league
-        ? { id: league.id, name: league.name, color: league.color }
-        : null,
-      owner: team
-        ? {
-            teamId: team.id,
-            teamAbbrev: team.teamAbbrev,
-            teamName: team.teamName,
-            teamColor: team.teamColor,
-            logoPath: team.logoPath,
-          }
-        : null,
+      ownerships,
     };
   });
 }
@@ -90,6 +128,8 @@ export const speedTierRoutes = new Elysia()
   /**
    * GET /api/leagues/:leagueId/speed-tiers
    * Per-league speed tiers (legacy callsite — kept for backwards compat).
+   * Still returns the deduped shape, but ownerships will only ever reference
+   * the one league.
    */
   .get('/api/leagues/:leagueId/speed-tiers', ({ params }) => {
     return buildSpeedRows([params.leagueId]);
@@ -97,8 +137,9 @@ export const speedTierRoutes = new Elysia()
 
   /**
    * GET /api/speed-tiers
-   * Global speed tiers across every active-season league. Frontend filters
-   * by league client-side via chip selectors.
+   * Global speed tiers across every active-season league. One row per unique
+   * Pokemon; each row's `ownerships` lists every (league, team) the mon is
+   * rostered on. Mons not drafted anywhere still appear with empty ownerships.
    */
   .get('/api/speed-tiers', () => {
     const ids = getActiveLeagueIds();
