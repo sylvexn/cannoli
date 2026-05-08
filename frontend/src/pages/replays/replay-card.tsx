@@ -65,7 +65,7 @@ export function ReplayCard({
             {hasMvp && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
-                title={`MVP: ${summary!.mvp!.name} (${summary!.mvp!.kills}K)`}
+                title={`MVP: ${summary!.mvp!.name}${summary!.mvp!.nickname ? ` "${summary!.mvp!.nickname}"` : ''} (${summary!.mvp!.kills}K)`}
               >
                 <Trophy size={9} />
                 MVP
