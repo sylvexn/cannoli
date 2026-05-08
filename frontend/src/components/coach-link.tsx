@@ -7,6 +7,7 @@ import { api, type ApiPublicProfile } from '@/lib/api';
 import { formatRecord, formatTenure } from '@/lib/format';
 import { spriteUrl } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
+import { blendHex } from '@/lib/color';
 import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Shield, Code2 } from 'lucide-react';
@@ -242,7 +243,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
   const display = merged.displayName?.trim() || merged.username;
   const primary = merged.primaryColor ?? FALLBACK_PRIMARY;
   const secondary = merged.secondaryColor ?? FALLBACK_SECONDARY;
-  const tertiary = merged.tertiaryColor ?? primary;
+  const tertiary = merged.tertiaryColor ?? blendHex(primary, secondary);
 
   const nameStyle: CSSProperties = {
     backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
