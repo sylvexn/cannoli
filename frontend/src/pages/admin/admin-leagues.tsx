@@ -10,8 +10,9 @@ import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  Save, Calendar, Trophy, Swords, Lock, Pause, AlertTriangle, Trophy as TrophyIcon,
+  Save, Calendar, Trophy, Swords, Lock, Pause, AlertTriangle, Trophy as TrophyIcon, Gamepad2,
 } from 'lucide-react';
+import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
 
 interface LeagueSettings {
   pointCap: number;
@@ -21,7 +22,19 @@ interface LeagueSettings {
   playoffTeamCount: number;
   paused: boolean;
   forfeitPolicy: 'double_forfeit' | 'admin_review';
+  format: DraftFormat;
 }
+
+const FORMAT_LABELS: Record<DraftFormat, string> = {
+  gen9natdex: 'Gen 9 NatDex',
+  gen9ou: 'Gen 9 OU',
+  gen9uu: 'Gen 9 UU',
+  gen9ru: 'Gen 9 RU',
+  gen9nu: 'Gen 9 NU',
+  gen9pu: 'Gen 9 PU',
+  gen9lc: 'Gen 9 LC',
+  gen9ubers: 'Gen 9 Ubers',
+};
 
 const phaseLabels: Record<string, { label: string; color: string }> = {
   predraft: { label: 'Pre-draft', color: 'text-text-muted bg-surface-overlay border-border-default' },
@@ -75,6 +88,7 @@ export function AdminLeagues() {
           playoffTeamCount: l.playoffTeamCount ?? 6,
           paused: !!l.season.paused,
           forfeitPolicy: l.season.forfeitPolicy ?? 'double_forfeit',
+          format: (l.format ?? 'gen9natdex') as DraftFormat,
         };
       }
       return next;
@@ -101,6 +115,7 @@ export function AdminLeagues() {
         playoffTeamCount: s.playoffTeamCount,
         paused: s.paused,
         forfeitPolicy: s.forfeitPolicy,
+        format: s.format,
       });
       toast.success(`Saved settings for ${leagues.find(l => l.id === leagueId)?.name}`);
       refreshLeagues();
@@ -222,8 +237,27 @@ export function AdminLeagues() {
                   />
                 </div>
 
-                {/* Operational toggles — paused + forfeit policy */}
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border-subtle">
+                {/* Operational toggles — format + paused + forfeit policy */}
+                <div className="grid grid-cols-3 gap-4 pt-2 border-t border-border-subtle">
+                  <div className="space-y-1">
+                    <label className="text-xs text-text-muted flex items-center gap-1">
+                      <Gamepad2 size={10} />
+                      Battle Format
+                    </label>
+                    <Select
+                      value={s.format}
+                      onValueChange={(v) => updateSetting(league.id, 'format', (v as DraftFormat) ?? 'gen9natdex')}
+                    >
+                      <SelectTrigger className="h-7 text-xs bg-surface-overlay">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DRAFT_FORMATS.map(f => (
+                          <SelectItem key={f} value={f} className="text-xs">{FORMAT_LABELS[f]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1">
                     <label className="text-xs text-text-muted flex items-center gap-1">
                       <Pause size={10} />

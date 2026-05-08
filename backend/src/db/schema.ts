@@ -103,6 +103,35 @@ export const leagues = sqliteTable('leagues', {
    *  10 mirrors the historic hardcoded value. Surfaced in the season wizard
    *  and per-league admin UI. */
   rosterSize: integer('roster_size').notNull().default(10),
+  /** Battle format for THIS league. Drives the draft board's moveset display
+   *  + matchup-center coverage scan: a gen9-only format hides past-gen-only
+   *  moves (Hidden Power, etc), gen9natdex shows the full sheet. See
+   *  frontend/src/data/pokemon-learnsets.ts → DraftFormat for the canonical
+   *  list. Default 'gen9natdex' preserves pre-#12 behavior. */
+  format: text('format').notNull().default('gen9natdex'),
+});
+
+// ─── Draft Templates (saved {format, captain count, banlist, tier snapshot}) ─
+
+export const draftTemplates = sqliteTable('draft_templates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  /** Battle format the template targets — same enum as `leagues.format`. */
+  format: text('format').notNull().default('gen9natdex'),
+  /** Frozen tier list at save time. JSON: [{ tier: number, names: string[] }, ...].
+   *  We snapshot rather than reference so future tier-list edits don't mutate
+   *  templates that are still in use. */
+  tierListSnapshot: text('tier_list_snapshot').notNull(),
+  /** JSON array of pokemon display names that are draft-banned. */
+  banlist: text('banlist').notNull().default('[]'),
+  /** JSON array of pokemon display names that are tera-captain-banned. */
+  teraBanlist: text('tera_banlist').notNull().default('[]'),
+  captainCount: integer('captain_count').notNull().default(2),
+  pointCap: integer('point_cap').notNull().default(110),
+  rosterSize: integer('roster_size').notNull().default(11),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  createdBy: integer('created_by').references(() => users.id),
 });
 
 // ─── Teams ───────────────────────────────────────────────────────────────────

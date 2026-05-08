@@ -172,6 +172,10 @@ export interface League {
   draftDate?: string | null;
   /** Configurable bracket size for this league's playoffs (2/4/6/8). Per-league. */
   playoffTeamCount: number;
+  /** Battle format — drives moveset legality on the draft board + matchup
+   *  center. See frontend/src/data/pokemon-learnsets.ts → DraftFormat.
+   *  Optional for backwards compat (treated as 'gen9natdex' when missing). */
+  format?: import('@/data/pokemon-learnsets').DraftFormat;
   season: LeagueSeason;
   players: Player[];
   hasData: boolean;

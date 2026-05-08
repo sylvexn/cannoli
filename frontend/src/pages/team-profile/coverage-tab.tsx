@@ -3,6 +3,7 @@ import type { RosterPokemon } from '@/lib/types';
 import { DEFAULT_MOVE_CATEGORIES } from '@/data/move-categories';
 import type { MoveCategory } from '@/data/move-categories';
 import { getTeamMoveCoverage } from '@/lib/move-coverage';
+import type { DraftFormat } from '@/data/pokemon-learnsets';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
@@ -11,6 +12,9 @@ import { cn } from '@/lib/utils';
 
 interface CoverageTabProps {
   roster: RosterPokemon[];
+  /** League battle format. Drives move legality (gen9-only formats hide
+   *  past-gen-only moves). Defaults to NatDex when missing. */
+  format?: DraftFormat;
 }
 
 /**
@@ -18,7 +22,7 @@ interface CoverageTabProps {
  * roster mons can perform that role and which ones. Designed for the
  * team-profile right-column tab. Compact, info-dense.
  */
-export function CoverageTab({ roster }: CoverageTabProps) {
+export function CoverageTab({ roster, format }: CoverageTabProps) {
   const [categories, setCategories] = useState<MoveCategory[]>(DEFAULT_MOVE_CATEGORIES);
 
   useEffect(() => {
@@ -31,8 +35,8 @@ export function CoverageTab({ roster }: CoverageTabProps) {
 
   // Reuse matchup-center helper with team B empty
   const coverage = useMemo(
-    () => getTeamMoveCoverage(roster, [], categories),
-    [roster, categories],
+    () => getTeamMoveCoverage(roster, [], categories, format),
+    [roster, categories, format],
   );
 
   return (

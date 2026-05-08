@@ -490,7 +490,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             </TabsContent>
 
             <TabsContent value="coverage" className="p-0 flex-1 overflow-y-auto flex flex-col">
-              <CoverageTab roster={activeRoster} />
+              <CoverageTab roster={activeRoster} format={league.format} />
             </TabsContent>
 
             <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
