@@ -28,7 +28,7 @@ import { BattleHud } from './battle-hud';
 
 type Pill = 'match' | 'scrims' | 'live';
 
-const COLLAPSED_PX = 40;
+const COLLAPSED_PX = 32;
 const EXPANDED_PX = 280;
 const BATTLE_VH = 50; // % of viewport height when watching a battle
 
@@ -106,7 +106,7 @@ export function ArenaFooter() {
     >
       {/* Pill bar — always visible, even during battle (acts as the "back" affordance is the battle's own bottom bar) */}
       {!viewingBattle && (
-        <div className="flex items-center gap-1 px-2 h-10 flex-shrink-0">
+        <div className="flex items-center gap-1 px-2 h-8 flex-shrink-0">
           <PillButton
             active={isOpen && activePill === 'match'}
             onClick={() => togglePill('match')}
@@ -242,7 +242,7 @@ function PillButton({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
         active ? classes.active : classes.idle
       }`}
     >
