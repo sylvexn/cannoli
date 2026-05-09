@@ -41,6 +41,53 @@ const scrimLobbies = new Map<string, ScrimLobby>();
 let nextScrimId = 1;
 
 /**
+ * Per-match spectator subscriptions. Tracks which WS clients are currently
+ * subscribed to `arena:match:{matchId}`. Elysia's pub/sub layer doesn't
+ * expose subscriber counts, so we maintain it ourselves to broadcast
+ * `spectator_count` updates whenever it changes.
+ */
+const matchSpectators = new Map<string, Set<object>>();
+
+function broadcastSpectatorCount(matchId: string) {
+  if (!broadcastWs) return;
+  const count = matchSpectators.get(matchId)?.size ?? 0;
+  broadcastWs.publish(`arena:match:${matchId}`, JSON.stringify({
+    type: 'spectator_count',
+    matchId,
+    count,
+  }));
+}
+
+function addSpectator(matchId: string, ws: object) {
+  let set = matchSpectators.get(matchId);
+  if (!set) {
+    set = new Set();
+    matchSpectators.set(matchId, set);
+  }
+  if (set.has(ws)) return;
+  set.add(ws);
+  broadcastSpectatorCount(matchId);
+}
+
+function removeSpectator(matchId: string, ws: object) {
+  const set = matchSpectators.get(matchId);
+  if (!set?.has(ws)) return;
+  set.delete(ws);
+  if (set.size === 0) matchSpectators.delete(matchId);
+  broadcastSpectatorCount(matchId);
+}
+
+/** Drop a ws from every match's spectator set (called on close). */
+function removeSpectatorFromAll(ws: object) {
+  for (const [matchId, set] of matchSpectators) {
+    if (set.delete(ws)) {
+      if (set.size === 0) matchSpectators.delete(matchId);
+      broadcastSpectatorCount(matchId);
+    }
+  }
+}
+
+/**
  * Per-match ready-up timeout. If both teams ready up but the bot doesn't transition
  * the match to in_progress within READY_TIMEOUT_MS, revert to scheduled and notify.
  */
@@ -340,6 +387,7 @@ export const arenaRoutes = new Elysia()
           const match = getCurrentMatch(team.teamId, team.leagueId);
           if (match) {
             ws.subscribe(`arena:match:${match.id}`);
+            addSpectator(match.id, ws);
           }
         }
 
@@ -375,6 +423,7 @@ export const arenaRoutes = new Elysia()
               const match = getCurrentMatch(team.teamId, team.leagueId);
               if (match) {
                 ws.subscribe(`arena:match:${match.id}`);
+                addSpectator(match.id, ws);
               }
             }
 
@@ -581,6 +630,14 @@ export const arenaRoutes = new Elysia()
             // Subscribe to live stats for a specific match
             if (msg.matchId) {
               ws.subscribe(`arena:match:${msg.matchId}`);
+              addSpectator(msg.matchId, ws);
+              // Send the current count back to the new subscriber so they see
+              // themselves in the count immediately (publish excludes sender).
+              ws.send(JSON.stringify({
+                type: 'spectator_count',
+                matchId: msg.matchId,
+                count: matchSpectators.get(msg.matchId)?.size ?? 0,
+              }));
             }
             break;
           }
@@ -588,6 +645,7 @@ export const arenaRoutes = new Elysia()
           case 'arena_unsubscribe': {
             if (msg.matchId) {
               ws.unsubscribe(`arena:match:${msg.matchId}`);
+              removeSpectator(msg.matchId, ws);
             }
             break;
           }
@@ -598,6 +656,7 @@ export const arenaRoutes = new Elysia()
     },
 
     close(ws) {
+      removeSpectatorFromAll(ws);
       const client = arenaClients.get(ws);
       if (client?.teamId && client.leagueId) {
         // Don't unready immediately — frontend page navigation tears down the

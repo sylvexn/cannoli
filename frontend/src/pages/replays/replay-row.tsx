@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ReplayEntry } from './replay-types';
 
@@ -153,8 +154,9 @@ function ReplayRowGlance({
       {hasMvp && summary.mvp && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <div
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/60"
+            <Link
+              to={pokemonRoute(summary.mvp.name)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/60 hover:border-neon/40 transition-colors"
               style={mvpTeamColor ? { borderColor: `${mvpTeamColor}40` } : undefined}
             >
               <Trophy size={10} className="text-amber-400 shrink-0" />
@@ -162,7 +164,7 @@ function ReplayRowGlance({
               <span className="text-[10px] font-mono tabular-nums text-text-secondary">
                 {summary.mvp.kills}K
               </span>
-            </div>
+            </Link>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs">
             <span className="font-medium">{summary.mvp.name}</span>

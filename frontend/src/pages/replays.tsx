@@ -169,14 +169,20 @@ export function ReplaysPage() {
     for (const e of entries) {
       byLeague.set(e.league.id, (byLeague.get(e.league.id) ?? 0) + 1);
     }
-    const blowouts = entries.filter(e => {
-      const margin = Math.abs((e.match.homeScore ?? 0) - (e.match.awayScore ?? 0));
-      return margin >= 4;
-    }).length;
+    // Categories are mutually exclusive: a sweep (6-0) is reported as a sweep,
+    // and a blowout is a non-sweep margin ≥ 4 (6-1, 6-2). This keeps
+    // `total ≥ sweeps + blowouts` and avoids double-counting a 6-0 in both.
     const sweeps = entries.filter(e => {
       const home = e.match.homeScore ?? 0;
       const away = e.match.awayScore ?? 0;
       return (home === 6 && away === 0) || (away === 6 && home === 0);
+    }).length;
+    const blowouts = entries.filter(e => {
+      const home = e.match.homeScore ?? 0;
+      const away = e.match.awayScore ?? 0;
+      const isSweep = (home === 6 && away === 0) || (away === 6 && home === 0);
+      const margin = Math.abs(home - away);
+      return !isSweep && margin >= 4;
     }).length;
     return { total, byLeague, blowouts, sweeps };
   }, [entries]);

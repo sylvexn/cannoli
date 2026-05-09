@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import type { RosterPokemon } from '@/lib/types';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 
@@ -35,6 +38,7 @@ export function StatsTab({ teamA, teamB }: StatsTabProps) {
 function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) {
   const [sortKey, setSortKey] = useState<StatKey>('spe');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const { openSideCard } = usePokemonSideCard();
 
   const sorted = useMemo(() =>
     [...team].sort((a, b) => {
@@ -103,9 +107,18 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
         <tbody>
           {sorted.map(pokemon => (
             <tr key={pokemon.name} className="border-t border-border-subtle/50 hover:bg-surface-overlay/30">
-              <td className="px-2 py-[3px] text-text-primary font-mono font-medium truncate max-w-[120px]">{pokemon.name}</td>
+              <td className="px-2 py-[3px] truncate max-w-[120px]">
+                <Link
+                  to={pokemonRoute(pokemon.name)}
+                  className="text-text-primary font-mono font-medium hover:text-neon hover:underline transition-colors"
+                >
+                  {pokemon.name}
+                </Link>
+              </td>
               <td className="py-[3px]">
-                <PokemonSprite name={pokemon.name} size="xs" />
+                <button onClick={() => openSideCard(pokemon.name)} title="View details">
+                  <PokemonSprite name={pokemon.name} size="xs" />
+                </button>
               </td>
               {STAT_KEYS.map(key => (
                 <td
