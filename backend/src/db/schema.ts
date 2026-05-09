@@ -147,8 +147,6 @@ export const teams = sqliteTable('teams', {
   bannerPath: text('banner_path'),
   /** Short team description — ≤ 280 chars enforced at API layer */
   bio: text('bio'),
-  /** Short team motto — ≤ 80 chars (e.g. "fortune favors the bold"). */
-  motto: text('motto'),
   /** Owner-authored captain note — ≤ 280 chars. Surfaced on the team
    *  profile under the captain strip; intended for trash talk + flavor. */
   captainNote: text('captain_note'),
@@ -478,12 +476,6 @@ export const userPreferences = sqliteTable('user_preferences', {
   density: text('density', { enum: ['compact', 'comfortable'] }).notNull().default('comfortable'),
   /** Where to land when navigating to '/' */
   defaultLandingPath: text('default_landing_path').notNull().default('/'),
-  /** Notify when a trade involves this user */
-  notifyTrades: integer('notify_trades', { mode: 'boolean' }).notNull().default(true),
-  /** Notify when a match is ready / completed */
-  notifyMatches: integer('notify_matches', { mode: 'boolean' }).notNull().default(true),
-  /** Notify on site announcements */
-  notifyAnnouncements: integer('notify_announcements', { mode: 'boolean' }).notNull().default(true),
   /** IANA timezone string (e.g. 'America/New_York'). Null = use browser-detected zone. */
   timezone: text('timezone'),
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */

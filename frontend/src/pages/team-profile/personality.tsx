@@ -1,11 +1,11 @@
 /**
- * Team personality strip — motto + captain note + edit controls (owner only).
+ * Team personality strip — captain note + edit controls (owner only).
  * Renders inline on the team detail page right under HeaderStrip. Empty teams
- * (no motto, no captain_note, viewer is not the owner) collapse silently.
+ * (no captain_note, viewer is not the owner) collapse silently.
  */
 
 import { useEffect, useState } from 'react';
-import { Pencil, X, Quote } from 'lucide-react';
+import { Pencil, X } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -17,43 +17,32 @@ import { cn } from '@/lib/utils';
 interface PersonalityProps {
   player: Player;
   /** Re-fetch league data after a successful save so the UI reflects the new
-   *  motto / captain note without a full page reload. */
+   *  captain note without a full page reload. */
   onSaved?: () => void | Promise<void>;
 }
 
-const MAX_MOTTO = 80;
 const MAX_NOTE = 280;
 
 export function Personality({ player, onSaved }: PersonalityProps) {
   const { user } = useAuth();
-  // Edit access: team owner OR staff. Variable kept named `isOwner` because
-  // the surrounding UI strings ("you own this team") read better that way —
-  // see canManageTeam from lib/permissions.
   const isOwner = canManageTeam(user, player);
 
   const [editing, setEditing] = useState(false);
-  const [motto, setMotto] = useState(player.motto ?? '');
   const [captainNote, setCaptainNote] = useState(player.captainNote ?? '');
   const [saving, setSaving] = useState(false);
 
-  // Re-sync local form state when the underlying player updates (e.g. after
-  // an external mutation refetches the league data).
   useEffect(() => {
-    setMotto(player.motto ?? '');
     setCaptainNote(player.captainNote ?? '');
-  }, [player.id, player.motto, player.captainNote]);
+  }, [player.id, player.captainNote]);
 
-  const hasContent = !!player.motto || !!player.captainNote;
+  const hasContent = !!player.captainNote;
 
-  // Hide the section entirely for non-owners on empty teams — no point
-  // showing an empty card.
   if (!hasContent && !isOwner) return null;
 
   async function handleSave() {
     setSaving(true);
     try {
       await api.updateTeam(player.id, {
-        motto: motto.trim() === '' ? null : motto.trim(),
         captainNote: captainNote.trim() === '' ? null : captainNote,
       });
       await onSaved?.();
@@ -67,7 +56,6 @@ export function Personality({ player, onSaved }: PersonalityProps) {
   }
 
   function handleCancel() {
-    setMotto(player.motto ?? '');
     setCaptainNote(player.captainNote ?? '');
     setEditing(false);
   }
@@ -90,25 +78,6 @@ export function Personality({ player, onSaved }: PersonalityProps) {
           >
             <X size={14} />
           </button>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-              Motto
-            </label>
-            <span className="text-[10px] font-mono tabular-nums text-text-muted">
-              {motto.length}/{MAX_MOTTO}
-            </span>
-          </div>
-          <input
-            type="text"
-            value={motto}
-            maxLength={MAX_MOTTO}
-            onChange={(e) => setMotto(e.target.value)}
-            placeholder="fortune favors the bold"
-            className="w-full px-3 py-1.5 rounded-md border border-border-default bg-surface-overlay/40 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-neon/40"
-          />
         </div>
 
         <div className="space-y-1.5">
@@ -160,21 +129,6 @@ export function Personality({ player, onSaved }: PersonalityProps) {
         </button>
       )}
       <div className="space-y-3 max-w-prose">
-        {player.motto ? (
-          <div className="flex items-start gap-2">
-            <Quote size={14} className="shrink-0 mt-1 text-text-muted/60" />
-            <p
-              className="text-base font-heading italic leading-snug"
-              style={{ color: player.teamColor }}
-            >
-              {player.motto}
-            </p>
-          </div>
-        ) : isOwner ? (
-          <p className="text-[12px] font-mono italic text-text-muted/60">
-            Add a motto so the league knows what you stand for.
-          </p>
-        ) : null}
         {player.captainNote ? (
           <p className="text-sm text-text-secondary leading-snug whitespace-pre-line">
             {player.captainNote}

@@ -12,7 +12,7 @@ import {
 import { toast } from 'sonner';
 import { api, type ApiUserPreferences } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { Sliders, Bell, Eye, Globe, ChevronsUpDown } from 'lucide-react';
+import { Sliders, Eye, Globe, ChevronsUpDown } from 'lucide-react';
 import { DEFAULT_LANDING_OPTIONS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -20,9 +20,6 @@ const DEFAULTS: ApiUserPreferences = {
   theme: 'dark',
   density: 'comfortable',
   defaultLandingPath: '/',
-  notifyTrades: true,
-  notifyMatches: true,
-  notifyAnnouncements: true,
   timezone: null,
   colorblindMode: false,
   updatedAt: null,
@@ -173,28 +170,6 @@ export function PreferencesTab() {
         loading={loading}
       />
 
-      {/* Notifications card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Bell size={16} />
-            Notifications
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-[11px] text-text-muted">
-            Notification delivery is coming soon — these toggles will become live in a future update.
-          </p>
-
-          <NotifyRow label="Trade activity" description="Proposals, accepts, and rejections involving your team."
-            checked={draft.notifyTrades} disabled />
-          <NotifyRow label="Match readiness" description="Match readying, completion, and replay availability."
-            checked={draft.notifyMatches} disabled />
-          <NotifyRow label="Site announcements" description="Admin-posted announcements and league-wide news."
-            checked={draft.notifyAnnouncements} disabled />
-        </CardContent>
-      </Card>
-
       <div className="sticky bottom-0 -mx-1 px-1 py-3 bg-surface-base/80 backdrop-blur-sm border-t border-border-subtle flex items-center justify-end gap-3">
         {dirty && <span className="text-xs text-text-muted">Unsaved changes</span>}
         <Button
@@ -292,19 +267,3 @@ function TimezoneCard({
   );
 }
 
-function NotifyRow({ label, description, checked, disabled }: {
-  label: string;
-  description: string;
-  checked: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-2 border-b border-border-subtle last:border-0">
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-text-primary">{label}</div>
-        <div className="text-[11px] text-text-muted">{description}</div>
-      </div>
-      <Switch checked={checked} disabled={disabled} />
-    </div>
-  );
-}

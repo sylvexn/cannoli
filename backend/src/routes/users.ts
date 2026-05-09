@@ -264,9 +264,6 @@ export const userRoutes = new Elysia()
         theme: row.theme,
         density: row.density,
         defaultLandingPath: row.defaultLandingPath,
-        notifyTrades: row.notifyTrades,
-        notifyMatches: row.notifyMatches,
-        notifyAnnouncements: row.notifyAnnouncements,
         timezone: row.timezone,
         colorblindMode: row.colorblindMode,
         updatedAt: row.updatedAt,
@@ -277,9 +274,6 @@ export const userRoutes = new Elysia()
       theme: 'dark',
       density: 'comfortable',
       defaultLandingPath: '/',
-      notifyTrades: true,
-      notifyMatches: true,
-      notifyAnnouncements: true,
       timezone: null,
       colorblindMode: false,
       updatedAt: null,
@@ -289,7 +283,7 @@ export const userRoutes = new Elysia()
   // ─── PUT /api/users/me/preferences ────────────────────────────────────
   .put('/api/users/me/preferences', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const { theme, density, defaultLandingPath, notifyTrades, notifyMatches, notifyAnnouncements, timezone, colorblindMode } =
+    const { theme, density, defaultLandingPath, timezone, colorblindMode } =
       (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -307,16 +301,6 @@ export const userRoutes = new Elysia()
         return { error: 'defaultLandingPath must be a path starting with /' };
       }
       updates.defaultLandingPath = defaultLandingPath;
-    }
-    for (const [k, v] of [
-      ['notifyTrades', notifyTrades],
-      ['notifyMatches', notifyMatches],
-      ['notifyAnnouncements', notifyAnnouncements],
-    ] as const) {
-      if (v !== undefined) {
-        if (typeof v !== 'boolean') { set.status = 400; return { error: `${k} must be boolean` }; }
-        updates[k] = v;
-      }
     }
     if (timezone !== undefined) {
       if (timezone === null || timezone === '') {
@@ -462,6 +446,9 @@ export const userRoutes = new Elysia()
         return {
           teamId: t.teamId,
           leagueId: t.leagueId,
+          // seasonId (DB id, numeric) is required for /archive/:seasonId/:leagueId/:teamId
+          // routing on the coach profile history cards.
+          seasonId: t.seasonId,
           teamName: t.teamName,
           teamAbbrev: t.teamAbbrev,
           teamColor: t.teamColor,

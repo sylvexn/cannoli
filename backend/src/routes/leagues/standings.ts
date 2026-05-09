@@ -110,7 +110,6 @@ export const standingsRoutes = new Elysia()
         logoPath: team.logoPath,
         bannerPath: team.bannerPath,
         bio: team.bio,
-        motto: team.motto,
         captainNote: team.captainNote,
         userId: team.userId,
         // Coach identity (joined from users table) — used by <CoachLink>
