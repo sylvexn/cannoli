@@ -446,6 +446,9 @@ export const userRoutes = new Elysia()
         return {
           teamId: t.teamId,
           leagueId: t.leagueId,
+          // seasonId (DB id, numeric) is required for /archive/:seasonId/:leagueId/:teamId
+          // routing on the coach profile history cards.
+          seasonId: t.seasonId,
           teamName: t.teamName,
           teamAbbrev: t.teamAbbrev,
           teamColor: t.teamColor,

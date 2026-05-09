@@ -1,9 +1,9 @@
 /**
  * /coach/:username/teams — directory of every team-tenure (current + past)
- * for a coach. Sortable by season, league, finish position. Each row links
- * to the canonical team URL (`/league/:id/teams/:id`) — Cannoli teams are
- * league-canonical (one team is one season's roster on one league), so the
- * URL captures the full identity.
+ * for a coach. Sortable by season, league, finish position. Active rows
+ * link to the live team URL `/league/:id/teams/:id`; past (archived)
+ * tenures route into the archive at `/archive/:seasonId/:leagueId/:teamId`
+ * so we don't hit a dead/redirected live page.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -21,6 +21,9 @@ type SortDir = 'asc' | 'desc';
 interface Tenure {
   teamId: string;
   leagueId: string;
+  /** DB id of the season — present for past (archived) rows so we can
+   *  deep-link the archive view. Null for active rows. */
+  seasonId: number | null;
   teamName: string;
   teamAbbrev: string;
   teamColor: string;
@@ -74,6 +77,7 @@ export function CoachTeamsIndexPage() {
     const current: Tenure[] = profile.currentTeams.map(t => ({
       teamId: t.teamId,
       leagueId: t.leagueId,
+      seasonId: null,
       teamName: t.teamName,
       teamAbbrev: t.teamAbbrev,
       teamColor: t.teamColor,
@@ -85,6 +89,7 @@ export function CoachTeamsIndexPage() {
     const past: Tenure[] = (profile.pastTeams ?? []).map(t => ({
       teamId: t.teamId,
       leagueId: t.leagueId,
+      seasonId: t.seasonId,
       teamName: t.teamName,
       teamAbbrev: t.teamAbbrev,
       teamColor: t.teamColor,
@@ -202,7 +207,11 @@ export function CoachTeamsIndexPage() {
             {sorted.map(t => (
               <li key={`${t.leagueId}-${t.seasonNumber}`}>
                 <Link
-                  to={`/league/${t.leagueId}/teams/${t.teamId}`}
+                  to={
+                    t.active || t.seasonId == null
+                      ? `/league/${t.leagueId}/teams/${t.teamId}`
+                      : `/archive/${t.seasonId}/${t.leagueId}/${t.teamId}`
+                  }
                   viewTransition
                   className="grid grid-cols-[60px_1fr_120px_140px_28px] items-center gap-3 px-3 py-2 border-b border-border-subtle/30 last:border-b-0 hover:bg-surface-overlay/40 transition-colors group"
                 >

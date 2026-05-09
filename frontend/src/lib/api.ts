@@ -329,6 +329,9 @@ export interface ApiPublicProfile {
   pastTeams?: Array<{
     teamId: string;
     leagueId: string;
+    /** DB id of the season this tenure belongs to — used to deep-link the
+     *  archive route /archive/:seasonId/:leagueId/:teamId. */
+    seasonId: number;
     teamName: string;
     teamAbbrev: string;
     teamColor: string;
