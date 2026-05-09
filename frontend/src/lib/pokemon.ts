@@ -72,6 +72,18 @@ const SPRITE_OVERRIDES: Record<string, string> = {
 
   // Ursaluna Bloodmoon
   'ursaluna-bloodmoon': 'ursaluna-bloodmoon',
+
+  // Treasures of Ruin — Showdown collapses the hyphen
+  'ting-lu': 'tinglu',
+  'wo-chien': 'wochien',
+  'chien-pao': 'chienpao',
+  'chi-yu': 'chiyu',
+
+  // Forces of Nature — Incarnate is the default form (no suffix on Showdown)
+  'thundurus-incarnate': 'thundurus',
+  'tornadus-incarnate': 'tornadus',
+  'landorus-incarnate': 'landorus',
+  'enamorus-incarnate': 'enamorus',
 };
 
 /**
