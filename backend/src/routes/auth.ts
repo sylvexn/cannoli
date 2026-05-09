@@ -7,7 +7,7 @@ import {
   sessionCookieString, clearSessionCookieString,
   csrfTokenForSession, csrfCookieString, clearCsrfCookieString,
 } from '../lib/auth';
-import { createPsSession, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie } from '../lib/ps-login';
+import { createPsSession, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie, parsePsSid, validatePsSid } from '../lib/ps-login';
 
 // ─── Login rate limiter ─────────────────────────────────────────────────────
 // In-memory, per-IP. Max 5 failed attempts per 15-minute window; once
@@ -145,7 +145,7 @@ export const authRoutes = new Elysia()
     return new Response(JSON.stringify({ success: true }), { headers });
   })
 
-  .get('/api/auth/me', ({ user, sessionToken, set }) => {
+  .get('/api/auth/me', ({ user, sessionToken, request, set }) => {
     if (!user) {
       set.status = 401;
       return { user: null };
@@ -153,10 +153,24 @@ export const authRoutes = new Elysia()
     // Refresh the CSRF cookie on session validation, so clients that have a
     // valid httpOnly session but a missing/expired csrf_token cookie get a
     // fresh one on the next /me hit.
+    //
+    // Also re-issue the PS sid cookie when the in-memory PS session is gone
+    // (backend restart wipes the sessions map, but cannoli sessions survive
+    // in DB — without this the iframe at sim.cannoli.live can't auto-login
+    // even though the user is logged into Cannoli). Detected by parsing the
+    // current sid and re-validating against the in-memory map.
     if (sessionToken) {
       const headers = new Headers();
       headers.append('Content-Type', 'application/json');
       headers.append('Set-Cookie', csrfCookieString(csrfTokenForSession(sessionToken)));
+
+      const cookieHeader = request.headers.get('cookie') ?? undefined;
+      const existingSid = parsePsSid(cookieHeader);
+      if (!existingSid || !validatePsSid(existingSid)) {
+        const ip = clientIp(request);
+        const { sidCookie } = createPsSession(user.username, ip);
+        headers.append('Set-Cookie', psSidCookieString(sidCookie));
+      }
       return new Response(JSON.stringify({ user }), { headers });
     }
     return { user };
