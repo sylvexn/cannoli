@@ -59,9 +59,12 @@ export function CoachProfilePage() {
       }
       setProfile(prof);
       setPins(userPins);
-      // Filter activity log to events where this user was the actor
+      // Filter activity log to events where this user was the actor.
+      // Exclude admin-category events: the public wall must not leak staff
+      // actions (force-picks, role changes, pin grants, etc.) even when the
+      // viewer happens to be staff and the endpoint returns them.
       const events = (log as { events?: ApiActivityEvent[] }).events ?? [];
-      setActivity(events.filter(e => e.actor === username));
+      setActivity(events.filter(e => e.actor === username && e.category !== 'admin'));
       setLoading(false);
     });
 
