@@ -52,19 +52,19 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
           >
             <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" />
           </Link>
-          <div className="min-w-0">
+          <div className="min-w-0 flex flex-col">
             <Link
               to={leagueUrl(`/teams/${homePlayer.id}`)} viewTransition
               onClick={e => e.stopPropagation()}
               className={cn(
-                'text-sm font-medium transition-colors block truncate hover:text-neon',
+                'text-sm font-medium leading-tight transition-colors block line-clamp-2 hover:text-neon',
                 homeWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               )}
             >
               {homePlayer.teamName}
             </Link>
-            <span onClick={e => e.stopPropagation()} className="block text-[10px] truncate">
-              <TeamCoach player={homePlayer} size="xs" className="text-text-muted/60" />
+            <span onClick={e => e.stopPropagation()} className="block text-[11px] truncate text-text-muted">
+              <TeamCoach player={homePlayer} size="xs" />
             </span>
           </div>
         </div>
@@ -88,19 +88,19 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
 
         {/* Away team */}
         <div className="flex items-center gap-2.5 justify-end min-w-0 flex-1">
-          <div className="min-w-0 text-right">
+          <div className="min-w-0 flex flex-col text-right">
             <Link
               to={leagueUrl(`/teams/${awayPlayer.id}`)} viewTransition
               onClick={e => e.stopPropagation()}
               className={cn(
-                'text-sm font-medium transition-colors block truncate hover:text-pink',
+                'text-sm font-medium leading-tight transition-colors block line-clamp-2 hover:text-pink',
                 awayWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               )}
             >
               {awayPlayer.teamName}
             </Link>
-            <span onClick={e => e.stopPropagation()} className="block text-[10px] truncate">
-              <TeamCoach player={awayPlayer} size="xs" className="text-text-muted/60" />
+            <span onClick={e => e.stopPropagation()} className="block text-[11px] truncate text-text-muted text-right">
+              <TeamCoach player={awayPlayer} size="xs" />
             </span>
           </div>
           <Link
