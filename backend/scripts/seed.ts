@@ -483,6 +483,104 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     }
     console.log(`  ${events.length} activity log events seeded`);
   }
+
+  // ─── Player availability (WT-B) ─────────────────────────────────────────
+  // Seed a logical-but-random availability blob across every team in every
+  // active S10 league for the current week ± 2. Weighted toward Available on
+  // weekends and Maybe/Busy on weekdays so the schedule aggregate has visible
+  // overlap to render. Idempotent: skipped entirely if the table already has
+  // rows.
+  const availCount = (sqlite.prepare('SELECT COUNT(*) as c FROM player_availability').get() as any).c;
+  if (availCount === 0) {
+    const teams = sqlite.prepare(
+      `SELECT t.id as teamId, t.league_id as leagueId, l.current_week as currentWeek, l.week_dates as weekDates
+         FROM teams t
+         JOIN leagues l ON l.id = t.league_id
+         JOIN seasons s ON s.id = l.season_id
+        WHERE s.season_number = 10`,
+    ).all() as { teamId: string; leagueId: string; currentWeek: number; weekDates: string | null }[];
+
+    // Deterministic PRNG so the seeded grid is stable across reseeds.
+    let prngState = 0xdeadbeef;
+    function rand(): number {
+      prngState = (prngState * 1664525 + 1013904223) >>> 0;
+      return prngState / 0xffffffff;
+    }
+
+    function getMonday(d: Date): Date {
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(d.setDate(diff));
+    }
+
+    const STATUSES: Array<{ status: 'available' | 'maybe' | 'unavailable'; weight: number }> = [
+      { status: 'available',   weight: 0.55 },
+      { status: 'maybe',       weight: 0.25 },
+      { status: 'unavailable', weight: 0.20 },
+    ];
+
+    function pickStatus(isWeekend: boolean): 'available' | 'maybe' | 'unavailable' {
+      // Bias weekends toward Available, weekdays toward Maybe/Busy.
+      const weights = isWeekend
+        ? [0.75, 0.18, 0.07]
+        : [0.40, 0.30, 0.30];
+      const r = rand();
+      let acc = 0;
+      for (let i = 0; i < STATUSES.length; i++) {
+        acc += weights[i]!;
+        if (r < acc) return STATUSES[i]!.status;
+      }
+      return STATUSES[0]!.status;
+    }
+
+    const NOTES_BUSY = ['out of town', 'work shift', 'family event', 'travel day', null, null];
+    const NOTES_MAYBE = ['after 8pm', 'might be late', 'depends on day-of', null, null, null];
+
+    let inserted = 0;
+    const insertStmt = sqlite.prepare(
+      `INSERT INTO player_availability (team_id, league_id, week, day, status, note)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+    );
+    const insertMany = sqlite.transaction((rows: Array<[string, string, number, string, string, string | null]>) => {
+      for (const r of rows) insertStmt.run(...r);
+    });
+
+    const rows: Array<[string, string, number, string, string, string | null]> = [];
+    for (const team of teams) {
+      const weekDatesMap: Record<string, string> = team.weekDates ? JSON.parse(team.weekDates) : {};
+      // Cover current week ± 2.
+      const weeksToSeed = [team.currentWeek - 2, team.currentWeek - 1, team.currentWeek, team.currentWeek + 1, team.currentWeek + 2]
+        .filter(w => w >= 1);
+
+      for (const week of weeksToSeed) {
+        const weekDate = weekDatesMap[String(week)];
+        const start = weekDate ? new Date(weekDate + 'T00:00:00') : getMonday(new Date());
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(start);
+          d.setDate(d.getDate() + i);
+          const iso = d.toISOString().slice(0, 10);
+          // Skip ~10% of cells so the grid has gaps (more realistic — not
+          // every coach fills every day).
+          if (rand() < 0.1) continue;
+          const dow = d.getDay();
+          const isWeekend = dow === 0 || dow === 6;
+          const status = pickStatus(isWeekend);
+          let note: string | null = null;
+          if (status === 'unavailable') {
+            const pick = NOTES_BUSY[Math.floor(rand() * NOTES_BUSY.length)];
+            note = pick ?? null;
+          } else if (status === 'maybe') {
+            const pick = NOTES_MAYBE[Math.floor(rand() * NOTES_MAYBE.length)];
+            note = pick ?? null;
+          }
+          rows.push([team.teamId, team.leagueId, week, iso, status, note]);
+        }
+      }
+    }
+    insertMany(rows);
+    inserted = rows.length;
+    console.log(`  ${inserted} player_availability rows seeded across ${teams.length} teams`);
+  }
 }
 
 // ─── Run ────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Settings, LogOut, User, LogIn, Search, UserCircle } from 'lucide-react';
+import { Settings, LogOut, User, LogIn, Search, UserCircle, Shield } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -24,8 +24,7 @@ interface MyTeam {
 
 interface SidebarFooterProps {
   user: AuthUser | null;
-  /** Admin flag — currently unused here (BotStatusChip moved to admin), but
-   *  kept on the API so callers don't need to drop the prop. */
+  /** When true, renders the Admin shortcut in the footer (admins only). */
   isAdmin?: boolean;
   myTeams: MyTeam[];
   leagues: { id: string; name: string; color: string }[];
@@ -35,7 +34,7 @@ interface SidebarFooterProps {
 }
 
 export function SidebarFooter({
-  user, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout,
+  user, isAdmin, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout,
 }: SidebarFooterProps) {
   const navigate = useNavigate();
 
@@ -44,13 +43,21 @@ export function SidebarFooter({
       {user && myTeams.length > 0 && (
         <MyTeamSidebar myTeams={myTeams} leagues={leagues} pendingTradeCount={pendingTradeCount} />
       )}
-      {user && myTeams.length === 0 && (
+
+      {/* Admin shortcut — moved out of the main nav so the footer slot
+       *  vacated by the old "My Hub" fallback hosts staff tools instead. */}
+      {user && isAdmin && (
         <NavLink
-          to="/me"
-          className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors"
+          to="/admin"
+          className={({ isActive }) => cn(
+            'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors',
+            isActive
+              ? 'bg-neon/10 text-neon'
+              : 'text-text-muted hover:bg-surface-overlay hover:text-text-secondary',
+          )}
         >
-          <User size={14} />
-          <span>My Hub</span>
+          <Shield size={14} />
+          <span>Admin</span>
         </NavLink>
       )}
 

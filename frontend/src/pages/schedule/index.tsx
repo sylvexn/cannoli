@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
-import { AvailabilityPanel } from './availability-panel';
+import { AvailabilityAggregate } from './availability-aggregate';
 import { useUserTimezone, getTimezoneAbbreviation } from '@/lib/format';
 
 type ScheduleView = 'regular' | 'playoffs';
@@ -172,7 +172,7 @@ export function SchedulePage() {
             </div>
           )}
 
-          <AvailabilityPanel selectedWeek={selectedWeek} />
+          <AvailabilityAggregate selectedWeek={selectedWeek} />
         </>
       ) : (
         <PlayoffBracket />
