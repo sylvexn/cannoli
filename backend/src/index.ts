@@ -18,6 +18,7 @@ import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
 import { pinRoutes } from './routes/pins';
 import { startBot } from './lib/ps-bot';
+import { ensureBotUser } from './lib/ps-bot-seed';
 import { startSchedulers } from './lib/scheduler';
 import { sqlite } from './db';
 
@@ -170,6 +171,10 @@ console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);
 
 // Start PS Monitor Bot if configured
 if (process.env.PS_SERVER_WS_URL) {
+  // Ensure the chat-plugin-required `cannolibot` user exists in our DB
+  // before starting the bot. The /cannoli-battle plugin gates on this row,
+  // so booting without it leaves the bot unable to create matches.
+  ensureBotUser();
   startBot();
   console.log('PS Monitor Bot starting...');
 }
