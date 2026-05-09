@@ -125,8 +125,8 @@ export function StatsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-orange-400">Pokemon</span>
-          <span className="text-text-primary ml-1">Stats</span>
+          <span className="text-orange-400">Pokemon</span>{' '}
+          <span className="text-text-primary">Stats</span>
         </h1>
         <p className="text-sm text-text-muted">
           League-wide performance &middot; Season 10

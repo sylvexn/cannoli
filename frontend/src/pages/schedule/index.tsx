@@ -87,8 +87,8 @@ export function SchedulePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-            <span className="text-pink">Schedule</span>
-            <span className="text-text-primary ml-1">&amp; Results</span>
+            <span className="text-pink">Schedule</span>{' '}
+            <span className="text-text-primary">&amp; Results</span>
           </h1>
           <p className="text-sm text-text-muted">
             Season {season.seasonNumber} &middot; {season.totalWeeks} weeks

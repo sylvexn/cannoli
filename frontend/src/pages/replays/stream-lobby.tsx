@@ -52,8 +52,8 @@ export function StreamLobby({
       </div>
 
       <h1 className="font-mono font-bold uppercase tracking-[0.2em] text-3xl mb-1">
-        <span className="text-neon">Week {week}</span>
-        <span className="text-text-primary ml-3">Stream Queue</span>
+        <span className="text-neon">Week {week}</span>{' '}
+        <span className="text-text-primary">Stream Queue</span>
       </h1>
       <p className="text-sm text-text-muted mb-6">
         Drag to reorder. Toggle "Featured" for headline matches.
