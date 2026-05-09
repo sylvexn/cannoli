@@ -57,6 +57,52 @@ export const leagueRoutes = new Elysia()
     return season || null;
   })
 
+  // ─── News (PS client compatibility) ─────────────────────────────────
+  //
+  // Pokemon Showdown's "Latest News" pseudo-PM expects an array of
+  // `{ id, title, summaryHTML, author, date }` (date in unix seconds) at
+  // `https://<routes.root>/news.json`. We surface Cannoli's site-wide
+  // announcement banner here so sim.cannoli.live shows the same message
+  // admins post in the Cannoli admin panel instead of stale upstream PS news.
+  //
+  // Public + unauthenticated — the PS client has no Cannoli session.
+  // The id is derived from the announcement type so changing severity
+  // marks the entry unread again in PS's read-tracker.
+  .get('/news.json', () => {
+    const row = db.select().from(schema.siteSettings).get();
+    if (!row || !row.announcement) return [];
+
+    const type = (row.announcementType ?? 'info') as string;
+    const typeLabel = type === 'warning' ? 'Warning'
+      : type === 'success' ? 'Update'
+      : 'Announcement';
+    // Bump id when the message body changes so PS marks it unread again.
+    // Storage.prefs('readnews') compares this id as a string.
+    let hash = 0;
+    const src = `${type}|${row.announcement}`;
+    for (let i = 0; i < src.length; i++) {
+      hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0;
+    }
+    const id = Math.abs(hash);
+
+    // PS escapes nothing in summaryHTML, so we hand back HTML — escape the
+    // raw announcement text first to be safe (admins type plain strings).
+    const escaped = row.announcement
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    return [{
+      id,
+      title: typeLabel,
+      summaryHTML: escaped,
+      author: 'Cannoli',
+      date: Math.floor(Date.now() / 1000),
+    }];
+  })
+
   // ─── Site Settings ──────────────────────────────────────────────────
 
   .get('/api/site-settings', () => {
