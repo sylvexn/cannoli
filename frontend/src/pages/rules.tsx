@@ -53,112 +53,115 @@ const TERA_BANNED = [
 
 export function RulesPage() {
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-3">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+        <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
           <span className="text-pink">League</span>{' '}
           <span className="text-text-primary">Rules</span>
         </h1>
-        <p className="text-sm text-text-muted">Cannoli draft and battle rules — read before drafting.</p>
+        <p className="text-xs text-text-muted">Cannoli draft and battle rules — read before drafting.</p>
       </div>
 
-      {/* Draft Rules */}
-      <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ScrollText size={16} className="text-neon" />
-            Draft Rules
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="space-y-2 text-sm text-text-secondary list-decimal pl-5">
-            {DRAFT_RULES.map((rule, i) => (
-              <li key={i} className="leading-relaxed">{rule}</li>
-            ))}
-          </ol>
-        </CardContent>
-      </Card>
-
-      {/* Battle Rules */}
-      <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Swords size={16} className="text-pink" />
-            Battle Rules
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ol className="space-y-2 text-sm text-text-secondary list-decimal pl-5">
-            {BATTLE_RULES.map((rule, i) => (
-              <li key={i} className="leading-relaxed">{rule}</li>
-            ))}
-          </ol>
-
-          <div>
-            <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-2">
-              The following clauses apply
-            </h4>
-            <dl className="space-y-1.5">
-              {CLAUSES.map(c => (
-                <div key={c.name} className="grid grid-cols-[140px_1fr] gap-2 text-xs">
-                  <dt className="font-medium text-text-primary">{c.name}</dt>
-                  <dd className="text-text-secondary leading-relaxed">{c.description}</dd>
-                </div>
+      {/* Three-column row: Draft / Battle / Bans */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
+        {/* Draft Rules */}
+        <Card className="bg-surface-raised border-border-default">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ScrollText size={14} className="text-neon" />
+              Draft Rules
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <ol className="space-y-1 text-xs text-text-secondary list-decimal pl-4 leading-snug">
+              {DRAFT_RULES.map((rule, i) => (
+                <li key={i}>{rule}</li>
               ))}
-            </dl>
-          </div>
+            </ol>
+          </CardContent>
+        </Card>
 
-          <div>
-            <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-2">
-              Pokémon-specific bans
-            </h4>
-            <ul className="space-y-1 text-sm">
-              {POKEMON_BANS.map(b => (
-                <li key={b.pokemon} className="text-text-secondary">
-                  <span className="font-medium text-text-primary">{b.move}</span> banned on{' '}
-                  <span className="text-pink">{b.pokemon}</span>.
-                </li>
+        {/* Battle Rules */}
+        <Card className="bg-surface-raised border-border-default">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Swords size={14} className="text-pink" />
+              Battle Rules
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3 space-y-3">
+            <ol className="space-y-1 text-xs text-text-secondary list-decimal pl-4 leading-snug">
+              {BATTLE_RULES.map((rule, i) => (
+                <li key={i}>{rule}</li>
               ))}
-            </ul>
-          </div>
-        </CardContent>
-      </Card>
+            </ol>
 
-      {/* Banned abilities/items/moves */}
-      <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldOff size={16} className="text-loss" />
-            Banned Abilities, Items &amp; Moves
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <BanList title="Abilities" items={BANNED_ABILITIES} />
-            <BanList title="Items" items={BANNED_ITEMS} />
-            <BanList title="Moves" items={BANNED_MOVES} />
-          </div>
-        </CardContent>
-      </Card>
+            <div>
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">
+                Clauses
+              </h4>
+              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] leading-snug">
+                {CLAUSES.map(c => (
+                  <div key={c.name}>
+                    <dt className="inline font-medium text-text-primary">{c.name}:</dt>{' '}
+                    <dd className="inline text-text-secondary">{c.description}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
 
-      {/* Tera Captain bans */}
+            <div>
+              <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">
+                Pokémon-specific bans
+              </h4>
+              <ul className="space-y-0.5 text-xs">
+                {POKEMON_BANS.map(b => (
+                  <li key={b.pokemon} className="text-text-secondary leading-snug">
+                    <span className="font-medium text-text-primary">{b.move}</span> on{' '}
+                    <span className="text-pink">{b.pokemon}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Banned Abilities / Items / Moves */}
+        <Card className="bg-surface-raised border-border-default">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ShieldOff size={14} className="text-loss" />
+              Banned Abilities, Items &amp; Moves
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <div className="space-y-2">
+              <BanList title="Abilities" items={BANNED_ABILITIES} />
+              <BanList title="Items" items={BANNED_ITEMS} />
+              <BanList title="Moves" items={BANNED_MOVES} />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tera Captain bans — full width strip */}
       <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Star size={16} className="text-yellow-400" />
+        <CardHeader className="pb-2 pt-3 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Star size={14} className="text-yellow-400" />
             Tera Captain Bans
+            <span className="ml-2 text-[10px] font-mono text-text-muted normal-case tracking-normal">
+              draftable, but not as captain
+            </span>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-xs text-text-muted mb-2">
-            These Pokémon may be drafted but cannot be designated as Tera Captains.
-          </p>
-          <div className="flex flex-wrap gap-2">
+        <CardContent className="px-4 pb-3">
+          <div className="flex flex-wrap gap-1.5">
             {TERA_BANNED.map(name => (
               <span
                 key={name}
-                className="inline-flex items-center gap-1 rounded-md bg-surface-overlay/60 border border-border-subtle px-2 py-1 text-xs text-text-secondary"
+                className="inline-flex items-center gap-1 rounded-md bg-surface-overlay/60 border border-border-subtle px-2 py-0.5 text-[11px] text-text-secondary"
               >
                 {name}
               </span>
@@ -173,14 +176,12 @@ export function RulesPage() {
 function BanList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
-      <h4 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-1.5">
+      <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-0.5">
         {title}
       </h4>
-      <ul className="space-y-0.5 text-xs text-text-secondary">
-        {items.map(item => (
-          <li key={item} className="font-medium">{item}</li>
-        ))}
-      </ul>
+      <p className="text-[11px] text-text-secondary leading-snug">
+        {items.join(' · ')}
+      </p>
     </div>
   );
 }
