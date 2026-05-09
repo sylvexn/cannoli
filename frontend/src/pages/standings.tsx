@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
-import { ChevronDown, ArrowLeftRight, UserPlus } from 'lucide-react';
+import { ChevronDown, ArrowLeftRight, UserPlus, ListOrdered, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useLeagueUrl } from '@/lib/use-league-url';
@@ -27,12 +27,34 @@ import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeleton
 import { EmptyState } from '@/components/empty-state';
 import { TeamCoach } from '@/components/team-coach';
 import { PokemonNickname } from '@/components/pokemon-nickname';
+import { PlayoffBracket } from './schedule/playoff-bracket';
+
+type StandingsView = 'standings' | 'playoffs';
 
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
-  const { players, standings, getWeekMatches, loading } = useLeagueData();
+  const { players, standings, getWeekMatches, matches, loading } = useLeagueData();
   const currentSeason = league.season;
+
+  // Playoffs-final view: when the league has actually generated a playoff
+  // bracket, surface it as a first-class view on the standings page. We auto-
+  // select it once the league enters the playoffs/offseason phase so coaches
+  // landing on the hub see the live bracket instead of a stale regular-season
+  // table. The toggle stays visible so the regular-season table remains one
+  // click away (final seeding, tiebreakers, qualify-line context).
+  const hasPlayoffs = useMemo(
+    () => matches.some(m => m.phase === 'playoffs'),
+    [matches],
+  );
+  const isPlayoffPhase =
+    currentSeason.phase === 'playoffs' ||
+    currentSeason.phase === 'offseason' ||
+    currentSeason.archived === true;
+  const [view, setView] = useState<StandingsView>('standings');
+  useEffect(() => {
+    if (hasPlayoffs && isPlayoffPhase) setView('playoffs');
+  }, [hasPlayoffs, isPlayoffPhase]);
 
   // Find the last completed week and next upcoming week
   const { recentWeek, upcomingWeek } = useMemo(() => {
@@ -90,16 +112,56 @@ export function StandingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-win">League</span>{' '}
-          <span className="text-text-primary">Hub</span>
-        </h1>
-        <p className="text-sm text-text-muted">
-          Season {currentSeason.seasonNumber} &middot; Week {currentSeason.currentWeek} of {currentSeason.totalWeeks}
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
+            <span className="text-win">League</span>{' '}
+            <span className="text-text-primary">Hub</span>
+          </h1>
+          <p className="text-sm text-text-muted">
+            Season {currentSeason.seasonNumber} &middot; Week {currentSeason.currentWeek} of {currentSeason.totalWeeks}
+            {isPlayoffPhase && (
+              <span className="ml-2 text-pink font-medium">&middot; Playoffs</span>
+            )}
+          </p>
+        </div>
+
+        {/* View toggle — only when playoff bracket exists. Defaults to the
+         *  playoffs view in playoff/offseason phase; falls back to the regular
+         *  standings table otherwise. */}
+        {hasPlayoffs && (
+          <div className="flex rounded-lg border border-border-default overflow-hidden">
+            <button
+              onClick={() => setView('standings')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'standings'
+                  ? 'bg-surface-overlay text-text-primary'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+              )}
+            >
+              <ListOrdered size={13} />
+              Standings
+            </button>
+            <button
+              onClick={() => setView('playoffs')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                view === 'playoffs'
+                  ? 'bg-pink/10 text-pink'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+              )}
+            >
+              <Trophy size={13} />
+              Playoffs
+            </button>
+          </div>
+        )}
       </div>
 
+      {view === 'playoffs' && hasPlayoffs ? (
+        <PlayoffsFinalView />
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Standings — takes 2 columns */}
         <Card className="lg:col-span-2 bg-surface-raised border-border-default">
@@ -265,7 +327,32 @@ export function StandingsPage() {
           </Card>
         </div>
       </div>
+      )}
     </div>
+  );
+}
+
+/** Playoffs-final view — full-width bracket render with a champion banner once
+ *  the finals have a result. Re-uses the schedule page's PlayoffBracket so the
+ *  visual + connector logic stays in lockstep across both surfaces. */
+function PlayoffsFinalView() {
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base text-text-primary flex items-center gap-2">
+            <Trophy size={14} className="text-pink" />
+            Playoff Bracket
+          </CardTitle>
+          <Badge variant="outline" className="text-pink border-pink/30 text-[10px]">
+            Final
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <PlayoffBracket />
+      </CardContent>
+    </Card>
   );
 }
 
