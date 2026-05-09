@@ -837,7 +837,37 @@ if (s9Missing.length === 0) {
 // This must run AFTER S10 finalize + S9 bracket fabrication so finals/SF
 // rows exist with the correct home/away teams (see ruby-vgk rewrite, etc.)
 // before we look up by (league, week|round, home, away).
+//
+// Scrape-on-seed is idempotent: if a season's cache directory already exists
+// we skip the scrape entirely (instant). If missing, we shell out to the
+// per-season scraper. The cache itself is gitignored (~3MB/season), so a
+// fresh container build will scrape once on first seed; subsequent reseeds
+// are network-free no-ops.
 {
+  const REPLAY_SEASONS = [
+    { season: 9,  scraper: 'scrape-s9-replays.ts' },
+    { season: 10, scraper: 'scrape-s10-replays.ts' },
+  ] as const;
+
+  console.log('\n── Replay cache ──');
+  for (const { season, scraper } of REPLAY_SEASONS) {
+    const dir = resolve(import.meta.dir, `../imports/replays/s${season}`);
+    if (existsSync(dir)) {
+      console.log(`  S${season}: cache present, skipping scrape`);
+      continue;
+    }
+    console.log(`  S${season}: cache missing — scraping (this can take a few minutes)…`);
+    const proc = Bun.spawnSync({
+      cmd: ['bun', 'run', `scripts/${scraper}`],
+      cwd: resolve(import.meta.dir, '..'),
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    if (proc.exitCode !== 0) {
+      console.warn(`  S${season}: scraper exited ${proc.exitCode} — continuing without these replays`);
+    }
+  }
+
   const { importReplays } = await import('./import-replays');
   console.log('\n── Attaching replays ──');
   importReplays(sqlite);
