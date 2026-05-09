@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Swords, Globe, Gamepad2,
+  Swords, Gamepad2,
   Archive, Film, ScrollText, ListTree, Home, Gauge,
 } from 'lucide-react';
 import {
@@ -231,23 +231,9 @@ export function AppShell() {
 
         {/* Nav */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
-          {/* My Hub — personalized landing for logged-in users */}
-          {user && (
-            <NavLink
-              to="/me"
-              className={({ isActive }) => cn(
-                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-neon/10 text-neon'
-                  : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-              )}
-            >
-              <Home size={16} />
-              My Hub
-            </NavLink>
-          )}
-
-          {/* League Overview */}
+          {/* Home — unified landing for everyone (guest/member/coach/admin).
+              The page renders a different top-half shape per role; the
+              sidebar item itself stays the same regardless. */}
           <NavLink viewTransition
             to="/"
             end
@@ -258,8 +244,8 @@ export function AppShell() {
                 : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
             )}
           >
-            <Globe size={16} />
-            League Overview
+            <Home size={16} />
+            Home
           </NavLink>
 
           {/* League sections */}
@@ -391,9 +377,9 @@ export function AppShell() {
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6'}>
           {/* Show a return-to-league pill on global routes if we know which
-              league the user was last in. Skip on League Overview / My Hub
-              where it would just be noise. */}
-          {!urlLeagueId && activeLeague && pathname !== '/' && pathname !== '/me' && (
+              league the user was last in. Skip on Home where it would just
+              be noise (the home page already surfaces league chips). */}
+          {!urlLeagueId && activeLeague && pathname !== '/' && (
             <div className="mb-3 flex items-center gap-2 text-xs">
               <span className="text-text-muted">Last visited:</span>
               <NavLink

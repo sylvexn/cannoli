@@ -51,7 +51,7 @@ export function LoginPage() {
 
   // Already logged in
   if (isAuthenticated && user) {
-    return <Navigate to={user.mustChangePassword ? '/change-password' : '/me'} replace />;
+    return <Navigate to={user.mustChangePassword ? '/change-password' : '/'} replace />;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,7 +61,7 @@ export function LoginPage() {
     const result = await login(username, password);
     setLoading(false);
     if (result.success) {
-      navigate('/me');
+      navigate('/');
     } else {
       setError(result.error ?? 'Login failed');
     }

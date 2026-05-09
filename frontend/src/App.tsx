@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppDataProvider } from '@/lib/app-data-context';
@@ -11,8 +11,7 @@ import { LeagueLayout } from '@/components/league-layout';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { LoginPage } from '@/pages/login';
 import { ChangePasswordPage } from '@/pages/change-password';
-import { LeagueOverviewPage } from '@/pages/league-overview';
-import { MePage } from '@/pages/me';
+import { HomePage } from '@/pages/home';
 import { RulesPage } from '@/pages/rules';
 import { TierListPage } from '@/pages/tier-list';
 import { StandingsPage } from '@/pages/standings';
@@ -68,7 +67,12 @@ export default function App() {
 
             {/* App shell (works for both guests and authenticated users) */}
             <Route element={<AppShell />}>
-              <Route index element={<LeagueOverviewPage />} />
+              <Route index element={<HomePage />} />
+
+              {/* Legacy /me deep links — keep working by redirecting to the
+                  new unified home (same route renders the personalized
+                  shape automatically when the user has a team). */}
+              <Route path="me" element={<Navigate to="/" replace />} />
 
               <Route path="league/:leagueId" element={<LeagueLayout />}>
                 <Route index element={<StandingsPage />} />
@@ -102,7 +106,6 @@ export default function App() {
 
               {/* Protected global routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="me" element={<MePage />} />
                 <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>

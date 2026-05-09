@@ -260,10 +260,14 @@ export const userRoutes = new Elysia()
       .where(eq(schema.userPreferences.userId, parseInt(user.id)))
       .get();
     if (row) {
+      // /me was the old "My Hub" route — folded into / on the home merge.
+      // Coerce stale prefs on read so existing users land on the unified
+      // home instead of hitting a redirect on every login.
+      const landing = row.defaultLandingPath === '/me' ? '/' : row.defaultLandingPath;
       return {
         theme: row.theme,
         density: row.density,
-        defaultLandingPath: row.defaultLandingPath,
+        defaultLandingPath: landing,
         timezone: row.timezone,
         colorblindMode: row.colorblindMode,
         updatedAt: row.updatedAt,
