@@ -108,8 +108,6 @@ export interface ApiTeam {
   logoPath?: string | null;
   bannerPath?: string | null;
   bio?: string | null;
-  /** Short team motto, ≤ 80 chars (owner-editable). */
-  motto?: string | null;
   /** Owner-authored captain note, ≤ 280 chars. */
   captainNote?: string | null;
   userId: number | null;
@@ -1012,7 +1010,6 @@ export const api = {
     teamColor?: string;
     userId?: number | null;
     bio?: string | null;
-    motto?: string | null;
     captainNote?: string | null;
   }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
 

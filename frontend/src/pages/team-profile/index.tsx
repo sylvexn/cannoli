@@ -391,7 +391,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         />
       )}
 
-      {/* ═══ TEAM PERSONALITY (motto + captain note, owner-editable) ═══ */}
+      {/* ═══ TEAM PERSONALITY (captain note, owner-editable) ═══ */}
       {!theorycraftMode && <Personality player={player} onSaved={refresh} />}
 
       {/* ═══ RECENT MOVES (community surface) ═══ */}
