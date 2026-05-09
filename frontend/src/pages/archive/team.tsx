@@ -419,7 +419,7 @@ function TransactionsCard({
   transactions, otherById, thisTeamId,
 }: {
   transactions: TxnRow[];
-  otherById: Map<string, { teamAbbrev: string; teamColor: string; teamName: string }>;
+  otherById: Map<string, { teamAbbrev: string; teamColor: string; teamName: string; logoPath?: string | null }>;
   thisTeamId: string;
 }) {
   if (transactions.length === 0) {

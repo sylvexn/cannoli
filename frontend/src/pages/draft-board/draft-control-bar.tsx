@@ -32,7 +32,7 @@ interface DraftControlBarProps {
   state: DraftState;
   dispatch: (action: DraftAction) => void;
   isDraftComplete: boolean;
-  draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
+  draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string; logoPath?: string | null }[];
   presence?: DraftPresenceData;
   timerEnabled?: boolean;
 }
