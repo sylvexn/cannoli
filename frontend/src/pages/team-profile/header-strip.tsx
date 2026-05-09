@@ -2,7 +2,6 @@ import type { Player } from '@/lib/types';
 import { Link } from 'react-router-dom';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
-import { CoachAvatar } from '@/components/coach-avatar';
 import { RecordDisplay } from '@/components/record-display';
 import { FlaskConical, ArrowLeft } from 'lucide-react';
 import { RankBadge } from './rank-badge';
@@ -51,8 +50,8 @@ export function HeaderStrip({
 
       {/* Coach jump-link — sits above the team title so visitors landing
           on a deep team URL can hop back to the human behind it without
-          hunting through the page. The avatar of the coach echoes the
-          team color via the avatar's outer ring. */}
+          hunting through the page. Avatar omitted here because TeamCoach
+          on the sub-line below already renders one. */}
       {player.owner && (
         <Link
           to={`/coach/${encodeURIComponent(player.owner.username)}`}
@@ -61,15 +60,6 @@ export function HeaderStrip({
         >
           <ArrowLeft size={11} className="shrink-0" />
           <span className="shrink-0">Coach:</span>
-          <CoachAvatar
-            username={player.owner.username}
-            displayName={player.owner.displayName}
-            avatarPath={player.owner.avatarPath}
-            primaryColor={player.owner.primaryColor}
-            secondaryColor={player.owner.secondaryColor}
-            size="sm"
-            ringColor={player.teamColor}
-          />
           <span className="text-text-secondary group-hover:text-neon transition-colors truncate normal-case tracking-normal">
             {player.owner.displayName ?? player.owner.username}
           </span>
