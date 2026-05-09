@@ -30,7 +30,6 @@ import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
 import { Personality } from './personality';
 import { RecentEvents } from './recent-events';
-import { Rivals } from './rivals';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -395,13 +394,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       {/* ═══ TEAM PERSONALITY (motto + captain note, owner-editable) ═══ */}
       {!theorycraftMode && <Personality player={player} onSaved={refresh} />}
 
-      {/* ═══ RECENT MOVES + RIVALS (community surfaces) ═══ */}
-      {!theorycraftMode && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <RecentEvents player={player} />
-          <Rivals player={player} />
-        </div>
-      )}
+      {/* ═══ RECENT MOVES (community surface) ═══ */}
+      {!theorycraftMode && <RecentEvents player={player} />}
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
       <SpriteShowcase
