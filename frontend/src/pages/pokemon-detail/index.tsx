@@ -502,15 +502,13 @@ function BattleRow({ battle: b }: { battle: ApiPokemonRecentBattle }) {
           <Sparkles size={11} className="text-pink" />
         </span>
       )}
-      <a
-        href={b.replayUrl}
-        target="_blank"
-        rel="noreferrer"
+      <Link
+        to={`/replays?match=${encodeURIComponent(b.matchId)}`}
         className="shrink-0 text-text-muted hover:text-neon transition-colors"
-        title="Open replay"
+        title="Watch replay"
       >
         <ExternalLink size={12} />
-      </a>
+      </Link>
     </div>
   );
 }
