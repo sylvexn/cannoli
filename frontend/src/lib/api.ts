@@ -265,9 +265,6 @@ export interface ApiUserPreferences {
   theme: 'dark' | 'light';
   density: 'compact' | 'comfortable';
   defaultLandingPath: string;
-  notifyTrades: boolean;
-  notifyMatches: boolean;
-  notifyAnnouncements: boolean;
   /** IANA zone (e.g. "America/New_York"); null means use the browser zone. */
   timezone: string | null;
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
