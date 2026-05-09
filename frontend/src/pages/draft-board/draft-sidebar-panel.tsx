@@ -107,8 +107,8 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
   return (
     <div
       className={cn(
-        'flex flex-col h-full min-h-0 bg-surface-raised border-l border-border-default',
-        floating && 'shadow-[-6px_0_18px_rgba(0,0,0,0.4)]',
+        'flex flex-col h-full min-h-0 bg-surface-raised/60 backdrop-blur-sm border-l border-border-subtle',
+        floating && 'shadow-[-6px_0_18px_rgba(0,0,0,0.4)] bg-surface-raised/85',
       )}
     >
       {/* Header */}

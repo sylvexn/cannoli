@@ -6,9 +6,18 @@
  * card. New definitions still use the legacy DefinitionDialog (kept in
  * `admin-pins.tsx`) via the "New Pin" button.
  *
- * Bulk season-mint is a single button that opens the wizard for the
- * currently selected season; backed by the `/api/admin/pins/mint-season`
- * endpoint which calls `mintManualPins` server-side.
+ * Per-pin actions (post-WT-A):
+ *   - Manual pin (isAuto = false) → "Award" button (opens metadata-aware
+ *     dialog to pick recipient + leagueId/pokemon/nickname).
+ *   - Auto pin (isAuto = true) already awarded for the active season →
+ *     "Edit" button (opens dialog to re-point the pin to a different user).
+ *   - Auto pin not yet awarded → no button; the auto job will handle it.
+ *
+ * The top-bar "Mint S{N} Auto-Awards" button re-runs the season-end auto
+ * job (Garchomp / Cannoli / Cynthia) for every league in the season. It is
+ * gated to seasons whose summary phase = `offseason` (i.e. every league has
+ * wrapped) — mid-season clicks would clobber rows that the per-match auto
+ * job is still maintaining.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -25,12 +34,13 @@ import type {
 import { formatPinMetadata } from '@/lib/pin-metadata-schema';
 import { DefinitionCard } from './definition-card';
 import { AwardDialog } from './award-dialog';
-import { BulkMintWizard } from './bulk-mint-wizard';
+import { EditPinDialog } from './edit-pin-dialog';
 import { NewDefinitionDialog } from '../admin-pins';
 
 interface SeasonRow {
   id: number;
   seasonNumber: number;
+  phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
 }
 
 export function PinsTab() {
@@ -44,8 +54,9 @@ export function PinsTab() {
   const [search, setSearch] = useState('');
   const [seasonId, setSeasonId] = useState<number | null>(null);
   const [awardDef, setAwardDef] = useState<ApiPinDefinition | null>(null);
+  const [editPin, setEditPin] = useState<ApiPinRecent | null>(null);
   const [creating, setCreating] = useState(false);
-  const [mintWizardOpen, setMintWizardOpen] = useState(false);
+  const [minting, setMinting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -60,7 +71,7 @@ export function PinsTab() {
         setDefs(d);
         setUsers(u);
         setLeagues(l);
-        setSeasons(s.map(row => ({ id: row.id, seasonNumber: row.seasonNumber })));
+        setSeasons(s.map(row => ({ id: row.id, seasonNumber: row.seasonNumber, phase: row.phase })));
         setRecent(r);
       })
       .catch(() => toast.error('Failed to load pins data'))
@@ -102,6 +113,50 @@ export function PinsTab() {
     return recent.filter(r => r.seasonId === seasonId);
   }, [recent, seasonId]);
 
+  // Mint button visibility: only when all leagues for the active season have
+  // wrapped (phase = offseason). The /api/seasons aggregate uses the
+  // "least-advanced" phase across leagues, so summaryPhase === 'offseason'
+  // implies every league is offseason.
+  const activeSeason = useMemo(
+    () => seasons.find(s => s.seasonNumber === seasonId) ?? null,
+    [seasons, seasonId],
+  );
+  const seasonOffseasonOrPast = activeSeason?.phase === 'offseason';
+
+  // Bucket existing pins per def for the active season so cards know whether
+  // to show Award (manual + unawarded) or Edit (auto + already awarded).
+  const existingByDef = useMemo(() => {
+    const map = new Map<string, ApiPinRecent[]>();
+    for (const r of recent) {
+      if (seasonId != null && r.seasonId !== seasonId) continue;
+      const list = map.get(r.pinDefId) ?? [];
+      list.push(r);
+      map.set(r.pinDefId, list);
+    }
+    return map;
+  }, [recent, seasonId]);
+
+  async function handleRunAuto() {
+    if (seasonId == null) return;
+    setMinting(true);
+    try {
+      const r = await api.runSeasonAutoAwards(seasonId);
+      if (r.totalAwarded === 0 && r.totalSkipped === 0) {
+        toast.message(`No auto-awards minted for S${seasonId} (no eligible matches?)`);
+      } else {
+        toast.success(
+          `Auto-awards: ${r.totalAwarded} new, ${r.totalSkipped} skipped`,
+        );
+      }
+      load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Mint failed';
+      toast.error(msg);
+    } finally {
+      setMinting(false);
+    }
+  }
+
   async function handleRevoke(id: number) {
     if (!confirm('Revoke this pin?')) return;
     try {
@@ -137,16 +192,17 @@ export function PinsTab() {
           </select>
         </label>
 
-        {seasonId != null && (
+        {seasonId != null && seasonOffseasonOrPast && (
           <Button
             size="sm"
             variant="outline"
             className="h-7 text-[11px]"
-            onClick={() => setMintWizardOpen(true)}
-            title="Replay the hand-curated award list for this season"
+            onClick={handleRunAuto}
+            disabled={minting}
+            title="Re-run the auto-award job (Garchomp, Cannoli, Cynthia) for every league in this season"
           >
             <Sparkles size={11} />
-            Mint S{seasonId} Awards
+            {minting ? 'Minting...' : `Mint S${seasonId} Auto-Awards`}
           </Button>
         )}
 
@@ -180,16 +236,21 @@ export function PinsTab() {
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-              {filteredDefs.map(def => (
-                <DefinitionCard
-                  key={def.id}
-                  def={def}
-                  seasonAwardCount={seasonAwardCounts[def.id] ?? 0}
-                  seasonLabel={seasonLabel}
-                  onAward={() => setAwardDef(def)}
-                  onEdited={load}
-                />
-              ))}
+              {filteredDefs.map(def => {
+                const existing = existingByDef.get(def.id) ?? [];
+                return (
+                  <DefinitionCard
+                    key={def.id}
+                    def={def}
+                    seasonAwardCount={seasonAwardCounts[def.id] ?? 0}
+                    seasonLabel={seasonLabel}
+                    existingAwards={existing}
+                    onAward={() => setAwardDef(def)}
+                    onEdit={(pin) => setEditPin(pin)}
+                    onEdited={load}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -275,13 +336,13 @@ export function PinsTab() {
         />
       )}
 
-      {/* ─── Bulk season-mint wizard ──────────────────────────────────── */}
-      {mintWizardOpen && seasonId != null && (
-        <BulkMintWizard
-          season={seasonId}
-          defs={defs}
-          onClose={() => setMintWizardOpen(false)}
-          onMinted={load}
+      {/* ─── Edit dialog (override auto-awarded recipient) ────────────── */}
+      {editPin && (
+        <EditPinDialog
+          pin={editPin}
+          users={users}
+          onClose={() => setEditPin(null)}
+          onSaved={() => { setEditPin(null); load(); }}
         />
       )}
     </div>
