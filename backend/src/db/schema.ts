@@ -147,8 +147,6 @@ export const teams = sqliteTable('teams', {
   bannerPath: text('banner_path'),
   /** Short team description — ≤ 280 chars enforced at API layer */
   bio: text('bio'),
-  /** Short team motto — ≤ 80 chars (e.g. "fortune favors the bold"). */
-  motto: text('motto'),
   /** Owner-authored captain note — ≤ 280 chars. Surfaced on the team
    *  profile under the captain strip; intended for trash talk + flavor. */
   captainNote: text('captain_note'),

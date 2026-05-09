@@ -61,7 +61,7 @@ export const teamAdminRoutes = new Elysia()
     if (archived) { set.status = 409; return archived; }
     const staff = isStaff(user);
 
-    const { coachName, teamName, teamAbbrev, teamColor, userId, bio, motto, captainNote } = body as Record<string, unknown>;
+    const { coachName, teamName, teamAbbrev, teamColor, userId, bio, captainNote } = body as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
     // Owner-allowed fields:
@@ -70,14 +70,6 @@ export const teamAdminRoutes = new Elysia()
       if (bio === null || bio === '') updates.bio = null;
       else if (typeof bio === 'string' && bio.length <= 280) updates.bio = bio;
       else { set.status = 400; return { error: 'bio must be a string ≤ 280 chars' }; }
-    }
-    // Personality fields — short owner-authored strings rendered on the team
-    // detail page. Caps mirror users.statusMessage / users.bio so the UI can
-    // share the same character-counter component.
-    if (motto !== undefined) {
-      if (motto === null || motto === '') updates.motto = null;
-      else if (typeof motto === 'string' && motto.length <= 80) updates.motto = motto.trim();
-      else { set.status = 400; return { error: 'motto must be a string ≤ 80 chars' }; }
     }
     if (captainNote !== undefined) {
       if (captainNote === null || captainNote === '') updates.captainNote = null;
