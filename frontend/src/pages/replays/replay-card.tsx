@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { ReplayEntry } from './replay-types';
+import { BroughtPreview } from './brought-preview';
 
 interface ReplayCardProps {
   entry: ReplayEntry;
@@ -50,18 +51,28 @@ export function ReplayCard({
         ['--card-accent' as never]: league.color,
       }}
     >
-      {/* Preview pane — deliberately empty. Slice 11C will render the
-          sprite trio + sweep flag thumbnail here. */}
+      {/* Preview pane: 6 brought vs 6 brought when summary is available;
+          falls back to a simple placeholder. */}
       <div
         className="relative h-24 flex items-center justify-center border-b border-border-subtle"
         style={{
           background: `linear-gradient(135deg, ${league.color}10 0%, transparent 70%)`,
         }}
       >
-        <div className="flex flex-col items-center gap-1 text-text-muted/60">
-          <ImageIcon size={16} strokeWidth={1.5} />
-          <span className="text-[9px] font-mono uppercase tracking-widest">No preview</span>
-        </div>
+        {summary && (summary.home.length > 0 || summary.away.length > 0) ? (
+          <BroughtPreview
+            home={summary.home}
+            away={summary.away}
+            homeColor={homeTeam?.teamColor}
+            awayColor={awayTeam?.teamColor}
+            size="sm"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-1 text-text-muted/60">
+            <ImageIcon size={16} strokeWidth={1.5} />
+            <span className="text-[9px] font-mono uppercase tracking-widest">No preview</span>
+          </div>
+        )}
 
         {/* Glance flags float top-right of the preview pane */}
         {(sweep || teraHeavy || hasMvp) && (
