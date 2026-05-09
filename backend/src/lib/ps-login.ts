@@ -178,11 +178,73 @@ export function clearPsSidCookieString(): string {
 // ─── Assertion Signing ──────────────────────────────────────────────────────
 
 /**
+ * Resolve Cannoli role + league memberships for the assertion's optional
+ * trailing fields (s1/s2/s3, see PS users.ts:706). PS stores these on
+ * `user.s1/s2/s3` after a successful login and exposes them to chat plugins,
+ * so this is how we ferry "who is this person in Cannoli" across the SSO.
+ *
+ *   s1 = compact role:   'admin' | 'coach' | 'user'
+ *        (collapses Cannoli `dev` → `admin`; PS never sees `guest`)
+ *   s2 = comma-separated league slugs the user is a coach (team owner) in
+ *        (empty string if none)
+ *   s3 = reserved (empty for now — keeps the slot for future expansion)
+ *
+ * Returns null when the user isn't found in Cannoli's DB (e.g. PS sent us a
+ * userid we've never authenticated, which shouldn't happen post-login). The
+ * signer falls back to empty s-fields in that case.
+ */
+export function getAssertionExtras(userid: string): { s1: string; s2: string; s3: string } | null {
+  // We were handed a PS userid (lowercased, alnum-only). Match Cannoli usernames
+  // the same way `authenticateUser` does — exact-match on the normalised form.
+  let user = db.select().from(schema.users)
+    .where(eq(schema.users.username, userid))
+    .get();
+  if (!user) {
+    const allUsers = db.select().from(schema.users).all();
+    user = allUsers.find(u => toUserid(u.username) === userid) ?? null;
+  }
+  if (!user) return null;
+
+  const role: 'admin' | 'coach' | 'user' = user.role === 'dev' || user.role === 'admin'
+    ? 'admin'
+    : 'user'; // baseline — overridden to 'coach' below if they own at least one team
+
+  // Coach memberships: any team rows whose userId points at this user, scoped
+  // to leagues that are still in an active phase (skip archived/offseason runs).
+  const teamRows = db.select({
+    leagueId: schema.teams.leagueId,
+    phase: schema.leagues.phase,
+  })
+    .from(schema.teams)
+    .innerJoin(schema.leagues, eq(schema.leagues.id, schema.teams.leagueId))
+    .where(eq(schema.teams.userId, user.id))
+    .all();
+
+  const activePhases = new Set(['predraft', 'draft', 'regular', 'playoffs']);
+  const slugs = teamRows
+    .filter(r => activePhases.has(r.phase))
+    .map(r => r.leagueId);
+
+  const finalRole = role === 'admin' ? 'admin' : (slugs.length > 0 ? 'coach' : 'user');
+
+  return {
+    s1: finalRole,
+    s2: slugs.join(','),
+    s3: '',
+  };
+}
+
+/**
  * Generate a signed assertion for the PS game server.
  *
  * @param challstr - The challenge string from |challstr| (contains a pipe)
  * @param userid - Normalized (lowercased, no special chars) username
  * @param userType - '2' for registered users (our only type)
+ *
+ * The assertion's tokenData carries optional trailing fields s1/s2/s3
+ * (see `getAssertionExtras`). Adding them is backward-compatible: PS only
+ * reads `tokenDataSplit[5..7]` after RSA verification, so older PS builds
+ * that ignore them still verify the same data block.
  */
 export function signAssertion(challstr: string, userid: string, userType: string = '2'): string | null {
   const privateKey = getPrivateKey();
@@ -195,7 +257,8 @@ export function signAssertion(challstr: string, userid: string, userType: string
   const challenge = pipeIndex >= 0 ? challstr.slice(pipeIndex + 1) : challstr;
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const tokenData = `${challenge},${userid},${userType},${timestamp},${PS_HOSTNAME}`;
+  const extras = getAssertionExtras(userid) ?? { s1: '', s2: '', s3: '' };
+  const tokenData = `${challenge},${userid},${userType},${timestamp},${PS_HOSTNAME},${extras.s1},${extras.s2},${extras.s3}`;
 
   try {
     const sign = createSign('RSA-SHA1');
