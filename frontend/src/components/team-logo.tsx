@@ -18,7 +18,9 @@ const sizeMap = {
 
 export function TeamLogo({ abbrev, color, size = 'md', className, logoPath }: TeamLogoProps) {
   if (logoPath) {
-    const src = logoPath.startsWith('/') ? logoPath : `/uploads/${logoPath}`;
+    const src = /^https?:\/\//.test(logoPath)
+      ? logoPath
+      : logoPath.startsWith('/') ? logoPath : `/uploads/${logoPath}`;
     return (
       <img
         src={src}

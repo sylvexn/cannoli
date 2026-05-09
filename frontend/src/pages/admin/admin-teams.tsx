@@ -162,8 +162,8 @@ export function AdminTeams() {
       toast.error('Please upload an image file');
       return;
     }
-    if (file.size > 512 * 1024) {
-      toast.error('Image must be under 512KB');
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image must be under 2MB');
       return;
     }
     try {

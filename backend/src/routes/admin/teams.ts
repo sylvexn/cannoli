@@ -4,6 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { isStaff, isStaffOrTeamOwner } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
+import { isR2Configured, r2Put, r2Delete, r2PublicUrl } from '../../lib/r2';
 
 export const teamAdminRoutes = new Elysia()
 
@@ -225,27 +226,34 @@ export const teamAdminRoutes = new Elysia()
     const file = form?.get('logo');
     if (!(file instanceof File)) { set.status = 400; return { error: 'No file uploaded under "logo" field' }; }
     if (!file.type.startsWith('image/')) { set.status = 400; return { error: 'File must be an image' }; }
-    if (file.size > 512 * 1024) { set.status = 400; return { error: 'File must be ≤ 512KB' }; }
+    if (file.size > 2 * 1024 * 1024) { set.status = 400; return { error: 'File must be ≤ 2MB' }; }
 
     const ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
     const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) ? ext : 'png';
     const filename = `${params.teamId}.${safeExt}`;
-    const relativePath = `team-logos/${filename}`;
-    const absPath = `${process.cwd()}/uploads/${relativePath}`;
+    const key = `team-logos/${filename}`;
 
-    await Bun.write(absPath, file);
+    let storedPath: string;
+    if (isR2Configured()) {
+      const buf = await file.arrayBuffer();
+      await r2Put(key, buf, file.type);
+      storedPath = r2PublicUrl(key);
+    } else {
+      await Bun.write(`${process.cwd()}/uploads/${key}`, file);
+      storedPath = key;
+    }
 
-    db.update(schema.teams).set({ logoPath: relativePath }).where(eq(schema.teams.id, params.teamId)).run();
+    db.update(schema.teams).set({ logoPath: storedPath }).where(eq(schema.teams.id, params.teamId)).run();
     db.insert(schema.activityLog).values({
       type: 'team_logo_uploaded',
       category: 'team',
       actor: user!.username,
       leagueId: team.leagueId,
       description: `Uploaded logo for ${team.teamName}`,
-      metadata: JSON.stringify({ teamId: params.teamId, path: relativePath, size: file.size }),
+      metadata: JSON.stringify({ teamId: params.teamId, path: storedPath, size: file.size }),
     }).run();
 
-    return { success: true, path: `/uploads/${relativePath}` };
+    return { success: true, path: storedPath };
   })
 
   // ─── Team logo remove ──────────────────────────────────────────────
