@@ -74,7 +74,16 @@ function broadcastDraftState(leagueId: string) {
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 
 function tickTimers() {
-  const states = db.select().from(schema.draftState).all();
+  let states: typeof schema.draftState.$inferSelect[];
+  try {
+    states = db.select().from(schema.draftState).all();
+  } catch (err) {
+    // Table can vanish briefly during a `seed:fresh` wipe; the next tick
+    // (1s later) will succeed once migrations recreate it. Log once per
+    // tick, don't crash the process.
+    console.warn('[draft tick] skipping tick — DB query failed:', err instanceof Error ? err.message : err);
+    return;
+  }
   const now = Date.now();
   for (const s of states) {
     if (s.status !== 'in_progress' || !s.timerStartedAt) continue;
@@ -155,6 +164,13 @@ function canSubscribeToLeague(
 
 export const draftRoutes = new Elysia()
   .onStart(() => { ensureTimerInterval(); })
+
+  // HTTP mirror of the WS `presence` broadcast. Useful for staff tooling +
+  // tests that need a synchronous "is everyone connected" check before
+  // calling /draft/start, without standing up a WS subscriber.
+  .get('/api/leagues/:leagueId/draft/presence', ({ params }) => {
+    return getPresenceList(params.leagueId);
+  })
 
   .get('/api/leagues/:leagueId/draft/state', ({ params }) => {
     const snapshot = getDraftSnapshot(params.leagueId);
@@ -410,9 +426,16 @@ export const draftRoutes = new Elysia()
             return;
           }
 
+          // When the client identifies without a teamId (live draft hasn't
+          // surfaced its picker yet, or the user just hasn't selected one),
+          // fall back to the auth-derived team so coaches still appear as
+          // players in the presence map. Staff never have an auth.teamId
+          // so they remain spectators.
+          const presenceTeamId = teamId || auth?.teamId || null;
+
           if (!leaguePresence.has(leagueId)) leaguePresence.set(leagueId, new Map());
           leaguePresence.get(leagueId)!.set(ws, {
-            teamId: teamId || null,
+            teamId: presenceTeamId,
             username,
             role: role || 'spectator',
             userId: auth?.userId ?? null,

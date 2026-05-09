@@ -151,8 +151,8 @@ export function DraftControlBar({
             <div className="flex items-center gap-2">
               <User size={13} className="text-text-muted" />
               <Select
-                value={state.userTeamId ?? 'none'}
-                onValueChange={v => dispatch({ type: 'SET_USER_TEAM', teamId: v === 'none' ? null : v })}
+                value={state.userTeamId}
+                onValueChange={(v: string | null) => dispatch({ type: 'SET_USER_TEAM', teamId: v })}
               >
                 <SelectTrigger className="h-7 w-[160px] text-xs bg-surface-overlay border-border-default">
                   <SelectValue placeholder="Pick your team..." />
