@@ -5,6 +5,7 @@ import { NeonLogo } from '@/components/neon-logo';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { api, type ApiLeague } from '@/lib/api';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Compact phase labels for the public active-leagues strip. We deliberately
 // use lowercase here — pre-auth ornament, reads like a status line, not a UI
@@ -124,15 +125,24 @@ export function LoginPage() {
             S10
           </span>
           <span className="w-px h-3 bg-border-default" />
-          <a
-            href="https://github.com/sylvexn/cannoli"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group/alpha inline-flex items-center rounded border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-pointer"
-          >
-            <span className="group-hover/alpha:hidden">alpha</span>
-            <span className="hidden group-hover/alpha:inline">{__COMMIT_HASH__}</span>
-          </a>
+          <Tooltip>
+            <TooltipTrigger
+              render={(props) => (
+                <a
+                  {...props}
+                  href="https://github.com/sylvexn/cannoli"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-pointer"
+                >
+                  alpha
+                </a>
+              )}
+            />
+            <TooltipContent>
+              <span className="font-mono text-[10px]">{__COMMIT_HASH__}</span>
+            </TooltipContent>
+          </Tooltip>
           <span className="w-px h-3 bg-border-default" />
           <span
             title="Build"
