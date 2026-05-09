@@ -423,28 +423,11 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     console.log(`  ${listings.length} trade block listings seeded`);
   }
 
-  // ─── Demo replay URLs on some completed matches ───────────────────────────
-
-  const completedMatches = sqlite.prepare(
-    `SELECT id FROM matches WHERE home_score IS NOT NULL AND phase = 'regular' ORDER BY week LIMIT 2`
-  ).all() as { id: string }[];
-
-  // Also mark matches with scores as completed
+  // ─── Mark scored matches completed ────────────────────────────────────────
+  // Real replay URLs land via importReplays() against the scraped JSON cache
+  // at backend/imports/replays/. Just ensure status is set so any UI that
+  // filters on `status = 'completed'` picks them up.
   sqlite.prepare(`UPDATE matches SET status = 'completed' WHERE home_score IS NOT NULL`).run();
-
-  if (completedMatches.length >= 1) {
-    sqlite.prepare(`UPDATE matches SET replay_url = ? WHERE id = ?`).run(
-      '/replays/Gen9NatDexDraft-2026-03-29-roabio-hellofellorat.html',
-      completedMatches[0].id,
-    );
-  }
-  if (completedMatches.length >= 2) {
-    sqlite.prepare(`UPDATE matches SET replay_url = ? WHERE id = ?`).run(
-      '/replays/Gen9NatDexDraft-2026-04-03-simolili-gabrys24.html',
-      completedMatches[1].id,
-    );
-  }
-  console.log(`  ${Math.min(completedMatches.length, 2)} demo replay URLs seeded`);
 
   // ─── Activity log ─────────────────────────────────────────────────────────
 
@@ -629,13 +612,9 @@ if (s9Missing.length === 0) {
   console.log(`\nSkipping S9 historical import: missing ${s9Missing.length} file(s).`);
 }
 
-// Attach scraped replay protocol logs to matches across every cached season
-// (S9, S10, …). Each season's cache lives under backend/imports/replays/sN/.
-{
-  const { importReplays } = await import('./import-replays');
-  console.log('\n── Attaching replays ──');
-  importReplays(sqlite);
-}
+// (importReplays moved below — must run AFTER S10 finalize + S9 bracket
+// fabrication so the rewritten finals/SF rows are present in the matches
+// table by the time we look them up.)
 
 // ─── S10: finalize the season ─────────────────────────────────────────────
 // Discord-announced champions are GABE (emerald-abs), TAYLOR (ruby-vgk),
@@ -819,6 +798,17 @@ if (s9Missing.length === 0) {
   for (const u of s9Manual.unresolved) {
     console.log(`    [unresolved] ${u.award.pin} ${u.award.leagueId ?? `season=${u.award.season}`} — ${u.reason}`);
   }
+}
+
+// Attach scraped replay protocol logs to matches across every cached season
+// (S9, S10, …). Each season's cache lives under backend/imports/replays/sN/.
+// This must run AFTER S10 finalize + S9 bracket fabrication so finals/SF
+// rows exist with the correct home/away teams (see ruby-vgk rewrite, etc.)
+// before we look up by (league, week|round, home, away).
+{
+  const { importReplays } = await import('./import-replays');
+  console.log('\n── Attaching replays ──');
+  importReplays(sqlite);
 }
 
 // ─── S10: award pins (auto + archive + manual) ───────────────────────────

@@ -111,6 +111,20 @@ export function tierColor(tier: number): string {
   return TIER_COLORS[tier] ?? '#64748b';
 }
 
+/**
+ * Coarse tier-band labels — pairs with the numeric tier in compact rows
+ * (e.g. "Tier 16 · Apex"). Mirrors the inline ladder used by the tier-list
+ * page header so the same vocabulary surfaces wherever a tier number appears.
+ */
+export function tierName(tier: number): string {
+  if (tier >= 18) return 'Apex';
+  if (tier >= 15) return 'Premium';
+  if (tier >= 12) return 'High';
+  if (tier >= 8) return 'Mid';
+  if (tier >= 5) return 'Low';
+  return 'Budget';
+}
+
 /** Phase display config — shared across overview, app-shell, admin */
 export const PHASE_COLORS: Record<string, string> = {
   draft: 'text-draw bg-draw/10',
