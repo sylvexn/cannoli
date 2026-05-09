@@ -5,7 +5,6 @@ import { api, type ApiPublicProfile, type ApiPin, type ApiActivityEvent } from '
 import { CoachAvatar } from '@/components/coach-avatar';
 import { Pin } from '@/components/pin';
 import { TeamLogo } from '@/components/team-logo';
-import { TeamLink } from '@/components/team-link';
 import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { formatRelativeTime, formatRecord } from '@/lib/format';
@@ -539,18 +538,15 @@ function PastTeamCard({
 }: {
   tenure: NonNullable<ApiPublicProfile['pastTeams']>[number];
 }) {
+  // Past tenures live in archived seasons — route into the archive view
+  // instead of the live /league/:id/teams/:id URL (which redirects/dies
+  // for archived teams).
   return (
-    <TeamLink
-      team={{
-        leagueId: tenure.leagueId,
-        teamId: tenure.teamId,
-        teamName: tenure.teamName,
-        teamAbbrev: tenure.teamAbbrev,
-        teamColor: tenure.teamColor,
-        logoPath: tenure.logoPath,
-      }}
-      asCard
+    <Link
+      to={`/archive/${tenure.seasonId}/${tenure.leagueId}/${tenure.teamId}`}
+      viewTransition
       className="card-interactive flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5"
+      style={{ ['--card-accent' as never]: tenure.teamColor }}
     >
       <TeamLogo
         abbrev={tenure.teamAbbrev}
@@ -577,7 +573,7 @@ function PastTeamCard({
           )}
         </div>
       </div>
-    </TeamLink>
+    </Link>
   );
 }
 

@@ -108,8 +108,6 @@ export interface ApiTeam {
   logoPath?: string | null;
   bannerPath?: string | null;
   bio?: string | null;
-  /** Short team motto, ≤ 80 chars (owner-editable). */
-  motto?: string | null;
   /** Owner-authored captain note, ≤ 280 chars. */
   captainNote?: string | null;
   userId: number | null;
@@ -267,9 +265,6 @@ export interface ApiUserPreferences {
   theme: 'dark' | 'light';
   density: 'compact' | 'comfortable';
   defaultLandingPath: string;
-  notifyTrades: boolean;
-  notifyMatches: boolean;
-  notifyAnnouncements: boolean;
   /** IANA zone (e.g. "America/New_York"); null means use the browser zone. */
   timezone: string | null;
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
@@ -334,6 +329,9 @@ export interface ApiPublicProfile {
   pastTeams?: Array<{
     teamId: string;
     leagueId: string;
+    /** DB id of the season this tenure belongs to — used to deep-link the
+     *  archive route /archive/:seasonId/:leagueId/:teamId. */
+    seasonId: number;
     teamName: string;
     teamAbbrev: string;
     teamColor: string;
@@ -1012,7 +1010,6 @@ export const api = {
     teamColor?: string;
     userId?: number | null;
     bio?: string | null;
-    motto?: string | null;
     captainNote?: string | null;
   }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
 

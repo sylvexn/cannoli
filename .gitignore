@@ -10,6 +10,9 @@ node_modules/
 dist/
 .output/
 
+# Playwright run artifacts
+tests/e2e/.results/
+
 # Environment
 .env
 .env.*

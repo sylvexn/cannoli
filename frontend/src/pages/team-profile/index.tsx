@@ -22,7 +22,6 @@ import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
-import { RosterActions } from './roster-actions';
 import { HeaderStrip } from './header-strip';
 import { SpriteShowcase } from './sprite-showcase';
 import { NextMatchBanner } from './next-match-banner';
@@ -30,7 +29,6 @@ import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
 import { Personality } from './personality';
 import { RecentEvents } from './recent-events';
-import { Rivals } from './rivals';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -392,16 +390,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         />
       )}
 
-      {/* ═══ TEAM PERSONALITY (motto + captain note, owner-editable) ═══ */}
+      {/* ═══ TEAM PERSONALITY (captain note, owner-editable) ═══ */}
       {!theorycraftMode && <Personality player={player} onSaved={refresh} />}
-
-      {/* ═══ RECENT MOVES + RIVALS (community surfaces) ═══ */}
-      {!theorycraftMode && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <RecentEvents player={player} />
-          <Rivals player={player} />
-        </div>
-      )}
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
       <SpriteShowcase
@@ -445,7 +435,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       {/* ═══ MAIN CONTENT GRID ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
 
-        {/* ─── ROSTER TABLE + MANAGER ACTIONS (2 cols) ─── */}
+        {/* ─── ROSTER TABLE (2 cols) ─── */}
         <div className="xl:col-span-2 flex flex-col gap-4">
           <RosterTable
             activeRoster={activeRoster}
@@ -461,8 +451,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             canEditNickname={!theorycraftMode && canManageTeam(user, player)}
             onNicknameSaved={() => { void refresh(); }}
           />
-          {/* Owner-only: trade-block listings + release controls */}
-          {!theorycraftMode && <RosterActions player={player} />}
         </div>
 
         {/* ─── RIGHT COLUMN — Tabbed, stretches to match roster ─── */}
@@ -574,6 +562,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           </Tabs>
         </Card>
       </div>
+
+      {/* ═══ RECENT MOVES (community surface, anchored at the bottom) ═══ */}
+      {!theorycraftMode && <RecentEvents player={player} />}
 
       {/* ═══ THEORYCRAFT FLOATING DIFF SUMMARY ═══ */}
       {theorycraftMode && (
