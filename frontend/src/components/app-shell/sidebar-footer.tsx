@@ -44,8 +44,8 @@ export function SidebarFooter({
         <MyTeamSidebar myTeams={myTeams} leagues={leagues} pendingTradeCount={pendingTradeCount} />
       )}
 
-      {/* Admin shortcut — moved out of the main nav so the footer slot
-       *  vacated by the old "My Hub" fallback hosts staff tools instead. */}
+      {/* Admin shortcut — lives in the footer instead of the main nav so
+       *  staff tools sit alongside the user/account controls. */}
       {user && isAdmin && (
         <NavLink
           to="/admin"

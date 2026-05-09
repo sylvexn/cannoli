@@ -151,7 +151,6 @@ export const PROFILE_COLOR_SWATCHES = [
 
 /** Default landing page options for user preferences */
 export const DEFAULT_LANDING_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '/', label: 'Home (League Overview)' },
-  { value: '/me', label: 'My Profile' },
+  { value: '/', label: 'Home' },
   { value: '/replays', label: 'Replays' },
 ];

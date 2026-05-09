@@ -79,7 +79,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     preloadSprites(player.roster.map(m => m.name));
   }, [player]);
 
-  // Allow deep-link from My Hub: /league/.../teams/...?theorycraft=1
+  // Allow deep-link into theorycraft mode: /league/.../teams/...?theorycraft=1
   const [searchParams, setSearchParams] = useSearchParams();
   const [theorycraftMode, setTheorycraftMode] = useState(
     searchParams.get('theorycraft') === '1',
