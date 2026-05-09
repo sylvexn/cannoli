@@ -3,13 +3,14 @@ import { cn } from '@/lib/utils';
 interface TeamLogoProps {
   abbrev: string;
   color: string;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   /** Relative path stored on the team (e.g. 'team-logos/sapphire-sas.png'). */
   logoPath?: string | null;
 }
 
 const sizeMap = {
+  xs: 'w-4 h-4 text-[8px]',
   sm: 'w-7 h-7 text-[10px]',
   md: 'w-9 h-9 text-xs',
   lg: 'w-12 h-12 text-sm',

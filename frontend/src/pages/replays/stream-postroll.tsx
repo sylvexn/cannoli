@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight, Sparkles, Swords, Zap } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamCoachVs } from '@/components/team-coach-vs';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiMatchPokemon, ApiTeam } from '@/lib/api';
 import type { League } from '@/lib/types';
@@ -116,9 +117,9 @@ export function StreamPostroll({ match, league, homeTeam, awayTeam, durationMs, 
 
         {/* Score row */}
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-10 w-full">
-          <ScoreSide team={homeTeam} score={match.homeScore} won={homeWon} align="right" />
+          <ScoreSide team={homeTeam} score={match.homeScore} won={homeWon} align="right" side="home" leagueId={league.id} />
           <span className="font-mono text-2xl tracking-widest text-text-muted">vs</span>
-          <ScoreSide team={awayTeam} score={match.awayScore} won={awayWon} align="left" />
+          <ScoreSide team={awayTeam} score={match.awayScore} won={awayWon} align="left" side="away" leagueId={league.id} />
         </div>
 
         {/* MVP card */}
@@ -202,11 +203,15 @@ function ScoreSide({
   score,
   won,
   align,
+  side,
+  leagueId,
 }: {
   team: ApiTeam | undefined;
   score: number | null;
   won: boolean;
   align: 'left' | 'right';
+  side: 'home' | 'away';
+  leagueId: string;
 }) {
   const color = team?.teamColor ?? '#6b7280';
   return (
@@ -216,12 +221,22 @@ function ScoreSide({
         align === 'right' ? 'flex-row-reverse text-right justify-self-end' : 'justify-self-start',
       )}
     >
-      <TeamLogo
-        abbrev={team?.teamAbbrev ?? '???'}
-        color={color}
-        logoPath={team?.logoPath ?? null}
-        size="lg"
-      />
+      {team ? (
+        <TeamCoachVs
+          team={{
+            leagueId,
+            teamId: team.id,
+            teamAbbrev: team.teamAbbrev,
+            teamColor: team.teamColor,
+            logoPath: team.logoPath,
+            owner: team.owner,
+          }}
+          side={side}
+          size="lg"
+        />
+      ) : (
+        <TeamLogo abbrev="???" color={color} size="lg" />
+      )}
       <div className="flex flex-col">
         <span
           className={cn(
