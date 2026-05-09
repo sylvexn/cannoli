@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Bookmark, Crown, Pause, Play, RotateCcw, SkipForward } from 'lucide-react';
-import { TeamLink } from '@/components/team-link';
+import { TeamCoachVs } from '@/components/team-coach-vs';
 import type { League } from '@/lib/types';
 import type { ApiTeam } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -126,6 +126,7 @@ export function StreamPreroll({
             record={homeRecord}
             rank={homeRank}
             align="right"
+            side="home"
             leagueId={league.id}
           />
 
@@ -141,6 +142,7 @@ export function StreamPreroll({
             record={awayRecord}
             rank={awayRank}
             align="left"
+            side="away"
             leagueId={league.id}
           />
         </div>
@@ -179,12 +181,14 @@ function TeamSide({
   record,
   rank,
   align,
+  side,
   leagueId,
 }: {
   team: ApiTeam | undefined;
   record: string;
   rank?: number;
   align: 'left' | 'right';
+  side: 'home' | 'away';
   leagueId: string;
 }) {
   const color = team?.teamColor ?? '#6b7280';
@@ -198,18 +202,17 @@ function TeamSide({
       )}
     >
       {team ? (
-        <TeamLink
+        <TeamCoachVs
           team={{
             leagueId,
             teamId: team.id,
-            teamName: team.teamName,
             teamAbbrev: team.teamAbbrev,
             teamColor: team.teamColor,
             logoPath: team.logoPath,
-            record: team.record,
+            owner: team.owner,
           }}
-          logoOnly
-          logoSize="xl"
+          side={side}
+          size="xl"
         />
       ) : null}
       <div

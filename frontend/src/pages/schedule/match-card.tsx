@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Match, Player, MatchPokemonEntry } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
+import { TeamCoachVs } from '@/components/team-coach-vs';
 import { TYPE_COLORS } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
@@ -45,13 +46,18 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
       >
         {/* Home team */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <Link
-            to={leagueUrl(`/teams/${homePlayer.id}`)} viewTransition
-            onClick={e => e.stopPropagation()}
-            className="group/home shrink-0"
-          >
-            <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" logoPath={homePlayer.logoPath} />
-          </Link>
+          <TeamCoachVs
+            team={{
+              leagueId: league.id,
+              teamId: homePlayer.id,
+              teamAbbrev: homePlayer.teamAbbrev,
+              teamColor: homePlayer.teamColor,
+              logoPath: homePlayer.logoPath,
+              owner: homePlayer.owner,
+            }}
+            side="home"
+            size="sm"
+          />
           <div className="min-w-0 flex flex-col">
             <Link
               to={leagueUrl(`/teams/${homePlayer.id}`)} viewTransition
@@ -103,13 +109,18 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               <TeamCoach player={awayPlayer} size="xs" />
             </span>
           </div>
-          <Link
-            to={leagueUrl(`/teams/${awayPlayer.id}`)} viewTransition
-            onClick={e => e.stopPropagation()}
-            className="group/away shrink-0"
-          >
-            <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" logoPath={awayPlayer.logoPath} />
-          </Link>
+          <TeamCoachVs
+            team={{
+              leagueId: league.id,
+              teamId: awayPlayer.id,
+              teamAbbrev: awayPlayer.teamAbbrev,
+              teamColor: awayPlayer.teamColor,
+              logoPath: awayPlayer.logoPath,
+              owner: awayPlayer.owner,
+            }}
+            side="away"
+            size="sm"
+          />
         </div>
 
         {/* Expand / replay / scout indicators */}
