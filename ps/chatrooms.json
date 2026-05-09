@@ -1,0 +1,4 @@
+[
+{"title":"Lobby","auth":{},"creationTime":1775420419220,"autojoin":true,"section":"official","introMessage":"<div class=\"infobox\"><b>Welcome to the Cannoli sim.</b><br />This server hosts our Pokemon draft tournament leagues. Visit <a href=\"https://mock.cannoli.live\">mock.cannoli.live</a> for standings, draft boards, and matchup tools. Coaches are auto-joined into their league's chat room on login.</div>"},
+{"title":"Staff","auth":{},"creationTime":1775420419220,"isPrivate":"hidden","modjoin":"%","autojoin":true}
+]
