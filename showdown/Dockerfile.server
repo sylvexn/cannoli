@@ -37,6 +37,13 @@ COPY ps/config-example.js config/config.js
 # Cannoli /cannoli-battle chat plugin
 COPY ps/cannoli.ts server/chat-plugins/cannoli.ts
 
+# Cannoli role + autojoin loginfilter (reads enriched s1/s2/s3 SSO fields)
+COPY ps/cannoli-roles.ts server/chat-plugins/cannoli-roles.ts
+
+# Default rooms — Lobby with Cannoli welcome MOTD + Staff. League rooms are
+# materialised at startup by config.js's startuphook (see ps/config-example.js).
+COPY ps/chatrooms.json config/chatrooms.json
+
 # Apply Cannoli league banlist to [Gen 9] NatDex Draft (idempotent patch).
 COPY ps/patch-natdex-draft.js /tmp/patch-natdex-draft.js
 RUN node /tmp/patch-natdex-draft.js config/formats.ts && rm /tmp/patch-natdex-draft.js
