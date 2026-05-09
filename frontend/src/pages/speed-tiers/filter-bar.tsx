@@ -1,4 +1,5 @@
 import { Sun, CloudRain, Wind, Snowflake, CloudOff, RotateCcw, ZapOff, Wand2, Search, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NumberInput } from '@/components/ui/number-input';
@@ -39,6 +40,32 @@ export function SpeedFilterBar({
   filteredCount,
   onReset,
 }: SpeedFilterBarProps) {
+  // Local search input — keystrokes update this immediately, but the parent
+  // filter (which feeds the expensive useMemo recompute + sort) only sees the
+  // value 200ms after the last keystroke. Resets and external clears stay in
+  // sync via the effect below.
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Re-sync local state when the parent resets or clears the filter.
+    setSearchInput(filters.search);
+  }, [filters.search]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  function setSearch(value: string) {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      onFiltersChange({ search: value });
+    }, 200);
+  }
+
   return (
     <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur-sm border-b border-border-subtle py-2 -mx-3 px-3 space-y-2">
       {/* Row 1: search, team, count, reset */}
@@ -46,14 +73,14 @@ export function SpeedFilterBar({
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
-            value={filters.search}
-            onChange={e => onFiltersChange({ search: e.target.value })}
+            value={searchInput}
+            onChange={e => setSearch(e.target.value)}
             placeholder="Search Pokemon, team, or coach..."
             className="w-full pl-7 pr-7 py-1 rounded bg-surface text-xs border border-border-subtle focus:border-neon/40 focus:outline-none"
           />
-          {filters.search && (
+          {searchInput && (
             <button
-              onClick={() => onFiltersChange({ search: '' })}
+              onClick={() => setSearch('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
               aria-label="Clear search"
             >
