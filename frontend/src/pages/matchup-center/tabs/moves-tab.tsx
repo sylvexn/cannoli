@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import type { RosterPokemon } from '@/lib/types';
 import { DEFAULT_MOVE_CATEGORIES } from '@/data/move-categories';
 import { getTeamMoveCoverage } from '@/lib/move-coverage';
@@ -61,9 +63,14 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                 'flex-1 flex justify-center py-1.5 bg-[#3b82f6]/5 min-w-[44px]',
                 i < teamA.length - 1 && 'border-r border-[#3b82f6]/10',
               )}
-              title={p.name}
             >
-              <PokemonSprite name={p.name} size="sm" />
+              <Link
+                to={pokemonRoute(p.name)}
+                title={p.name}
+                className="hover:scale-110 transition-transform"
+              >
+                <PokemonSprite name={p.name} size="sm" />
+              </Link>
             </div>
           ))}
           {/* Divider between teams */}
@@ -75,9 +82,14 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                 'flex-1 flex justify-center py-1.5 bg-[#ef4444]/5 min-w-[44px]',
                 i < teamB.length - 1 && 'border-r border-[#ef4444]/10',
               )}
-              title={p.name}
             >
-              <PokemonSprite name={p.name} size="sm" />
+              <Link
+                to={pokemonRoute(p.name)}
+                title={p.name}
+                className="hover:scale-110 transition-transform"
+              >
+                <PokemonSprite name={p.name} size="sm" />
+              </Link>
             </div>
           ))}
         </div>

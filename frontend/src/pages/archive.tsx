@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
+import { pokemonRoute } from '@/lib/pokemon-route';
 import { RecordDisplay } from '@/components/record-display';
 import { cn } from '@/lib/utils';
 import { MEDAL_COLORS } from '@/lib/constants';
@@ -346,6 +349,7 @@ function LeagueArchiveCard({ league }: { league: ArchiveLeague }) {
 
 function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: number; compact?: boolean }) {
   const [showRoster, setShowRoster] = useState(false);
+  const { openSideCard } = usePokemonSideCard();
 
   return (
     <div
@@ -390,8 +394,15 @@ function ArchiveTeamRow({ team, rank, compact }: { team: ArchiveTeam; rank: numb
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
             {team.roster.sort((a, b) => b.tier - a.tier).map(mon => (
               <div key={mon.name} className="flex items-center gap-1.5">
-                <PokemonSprite name={mon.name} size="xs" />
-                <span className="text-[11px] text-text-primary truncate flex-1">{mon.name}</span>
+                <button onClick={() => openSideCard(mon.name)} title="View details">
+                  <PokemonSprite name={mon.name} size="xs" />
+                </button>
+                <Link
+                  to={pokemonRoute(mon.name)}
+                  className="text-[11px] text-text-primary truncate flex-1 hover:text-neon hover:underline transition-colors"
+                >
+                  {mon.name}
+                </Link>
                 <span className="text-[9px] font-mono text-text-muted">{mon.tier}</span>
               </div>
             ))}

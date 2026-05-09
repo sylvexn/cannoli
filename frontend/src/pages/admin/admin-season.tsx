@@ -1,11 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAppData } from '@/lib/app-data-context';
-import { api } from '@/lib/api';
-import type { ApiDraftState } from '@/lib/api';
-import { toast } from 'sonner';
 import { Sparkles, Plus } from 'lucide-react';
-import { phaseConfig, getNextPhase, PRESET_COLORS, type EditableLeague, type Phase } from './season/phase-config';
+import { type EditableLeague } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
 import { NewSeasonWizard } from './season/new-season-wizard';
 import { DraftOrderEditor } from './season/draft-order-editor';
@@ -15,6 +12,11 @@ import { SeasonArchiveSection } from './season/season-archive-section';
 import { SeasonConfirmDialogs } from './season/season-confirm-dialogs';
 import { SeasonPlayoffDialog } from './season/season-playoff-dialog';
 import { SeasonBackwardPhaseDialog } from './season/season-backward-phase-dialog';
+import { useSeasonArchive } from './season/use-season-archive';
+import { useDraftStates } from './season/use-draft-states';
+import { usePhaseControls } from './season/use-phase-controls';
+import { usePlayoffControls } from './season/use-playoff-controls';
+import { useLeagueMutations } from './season/use-league-mutations';
 
 export function AdminSeason() {
   const { leagues: defaultLeagues, refreshLeagues } = useAppData();
@@ -27,24 +29,8 @@ export function AdminSeason() {
     Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }]))
   );
 
-  // Draft state per league
-  const [draftStates, setDraftStates] = useState<Record<string, ApiDraftState | null>>({});
-
-  // Fetch draft states for leagues in draft phase
-  const fetchDraftStates = useCallback(async () => {
-    const states: Record<string, ApiDraftState | null> = {};
-    for (const league of defaultLeagues) {
-      if (league.season?.phase === 'draft') {
-        try {
-          const s = await api.getDraftState(league.id);
-          states[league.id] = s;
-        } catch { states[league.id] = null; }
-      }
-    }
-    setDraftStates(states);
-  }, [defaultLeagues]);
-
-  useEffect(() => { fetchDraftStates(); }, [fetchDraftStates]);
+  // Draft state per league + start/pause/resume actions
+  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues);
 
   // Sync when defaultLeagues changes
   useEffect(() => {
@@ -52,356 +38,20 @@ export function AdminSeason() {
     setLeagueStates(Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }])));
   }, [defaultLeagues]);
 
-  // Advance phase confirmation
-  const [advanceOpen, setAdvanceOpen] = useState(false);
-  const [advanceTarget, setAdvanceTarget] = useState<{ leagueId: string; from: Phase; to: Phase } | null>(null);
-
-  // Week advance confirmation
-  const [weekOpen, setWeekOpen] = useState(false);
-  const [weekTarget, setWeekTarget] = useState<string | null>(null);
-
   // New season wizard
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  // League edit dialog
-  const [leagueEditOpen, setLeagueEditOpen] = useState(false);
-  const [editingLeague, setEditingLeague] = useState<EditableLeague | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editColor, setEditColor] = useState('');
+  // League CRUD + force-regen flows
+  const mut = useLeagueMutations({ leagueList, leagueStates, refreshLeagues });
 
-  // Delete league confirmation
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  // Phase advance / week tick / backward override flows
+  const phase = usePhaseControls({ leagueList, leagueStates, refreshLeagues });
 
-  // Regenerate schedule confirmation (in-season nuclear option)
-  const [regenOpen, setRegenOpen] = useState(false);
-  const [regenTarget, setRegenTarget] = useState<{ id: string; name: string; phase: Phase } | null>(null);
-  const [regenConfirmText, setRegenConfirmText] = useState('');
-  const [regenSubmitting, setRegenSubmitting] = useState(false);
+  // Playoff bracket detection + generate/regenerate flow
+  const playoff = usePlayoffControls(defaultLeagues, refreshLeagues);
 
-  // Playoff bracket state — { leagueId: { hasBracket, seedings? } }
-  const [playoffInfo, setPlayoffInfo] = useState<Record<string, { hasBracket: boolean; matchCount: number }>>({});
-  const [playoffOpen, setPlayoffOpen] = useState(false);
-  const [playoffTarget, setPlayoffTarget] = useState<{ id: string; name: string; topN: number; isRegen: boolean } | null>(null);
-  const [playoffPreview, setPlayoffPreview] = useState<{ teamId: string; rank: number }[]>([]);
-  const [playoffConfirmText, setPlayoffConfirmText] = useState('');
-  const [playoffSubmitting, setPlayoffSubmitting] = useState(false);
-
-  // Backward phase override
-  const [backwardOpen, setBackwardOpen] = useState(false);
-  const [backwardTarget, setBackwardTarget] = useState<{ leagueId: string; from: Phase; to: Phase } | null>(null);
-  const [backwardConfirmText, setBackwardConfirmText] = useState('');
-
-  // Season archive list
-  const [seasonsList, setSeasonsList] = useState<{ id: number; seasonNumber: number; phase: string; archived: boolean }[]>([]);
-  const refreshSeasons = useCallback(() => {
-    api.getSeasons()
-      .then(rows => setSeasonsList(rows.map(r => ({
-        id: r.id,
-        seasonNumber: r.seasonNumber,
-        phase: r.phase,
-        archived: !!r.archived,
-      }))))
-      .catch(() => {});
-  }, []);
-  useEffect(() => { refreshSeasons(); }, [refreshSeasons]);
-
-  async function toggleArchive(seasonId: number, archived: boolean) {
-    try {
-      await api.archiveSeason(seasonId, archived);
-      toast.success(archived ? 'Season archived' : 'Season un-archived');
-      refreshSeasons();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  }
-
-  // Detect existing bracket per league (look at schedule playoff matches).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const info: Record<string, { hasBracket: boolean; matchCount: number }> = {};
-      for (const l of defaultLeagues) {
-        if (l.season?.phase !== 'playoffs') continue;
-        try {
-          const sched = await api.getSchedule(l.id);
-          const playoffMatches = sched.filter(m => m.phase === 'playoffs');
-          info[l.id] = { hasBracket: playoffMatches.length > 0, matchCount: playoffMatches.length };
-        } catch { /* ignore */ }
-      }
-      if (!cancelled) setPlayoffInfo(info);
-    })();
-    return () => { cancelled = true; };
-  }, [defaultLeagues]);
-
-  async function handleGenerateSchedule(league: EditableLeague) {
-    const state = leagueStates[league.id];
-    const phase = state?.phase as Phase | undefined;
-    if (phase === 'regular' || phase === 'playoffs') {
-      setRegenTarget({ id: league.id, name: league.name, phase });
-      setRegenConfirmText('');
-      setRegenOpen(true);
-      return;
-    }
-    try {
-      const result = await api.generateSchedule(league.id);
-      toast.success(`Generated ${result.matchCount} matches`);
-      refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  }
-
-  async function executeForcedRegen() {
-    if (!regenTarget) return;
-    if (regenConfirmText.trim() !== regenTarget.name) {
-      toast.error(`Type the league name exactly to confirm: "${regenTarget.name}"`);
-      return;
-    }
-    setRegenSubmitting(true);
-    try {
-      await api.generateSchedule(regenTarget.id, { force: true, confirmName: regenConfirmText.trim() });
-      toast.success(`Schedule regenerated for ${regenTarget.name}`);
-      refreshLeagues?.();
-      setRegenOpen(false);
-      setRegenTarget(null);
-      setRegenConfirmText('');
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setRegenSubmitting(false);
-    }
-  }
-
-  function confirmAdvance(league: EditableLeague) {
-    const state = leagueStates[league.id];
-    const next = getNextPhase(state.phase as Phase);
-    if (!next) return;
-    setAdvanceTarget({ leagueId: league.id, from: state.phase as Phase, to: next });
-    setAdvanceOpen(true);
-  }
-
-  // Backward (revert) phase. Used to undo an accidental advance — e.g.
-  // playoffs → regular if the bracket was generated before someone realized
-  // a forfeit needed re-entering. Backend rejects without { override, confirm }.
-  function confirmBackward(leagueId: string, from: Phase, to: Phase) {
-    setBackwardTarget({ leagueId, from, to });
-    setBackwardConfirmText('');
-    setBackwardOpen(true);
-  }
-
-  async function executeBackward() {
-    if (!backwardTarget) return;
-    if (backwardConfirmText.trim() !== 'I understand') {
-      toast.error('Type "I understand" exactly to confirm');
-      return;
-    }
-    try {
-      await api.advancePhase(backwardTarget.leagueId, backwardTarget.to, {
-        override: true,
-        confirm: 'I understand',
-      });
-      toast.success(`Reverted to ${backwardTarget.to}`);
-      refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-    setBackwardOpen(false);
-    setBackwardTarget(null);
-    setBackwardConfirmText('');
-  }
-
-  // Playoff bracket generation
-  function openPlayoffsDialog(league: EditableLeague, isRegen: boolean) {
-    const playoffN = (defaultLeagues.find(l => l.id === league.id) as any)?.playoffTeamCount ?? 6;
-    setPlayoffTarget({ id: league.id, name: league.name, topN: playoffN, isRegen });
-    setPlayoffPreview([]);
-    setPlayoffConfirmText('');
-    // Pre-fetch standings → seeding preview
-    api.getTeams(league.id)
-      .then(teams => {
-        const seeded = [...teams]
-          .sort((a, b) => {
-            // teams from /api/leagues/:id/teams come pre-sorted by computeStandings,
-            // but enforce by record + differential as fallback
-            if (b.record.wins !== a.record.wins) return b.record.wins - a.record.wins;
-            return (b.record.differential ?? 0) - (a.record.differential ?? 0);
-          })
-          .slice(0, playoffN);
-        setPlayoffPreview(seeded.map((t, i) => ({ teamId: t.id, rank: i + 1 })));
-      })
-      .catch(() => setPlayoffPreview([]));
-    setPlayoffOpen(true);
-  }
-
-  async function executePlayoffs() {
-    if (!playoffTarget) return;
-    if (playoffTarget.isRegen && playoffConfirmText.trim() !== playoffTarget.name) {
-      toast.error(`Type the league name exactly to confirm: "${playoffTarget.name}"`);
-      return;
-    }
-    setPlayoffSubmitting(true);
-    try {
-      const result = await api.generatePlayoffs(playoffTarget.id, { topN: playoffTarget.topN });
-      toast.success(`Generated ${result.matchCount} bracket matches for ${playoffTarget.name}`);
-      // Refresh local state so the button flips to "Regenerate"
-      setPlayoffInfo(prev => ({
-        ...prev,
-        [playoffTarget.id]: { hasBracket: true, matchCount: result.matchCount },
-      }));
-      refreshLeagues?.();
-      setPlayoffOpen(false);
-      setPlayoffTarget(null);
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setPlayoffSubmitting(false);
-    }
-  }
-
-  async function executeAdvance() {
-    if (!advanceTarget) return;
-    const { leagueId, from, to } = advanceTarget;
-    try {
-      await api.advancePhase(leagueId, to);
-      const name = leagueList.find(l => l.id === leagueId)?.name;
-      toast.success(`${name} advanced to ${phaseConfig[to].label}`);
-
-      // Auto-generate schedule when transitioning from draft to regular
-      if (from === 'draft' && to === 'regular') {
-        try {
-          const result = await api.generateSchedule(leagueId);
-          toast.success(`Generated ${result.matchCount} matches for ${name}`);
-        } catch (schedErr: any) {
-          toast.error(`Phase advanced but schedule generation failed: ${schedErr.message}`);
-        }
-      }
-
-      refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-    setAdvanceOpen(false);
-    setAdvanceTarget(null);
-  }
-
-  function confirmWeekAdvance(leagueId: string) {
-    setWeekTarget(leagueId);
-    setWeekOpen(true);
-  }
-
-  async function executeWeekAdvance() {
-    if (!weekTarget) return;
-    try {
-      const result = await api.advanceWeek(weekTarget);
-      const name = leagueList.find(l => l.id === weekTarget)?.name;
-      toast.success(`${name} advanced to Week ${result.week}`);
-      refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-    setWeekOpen(false);
-    setWeekTarget(null);
-  }
-
-  // Draft controls
-  async function handleStartDraft(leagueId: string) {
-    try {
-      const state = await api.startDraft(leagueId, 120);
-      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
-      toast.success('Draft started!');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  }
-
-  async function handlePauseDraft(leagueId: string) {
-    try {
-      await api.pauseDraft(leagueId);
-      setDraftStates(prev => ({
-        ...prev,
-        [leagueId]: prev[leagueId] ? { ...prev[leagueId]!, status: 'paused' } : null,
-      }));
-      toast.success('Draft paused');
-    } catch (err: any) { toast.error(err.message); }
-  }
-
-  async function handleResumeDraft(leagueId: string) {
-    try {
-      const state = await api.resumeDraft(leagueId);
-      setDraftStates(prev => ({ ...prev, [leagueId]: state }));
-      toast.success('Draft resumed');
-    } catch (err: any) { toast.error(err.message); }
-  }
-
-  // League CRUD
-  function openNewLeague() {
-    setEditingLeague(null);
-    setEditName('');
-    setEditColor(PRESET_COLORS.find(c => !leagueList.some(l => l.color === c)) ?? PRESET_COLORS[0]);
-    setLeagueEditOpen(true);
-  }
-
-  function openEditLeague(league: EditableLeague) {
-    setEditingLeague(league);
-    setEditName(league.name);
-    setEditColor(league.color);
-    setLeagueEditOpen(true);
-  }
-
-  async function saveLeague() {
-    const name = editName.trim();
-    if (!name) return;
-
-    try {
-      if (editingLeague) {
-        await api.updateLeague(editingLeague.id, { name, color: editColor });
-        toast.success(`Updated "${name}"`);
-      } else {
-        await api.createLeague(name, editColor);
-        toast.success(`Created "${name}"`);
-      }
-      refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-    setLeagueEditOpen(false);
-  }
-
-  function confirmDeleteLeague(id: string) {
-    setDeleteTarget(id);
-    setDeleteConfirmText('');
-    setDeleteOpen(true);
-  }
-
-  async function executeDeleteLeague() {
-    if (!deleteTarget) return;
-    const target = leagueList.find(l => l.id === deleteTarget);
-    if (!target) return;
-    const phase = leagueStates[deleteTarget]?.phase as Phase | undefined;
-    const isLive = phase === 'regular' || phase === 'playoffs';
-
-    if (isLive && deleteConfirmText.trim() !== target.name) {
-      toast.error(`Type the league name "${target.name}" to confirm deletion`);
-      return;
-    }
-
-    setDeleteSubmitting(true);
-    try {
-      await api.deleteLeague(deleteTarget, isLive ? { force: true, confirmName: target.name } : undefined);
-      toast.success(`Deleted "${target.name}"`);
-      refreshLeagues?.();
-      setDeleteOpen(false);
-      setDeleteTarget(null);
-      setDeleteConfirmText('');
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setDeleteSubmitting(false);
-    }
-  }
+  // Season archive list (read-only, with toggle)
+  const { seasonsList, toggleArchive } = useSeasonArchive();
 
   return (
     <div className="space-y-4">
@@ -418,7 +68,7 @@ export function AdminSeason() {
           <span className="text-text-primary font-medium font-mono">{leagueList.length}</span>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="outline" onClick={openNewLeague}>
+          <Button size="sm" variant="outline" onClick={mut.openNewLeague}>
             <Plus size={14} />
             Add League
           </Button>
@@ -441,17 +91,17 @@ export function AdminSeason() {
               state={state}
               draftState={draftStates[league.id]}
               apiLeague={defaultLeagues.find(l => l.id === league.id)}
-              playoffInfo={playoffInfo[league.id]}
-              onEditLeague={openEditLeague}
-              onDeleteLeague={confirmDeleteLeague}
+              playoffInfo={playoff.playoffInfo[league.id]}
+              onEditLeague={mut.openEditLeague}
+              onDeleteLeague={mut.confirmDeleteLeague}
               onStartDraft={handleStartDraft}
               onPauseDraft={handlePauseDraft}
               onResumeDraft={handleResumeDraft}
-              onOpenPlayoffsDialog={openPlayoffsDialog}
-              onGenerateSchedule={handleGenerateSchedule}
-              onConfirmWeekAdvance={confirmWeekAdvance}
-              onConfirmAdvance={confirmAdvance}
-              onConfirmBackward={confirmBackward}
+              onOpenPlayoffsDialog={playoff.openPlayoffsDialog}
+              onGenerateSchedule={mut.handleGenerateSchedule}
+              onConfirmWeekAdvance={phase.confirmWeekAdvance}
+              onConfirmAdvance={phase.confirmAdvance}
+              onConfirmBackward={phase.confirmBackward}
             />
           );
         })}
@@ -487,65 +137,65 @@ export function AdminSeason() {
       <SeasonConfirmDialogs
         leagueList={leagueList}
         leagueStates={leagueStates}
-        advanceOpen={advanceOpen}
-        setAdvanceOpen={setAdvanceOpen}
-        advanceTarget={advanceTarget}
-        onExecuteAdvance={executeAdvance}
-        weekOpen={weekOpen}
-        setWeekOpen={setWeekOpen}
-        weekTarget={weekTarget}
-        onExecuteWeekAdvance={executeWeekAdvance}
-        deleteOpen={deleteOpen}
-        setDeleteOpen={setDeleteOpen}
-        deleteTarget={deleteTarget}
-        deleteConfirmText={deleteConfirmText}
-        setDeleteConfirmText={setDeleteConfirmText}
-        deleteSubmitting={deleteSubmitting}
-        onExecuteDeleteLeague={executeDeleteLeague}
-        regenOpen={regenOpen}
-        setRegenOpen={setRegenOpen}
-        regenTarget={regenTarget}
-        regenConfirmText={regenConfirmText}
-        setRegenConfirmText={setRegenConfirmText}
-        regenSubmitting={regenSubmitting}
-        onExecuteForcedRegen={executeForcedRegen}
+        advanceOpen={phase.advanceOpen}
+        setAdvanceOpen={phase.setAdvanceOpen}
+        advanceTarget={phase.advanceTarget}
+        onExecuteAdvance={phase.executeAdvance}
+        weekOpen={phase.weekOpen}
+        setWeekOpen={phase.setWeekOpen}
+        weekTarget={phase.weekTarget}
+        onExecuteWeekAdvance={phase.executeWeekAdvance}
+        deleteOpen={mut.deleteOpen}
+        setDeleteOpen={mut.setDeleteOpen}
+        deleteTarget={mut.deleteTarget}
+        deleteConfirmText={mut.deleteConfirmText}
+        setDeleteConfirmText={mut.setDeleteConfirmText}
+        deleteSubmitting={mut.deleteSubmitting}
+        onExecuteDeleteLeague={mut.executeDeleteLeague}
+        regenOpen={mut.regenOpen}
+        setRegenOpen={mut.setRegenOpen}
+        regenTarget={mut.regenTarget}
+        regenConfirmText={mut.regenConfirmText}
+        setRegenConfirmText={mut.setRegenConfirmText}
+        regenSubmitting={mut.regenSubmitting}
+        onExecuteForcedRegen={mut.executeForcedRegen}
       />
 
       {/* League Edit Dialog */}
       <LeagueEditDialog
-        open={leagueEditOpen}
-        onOpenChange={setLeagueEditOpen}
-        editingLeague={editingLeague}
-        editName={editName}
-        setEditName={setEditName}
-        editColor={editColor}
-        setEditColor={setEditColor}
-        onSave={saveLeague}
+        open={mut.leagueEditOpen}
+        onOpenChange={mut.setLeagueEditOpen}
+        editingLeague={mut.editingLeague}
+        editName={mut.editName}
+        setEditName={mut.setEditName}
+        editColor={mut.editColor}
+        setEditColor={mut.setEditColor}
+        onSave={mut.saveLeague}
       />
 
       {/* Playoff Bracket Generation Dialog */}
       <SeasonPlayoffDialog
-        playoffOpen={playoffOpen}
-        setPlayoffOpen={setPlayoffOpen}
-        playoffTarget={playoffTarget}
-        setPlayoffTarget={setPlayoffTarget}
-        playoffPreview={playoffPreview}
-        playoffConfirmText={playoffConfirmText}
-        setPlayoffConfirmText={setPlayoffConfirmText}
-        playoffSubmitting={playoffSubmitting}
-        onExecutePlayoffs={executePlayoffs}
+        playoffOpen={playoff.playoffOpen}
+        setPlayoffOpen={playoff.setPlayoffOpen}
+        playoffTarget={playoff.playoffTarget}
+        setPlayoffTarget={playoff.setPlayoffTarget}
+        playoffPreview={playoff.playoffPreview}
+        playoffConfirmText={playoff.playoffConfirmText}
+        setPlayoffConfirmText={playoff.setPlayoffConfirmText}
+        playoffSubmitting={playoff.playoffSubmitting}
+        onExecutePlayoffs={playoff.executePlayoffs}
       />
 
       {/* Backward Phase Override Dialog */}
       <SeasonBackwardPhaseDialog
         leagueList={leagueList}
-        backwardOpen={backwardOpen}
-        setBackwardOpen={setBackwardOpen}
-        backwardTarget={backwardTarget}
-        setBackwardTarget={setBackwardTarget}
-        backwardConfirmText={backwardConfirmText}
-        setBackwardConfirmText={setBackwardConfirmText}
-        onExecuteBackward={executeBackward}
+        backwardOpen={phase.backwardOpen}
+        setBackwardOpen={phase.setBackwardOpen}
+        backwardTarget={phase.backwardTarget}
+        setBackwardTarget={phase.setBackwardTarget}
+        backwardConfirmText={phase.backwardConfirmText}
+        setBackwardConfirmText={phase.setBackwardConfirmText}
+        onExecuteBackward={phase.executeBackward}
       />
 
       {/* New Season Wizard */}
