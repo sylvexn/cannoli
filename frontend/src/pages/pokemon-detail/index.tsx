@@ -1,6 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAppData } from '@/lib/app-data-context';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -10,11 +9,12 @@ import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
 import { TeamLink } from '@/components/team-link';
+import { CoachLink } from '@/components/coach-link';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
-import { Swords, ArrowLeft, Shield, Gauge, UsersRound } from 'lucide-react';
-import type { League, Player } from '@/lib/types';
+import { Swords, ArrowLeft, Shield, Gauge, UsersRound, Clapperboard, ExternalLink, Sparkles } from 'lucide-react';
+import { api, type ApiGlobalOwnership, type ApiPokemonRecentBattle } from '@/lib/api';
 import type { PokemonType } from '@/lib/pokemon';
 
 export function PokemonDetailPage() {
@@ -88,6 +88,8 @@ export function PokemonDetailPage() {
         </div>
       </div>
 
+      {/* Bottom: full-width ownership + recent battles strip */}
+      <PokemonScoutingStrip pokemonName={decodedName} />
     </div>
   );
 }
@@ -151,79 +153,8 @@ function IdentityCard({ decodedName, types, bst, tierEntry, abilities }: Identit
             </div>
           </div>
         )}
-
-        {/* Current ownership */}
-        <CurrentOwnerSummary pokemonName={decodedName} />
       </CardContent>
     </Card>
-  );
-}
-
-interface OwnershipEntry {
-  league: League;
-  player: Player;
-}
-
-function CurrentOwnerSummary({ pokemonName }: { pokemonName: string }) {
-  const { leagues } = useAppData();
-
-  const owners = useMemo<OwnershipEntry[]>(() => {
-    const results: OwnershipEntry[] = [];
-    for (const league of leagues) {
-      if (!league.hasData) continue;
-      for (const player of league.players) {
-        if (player.roster.some(m => m.name === pokemonName)) {
-          results.push({ league, player });
-        }
-      }
-    }
-    return results;
-  }, [leagues, pokemonName]);
-
-  return (
-    <div>
-      <h3 className="text-[10px] font-heading font-semibold text-text-secondary uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-        <UsersRound size={11} className="text-neon" />
-        On The Block
-      </h3>
-      {owners.length === 0 ? (
-        <p className="text-xs text-text-muted">
-          Free agent across all active leagues.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {owners.map(({ league, player }) => (
-            <div
-              key={`${league.id}-${player.id}`}
-              className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface-overlay/40 px-2 py-1.5"
-            >
-              <Badge
-                variant="outline"
-                className="text-[10px] font-bold uppercase shrink-0"
-                style={{ borderColor: `${league.color}50`, color: league.color }}
-              >
-                {league.name.replace(' League', '')}
-              </Badge>
-              <TeamLink
-                team={{
-                  leagueId: league.id,
-                  teamId: player.id,
-                  teamName: player.teamName,
-                  teamAbbrev: player.teamAbbrev,
-                  teamColor: player.teamColor,
-                  record: player.record,
-                }}
-                logoSize="sm"
-              >
-                <span className="text-xs font-medium text-text-primary hover:text-neon transition-colors truncate">
-                  {player.teamName}
-                </span>
-              </TeamLink>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -353,5 +284,233 @@ function SpeedTierStrip({ baseSpeed }: { baseSpeed: number }) {
         </Link>
       </CardContent>
     </Card>
+  );
+}
+
+/* -------------------- Bottom scouting strip -------------------- */
+
+/**
+ * Full-width strip rendered below the 2-col scouting layout. Two cards side by
+ * side on lg+ (stack on smaller screens):
+ *   1. On The Block — every (active league, team) currently rostering this mon
+ *   2. Recent Battles — completed matches across active leagues with replays
+ *
+ * Both panels fetch from the global pokemon endpoints. Free-agent + no-replay
+ * pokemon render an empty-state line instead of the data list so the strip is
+ * always visible (never silently absent).
+ */
+function PokemonScoutingStrip({ pokemonName }: { pokemonName: string }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <OnTheBlockCard pokemonName={pokemonName} />
+      <RecentBattlesCard pokemonName={pokemonName} />
+    </div>
+  );
+}
+
+function OnTheBlockCard({ pokemonName }: { pokemonName: string }) {
+  const [rows, setRows] = useState<ApiGlobalOwnership[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null);
+    api.getPokemonGlobalOwnership(pokemonName)
+      .then(r => { if (!cancelled) setRows(r); })
+      .catch(() => { if (!cancelled) setRows([]); });
+    return () => { cancelled = true; };
+  }, [pokemonName]);
+
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-heading font-semibold uppercase tracking-wider text-text-primary flex items-center gap-2">
+          <UsersRound size={14} className="text-neon" />
+          On The Block
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {rows === null ? (
+          <p className="text-xs text-text-muted">Loading ownership…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-text-muted">Free agent across all active leagues.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {rows.map(row => (
+              <div
+                key={`${row.leagueId}-${row.owner.teamId}`}
+                className="flex items-center gap-2.5 rounded-md border border-border-subtle bg-surface-overlay/40 px-2.5 py-2"
+              >
+                <Badge
+                  variant="outline"
+                  className="text-[9px] font-bold uppercase shrink-0 font-mono"
+                  style={{ borderColor: `${row.leagueColor}50`, color: row.leagueColor }}
+                >
+                  {row.leagueName.replace(' League', '')}
+                </Badge>
+                <TeamLink
+                  team={{
+                    leagueId: row.leagueId,
+                    teamId: row.owner.teamId,
+                    teamName: row.owner.teamName,
+                    teamAbbrev: row.owner.teamAbbrev,
+                    teamColor: row.owner.teamColor,
+                    logoPath: row.owner.logoPath,
+                    record: { wins: 0, losses: 0, differential: 0 },
+                  }}
+                  logoOnly
+                  logoSize="md"
+                />
+                <div className="min-w-0 flex-1">
+                  <Link
+                    to={`/league/${row.leagueId}/teams/${row.owner.teamId}`}
+                    className="text-sm font-medium text-text-primary hover:text-neon transition-colors truncate block"
+                  >
+                    {row.owner.teamName}
+                  </Link>
+                  {row.coach?.username ? (
+                    <CoachLink
+                      coach={{
+                        username: row.coach.username,
+                        displayName: row.coach.displayName,
+                        primaryColor: row.coach.primaryColor,
+                        secondaryColor: row.coach.secondaryColor,
+                        tertiaryColor: row.coach.tertiaryColor,
+                        avatarPath: row.coach.avatarPath,
+                        role: row.coach.role as CoachLinkRole,
+                      }}
+                      size="xs"
+                      noHoverCard
+                      className="text-[11px]"
+                    />
+                  ) : (
+                    <div className="text-[11px] text-text-muted">{row.coach?.displayName ?? ''}</div>
+                  )}
+                </div>
+                {row.isTeraCaptain && (
+                  <span title="Tera Captain" className="shrink-0">
+                    <Sparkles size={12} className="text-pink" />
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type CoachLinkRole = 'dev' | 'admin' | 'user' | null;
+
+function RecentBattlesCard({ pokemonName }: { pokemonName: string }) {
+  const [rows, setRows] = useState<ApiPokemonRecentBattle[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null);
+    api.getPokemonRecentBattles(pokemonName, 8)
+      .then(r => { if (!cancelled) setRows(r); })
+      .catch(() => { if (!cancelled) setRows([]); });
+    return () => { cancelled = true; };
+  }, [pokemonName]);
+
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-heading font-semibold uppercase tracking-wider text-text-primary flex items-center gap-2">
+          <Clapperboard size={14} className="text-pink" />
+          Recent Battles
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {rows === null ? (
+          <p className="text-xs text-text-muted">Loading battles…</p>
+        ) : rows.length === 0 ? (
+          <p className="text-xs text-text-muted">No replays featuring this Pokemon yet.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {rows.map(b => (
+              <BattleRow key={b.matchId} battle={b} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BattleRow({ battle: b }: { battle: ApiPokemonRecentBattle }) {
+  const resultColor = b.result === 'W' ? 'text-win' : b.result === 'L' ? 'text-loss' : 'text-draw';
+  const weekLabel = b.phase === 'playoffs' ? (b.playoffRound ?? 'PO').toUpperCase() : `W${b.week}`;
+  const score = b.teamScore != null && b.oppScore != null ? `${b.teamScore}-${b.oppScore}` : '';
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface-overlay/40 px-2.5 py-2 min-w-0">
+      <Badge
+        variant="outline"
+        className="text-[9px] font-bold uppercase shrink-0 font-mono"
+        style={{ borderColor: `${b.leagueColor}50`, color: b.leagueColor }}
+      >
+        {b.leagueName.replace(' League', '')}
+      </Badge>
+      <span className="text-[10px] font-mono text-text-muted uppercase tracking-wider shrink-0 w-7 text-center">
+        {weekLabel}
+      </span>
+      {b.result && (
+        <span className={`text-[11px] font-mono font-bold shrink-0 w-4 text-center ${resultColor}`}>
+          {b.result}
+        </span>
+      )}
+      <TeamLink
+        team={{
+          leagueId: b.leagueId,
+          teamId: b.owner.teamId,
+          teamName: b.owner.teamName,
+          teamAbbrev: b.owner.teamAbbrev,
+          teamColor: b.owner.teamColor,
+          logoPath: b.owner.logoPath,
+          record: { wins: 0, losses: 0, differential: 0 },
+        }}
+        logoOnly
+        logoSize="sm"
+      />
+      <span className="text-[11px] text-text-muted shrink-0">vs</span>
+      <TeamLink
+        team={{
+          leagueId: b.leagueId,
+          teamId: b.opponent.teamId,
+          teamName: b.opponent.teamName,
+          teamAbbrev: b.opponent.teamAbbrev,
+          teamColor: b.opponent.teamColor,
+          logoPath: b.opponent.logoPath,
+          record: { wins: 0, losses: 0, differential: 0 },
+        }}
+        logoOnly
+        logoSize="sm"
+      />
+      <span className="text-[11px] font-mono text-text-muted shrink-0">
+        {score}
+      </span>
+      <div className="flex-1" />
+      <span className="text-[11px] font-mono shrink-0 flex items-center gap-1.5">
+        <span className="text-win">{b.kills}</span>
+        <span className="text-text-muted">/</span>
+        <span className="text-loss">{b.deaths}</span>
+      </span>
+      {b.teraUsed && (
+        <span title={b.teraType ? `Tera: ${b.teraType}` : 'Tera used'} className="shrink-0">
+          <Sparkles size={11} className="text-pink" />
+        </span>
+      )}
+      <a
+        href={b.replayUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="shrink-0 text-text-muted hover:text-neon transition-colors"
+        title="Open replay"
+      >
+        <ExternalLink size={12} />
+      </a>
+    </div>
   );
 }

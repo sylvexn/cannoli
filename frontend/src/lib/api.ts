@@ -493,8 +493,52 @@ export interface ApiGlobalOwnership {
     teamColor: string;
     logoPath: string | null;
   };
+  /** Coach data for CoachLink rendering. Falls back to a `{ displayName }`-only
+   *  shape when the team has no linked user account. */
+  coach?: {
+    username?: string;
+    displayName: string;
+    avatarPath?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    tertiaryColor?: string | null;
+    role?: string;
+  };
   isTeraCaptain: boolean;
   nickname: string | null;
+}
+
+export interface ApiPokemonRecentBattle {
+  matchId: string;
+  leagueId: string;
+  leagueName: string;
+  leagueColor: string;
+  week: number;
+  phase: 'regular' | 'playoffs';
+  playoffRound: string | null;
+  replayUrl: string;
+  completedAt: string | null;
+  owner: {
+    teamId: string;
+    teamAbbrev: string;
+    teamName: string;
+    teamColor: string;
+    logoPath: string | null;
+  };
+  opponent: {
+    teamId: string;
+    teamAbbrev: string;
+    teamName: string;
+    teamColor: string;
+    logoPath: string | null;
+  };
+  result: 'W' | 'L' | 'T' | null;
+  teamScore: number | null;
+  oppScore: number | null;
+  kills: number;
+  deaths: number;
+  teraUsed: boolean;
+  teraType: string | null;
 }
 
 // ─── Pins ────────────────────────────────────────────────────────────────
@@ -1091,6 +1135,10 @@ export const api = {
   // Cross-league ownership for a single Pokemon (for global pages + side card)
   getPokemonGlobalOwnership: (name: string) =>
     fetchJson<ApiGlobalOwnership[]>(`/api/pokemon/${encodeURIComponent(name)}/global-ownership`),
+
+  // Recent completed matches across active leagues that featured this Pokemon
+  getPokemonRecentBattles: (name: string, limit = 10) =>
+    fetchJson<ApiPokemonRecentBattle[]>(`/api/pokemon/${encodeURIComponent(name)}/recent-battles?limit=${limit}`),
 
   // Player availability
   getAvailability: (leagueId: string) =>
