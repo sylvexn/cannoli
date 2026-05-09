@@ -18,12 +18,13 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
   AlertTriangle, ArrowLeftRight, Clock, UserPlus,
-  Send, Handshake, X,
+  Send, Handshake, X, Wand2,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { PokemonType } from '@/lib/pokemon';
 import { CompactTradeCard } from './compact-trade-card';
 import { TradeProposeDialog } from './trade-propose-dialog';
+import { TradeWizard } from './wizard/trade-wizard';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { TradeBlockSkeleton } from '@/components/skeletons';
@@ -93,6 +94,7 @@ export function TradeBlockPage() {
     /** If set, the dialog opens pre-filled as a counter to this trade. */
     counterTo?: Trade;
   } | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const activeTrades = useMemo(
     () => trades.filter(t =>
@@ -163,8 +165,19 @@ export function TradeBlockPage() {
           </h1>
           <p className="text-sm text-text-muted">Season {currentSeason.seasonNumber} trades & free agency</p>
         </div>
-        {/* Deadline badge — compact */}
-        {deadlinePassed ? (
+        <div className="flex items-center gap-2">
+          {/* Trade Wizard entry — multi-step companion to the inline propose flow */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-purple-400/40 text-purple-300 hover:bg-purple-400/10 hover:text-purple-200"
+            onClick={() => setWizardOpen(true)}
+          >
+            <Wand2 size={12} />
+            Trade Wizard
+          </Button>
+          {/* Deadline badge — compact */}
+          {deadlinePassed ? (
           <Badge variant="outline" className="text-loss border-loss/30 bg-loss/10 gap-1.5 px-3 py-1">
             <AlertTriangle size={12} />
             Deadline passed (Week {tradeDeadlineWeek})
@@ -175,6 +188,7 @@ export function TradeBlockPage() {
             Deadline: Week {tradeDeadlineWeek} · {tradeDeadlineWeek - currentSeason.currentWeek}w left
           </Badge>
         )}
+        </div>
       </div>
 
       {/* 3-column layout: Block | Proposals | History */}
@@ -454,6 +468,12 @@ export function TradeBlockPage() {
         onClose={() => { setProposeOpen(null); loadTrades(); }}
         recipientTeamId={proposeOpen?.teamId}
         counterTo={proposeOpen?.counterTo}
+      />
+
+      {/* Multi-step Trade Wizard — companion to the quick-propose dialog above */}
+      <TradeWizard
+        open={wizardOpen}
+        onClose={() => { setWizardOpen(false); loadTrades(); }}
       />
     </div>
   );
