@@ -23,6 +23,7 @@ import { checkSeasonArchived } from '../lib/archive-guard';
 import {
   S9_AWARDS, S10_AWARDS, mintManualPins, type ManualAward,
 } from '../lib/pins/awards-data';
+import { runAutoAwards } from '../lib/pins/auto-award';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -247,6 +248,77 @@ export const pinRoutes = new Elysia()
     return { success: true, id: inserted?.id ?? null };
   })
 
+  // ─── PATCH /api/admin/pins/:id ─────────────────────────────────────────
+  // Re-point an existing pin to a different user. Used by the admin UI to
+  // override an auto-awarded pin (e.g. correcting Garchomp after a stat
+  // recompute) without deleting + re-awarding. Idempotent: setting the same
+  // userId is a no-op.
+  .patch('/api/admin/pins/:id', ({ params, body, query, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const id = parseInt(params.id);
+    if (!Number.isFinite(id)) { set.status = 400; return { error: 'Invalid pin id' }; }
+    const existing = db.select().from(schema.pins).where(eq(schema.pins.id, id)).get();
+    if (!existing) { set.status = 404; return { error: 'Pin not found' }; }
+
+    if (existing.seasonId != null) {
+      const archived = checkSeasonArchived(existing.seasonId, query.force);
+      if (archived) { set.status = 409; return archived; }
+    }
+
+    const b = body as Partial<{ userId: number; metadata: Record<string, unknown> }>;
+    const updates: Record<string, unknown> = {};
+
+    if (b.userId !== undefined) {
+      const targetUser = db.select().from(schema.users).where(eq(schema.users.id, b.userId)).get();
+      if (!targetUser) { set.status = 404; return { error: 'Target user not found' }; }
+      // Check for collision with the unique (user_id, pin_def_id, season_id) index.
+      if (b.userId !== existing.userId) {
+        const collision = db.select().from(schema.pins).where(and(
+          eq(schema.pins.userId, b.userId),
+          eq(schema.pins.pinDefId, existing.pinDefId),
+          existing.seasonId == null
+            ? sql`${schema.pins.seasonId} IS NULL`
+            : eq(schema.pins.seasonId, existing.seasonId),
+        )).get();
+        if (collision) {
+          set.status = 409;
+          return { error: 'Target user already has this pin for the given season' };
+        }
+      }
+      updates.userId = b.userId;
+    }
+    if (b.metadata !== undefined) {
+      updates.metadata = JSON.stringify(b.metadata);
+    }
+
+    if (Object.keys(updates).length === 0) return { success: true };
+
+    db.update(schema.pins).set(updates).where(eq(schema.pins.id, id)).run();
+
+    const def = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, existing.pinDefId)).get();
+    const newUser = b.userId !== undefined
+      ? db.select().from(schema.users).where(eq(schema.users.id, b.userId)).get()
+      : null;
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_awarded',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Re-pointed '${def?.name ?? existing.pinDefId}' (pin#${id})${newUser ? ` to ${newUser.username}` : ''}`,
+      metadata: JSON.stringify({
+        pinId: id,
+        previousUserId: existing.userId,
+        newUserId: b.userId ?? existing.userId,
+        pinDefId: existing.pinDefId,
+        seasonId: existing.seasonId,
+        override: true,
+      }),
+    }).run();
+
+    return { success: true };
+  })
+
   // ─── DELETE /api/admin/pins/:id ────────────────────────────────────────
   .delete('/api/admin/pins/:id', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -358,6 +430,60 @@ export const pinRoutes = new Elysia()
     }).run();
 
     return { success: true, ...summary };
+  })
+
+  // ─── POST /api/admin/pins/run-auto ─────────────────────────────────────
+  // Run the auto-award (season-end) job for every league belonging to a
+  // season. Idempotent: each insert goes through the (user, def, season)
+  // unique index. Intended to be called from the admin Pins tab once the
+  // season is in offseason / past finals; the UI hides the button mid-season.
+  .post('/api/admin/pins/run-auto', ({ body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const b = body as { season: number };
+    const seasonNumber = b?.season;
+    if (!Number.isFinite(seasonNumber)) {
+      set.status = 400;
+      return { error: 'season is required' };
+    }
+    const seasonRow = db.select().from(schema.seasons)
+      .where(eq(schema.seasons.seasonNumber, seasonNumber)).get();
+    if (!seasonRow) { set.status = 404; return { error: `Season ${seasonNumber} not found` }; }
+
+    const leagues = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.seasonId, seasonRow.id)).all();
+
+    const adminId = user.id ? parseInt(user.id) : null;
+    let totalAwarded = 0;
+    let totalSkipped = 0;
+    const perLeague: { leagueId: string; awarded: number; skipped: number }[] = [];
+
+    for (const league of leagues) {
+      const summary = runAutoAwards(league.id, { trigger: 'season-end', awardedBy: adminId });
+      totalAwarded += summary.awarded.length;
+      totalSkipped += summary.skipped;
+      perLeague.push({
+        leagueId: league.id,
+        awarded: summary.awarded.length,
+        skipped: summary.skipped,
+      });
+    }
+
+    db.insert(schema.activityLog).values({
+      type: 'pin_awarded',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Ran auto-awards for S${seasonNumber} (${totalAwarded} new, ${totalSkipped} skipped across ${leagues.length} league(s))`,
+      metadata: JSON.stringify({
+        autoRun: true,
+        season: seasonNumber,
+        leagues: perLeague,
+        totalAwarded,
+        totalSkipped,
+      }),
+    }).run();
+
+    return { success: true, season: seasonNumber, totalAwarded, totalSkipped, perLeague };
   });
 
 function safeJson(s: string): unknown {

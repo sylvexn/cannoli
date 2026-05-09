@@ -16,10 +16,10 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { Pin } from '@/components/pin';
-import { Pencil, Sparkles } from 'lucide-react';
+import { Pencil, Sparkles, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { api, type ApiPinDefinition } from '@/lib/api';
+import { api, type ApiPinDefinition, type ApiPinRecent } from '@/lib/api';
 import { PinIconPicker } from './pin-icon-picker';
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -30,14 +30,31 @@ interface DefinitionCardProps {
    *  "X awarded this season"). Pass 0 when the season has no pins yet. */
   seasonAwardCount: number;
   seasonLabel: string | null;
+  /** Pins for this def in the active season (used to switch between
+   *  Award and Edit affordances). */
+  existingAwards?: ApiPinRecent[];
   onAward: () => void;
+  /** Open the edit-recipient dialog for an existing pin (used for auto pins
+   *  whose recipient was wrongly resolved by the stat job). */
+  onEdit?: (pin: ApiPinRecent) => void;
   onEdited: () => void;
 }
 
 export function DefinitionCard({
-  def, seasonAwardCount, seasonLabel, onAward, onEdited,
+  def, seasonAwardCount, seasonLabel, existingAwards = [], onAward, onEdit, onEdited,
 }: DefinitionCardProps) {
   const [editOpen, setEditOpen] = useState(false);
+
+  // Action button rules per plan:
+  //   - manual pin (isAuto = false), unawarded for season → Award
+  //   - auto pin (isAuto = true), already awarded for season → Edit
+  //   - auto pin, not yet awarded → no button (waits for the auto job)
+  //   - manual pin, already awarded → still allow Award (multi-recipient
+  //     awards like garchomp ties happen)
+  const isManual = !def.isAuto;
+  const hasExisting = existingAwards.length > 0;
+  const showAward = isManual;
+  const showEdit = !isManual && hasExisting && onEdit != null;
 
   return (
     <div className="rounded-md border border-border-default bg-surface-raised/50 p-3 flex flex-col gap-2">
@@ -83,10 +100,27 @@ export function DefinitionCard({
           <span className="font-mono font-bold">{seasonAwardCount}</span>
           {' '}awarded {seasonLabel ? `in ${seasonLabel}` : 'all-time'}
         </div>
-        <Button size="sm" className="h-7 text-[11px]" onClick={onAward}>
-          <Sparkles size={11} />
-          Award
-        </Button>
+        <div className="flex items-center gap-1">
+          {showEdit && existingAwards.map(p => (
+            <Button
+              key={p.id}
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px]"
+              onClick={() => onEdit?.(p)}
+              title={`Re-point '${def.name}' (currently ${p.username})`}
+            >
+              <UserCog size={11} />
+              Edit
+            </Button>
+          ))}
+          {showAward && (
+            <Button size="sm" className="h-7 text-[11px]" onClick={onAward}>
+              <Sparkles size={11} />
+              Award
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

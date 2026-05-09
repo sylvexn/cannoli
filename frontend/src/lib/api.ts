@@ -1166,6 +1166,22 @@ export const api = {
       skipped: number;
       unresolved: { award: ApiManualAward; reason: string }[];
     }>('/api/admin/pins/mint-season', { season }),
+
+  /** Re-run the season-end auto-award job for every league in a season.
+   *  Used by the Pins admin Mint button (only enabled in offseason / past finals). */
+  runSeasonAutoAwards: (season: number) =>
+    postJson<{
+      success: boolean;
+      season: number;
+      totalAwarded: number;
+      totalSkipped: number;
+      perLeague: { leagueId: string; awarded: number; skipped: number }[];
+    }>('/api/admin/pins/run-auto', { season }),
+
+  /** Re-point an existing pin to a different user (used to override an
+   *  auto-awarded pin without revoke + re-award). */
+  updatePinRecipient: (id: number, data: { userId?: number; metadata?: Record<string, unknown> }) =>
+    mutateJson<{ success: boolean }>('PATCH', `/api/admin/pins/${id}`, data),
 };
 
 /** Mirrors `ManualAward` in backend/src/lib/pins/awards-data.ts. The discriminated
