@@ -12,6 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Search, ArrowDown, UserPlus, X } from 'lucide-react';
 import type { PokemonType } from '@/lib/pokemon';
+import { useDebounced } from '@/lib/use-debounced';
+import { tierName } from '@/lib/constants';
 
 interface FreeAgent {
   name: string;
@@ -29,7 +31,9 @@ interface TeamInfo {
   roster: { name: string; tier: number }[];
 }
 
-type SortOption = 'tier-desc' | 'tier-asc' | 'name-asc' | 'spe-desc' | 'bst-desc';
+type SortOption = 'tier-desc' | 'tier-asc' | 'name-asc' | 'spe-desc' | 'bst-desc' | 'team';
+
+const VISIBLE_LIMIT = 200;
 
 export function AdminFreeAgents() {
   const { leagues } = useAppData();
@@ -37,7 +41,9 @@ export function AdminFreeAgents() {
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
   const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounced(search, 200);
   const [sortBy, setSortBy] = useState<SortOption>('tier-desc');
+  const [showAll, setShowAll] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Pickup form state
@@ -73,11 +79,15 @@ export function AdminFreeAgents() {
     }).finally(() => setLoading(false));
   }, [selectedLeague]);
 
+  // Reset show-all when filters change so a stale toggle doesn't dump 1000 rows
+  // unexpectedly.
+  useEffect(() => { setShowAll(false); }, [debouncedSearch, sortBy, selectedLeague]);
+
   const filtered = useMemo(() => {
     let list = freeAgents;
 
-    if (search) {
-      const q = search.toLowerCase();
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
       list = list.filter(p =>
         p.name.toLowerCase().includes(q) ||
         p.type1.toLowerCase().includes(q) ||
@@ -103,15 +113,36 @@ export function AdminFreeAgents() {
       case 'bst-desc':
         list = [...list].sort((a, b) => bst(b) - bst(a) || a.name.localeCompare(b.name));
         break;
+      case 'team':
+        // Free agents are not on a team, so this sort just keeps tier ordering;
+        // the rendering layer handles the team grouping below.
+        list = [...list].sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
+        break;
     }
 
     return list;
-  }, [freeAgents, search, sortBy]);
+  }, [freeAgents, debouncedSearch, sortBy]);
+
+  const visibleList = useMemo(
+    () => (showAll ? filtered : filtered.slice(0, VISIBLE_LIMIT)),
+    [filtered, showAll],
+  );
 
   const selectedTeamRoster = useMemo(() => {
     if (!pickupTeam) return [];
     return teams.find(t => t.id === pickupTeam)?.roster ?? [];
   }, [pickupTeam, teams]);
+
+  // When grouping by team, build a sectioned view: ungrouped FAs first (the
+  // "true" pool), then a section per team showing what they would consider
+  // available — currently always empty for FAs, but kept as a header so the
+  // sort is informative and future "owned by" metadata can plug in here.
+  const teamGroups = useMemo(() => {
+    if (sortBy !== 'team') return null;
+    return teams
+      .slice()
+      .sort((a, b) => a.teamName.localeCompare(b.teamName));
+  }, [sortBy, teams]);
 
   async function handlePickup() {
     if (!pickupPokemon || !pickupTeam) return;
@@ -160,7 +191,7 @@ export function AdminFreeAgents() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, type, or ability..."
+            placeholder="Search by name or type..."
             className="w-full pl-8 pr-8 py-1.5 rounded-md bg-surface text-sm border border-border-subtle focus:border-neon/40 focus:outline-none"
           />
           {search && (
@@ -173,7 +204,7 @@ export function AdminFreeAgents() {
           )}
         </div>
         <Select value={sortBy} onValueChange={v => setSortBy(v as SortOption)}>
-          <SelectTrigger className="h-8 w-[150px] text-xs bg-surface border-border-subtle">
+          <SelectTrigger className="h-8 w-[170px] text-xs bg-surface border-border-subtle">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -182,6 +213,7 @@ export function AdminFreeAgents() {
             <SelectItem value="name-asc" className="text-xs">Name (A → Z)</SelectItem>
             <SelectItem value="spe-desc" className="text-xs">Speed (fast → slow)</SelectItem>
             <SelectItem value="bst-desc" className="text-xs">BST (high → low)</SelectItem>
+            <SelectItem value="team" className="text-xs">Group by team</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -233,36 +265,96 @@ export function AdminFreeAgents() {
         <LoadingSprite />
       ) : (
         <div className="space-y-0.5 max-h-[50vh] overflow-y-auto">
-          <div className="text-[10px] text-text-muted mb-1">{filtered.length} free agents available</div>
-          {filtered.slice(0, 200).map(p => {
-            const bst = p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
-            return (
-              <div
-                key={p.name}
-                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-overlay/40 transition-colors group"
+          {/* Header summary */}
+          <div className="text-[10px] text-text-muted mb-1 flex items-center justify-between">
+            {filtered.length > VISIBLE_LIMIT && !showAll ? (
+              <span>
+                Showing <span className="text-text-secondary font-semibold">{VISIBLE_LIMIT}</span> of{' '}
+                <span className="text-text-secondary font-semibold">{filtered.length}</span> — refine search to see more
+              </span>
+            ) : (
+              <span>{filtered.length} free agents available</span>
+            )}
+          </div>
+
+          {/* Ungrouped (always shown) */}
+          {visibleList.map(p => (
+            <FreeAgentRow
+              key={p.name}
+              p={p}
+              onPickup={() => setPickupPokemon(p.name)}
+            />
+          ))}
+
+          {/* Show-all toggle */}
+          {filtered.length > VISIBLE_LIMIT && (
+            <div className="flex justify-center py-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-[10px] h-6"
+                onClick={() => setShowAll(s => !s)}
               >
-                <PokemonSprite name={p.name} size="xs" className="shrink-0" />
-                <span className="text-xs font-medium text-text-primary w-28 truncate">{p.name}</span>
-                <TierBadge points={p.tier} />
-                <TypeChip types={[p.type1.toLowerCase() as PokemonType, ...(p.type2 ? [p.type2.toLowerCase() as PokemonType] : [])]} size="xs" />
-                <span className="text-[10px] text-text-muted font-mono tabular-nums">{p.stats.spe} spe</span>
-                <span className="text-[10px] text-text-muted/50 font-mono tabular-nums">{bst} bst</span>
-                <button
-                  onClick={() => setPickupPokemon(p.name)}
-                  className="opacity-0 group-hover:opacity-100 text-[10px] text-neon hover:text-neon/80 font-semibold transition-all ml-auto"
-                >
-                  Pickup
-                </button>
+                {showAll
+                  ? `Collapse to ${VISIBLE_LIMIT}`
+                  : `Show all ${filtered.length}`}
+              </Button>
+            </div>
+          )}
+
+          {/* Owned-by-team grouping section (when sort = team) */}
+          {teamGroups && teamGroups.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-text-muted px-1">
+                By team
               </div>
-            );
-          })}
-          {filtered.length > 200 && (
-            <div className="text-[10px] text-text-muted text-center py-2">
-              Showing first 200 of {filtered.length} — use search to narrow
+              {teamGroups.map(t => (
+                <div key={t.id} className="rounded border border-border-subtle/40">
+                  <div
+                    className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-2"
+                    style={{ color: t.teamColor }}
+                  >
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: t.teamColor }}
+                    />
+                    {t.teamName} <span className="text-text-muted/60">({t.teamAbbrev})</span>
+                    <span className="ml-auto text-text-muted/60 font-mono">{t.roster.length} on roster</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function FreeAgentRow({ p, onPickup }: { p: FreeAgent; onPickup: () => void }) {
+  const bst = p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-overlay/40 transition-colors group">
+      <PokemonSprite name={p.name} size="xs" className="shrink-0" />
+      <span className="text-xs font-medium text-text-primary w-28 truncate">{p.name}</span>
+      <div className="flex items-center gap-1 shrink-0">
+        <TierBadge points={p.tier} />
+        <span className="text-[9px] font-mono uppercase tracking-wider text-text-muted/70">
+          {tierName(p.tier)}
+        </span>
+      </div>
+      <TypeChip
+        types={[p.type1.toLowerCase() as PokemonType, ...(p.type2 ? [p.type2.toLowerCase() as PokemonType] : [])]}
+        size="xs"
+      />
+      <span className="text-[10px] text-text-muted font-mono tabular-nums">{p.stats.spe} spe</span>
+      <span className="text-[10px] text-text-muted/50 font-mono tabular-nums">{bst} bst</span>
+      <button
+        onClick={onPickup}
+        className="opacity-0 group-hover:opacity-100 text-[10px] text-neon hover:text-neon/80 font-semibold transition-all ml-auto"
+      >
+        Pickup
+      </button>
     </div>
   );
 }
