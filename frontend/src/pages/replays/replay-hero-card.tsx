@@ -9,6 +9,9 @@ interface ReplayHeroCardProps {
   isViewing: boolean;
   summary: ApiReplaySummary | undefined;
   stats: { total: number; sweeps: number; blowouts: number };
+  /** False while the league is still on or before this match's week — keeps
+   *  MVP/Sweep/Tera spoiler badges hidden until the week's matches are over. */
+  weekEnded: boolean;
   onToggleViewing: (entry: ReplayEntry | null) => void;
   onCopyShareLink: (matchId: string) => void;
 }
@@ -24,6 +27,7 @@ export function ReplayHeroCard({
   isViewing,
   summary,
   stats,
+  weekEnded,
   onToggleViewing,
   onCopyShareLink,
 }: ReplayHeroCardProps) {
@@ -31,9 +35,9 @@ export function ReplayHeroCard({
   const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
 
-  const sweep = summary?.sweep;
-  const teraHeavy = summary && summary.teraCount >= 3;
-  const hasMvp = summary?.mvp && summary.mvp.kills > 0;
+  const sweep = weekEnded && summary?.sweep;
+  const teraHeavy = weekEnded && summary && summary.teraCount >= 3;
+  const hasMvp = weekEnded && summary?.mvp && summary.mvp.kills > 0;
 
   return (
     <div

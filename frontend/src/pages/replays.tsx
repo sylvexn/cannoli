@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
 import { toast } from 'sonner';
 import type { ReplayEntry, TimeFilter } from './replays/replay-types';
+import { isReplayWeekEnded } from './replays/replay-types';
 import { ReplayViewerPanel } from './replays/replay-viewer-panel';
 import { ReplayFilters } from './replays/replay-filters';
 import { ReplayCard } from './replays/replay-card';
@@ -281,6 +282,7 @@ export function ReplaysPage() {
               isViewing={viewingReplay?.match.id === heroEntry.match.id}
               summary={summaries.get(heroEntry.match.id)}
               stats={stats}
+              weekEnded={isReplayWeekEnded(heroEntry)}
               onToggleViewing={handleViewReplay}
               onCopyShareLink={copyShareLink}
             />
@@ -295,6 +297,7 @@ export function ReplaysPage() {
                   index={i}
                   isViewing={viewingReplay?.match.id === entry.match.id}
                   summary={summaries.get(entry.match.id)}
+                  weekEnded={isReplayWeekEnded(entry)}
                   onToggleViewing={handleViewReplay}
                 />
               ))}
