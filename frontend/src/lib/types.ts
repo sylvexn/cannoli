@@ -141,6 +141,10 @@ export interface LeagueSeason {
   pointCap: number;
   teraCaptainSlots: number;
   tradeDeadlineWeek: number;
+  /** Per-league roster size (= number of snake-draft slots per team). Sourced
+   *  from `leagues.roster_size` but surfaced under `season` for backwards-compat
+   *  with existing readers. */
+  rosterSize: number;
   forfeitPolicy?: 'double_forfeit' | 'admin_review';
   paused?: boolean;
   archived?: boolean;

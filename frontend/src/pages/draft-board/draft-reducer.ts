@@ -192,7 +192,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         timerDuration: snap.timerDuration,
         timerSeconds,
         liveTimerExpiresAt: snap.timerExpiresAt ?? null,
-        pointCap: 110,
+        pointCap: snap.pointCap ?? state.pointCap,
       };
     }
 

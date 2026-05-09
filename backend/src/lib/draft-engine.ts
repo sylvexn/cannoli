@@ -55,6 +55,10 @@ export interface DraftStateSnapshot {
   picks: { teamId: string; pokemonName: string; tier: number; pickNumber: number }[];
   snakeOrder: SnakePick[];
   teamPoints: Record<string, number>; // teamId → points used
+  /** Per-league budget config — surfaced so the client doesn't hardcode 110. */
+  pointCap: number;
+  rosterSize: number;
+  teraCaptainSlots: number;
 }
 
 export interface PickValidation {
@@ -415,6 +419,9 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
     picks,
     snakeOrder,
     teamPoints,
+    pointCap: season.pointCap,
+    rosterSize: league.rosterSize,
+    teraCaptainSlots: season.teraCaptainSlots,
   };
 }
 

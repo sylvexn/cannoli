@@ -89,7 +89,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     selectedTeamId: null,
     filters: DEFAULT_FILTERS,
     detailPokemon: null,
-    pointCap: 110,
+    pointCap: league.season?.pointCap ?? 110,
     draftQueue: [],
     autoDraftQueue: false,
     liveTimerExpiresAt: null,
@@ -117,9 +117,27 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     dispatch({ type: 'SET_VIEW', view: 'active', source: 'simulator' });
   }, [source, state.view]);
 
+  // Quick affordability cap for the pool's "fits my budget" filter — derived
+  // straight from state so it's available before useDraftTeams resolves.
+  // Mirrors getMaxAffordableCost: raw remaining minus 1pt × (picksLeft - 1) for
+  // mandatory remaining slots. Captain markup is a soft warning, not folded in.
+  const selfAffordCap = useMemo(() => {
+    if (!state.userTeamId) return undefined;
+    if (state.view !== 'active') return undefined;
+    let used = 0;
+    for (const p of state.allPicks) if (p.playerId === state.userTeamId) used += p.tier;
+    let picksLeft = 0;
+    for (let i = state.currentPickIndex; i < state.snakeOrder.length; i++) {
+      if (state.snakeOrder[i].teamId === state.userTeamId) picksLeft++;
+    }
+    const remaining = state.pointCap - used;
+    if (picksLeft <= 0) return remaining;
+    return Math.max(0, remaining - (picksLeft - 1));
+  }, [state.userTeamId, state.view, state.allPicks, state.currentPickIndex, state.snakeOrder, state.pointCap]);
+
   // ─── Pool, ownership, lookups ────────────────────────────────────
   const { rosterLookup, playerLookup, ownershipMap, filteredPool, poolByTier }
-    = useDraftPool(state, players);
+    = useDraftPool(state, players, { affordCap: selfAffordCap });
 
   // ─── Team-derived data (rosters, points, picks-left, drafted set) ─
   const {
@@ -385,6 +403,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     presence,
     userBudgetRemaining,
     userMaxAffordableCost,
+    selfAffordCap,
     userConflictRoster,
     /**
      * Conflict context (roster + budget) for whoever is currently on the clock.

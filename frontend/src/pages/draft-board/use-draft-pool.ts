@@ -4,6 +4,16 @@ import { getPokemonData } from '@/data/pokemon-data';
 import type { Player, RosterPokemon } from '@/lib/types';
 import type { DraftState, PoolOwnership } from './types';
 
+interface UseDraftPoolOptions {
+  /** Highest tier the user can take right now after reserves (raw budget minus
+   *  min-cost reserve for remaining mandatory picks). When provided alongside
+   *  `filters.affordableOnly`, the pool excludes Pokemon over this cap. The
+   *  call-site passes whatever it already has — we compute a coarse fallback
+   *  from current points used + picks-left so the toggle is useful even
+   *  before downstream hooks resolve. */
+  affordCap?: number;
+}
+
 /**
  * Builds the canonical ownership map (drafted + traded), the filtered/sorted
  * Pokemon pool, and per-tier groupings used by the grid view.
@@ -11,7 +21,8 @@ import type { DraftState, PoolOwnership } from './types';
  * Also exposes `rosterLookup` / `playerLookup` since they're cheap by-products
  * of `players` and several consumers (popovers, sidebars) want them too.
  */
-export function useDraftPool(state: DraftState, players: Player[]) {
+export function useDraftPool(state: DraftState, players: Player[], opts: UseDraftPoolOptions = {}) {
+  const { affordCap } = opts;
   const rosterLookup = useMemo(() => {
     const map = new Map<string, RosterPokemon>();
     for (const player of players) {
@@ -67,6 +78,7 @@ export function useDraftPool(state: DraftState, players: Player[]) {
   const filteredPool = useMemo(() => {
     let pool = TIER_LIST.filter(entry => {
       if (entry.tier < state.filters.tierMin || entry.tier > state.filters.tierMax) return false;
+      if (state.filters.affordableOnly && affordCap != null && entry.tier > affordCap) return false;
       if (state.filters.search) {
         const q = state.filters.search.toLowerCase();
         if (!entry.name.toLowerCase().includes(q)) return false;
@@ -116,7 +128,7 @@ export function useDraftPool(state: DraftState, players: Player[]) {
         break;
     }
     return pool;
-  }, [state.filters, ownershipMap, rosterLookup]);
+  }, [state.filters, ownershipMap, rosterLookup, affordCap]);
 
   const poolByTier = useMemo(() => {
     const groups = new Map<number, typeof filteredPool>();

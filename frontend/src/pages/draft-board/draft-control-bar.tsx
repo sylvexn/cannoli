@@ -100,15 +100,16 @@ export function DraftControlBar({
   const startSimulatorDraft = useCallback(() => {
     if (!state.userTeamId) return;
     const teamIds = draftOrder.map(p => p.id);
-    const snakeOrder = generateSnakeSlots(teamIds, 10);
+    const rounds = league.season?.rosterSize ?? 10;
+    const snakeOrder = generateSnakeSlots(teamIds, rounds);
     dispatch({
       type: 'DRAFT_START',
       snakeOrder,
       userTeamId: state.userTeamId,
       timerDuration: state.timerDuration || 30,
-      pointCap: 110,
+      pointCap: league.season?.pointCap ?? 110,
     });
-  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
+  }, [state.userTeamId, state.timerDuration, draftOrder, dispatch, league.season]);
 
   const handleStartClick = useCallback((e: React.MouseEvent) => {
     if (isServer) {
