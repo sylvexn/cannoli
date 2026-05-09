@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/empty-state';
 import { ActivityFeed } from '@/components/activity-feed';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
-import { Megaphone, Users, Swords, ArrowLeftRight, Trophy, ScrollText } from 'lucide-react';
+import { Megaphone, Users, Swords, ArrowLeftRight, Trophy } from 'lucide-react';
 import type { ApiTeam, ApiActivityEvent } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { HeadlinesStrip } from './headlines-strip';
@@ -63,40 +63,22 @@ export function CommunityFeed({
 
       <HeadlinesStrip headlines={headlines} />
 
-      {/* Center column (~720px) is the activity feed; right rail holds the
-          condensed stats bar + per-league quick standings cards. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,720px)_280px] gap-6 items-start">
-        <ActivityFeed activity={recentActivity} teamsPerLeague={teamsPerLeague} variant="dense" />
-
-        <div className="space-y-4 xl:sticky xl:top-4">
-          <div className="rounded-lg border border-border-default bg-surface-raised divide-y divide-border-subtle overflow-hidden">
-            <StatRow icon={Users} label="Players" value={totalPlayers} color="text-neon" loading={teamsLoading} />
-            <StatRow icon={Trophy} label="Drafted" value={totalDrafted} color="text-draw" loading={teamsLoading} />
-            <StatRow icon={ArrowLeftRight} label="Trades" value={tradesCount} color="text-purple-400" loading={tradesLoading} />
-            <StatRow icon={Swords} label="Matches" value={Math.floor(totalMatches)} color="text-win" loading={teamsLoading} />
-          </div>
-
-          <div className="space-y-3">
-            {leagues.map(league => (
-              <LeagueQuickCard
-                key={league.id}
-                league={league}
-                teams={teamsPerLeague[league.id] ?? []}
-                loading={teamsLoading}
-              />
-            ))}
-          </div>
-        </div>
+      {/* Horizontal stats strip — was vertical inside the right rail; moved
+          out so the activity column doesn't have to share height with it. */}
+      <div className="rounded-lg border border-border-default bg-surface-raised grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-border-subtle overflow-hidden">
+        <StatRow icon={Users} label="Players" value={totalPlayers} color="text-neon" loading={teamsLoading} />
+        <StatRow icon={Trophy} label="Drafted" value={totalDrafted} color="text-draw" loading={teamsLoading} />
+        <StatRow icon={ArrowLeftRight} label="Trades" value={tradesCount} color="text-purple-400" loading={tradesLoading} />
+        <StatRow icon={Swords} label="Matches" value={Math.floor(totalMatches)} color="text-win" loading={teamsLoading} />
       </div>
 
-      {/* Secondary surface: dense league cards. Power users still get the
-          full at-a-glance view, just collapsed below the fold. */}
-      <details className="rounded-lg border border-border-default bg-surface-raised">
-        <summary className="cursor-pointer px-4 py-2 text-[11px] font-mono uppercase tracking-wider text-text-muted hover:text-text-primary transition-colors flex items-center gap-2">
-          <ScrollText size={12} />
-          All standings (dense view)
-        </summary>
-        <div className="p-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Two columns: dense league cards always-visible on the left (replaces
+          the previous collapsed-by-default <details>); recent activity in a
+          tall right rail. The dense cards are the real "what's the state of
+          the leagues" surface — keeping them open by default trades collapse
+          discipline for at-a-glance scanability. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {leagues.map((league, leagueIdx) => (
             <DenseLeagueCard
               key={league.id}
@@ -107,7 +89,13 @@ export function CommunityFeed({
             />
           ))}
         </div>
-      </details>
+
+        <ActivityFeed
+          activity={recentActivity}
+          teamsPerLeague={teamsPerLeague}
+          variant="dense"
+        />
+      </div>
     </div>
   );
 }
@@ -127,81 +115,6 @@ function StatRow({ icon: Icon, label, value, color, loading }: {
         {loading ? '…' : value.toLocaleString()}
       </span>
     </div>
-  );
-}
-
-function LeagueQuickCard({
-  league, teams, loading,
-}: {
-  league: League;
-  teams: ApiTeam[];
-  loading: boolean;
-}) {
-  const top3 = teams.slice(0, 3);
-
-  return (
-    <Card
-      className="bg-surface-raised border-border-default overflow-hidden"
-      style={{
-        background:
-          `linear-gradient(160deg, ${league.color}10 0%, ${league.color}05 40%, transparent 100%),` +
-          `var(--color-surface-raised)`,
-      }}
-    >
-      <div className="h-0.5" style={{ backgroundColor: league.color }} />
-      <CardHeader className="pb-1.5 pt-2.5 px-3">
-        <div className="flex items-center justify-between gap-2">
-          <Link to={`/league/${league.id}`} viewTransition className="hover:opacity-80 transition-opacity min-w-0">
-            <CardTitle className="text-[13px] font-heading truncate" style={{ color: league.color }}>
-              {league.name}
-            </CardTitle>
-          </Link>
-          <Badge variant="outline" className={cn('text-[9px] shrink-0', PHASE_COLORS[league.season.phase])}>
-            {league.season.phase}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="px-3 pb-2.5 pt-0">
-        {loading ? (
-          <div className="text-center py-3 text-text-muted text-xs">…</div>
-        ) : top3.length > 0 ? (
-          <div className="space-y-0.5">
-            {top3.map((team, i) => (
-              <div
-                key={team.id}
-                className="flex items-center gap-2 py-1 px-1.5 rounded hover:bg-surface-overlay/60 transition-colors"
-              >
-                <span className="text-[10px] font-mono font-bold tabular-nums w-3.5 text-center text-neon">
-                  {i + 1}
-                </span>
-                <TeamLink
-                  team={{
-                    leagueId: league.id,
-                    teamId: team.id,
-                    teamName: team.teamName,
-                    teamAbbrev: team.teamAbbrev,
-                    teamColor: team.teamColor,
-                    logoPath: team.logoPath ?? null,
-                    record: team.record,
-                  }}
-                  logoSize="sm"
-                  size="xs"
-                  className="flex-1 min-w-0"
-                />
-                <RecordDisplay
-                  wins={team.record.wins}
-                  losses={team.record.losses}
-                  differential={team.record.differential}
-                  className="text-[10px]"
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-2 text-text-muted text-[11px]">No teams yet.</div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
