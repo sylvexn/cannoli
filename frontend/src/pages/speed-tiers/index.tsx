@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gauge, RotateCcw, Sparkles } from 'lucide-react';
-import { useWindowVirtualizer } from '@tanstack/react-virtual';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { api, type ApiSpeedTierRow, type ApiSpeedTierOwnership } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
@@ -173,18 +173,50 @@ export function SpeedTiersPage() {
 
   // Virtualize the body rows — at ~700 mons across the dex, rendering every
   // <tr> on every filter change melted the page. We render only the rows in
-  // the visible window plus a small overscan buffer, using window scroll so
-  // the sticky filter bar above continues to behave naturally.
+  // the visible window plus a small overscan buffer.
+  //
+  // The actual scroll container is the AppShell's <main> (it has overflow-y-auto),
+  // not window — so useWindowVirtualizer would never see scroll updates and the
+  // page would render a static slice that doesn't refresh as the user scrolls.
+  // We grab main directly and feed it as getScrollElement.
+  //
+  // scrollMargin = the offset between main's scroll origin and the table's top
+  // (filter bar height etc. above the table). The virtualizer needs this so
+  // virtualItem.start values are aligned with where we render them in the DOM.
+  // Without subtracting scrollMargin from paddingTop we'd render a giant spacer
+  // row equal to the offset and shove the first row way down the page.
   const tableContainerRef = useRef<HTMLDivElement | null>(null);
-  const virtualizer = useWindowVirtualizer({
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useLayoutEffect(() => {
+    setScrollEl(document.querySelector<HTMLElement>('main'));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!scrollEl || !tableContainerRef.current) return;
+    const update = () => {
+      if (!scrollEl || !tableContainerRef.current) return;
+      const tableTop = tableContainerRef.current.getBoundingClientRect().top;
+      const mainTop = scrollEl.getBoundingClientRect().top;
+      setScrollMargin(Math.max(0, tableTop - mainTop + scrollEl.scrollTop));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(scrollEl);
+    return () => ro.disconnect();
+  }, [scrollEl, filters, assumptions, highlightLeagueIds, sorted.length]);
+
+  const virtualizer = useVirtualizer({
     count: sorted.length,
+    getScrollElement: () => scrollEl,
     estimateSize: () => ROW_HEIGHT_PX,
     overscan: 12,
-    scrollMargin: tableContainerRef.current?.offsetTop ?? 0,
+    scrollMargin,
   });
   const virtualItems = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
-  const paddingTop = virtualItems[0]?.start ?? 0;
+  const paddingTop = Math.max(0, (virtualItems[0]?.start ?? 0) - scrollMargin);
   const paddingBottom = totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0);
 
   if (loading && !rows) return <SpeedTiersSkeleton />;
