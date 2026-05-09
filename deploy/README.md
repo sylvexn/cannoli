@@ -133,6 +133,9 @@ Selected env vars consumed by the backend container (full list in
 - `CANNOLI_DB_PATH` - override SQLite path (defaults to `backend/data/cannoli.db`).
 - `PS_SERVER_WS_URL` - bot connects here. Unset = bot disabled.
 - `PS_RSA_PRIVATE_KEY` - required when `PS_SERVER_WS_URL` is set; signs PS auth assertions.
+- `PS_INTERNAL_SECRET` - shared secret gating `/api/internal/ps/leagues`. Must match
+  the value set on `cannoli-ps-server` (the PS startup hook calls this endpoint to
+  materialise per-league chat rooms). Generate with `openssl rand -hex 32`.
 - `PS_LOGS_DIR` - root for PS autosaved replay logs (`{format}/{YYYY-MM-DD}/{roomId}.log.json`).
   Used by the disk-replay fallback when the bot was offline at the moment a match
   finished. Defaults to `./showdown/server/logs` (in-repo PS checkout). In production
@@ -140,6 +143,23 @@ Selected env vars consumed by the backend container (full list in
   mounted read-only into `cannoli-backend-{mock,live}`.
 - `BOT_USERNAME` / `BOT_PASSWORD` - credentials for the bot's `users` row, seeded
   on every boot when bot env is set.
+
+## Required env vars: cannoli-ps-server
+
+The PS server's startup hook (`ps/config-example.js`) fetches active leagues
+from the backend so it can spin up matching chat rooms. Set these in Coolify
+on `cannoli-ps-server` before deploying the SSO-roles changes:
+
+- `CANNOLI_BACKEND_URL` - internal docker alias for the active backend.
+  - mock: `http://cannoli-backend-mock:3001`
+  - live: `http://cannoli-backend-live:3001`
+- `PS_INTERNAL_SECRET` - same value as on `cannoli-backend-{mock,live}`.
+
+Additionally, the SSO assertion now carries `s1` (role) / `s2` (league slugs) /
+`s3` (reserved). PS picks them up automatically — no PS-side config needed for
+that part. Coaches get `+` globally + `%` in their league rooms; admins get `~`.
+The `cannoli-roles` plugin only ever auto-promotes; it never demotes, so any
+hand-promoted staff above this baseline keep their rank.
 
 ## Initial seeding
 
