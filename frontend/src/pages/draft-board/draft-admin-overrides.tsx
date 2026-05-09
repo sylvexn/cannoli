@@ -28,7 +28,7 @@ import { api } from '@/lib/api';
 import { TIER_LIST } from '@/data/tier-list';
 
 interface DraftAdminOverridesProps {
-  draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
+  draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string; logoPath?: string | null }[];
   /** Names of Pokemon already drafted in this league (to filter the picker). */
   draftedNames: Set<string>;
   /** Whether there's at least one pick to undo. */
