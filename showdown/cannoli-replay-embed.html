@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<!--
+  Cannoli replay embed (sim.cannoli.live/replay/embed.html?match=<matchId>)
+
+  Standalone replay player. The Cannoli site iframes this page from the
+  /replays gallery so users can scrub through battles without leaving the
+  app or hitting replay.pokemonshowdown.com.
+
+  Reuses the upstream PS Battle player JS (already shipped in the
+  play.pokemonshowdown.com tree at /js/, /data/, /style/), so this page
+  is intentionally tiny — it just wires up the player and points it at
+  the Cannoli backend's replay JSON endpoint (/replay/data/<id>.json,
+  proxied to cannoli-backend:3001).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Replay — Cannoli</title>
+
+<link rel="stylesheet" href="/style/font-awesome.css" />
+<link rel="stylesheet" href="/style/battle.css" />
+<link rel="stylesheet" href="/style/utilichart.css" />
+<link rel="stylesheet" href="/style/replay.css" />
+
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #0e0e10;
+    color: #ddd;
+    font-family: Verdana, Helvetica, sans-serif;
+    overflow-x: hidden;
+  }
+  #wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 8px;
+  }
+  #status {
+    padding: 24px;
+    text-align: center;
+    color: #aaa;
+    font-size: 13px;
+  }
+  #status.error { color: #f77; }
+  /* Side-by-side battle frame + log on wide viewports, stacked on narrow */
+  .battle-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .battle {
+    margin: 0 auto;
+  }
+  .battle-log {
+    flex: 1 1 320px;
+    min-width: 280px;
+    max-width: 480px;
+    height: 480px;
+    position: relative;
+  }
+  @media (max-width: 820px) {
+    .battle-wrap { flex-direction: column; }
+    .battle-log { width: 100%; max-width: none; height: 280px; }
+  }
+</style>
+
+<!-- PS expects window.Config to exist before battle.js loads -->
+<script src="/config/config.js"></script>
+</head>
+<body>
+<div id="wrap">
+  <div id="status">Loading replay…</div>
+  <div class="battle-wrap" id="player" style="display:none;">
+    <div class="battle"></div>
+    <div class="battle-log"></div>
+  </div>
+</div>
+
+<!-- PS battle player stack. Order matters; mirrors index.template.php from
+     replay.pokemonshowdown.com. `defer` so they execute in source order
+     after the body is parsed. -->
+<script defer src="/js/lib/ps-polyfill.js"></script>
+<script defer src="/js/lib/jquery-2.2.4.min.js"></script>
+<script defer src="/js/lib/html-sanitizer-minified.js"></script>
+<script defer src="/js/battle-sound.js"></script>
+<script defer src="/js/battledata.js"></script>
+<script defer src="/data/pokedex-mini.js"></script>
+<script defer src="/data/pokedex-mini-bw.js"></script>
+<script defer src="/data/graphics.js"></script>
+<script defer src="/data/pokedex.js"></script>
+<script defer src="/data/moves.js"></script>
+<script defer src="/data/abilities.js"></script>
+<script defer src="/data/items.js"></script>
+<script defer src="/data/teambuilder-tables.js"></script>
+<script defer src="/js/battle-tooltips.js"></script>
+<script defer src="/js/battle.js"></script>
+
+<script defer>
+(function () {
+  function ready(fn) {
+    if (document.readyState !== 'loading') return fn();
+    document.addEventListener('DOMContentLoaded', fn);
+  }
+
+  function showError(msg) {
+    var s = document.getElementById('status');
+    s.className = 'error';
+    s.textContent = msg;
+  }
+
+  function getMatchId() {
+    var qs = new URLSearchParams(window.location.search);
+    var id = qs.get('match');
+    if (id) return id;
+    // /replay/embed.html/<matchId> path-style fallback (some iframes lose
+    // the query string on certain proxies)
+    var m = window.location.pathname.match(/\/replay\/embed\.html\/(.+)$/);
+    return m ? m[1] : null;
+  }
+
+  ready(function () {
+    var matchId = getMatchId();
+    if (!matchId) {
+      showError('Missing ?match=<id>');
+      return;
+    }
+
+    // Wait until all the deferred PS scripts have parsed and Battle is
+    // defined on window. `defer` resolves before DOMContentLoaded so by
+    // the time this handler runs Battle should already be available; the
+    // small poll is defensive against script load races on cold caches.
+    var tries = 0;
+    function start() {
+      if (typeof window.Battle !== 'function' || typeof window.jQuery !== 'function') {
+        if (++tries > 50) {
+          showError('Replay player failed to load (PS battle.js missing).');
+          return;
+        }
+        return setTimeout(start, 100);
+      }
+
+      fetch('/replay/data/' + encodeURIComponent(matchId) + '.json', {
+        credentials: 'omit',
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function (replay) {
+        if (!replay || !replay.log) {
+          showError('Replay log not available.');
+          return;
+        }
+
+        document.getElementById('status').style.display = 'none';
+        var $player = window.jQuery('#player').show();
+
+        var battle = new window.Battle({
+          id: replay.id,
+          $frame: $player.find('.battle'),
+          $logFrame: $player.find('.battle-log'),
+          log: String(replay.log).split('\n'),
+          isReplay: true,
+          paused: false,
+          autoresize: true,
+        });
+        // Mirrors replays-battle.tsx — surface for debugging.
+        window.battle = battle;
+      }).catch(function (err) {
+        showError('Failed to load replay: ' + (err && err.message || err));
+      });
+    }
+    start();
+  });
+})();
+</script>
+</body>
+</html>
