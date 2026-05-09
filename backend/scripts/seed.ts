@@ -871,6 +871,18 @@ if (s9Missing.length === 0) {
   const { importReplays } = await import('./import-replays');
   console.log('\n── Attaching replays ──');
   importReplays(sqlite);
+
+  // Parse the freshly-attached protocol logs into per-Pokemon K/D so the
+  // /replays gallery's brought-team preview pane renders. Skips S9
+  // (historical XLSX RawKills are SoT) and is idempotent — only fills in
+  // matches with a log but no existing match_pokemon rows.
+  const { backfillMatchPokemon } = await import('./backfill-match-pokemon');
+  console.log('\n── Backfilling match_pokemon from logs ──');
+  const bf = backfillMatchPokemon(sqlite);
+  console.log(
+    `  parsed ${bf.parsed}/${bf.scanned} matches, inserted ${bf.inserted} pokemon rows ` +
+    `(skipped: ${bf.skippedS9} S9, ${bf.skippedAmbiguous} unmappable, ${bf.skippedNoMons} empty)`,
+  );
 }
 
 // ─── S10: award pins (auto + archive + manual) ───────────────────────────

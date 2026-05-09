@@ -114,6 +114,65 @@ export const matchRoutes = new Elysia()
     };
   })
 
+  // ─── Replay payload (PS-format JSON for the in-site replay viewer) ───
+  //
+  // Returns the protocol log + minimal metadata in the shape the upstream
+  // Pokemon Showdown replay client (replay.pokemonshowdown.com SPA) expects.
+  // Consumed by the embed page on sim.cannoli.live, which is iframed by
+  // the Cannoli replay viewer panel — no external link to PS required.
+  //
+  // Public on purpose: replays are spectator content and the embed page
+  // (cross-origin) can't carry session cookies anyway. CORS allow-all so
+  // either sim.cannoli.live or cannoli.live can fetch directly if we ever
+  // skip the nginx proxy.
+
+  .get('/api/matches/:matchId/replay.json', ({ params, set }) => {
+    const match = db.select().from(schema.matches)
+      .where(eq(schema.matches.id, params.matchId))
+      .get();
+    if (!match || !match.replayLog) {
+      set.status = 404;
+      return { error: 'Replay log not available for this match' };
+    }
+
+    const homeTeam = db.select().from(schema.teams)
+      .where(eq(schema.teams.id, match.homeTeamId)).get();
+    const awayTeam = db.select().from(schema.teams)
+      .where(eq(schema.teams.id, match.awayTeamId)).get();
+
+    // Format string is parsed back out of the log's `|tier|` line by the
+    // viewer if absent. Try to surface it directly anyway so the title
+    // line on the embed reads cleanly when the log is truncated.
+    const tierMatch = match.replayLog.match(/\n\|tier\|([^|\n]*)/);
+    const format = tierMatch ? tierMatch[1] : '[Gen 9] NatDex Draft';
+
+    // Player name preference: the log's `|player|p1|<name>|...` line is the
+    // ground truth (PS username at the time of the battle). Fall back to
+    // team coach names if the log was scraped without `|player|` lines
+    // (defensive — every PS replay has them).
+    const p1Match = match.replayLog.match(/\n\|player\|p1\|([^|\n]*)/);
+    const p2Match = match.replayLog.match(/\n\|player\|p2\|([^|\n]*)/);
+    const p1 = p1Match?.[1] || homeTeam?.coachName || 'Home';
+    const p2 = p2Match?.[1] || awayTeam?.coachName || 'Away';
+
+    set.headers['Access-Control-Allow-Origin'] = '*';
+    set.headers['Cache-Control'] = 'public, max-age=300';
+    return {
+      id: match.id,
+      format,
+      players: [p1, p2],
+      log: match.replayLog,
+      uploadtime: match.completedAt
+        ? Math.floor(new Date(match.completedAt).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+      views: 0,
+      formatid: format.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      rating: null,
+      private: 0,
+      password: null,
+    };
+  })
+
   // ─── Match Details (pokemon K/D for a specific match) ────────────────
 
   .get('/api/matches/:matchId/pokemon', ({ params }) => {

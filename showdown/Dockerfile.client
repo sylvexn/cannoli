@@ -87,8 +87,16 @@ FROM nginx:alpine
 # Copy built client files
 COPY --from=build /client/play.pokemonshowdown.com /usr/share/nginx/html
 
-# Also copy replay viewer
+# Also copy upstream replay viewer (PHP — currently non-functional under
+# nginx-only, kept for static asset companions like /replay/style/).
 COPY --from=build /client/replay.pokemonshowdown.com /usr/share/nginx/html/replay
+
+# Cannoli's standalone replay embed page. Iframed by the Cannoli site at
+# /replay/embed.html?match=<id>; fetches the log via /replay/data/<id>.json
+# (proxied to the cannoli backend by nginx). Overwrites the upstream
+# /replay/embed.html if any (there isn't one) — this is the entry point
+# the cannoli frontend points at.
+COPY showdown/cannoli-replay-embed.html /usr/share/nginx/html/replay/embed.html
 
 # Nginx config template (envsubst for PS_SERVER_HOST / PS_LOGIN_HOST)
 COPY showdown/nginx.conf /etc/nginx/templates/default.conf.template
