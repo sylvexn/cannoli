@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, inArray, desc } from 'drizzle-orm';
+import { eq, inArray, desc, sql } from 'drizzle-orm';
 
 /**
  * Ownership entry for a single Pokemon — one per (league, team) it's rostered
@@ -37,8 +37,13 @@ interface Ownership {
  */
 function buildSpeedRows(leagueIds: string[]) {
   // Always source the canonical Pokemon list — even with no leagues we want
-  // a full undrafted dex.
-  const pokemonRows = db.select().from(schema.pokemon).all();
+  // a full undrafted dex. The "(T)" suffix rows are tera-captain duplicates
+  // imported from the source XLSX (same species, just marked as captain via
+  // the suffix); the speed table treats captains via per-row metadata, so
+  // strip them here to avoid every species rendering twice.
+  const pokemonRows = db.select().from(schema.pokemon)
+    .where(sql`${schema.pokemon.name} NOT LIKE '%(T)'`)
+    .all();
 
   // Build the ownerships map keyed by pokemonName.
   const ownershipsByName = new Map<string, Ownership[]>();

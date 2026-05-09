@@ -271,6 +271,11 @@ export function importSeason(
     const name = row[0];
     if (!name || typeof name !== 'string' || !name.trim()) continue;
 
+    // The Pokemon sheet lists tera-captain variants as duplicate rows with a
+    // " (T)" suffix on the same species. Skip those — captain status is
+    // tracked on rosters, not on the species reference table.
+    if (isTeraCaptain(name)) continue;
+
     const pts = parseInt(row[1]) || 0;
     pokemonRows.push({
       name: name.trim(),
