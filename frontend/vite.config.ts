@@ -32,6 +32,14 @@ export default defineConfig({
         target: 'ws://localhost:3001',
         ws: true,
       },
+      // Disk-fallback team/user images. When R2 isn't configured the backend
+      // stores uploads on disk and serves them at GET /uploads/:dir/:file —
+      // without this proxy Vite would 404 (or fall through to the SPA index)
+      // and the TeamLogo <img> would render broken.
+      '/uploads': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
 })
