@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { TeamLink } from '@/components/team-link';
+import { TeamCoachStack } from '@/components/team-coach-stack';
 import { useLeague } from '@/lib/league-context';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
@@ -87,18 +87,17 @@ export function DraftOnTheClock({
       <div className="px-3 py-2 flex items-center gap-3 flex-wrap">
         {/* Drafter identity */}
         <div className="flex items-center gap-2 min-w-0">
-          <TeamLink
+          <TeamCoachStack
             team={{
               leagueId: league.id,
               teamId: player.id,
-              teamName: player.teamName,
               teamAbbrev: player.teamAbbrev,
               teamColor: player.teamColor,
               logoPath: player.logoPath,
-              record: player.record,
+              owner: player.owner,
             }}
-            logoOnly
-            logoSize="md"
+            size="md"
+            side="right"
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
