@@ -271,6 +271,7 @@ export function PokemonSideCard({
                             teamName: o.teamName,
                             teamAbbrev: o.teamAbbrev,
                             teamColor: o.teamColor,
+                            logoPath: o.logoPath,
                             record: o.record,
                           }}
                           logoOnly
@@ -321,13 +322,14 @@ export function PokemonSideCard({
                           teamName: owner.teamName,
                           teamAbbrev: owner.teamAbbrev,
                           teamColor: owner.teamColor,
+                          logoPath: owner.logoPath,
                           record: owner.record,
                         }}
                         logoOnly
                         logoSize="md"
                       />
                     ) : (
-                      <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
+                      <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" logoPath={owner.logoPath} />
                     )}
                     <div className="min-w-0">
                       <Link

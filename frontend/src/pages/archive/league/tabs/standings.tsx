@@ -82,7 +82,7 @@ function StandingsRow({ team, rank }: { team: TeamRow; rank: number }) {
           {rank}
         </span>
         <div className="flex items-center gap-2 min-w-0">
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
           <div className="min-w-0">
             <div className="font-medium text-text-primary truncate flex items-center gap-1.5">
               <span className="truncate">{team.teamName}</span>

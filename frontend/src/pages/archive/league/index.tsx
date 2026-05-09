@@ -117,6 +117,7 @@ export function ArchiveLeaguePage() {
             teamName: championInfo.winner.teamName,
             teamAbbrev: championInfo.winner.teamAbbrev,
             teamColor: championInfo.winner.teamColor,
+            logoPath: championInfo.winner.logoPath,
             coachUsername: championInfo.winner.coachName.toLowerCase().replace(/\s+/g, ''),
           }}
           league={{

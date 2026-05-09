@@ -50,7 +50,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             onClick={e => e.stopPropagation()}
             className="group/home shrink-0"
           >
-            <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" />
+            <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" logoPath={homePlayer.logoPath} />
           </Link>
           <div className="min-w-0 flex flex-col">
             <Link
@@ -108,7 +108,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             onClick={e => e.stopPropagation()}
             className="group/away shrink-0"
           >
-            <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
+            <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" logoPath={awayPlayer.logoPath} />
           </Link>
         </div>
 
@@ -156,7 +156,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                   className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
                   style={{ backgroundColor: `${homePlayer.teamColor}15`, color: homePlayer.teamColor }}
                 >
-                  <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" />
+                  <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" logoPath={homePlayer.logoPath} />
                   {homePlayer.teamAbbrev}
                   {homeWon && <span className="text-win text-[9px] ml-auto font-bold">W</span>}
                 </div>
@@ -166,7 +166,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                 >
                   {awayWon && <span className="text-win text-[9px] mr-auto font-bold">W</span>}
                   {awayPlayer.teamAbbrev}
-                  <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" />
+                  <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" logoPath={awayPlayer.logoPath} />
                 </div>
               </div>
 

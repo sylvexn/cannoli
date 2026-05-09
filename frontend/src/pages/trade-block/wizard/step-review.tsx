@@ -131,7 +131,7 @@ function SideSummary({
   return (
     <div className={cn('min-w-0', align === 'right' && 'text-right')}>
       <div className={cn('flex items-center gap-2 mb-2', align === 'right' && 'justify-end')}>
-        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
         <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">{team.teamAbbrev}</span>
         <span className={cn('text-[10px] font-mono uppercase tracking-wider font-semibold', color)}>{label}</span>
       </div>
@@ -163,7 +163,7 @@ function PointsCard({
   return (
     <div className={cn('rounded-md border p-3 space-y-1', overCap ? 'border-loss/30 bg-loss/5' : 'border-border-subtle bg-surface-overlay/20')}>
       <div className="flex items-center gap-2">
-        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
         <span className="text-xs font-medium text-text-primary truncate">{team.teamAbbrev}</span>
         <span className={cn('text-[10px] font-mono ml-auto tabular-nums', deltaCls)}>
           {delta > 0 ? '+' : ''}{delta} pts

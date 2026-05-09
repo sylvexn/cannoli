@@ -118,7 +118,7 @@ function BracketSide({
           to={`/archive/${seasonId}/${leagueId}/${team.id}`}
           className="flex items-center gap-2 flex-1 min-w-0 hover:text-text-primary transition-colors"
         >
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
           <span className={cn(
             'text-xs truncate',
             won ? 'text-win font-medium' : otherWon ? 'text-text-muted' : 'text-text-primary',

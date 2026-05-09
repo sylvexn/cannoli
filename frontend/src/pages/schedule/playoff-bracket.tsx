@@ -102,7 +102,7 @@ export function PlayoffBracket() {
                   to={leagueUrl(`/teams/${champ.id}`)}
                   className="flex items-center gap-2 hover:opacity-90 transition-opacity"
                 >
-                  <TeamLogo abbrev={champ.teamAbbrev} color={champ.teamColor} size="md" />
+                  <TeamLogo abbrev={champ.teamAbbrev} color={champ.teamColor} size="md" logoPath={champ.logoPath} />
                   <span className="text-sm font-bold text-text-primary hover:text-draw transition-colors">
                     {champ.teamName}
                   </span>
@@ -262,7 +262,7 @@ function BracketTeamLink({ player, isWinner, isLoser }: {
       to={leagueUrl(`/teams/${player.id}`)}
       className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-90 transition-opacity"
     >
-      <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+      <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" logoPath={player.logoPath} />
       <span className={cn(
         'text-xs font-medium flex-1 min-w-0 truncate hover:underline',
         isWinner ? 'text-win' : isLoser ? 'text-text-muted' : 'text-text-primary',

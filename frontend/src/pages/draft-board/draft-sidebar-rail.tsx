@@ -76,7 +76,7 @@ export function DraftSidebarRail({
             )}
             aria-label={`${p.teamAbbrev}${isUser ? ' (your team)' : ''}${isDrafter ? ' (on the clock)' : ''}`}
           >
-            <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+            <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
             {isLiveMode && (
               <span
                 className={cn(

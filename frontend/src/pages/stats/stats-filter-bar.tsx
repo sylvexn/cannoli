@@ -78,7 +78,7 @@ export function StatsFilterBar({ filters, onUpdate, totalCount, filteredCount }:
             {players.map(p => (
               <SelectItem key={p.id} value={p.id}>
                 <span className="flex items-center gap-2">
-                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                   {p.teamAbbrev}
                 </span>
               </SelectItem>

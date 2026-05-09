@@ -169,7 +169,7 @@ function BottomSheetShell(props: DraftTeamSidebarProps) {
         )}
       >
         {userPlayer ? (
-          <TeamLogo abbrev={userPlayer.teamAbbrev} color={userPlayer.teamColor} size="sm" />
+          <TeamLogo abbrev={userPlayer.teamAbbrev} color={userPlayer.teamColor} size="sm" logoPath={userPlayer.logoPath} />
         ) : (
           <div className="w-7 h-7 rounded-full bg-surface-overlay" aria-hidden />
         )}

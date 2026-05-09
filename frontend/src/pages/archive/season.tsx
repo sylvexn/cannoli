@@ -47,6 +47,7 @@ interface ArchiveTeam {
   teamName: string;
   teamAbbrev: string;
   teamColor: string;
+  logoPath: string | null;
   rank: number;
   /** Final placement (1 = Champion, 2 = Runner-up, etc.). NULL pre-archive. */
   finishPosition: number | null;
@@ -276,6 +277,7 @@ function LeagueArchiveCard({
               teamName: derivedChampion.teamName,
               teamAbbrev: derivedChampion.teamAbbrev,
               teamColor: derivedChampion.teamColor,
+              logoPath: derivedChampion.logoPath,
               coachUsername: derivedChampion.coachName.toLowerCase().replace(/\s+/g, ''),
             }}
             league={{
@@ -332,7 +334,7 @@ function LeagueArchiveCard({
                       {mvp.kills}K/{mvp.deaths}D
                     </span>
                     {team && (
-                      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
                     )}
                   </div>
                 );
@@ -396,7 +398,7 @@ function LeagueArchiveCard({
                             <div key={m.id} className="rounded border border-border-subtle overflow-hidden text-[11px]">
                               <div className={cn('flex items-center gap-1.5 px-2 py-1', homeWon && 'bg-win/5')}>
                                 <span className="text-[9px] font-mono text-text-muted w-3">{m.homeSeed}</span>
-                                {home && <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />}
+                                {home && <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" logoPath={home.logoPath} />}
                                 <span className={cn('flex-1 truncate', homeWon ? 'text-win font-medium' : awayWon ? 'text-text-muted' : 'text-text-primary')}>
                                   {home?.teamAbbrev || 'TBD'}
                                 </span>
@@ -405,7 +407,7 @@ function LeagueArchiveCard({
                               <div className="h-px bg-border-subtle" />
                               <div className={cn('flex items-center gap-1.5 px-2 py-1', awayWon && 'bg-win/5')}>
                                 <span className="text-[9px] font-mono text-text-muted w-3">{m.awaySeed}</span>
-                                {away && <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />}
+                                {away && <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" logoPath={away.logoPath} />}
                                 <span className={cn('flex-1 truncate', awayWon ? 'text-win font-medium' : homeWon ? 'text-text-muted' : 'text-text-primary')}>
                                   {away?.teamAbbrev || 'TBD'}
                                 </span>
@@ -485,7 +487,7 @@ function ArchiveTeamRow({
         )}>
           {rank}
         </span>
-        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
         <div className="flex-1 min-w-0">
           <span className={cn(
             'text-xs font-medium truncate block',

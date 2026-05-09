@@ -263,7 +263,7 @@ export function TradeBlockPage() {
                       </div>
                       <div className="shrink-0 flex flex-col items-center gap-1">
                         <Link to={leagueUrl(`/teams/${team.id}`)} viewTransition className="group/team">
-                          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
                         </Link>
                         <span className="text-[8px] text-text-muted">{team.teamAbbrev}</span>
                         {!deadlinePassed && (
@@ -359,7 +359,7 @@ export function TradeBlockPage() {
                       teamFilter === team.id ? 'opacity-100 ring-1 ring-neon/40 rounded-full' : 'opacity-50 hover:opacity-80',
                     )}
                   >
-                    <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                    <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
                   </button>
                 ))}
               </div>
@@ -399,6 +399,7 @@ export function TradeBlockPage() {
                                   teamName: proposer.teamName,
                                   teamAbbrev: proposer.teamAbbrev,
                                   teamColor: proposer.teamColor,
+                                  logoPath: proposer.logoPath,
                                   record: proposer.record,
                                 }}
                                 logoOnly
@@ -421,6 +422,7 @@ export function TradeBlockPage() {
                                   teamName: recipient.teamName,
                                   teamAbbrev: recipient.teamAbbrev,
                                   teamColor: recipient.teamColor,
+                                  logoPath: recipient.logoPath,
                                   record: recipient.record,
                                 }}
                                 logoOnly

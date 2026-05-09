@@ -28,6 +28,8 @@ interface TeamSeason {
     teamName: string;
     teamAbbrev: string;
     teamColor: string;
+    logoPath: string | null;
+    bannerPath: string | null;
     userId: number | null;
     /** Final placement (1 = Champion, 2 = Runner-up, 3/4 = Semifinalist,
      *  5–8 = Quarterfinalist, 9+ = Regular Season). NULL pre-archive. */
@@ -47,7 +49,7 @@ interface TeamSeason {
   weekByWeek: WeekRow[];
   transactions: TxnRow[];
   pokemonStats: { pokemonName: string; kills: number; deaths: number; gp: number; teraUsed: number }[];
-  otherTeams: { id: string; coachName: string; teamName: string; teamAbbrev: string; teamColor: string }[];
+  otherTeams: { id: string; coachName: string; teamName: string; teamAbbrev: string; teamColor: string; logoPath: string | null }[];
 }
 
 interface RosterMon {
@@ -150,7 +152,7 @@ export function ArchiveTeamPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4 flex-wrap">
-        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="xl" />
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="xl" logoPath={team.logoPath} />
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
             <span style={{ color: team.teamColor }}>{team.teamAbbrev}</span>{' '}
@@ -256,7 +258,7 @@ export function ArchiveTeamPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {opp && <TeamLogo abbrev={opp.teamAbbrev} color={opp.teamColor} size="sm" />}
+                      {opp && <TeamLogo abbrev={opp.teamAbbrev} color={opp.teamColor} size="sm" logoPath={opp.logoPath} />}
                       <span className="text-text-primary truncate text-[10px]">{opp?.teamAbbrev ?? '???'}</span>
                     </div>
                     <div className="flex items-center justify-end gap-1">
@@ -494,7 +496,7 @@ function TransactionsCard({
                 {counterparty && (
                   <span className="ml-auto flex items-center gap-1 text-text-muted">
                     <span className="text-[9px]">w/</span>
-                    <TeamLogo abbrev={counterparty.teamAbbrev} color={counterparty.teamColor} size="sm" />
+                    <TeamLogo abbrev={counterparty.teamAbbrev} color={counterparty.teamColor} size="sm" logoPath={counterparty.logoPath} />
                     <span>{counterparty.teamAbbrev}</span>
                   </span>
                 )}

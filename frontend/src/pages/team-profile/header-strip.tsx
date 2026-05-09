@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
 import { RecordDisplay } from '@/components/record-display';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { FlaskConical, ArrowLeft } from 'lucide-react';
 import { RankBadge } from './rank-badge';
 
@@ -67,7 +68,52 @@ export function HeaderStrip({
       )}
 
       <div className="px-5 pt-2 pb-3 flex items-center gap-4">
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="lg" className="w-12 h-12 text-xs shrink-0" />
+        {player.logoPath ? (
+          <Popover>
+            <PopoverTrigger
+              nativeButton={false}
+              openOnHover
+              delay={150}
+              closeDelay={120}
+              render={
+                <button
+                  type="button"
+                  aria-label={`View ${player.teamAbbrev} logo at full size`}
+                  className="shrink-0 transition-transform duration-200 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-neon/60 rounded-full"
+                />
+              }
+            >
+              <TeamLogo
+                abbrev={player.teamAbbrev}
+                color={player.teamColor}
+                size="lg"
+                logoPath={player.logoPath}
+                className="w-12 h-12 text-xs"
+              />
+            </PopoverTrigger>
+            <PopoverContent
+              side="right"
+              align="start"
+              sideOffset={10}
+              className="p-3 border-border-default bg-surface-raised w-auto"
+            >
+              <img
+                src={player.logoPath}
+                alt={`${player.teamAbbrev} full logo`}
+                className="block max-w-[280px] max-h-[280px] w-auto h-auto object-contain"
+                loading="lazy"
+              />
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <TeamLogo
+            abbrev={player.teamAbbrev}
+            color={player.teamColor}
+            size="lg"
+            logoPath={player.logoPath}
+            className="w-12 h-12 text-xs shrink-0"
+          />
+        )}
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-heading font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
           {/* Coach + abbrev sub-line — kept around for the legacy non-owner

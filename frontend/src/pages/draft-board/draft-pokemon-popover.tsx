@@ -314,7 +314,7 @@ export function DraftPokemonPopover({
                   teamName: owner.teamName,
                   teamAbbrev: owner.teamAbbrev,
                   teamColor: owner.teamColor,
-                  logoPath: owner.bannerPath ?? null,
+                  logoPath: owner.logoPath ?? null,
                 }}
                 logoSize="sm"
                 noHoverCard
@@ -336,7 +336,7 @@ export function DraftPokemonPopover({
                             teamName: from.teamName,
                             teamAbbrev: from.teamAbbrev,
                             teamColor: from.teamColor,
-                            logoPath: from.bannerPath ?? null,
+                            logoPath: from.logoPath ?? null,
                           }}
                           showLogo={false}
                           size="xs"
@@ -356,7 +356,7 @@ export function DraftPokemonPopover({
                         teamName: owner.teamName,
                         teamAbbrev: owner.teamAbbrev,
                         teamColor: owner.teamColor,
-                        logoPath: owner.bannerPath ?? null,
+                        logoPath: owner.logoPath ?? null,
                       }}
                       showLogo={false}
                       size="xs"

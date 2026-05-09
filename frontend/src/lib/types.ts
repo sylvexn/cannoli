@@ -51,6 +51,8 @@ export interface Player {
   owner?: CoachOwner | null;
   /** Set after the team locks its tera captains during the post-draft gate. */
   captainsLocked?: boolean;
+  /** Public URL (R2) or relative path of the uploaded team logo; null for initials fallback. */
+  logoPath?: string | null;
   /** Public path to uploaded team banner; null for color-block fallback. */
   bannerPath?: string | null;
   /** Long-form team description (≤ 280, owner-editable). */

@@ -162,7 +162,7 @@ export function DraftControlBar({
                     <SelectItem key={p.id} value={p.id} className="text-xs">
                       <span className="flex items-center gap-1.5">
                         <span className="text-[10px] font-mono text-text-muted w-3">{i + 1}</span>
-                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                         {p.teamAbbrev} — {p.name}
                       </span>
                     </SelectItem>
@@ -270,7 +270,7 @@ export function DraftControlBar({
                             size={6}
                             className={cn('shrink-0', online ? 'fill-win text-win' : 'fill-loss text-loss')}
                           />
-                          <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                          <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                           <span className={cn('text-[11px] flex-1 truncate', online ? 'text-text-primary' : 'text-text-muted')}>
                             {p.teamAbbrev}
                           </span>
@@ -318,7 +318,7 @@ export function DraftControlBar({
               {disconnectedTeams.map(p => (
                 <div key={p.id} className="flex items-center gap-2 text-sm">
                   <Circle size={6} className="fill-loss text-loss" />
-                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                  <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                   <span className="text-text-primary">{p.teamAbbrev}</span>
                   <span className="text-text-muted">— {p.name}</span>
                 </div>

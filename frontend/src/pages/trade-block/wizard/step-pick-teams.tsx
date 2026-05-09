@@ -49,7 +49,7 @@ export function PickTeamsStep({
               {availableProposers.map(p => (
                 <SelectItem key={p.id} value={p.id} className="text-xs">
                   <span className="flex items-center gap-1.5">
-                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                     {p.teamAbbrev} — {p.name}
                   </span>
                 </SelectItem>
@@ -68,7 +68,7 @@ export function PickTeamsStep({
               {availableRecipients.map(p => (
                 <SelectItem key={p.id} value={p.id} className="text-xs">
                   <span className="flex items-center gap-1.5">
-                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                    <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                     {p.teamAbbrev} — {p.name}
                   </span>
                 </SelectItem>
@@ -101,7 +101,7 @@ function TeamSummary({ team, side }: { team: Player | null; side: 'from' | 'to' 
   }
   return (
     <div className="flex items-center gap-2">
-      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" />
+      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" logoPath={team.logoPath} />
       <div className="min-w-0">
         <div className="font-medium text-text-primary truncate">{team.teamName}</div>
         <div className="text-[10px] text-text-muted font-mono uppercase tracking-wider">

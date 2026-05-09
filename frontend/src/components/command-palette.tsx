@@ -89,6 +89,7 @@ interface TeamEntry {
   teamName: string;
   teamAbbrev: string;
   teamColor: string;
+  logoPath: string | null;
 }
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
@@ -121,6 +122,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             teamName: t.teamName,
             teamAbbrev: t.teamAbbrev,
             teamColor: t.teamColor,
+            logoPath: t.logoPath ?? null,
           });
         }
       }
@@ -344,7 +346,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     onSelect={() => go(`/league/${t.leagueId}/teams/${t.playerId}`)}
                     className="flex items-center gap-2.5"
                   >
-                    <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="sm" />
+                    <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="sm" logoPath={t.logoPath} />
                     <span className="font-medium text-text-primary">{t.teamName}</span>
                     <span className="text-xs text-text-muted">{t.playerName}</span>
                     <span

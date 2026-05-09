@@ -122,7 +122,7 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
                 <span className="text-xs font-mono font-bold tabular-nums text-text-muted w-4 shrink-0">
                   {idx + 1}
                 </span>
-                <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
                 <span className="text-xs text-text-primary flex-1 min-w-0 truncate">
                   {team.teamName}
                 </span>

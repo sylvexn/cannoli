@@ -188,6 +188,7 @@ export function CompactTradeCard({
                   teamName: proposer.teamName,
                   teamAbbrev: proposer.teamAbbrev,
                   teamColor: proposer.teamColor,
+                  logoPath: proposer.logoPath,
                   record: proposer.record,
                 }}
                 logoSize="sm"
@@ -230,6 +231,7 @@ export function CompactTradeCard({
                   teamName: recipient.teamName,
                   teamAbbrev: recipient.teamAbbrev,
                   teamColor: recipient.teamColor,
+                  logoPath: recipient.logoPath,
                   record: recipient.record,
                 }}
                 logoSize="sm"
