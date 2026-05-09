@@ -8,6 +8,7 @@ import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
+import { validatePokemonDataForMatch } from '../lib/match-validation';
 
 export const matchRoutes = new Elysia()
 
@@ -189,6 +190,20 @@ export const matchRoutes = new Elysia()
       return { error: 'homeScore and awayScore required' };
     }
 
+    // Validate pokemonData (teamId in {home,away}; pokemonName on roster).
+    // Done before the tx so we don't churn the WAL on bad input.
+    if (pokemonData?.length) {
+      const validation = validatePokemonDataForMatch(pokemonData, match.homeTeamId, match.awayTeamId);
+      if (!validation.ok) {
+        set.status = 400;
+        return {
+          error: 'Invalid pokemonData entries',
+          code: 'invalid_pokemon_data',
+          invalid: validation.errors,
+        };
+      }
+    }
+
     const newStatus = (warnings?.length ?? 0) > 0 ? 'disputed' : 'completed';
 
     return tx(() => {
@@ -267,9 +282,13 @@ export const matchRoutes = new Elysia()
       .get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
 
+    // Only flip to 'completed' if BOTH scores are recorded — otherwise we
+    // promote a half-recorded result into the standings. Mirrors the
+    // homeScore/awayScore guard the result handler enforces on the way in.
+    const hasFullScore = match.homeScore !== null && match.awayScore !== null;
     db.update(schema.matches).set({
       warnings: null,
-      status: match.homeScore !== null ? 'completed' : match.status,
+      status: hasFullScore ? 'completed' : match.status,
     }).where(eq(schema.matches.id, params.matchId)).run();
 
     db.insert(schema.activityLog).values({

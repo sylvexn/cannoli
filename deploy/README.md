@@ -124,6 +124,23 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 To roll back: re-create maintenance from `deploy/maintenance/Dockerfile`,
 move FQDN back, repoint showdown env to `cannoli-backend-mock`.
 
+## Backend env reference
+
+Selected env vars consumed by the backend container (full list in
+`backend/src/index.ts` boot guards):
+
+- `CANNOLI_MODE` — `mock` | `live` (per-deployment).
+- `CANNOLI_DB_PATH` — override SQLite path (defaults to `backend/data/cannoli.db`).
+- `PS_SERVER_WS_URL` — bot connects here. Unset = bot disabled.
+- `PS_RSA_PRIVATE_KEY` — required when `PS_SERVER_WS_URL` is set; signs PS auth assertions.
+- `PS_LOGS_DIR` — root for PS autosaved replay logs (`{format}/{YYYY-MM-DD}/{roomId}.log.json`).
+  Used by the disk-replay fallback when the bot was offline at the moment a match
+  finished. Defaults to `./showdown/server/logs` (in-repo PS checkout). In production
+  point at the mounted `ps-logs` volume — the same volume `cannoli-ps-server` writes to,
+  mounted read-only into `cannoli-backend-{mock,live}`.
+- `BOT_USERNAME` / `BOT_PASSWORD` — credentials for the bot's `users` row, seeded
+  on every boot when bot env is set.
+
 ## Initial seeding
 
 Backend containers start with an empty SQLite DB on first deploy.
