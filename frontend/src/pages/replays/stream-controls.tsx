@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, ExternalLink, Pause, Play, Subtitles, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pause, Play, Subtitles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface StreamControlsProps {
@@ -8,7 +8,6 @@ interface StreamControlsProps {
   visible: boolean;
   paused: boolean;
   showLowerThird: boolean;
-  externalReplayUrl: string | null;
   onPrev: () => void;
   onNext: () => void;
   onTogglePause: () => void;
@@ -27,7 +26,6 @@ export function StreamControls({
   visible,
   paused,
   showLowerThird,
-  externalReplayUrl,
   onPrev,
   onNext,
   onTogglePause,
@@ -66,18 +64,6 @@ export function StreamControls({
         >
           <Subtitles size={16} />
         </ControlButton>
-
-        {externalReplayUrl && (
-          <a
-            href={externalReplayUrl}
-            target="_blank"
-            rel="noreferrer"
-            title="Open in Showdown"
-            className="p-2 rounded-md text-text-muted hover:text-neon hover:bg-white/5 transition-colors"
-          >
-            <ExternalLink size={16} />
-          </a>
-        )}
 
         <ControlButton onClick={onEnd} title="End stream" tone="danger">
           <X size={16} />

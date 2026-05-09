@@ -1,4 +1,4 @@
-import { ExternalLink, Play, Image as ImageIcon, Link2, Flame, Zap, Trophy, Sparkles } from 'lucide-react';
+import { Play, Image as ImageIcon, Link2, Flame, Zap, Trophy, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -199,15 +199,6 @@ export function ReplayHeroCard({
             >
               <Link2 size={14} />
             </button>
-            <a
-              href={match.replayUrl!}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center text-text-muted hover:text-neon transition-colors p-2 rounded-md border border-border-default hover:border-neon/40"
-              title="Open replay in Showdown"
-            >
-              <ExternalLink size={14} />
-            </a>
           </div>
         </div>
       </div>

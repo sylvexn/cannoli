@@ -28,14 +28,3 @@ export function storageKey(week: string | undefined): string {
   return `cannoli:stream:week-${week ?? 'unknown'}`;
 }
 
-export function isLocalReplay(url: string): boolean {
-  if (url.startsWith('/replays/') || url.startsWith('/replay')) return true;
-  const psUrl = (import.meta.env.VITE_SHOWDOWN_URL as string | undefined) || 'https://sim.cannoli.live';
-  try {
-    const psHost = new URL(psUrl).host;
-    const u = new URL(url);
-    return u.host === psHost;
-  } catch {
-    return false;
-  }
-}

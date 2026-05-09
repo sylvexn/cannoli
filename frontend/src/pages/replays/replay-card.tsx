@@ -1,4 +1,4 @@
-import { ExternalLink, Play, Image as ImageIcon, Flame, Zap, Trophy } from 'lucide-react';
+import { Play, Image as ImageIcon, Flame, Zap, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -160,15 +160,6 @@ export function ReplayCard({
             <Play size={11} />
             {isViewing ? 'Playing' : 'Watch'}
           </button>
-          <a
-            href={match.replayUrl!}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center text-text-muted hover:text-neon transition-colors p-1.5 rounded border border-border-default hover:border-neon/40"
-            title="Open replay in Showdown"
-          >
-            <ExternalLink size={13} />
-          </a>
         </div>
       </div>
     </div>

@@ -35,19 +35,23 @@ export function isReplayWeekEnded(entry: ReplayEntry) {
 }
 
 /**
- * Check if a replay URL can be safely iframed.
- * Includes both relative `/replay…` paths (legacy) and the configured PS
- * sim host (which sets `frame-ancestors 'self' https://cannoli.live` per
- * showdown/nginx.conf).
+ * URL of the in-site replay embed served from the cannoli-ps-client image
+ * (showdown/cannoli-replay-embed.html). The embed page reads `?match=<id>`,
+ * fetches the log via /replay/data/<id>.json (proxied to cannoli-backend
+ * by showdown/nginx.conf), and renders with the upstream PS Battle player.
+ *
+ * Centralised here so the viewer panel + the stream cockpit reuse the
+ * same URL shape; if we ever fold the embed under a different path
+ * (e.g. /replays/embed) this is the only spot to change.
  */
-export function isLocalReplay(url: string) {
-  if (url.startsWith('/replays/') || url.startsWith('/replay')) return true;
-  const psUrl = (import.meta.env.VITE_SHOWDOWN_URL as string | undefined) || 'https://sim.cannoli.live';
-  try {
-    const psHost = new URL(psUrl).host;
-    const u = new URL(url);
-    return u.host === psHost;
-  } catch {
-    return false;
-  }
+export function replayEmbedUrl(matchId: string): string {
+  const raw = (import.meta.env.VITE_SHOWDOWN_URL as string | undefined) || 'https://sim.cannoli.live';
+  // Strip any trailing slash and the dev-only `?~~host:port` server-prefix
+  // suffix (see .env). PS uses that suffix to tell its SPA which game
+  // server to talk to; for our embed page (a normal HTML file) we just
+  // need scheme + host.
+  let base = raw.replace(/\/$/, '');
+  const q = base.indexOf('?');
+  if (q !== -1) base = base.slice(0, q);
+  return `${base}/replay/embed.html?match=${encodeURIComponent(matchId)}`;
 }

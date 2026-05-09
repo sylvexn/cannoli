@@ -1,7 +1,7 @@
-import { ExternalLink, Play, X, Maximize2, Minimize2, Link2 } from 'lucide-react';
+import { Play, X, Maximize2, Minimize2, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReplayEntry } from './replay-types';
-import { isLocalReplay } from './replay-types';
+import { replayEmbedUrl } from './replay-types';
 
 interface ReplayViewerPanelProps {
   entry: ReplayEntry;
@@ -23,7 +23,7 @@ export function ReplayViewerPanel({
   onClose,
 }: ReplayViewerPanelProps) {
   const { match, league, homeTeam, awayTeam } = entry;
-  const local = isLocalReplay(match.replayUrl!);
+  const embedUrl = replayEmbedUrl(match.id);
 
   return (
     <div className={cn(
@@ -61,17 +61,6 @@ export function ReplayViewerPanel({
           >
             {theater ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
-          {local && (
-            <a
-              href={match.replayUrl!}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1 text-text-muted hover:text-neon transition-colors"
-              title="Open in new tab"
-            >
-              <ExternalLink size={13} />
-            </a>
-          )}
           <button
             onClick={onClose}
             className="p-1 text-text-muted hover:text-loss transition-colors"
@@ -81,27 +70,13 @@ export function ReplayViewerPanel({
           </button>
         </div>
       </div>
-      {local ? (
-        <iframe
-          src={match.replayUrl!}
-          className={cn('w-full border-0 bg-white', theater ? 'flex-1' : '')}
-          style={!theater ? { height: '500px' } : undefined}
-          title="Replay viewer"
-          sandbox="allow-scripts allow-same-origin"
-        />
-      ) : (
-        <div className="flex items-center justify-center py-12 text-text-muted text-sm">
-          <a
-            href={match.replayUrl!}
-            target="_blank"
-            rel="noreferrer"
-            className="text-neon hover:underline flex items-center gap-1"
-          >
-            <ExternalLink size={14} />
-            Open replay on Pokemon Showdown
-          </a>
-        </div>
-      )}
+      <iframe
+        src={embedUrl}
+        className={cn('w-full border-0 bg-[#0e0e10]', theater ? 'flex-1' : '')}
+        style={!theater ? { height: '500px' } : undefined}
+        title="Replay viewer"
+        sandbox="allow-scripts allow-same-origin"
+      />
     </div>
   );
 }

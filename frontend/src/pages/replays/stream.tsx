@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Film } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiTeam } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
@@ -23,9 +23,9 @@ import {
   type PersistedState,
   type QueueEntry,
   type StreamPhase,
-  isLocalReplay,
   storageKey,
 } from './stream-types';
+import { replayEmbedUrl } from './replay-types';
 import { initialStreamState, streamReducer } from './stream-reducer';
 
 /**
@@ -367,8 +367,7 @@ function LiveView(props: LiveProps) {
   } = props;
 
   if (!active) return null;
-  const replayUrl = active.match.replayUrl ?? '';
-  const local = isLocalReplay(replayUrl);
+  const replayUrl = replayEmbedUrl(active.match.id);
   const isFeatured = featured.has(active.id);
 
   return (
@@ -395,7 +394,7 @@ function LiveView(props: LiveProps) {
       )}
 
       {phase === 'replay' && (
-        <ReplayFrame url={replayUrl} local={local} onDone={onReplayDone} />
+        <ReplayFrame url={replayUrl} onDone={onReplayDone} />
       )}
 
       {phase === 'postroll' && (
@@ -428,7 +427,6 @@ function LiveView(props: LiveProps) {
         visible={controlsVisible || phase !== 'replay'}
         paused={prerollHeld}
         showLowerThird={showLowerThird}
-        externalReplayUrl={replayUrl || null}
         onPrev={onPrev}
         onNext={onNext}
         onTogglePause={onTogglePause}
@@ -439,38 +437,12 @@ function LiveView(props: LiveProps) {
   );
 }
 
-function ReplayFrame({ url, local, onDone }: { url: string; local: boolean; onDone: () => void }) {
-  if (!local) {
-    return (
-      <div className="fixed inset-0 z-30 bg-surface flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-text-muted">
-          <Film size={36} className="text-text-muted/40" />
-          <div className="text-sm">This replay isn't iframable from here.</div>
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/10 text-neon text-sm hover:bg-neon/20 transition-colors"
-          >
-            <ExternalLink size={14} />
-            Open in Showdown
-          </a>
-          <button
-            onClick={onDone}
-            className="text-[11px] font-mono uppercase tracking-widest text-text-muted hover:text-text-primary transition-colors"
-          >
-            Skip to post-roll
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+function ReplayFrame({ url, onDone: _onDone }: { url: string; onDone: () => void }) {
   return (
     <iframe
       src={url}
       title="Replay"
-      className="fixed inset-0 w-screen h-screen z-20 bg-white border-0"
+      className="fixed inset-0 w-screen h-screen z-20 bg-[#0e0e10] border-0"
       sandbox="allow-scripts allow-same-origin"
     />
   );
