@@ -16,6 +16,8 @@ import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
+import { existsSync, readFileSync, readdirSync } from 'fs';
+import { join, resolve } from 'path';
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,17 @@ const BOT_PASSWORD = process.env.BOT_PASSWORD || 'cannolibot';
 const PS_PUBLIC_HOST =
   (process.env.PS_PUBLIC_URL || process.env.SHOWDOWN_URL || 'https://sim.cannoli.live')
     .replace(/\/+$/, '');
+
+/**
+ * Root directory PS writes autosaved replays to (relative paths resolved
+ * against the backend cwd at boot). Used for the disk-replay fallback when a
+ * match completes while the bot is offline. Default points at the in-repo
+ * Showdown checkout for dev convenience; production should set PS_LOGS_DIR
+ * to wherever the PS server volume is mounted (see deploy/README.md).
+ */
+const PS_LOGS_DIR = resolve(
+  process.env.PS_LOGS_DIR || './showdown/server/logs',
+);
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -332,9 +345,155 @@ function handleBotPm(sender: string, message: string) {
 }
 
 /**
+ * Extract format slug from a PS room id. `battle-gen9natdexdraft-12345` →
+ * `gen9natdexdraft`. Returns null if the id doesn't match the expected shape.
+ */
+export function formatFromRoomId(roomId: string): string | null {
+  const m = /^battle-([a-z0-9]+)-\d+(?:-\w+)?$/.exec(roomId);
+  return m ? m[1] : null;
+}
+
+/**
+ * Look for a saved replay log on disk. PS autosaves to:
+ *   {PS_LOGS_DIR}/{format}/{YYYY-MM-DD}/{roomId}.log.json
+ *
+ * We don't know the date a-priori (a match could span midnight or have been
+ * abandoned days ago), so we walk the format dir looking for the file. The
+ * dirs are date-named so this is bounded — a few dozen entries at most.
+ *
+ * Returns the parsed `log: string[]` from the JSON, or null if not found /
+ * unreadable.
+ */
+export function readReplayLogFromDisk(
+  roomId: string,
+  rootDir: string = PS_LOGS_DIR,
+): string[] | null {
+  const format = formatFromRoomId(roomId);
+  if (!format) return null;
+
+  if (!existsSync(rootDir)) {
+    console.warn(`[PS Bot] PS_LOGS_DIR not found: ${rootDir} — disk-replay fallback disabled`);
+    return null;
+  }
+
+  const formatDir = join(rootDir, format);
+  if (!existsSync(formatDir)) return null;
+
+  // Scan date dirs in reverse (newest first — most matches will be recent).
+  let dateDirs: string[];
+  try {
+    dateDirs = readdirSync(formatDir).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
+  } catch (err) {
+    console.warn(`[PS Bot] Failed to scan ${formatDir}:`, err);
+    return null;
+  }
+
+  for (const date of dateDirs) {
+    const candidate = join(formatDir, date, `${roomId}.log.json`);
+    if (!existsSync(candidate)) continue;
+
+    try {
+      const raw = readFileSync(candidate, 'utf-8');
+      const parsed = JSON.parse(raw) as { log?: string[] };
+      if (Array.isArray(parsed.log)) return parsed.log;
+    } catch (err) {
+      console.warn(`[PS Bot] Failed to read replay ${candidate}:`, err);
+    }
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * Replay a finished battle from disk through the regular completion path.
+ * Used when the bot was offline at the moment a match's `|win|` was emitted —
+ * the live room has been torn down, but PS persists the protocol to disk
+ * (autosavereplays = true).
+ *
+ * Synthesizes a MonitoredBattle (so handleMatchEnd's branching just works),
+ * feeds every line through the parser, then routes the final result to the
+ * normal handler. Idempotent against already-completed matches because
+ * handleMatchEnd guards on `battle.matchId` and our caller filters on
+ * `status='in_progress'`.
+ */
+function replayFromDisk(match: { id: string; homeTeamId: string; awayTeamId: string; psRoomId: string | null }): boolean {
+  const roomId = match.psRoomId;
+  if (!roomId) return false;
+
+  const lines = readReplayLogFromDisk(roomId);
+  if (!lines || lines.length === 0) return false;
+
+  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
+  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+  const p1Userid = homeTeam?.showdownUsername ? toUserid(homeTeam.showdownUsername) : '';
+  const p2Userid = awayTeam?.showdownUsername ? toUserid(awayTeam.showdownUsername) : '';
+
+  const battle: MonitoredBattle = {
+    roomId,
+    matchId: match.id,
+    p1: p1Userid,
+    p2: p2Userid,
+    format: '',
+    parser: new ReplayParser(),
+    lines: [],
+    isOfficial: true,
+    homeSide: null,
+  };
+
+  // Replay every line through the parser. We also accumulate lines into
+  // battle.lines so the persisted replayLog matches what live capture would
+  // have stored.
+  let winnerUsername: string | null = null;
+  let isTie = false;
+  for (const line of lines) {
+    battle.lines.push(line);
+    battle.parser.feedLine(line);
+    if (line.startsWith('|win|')) {
+      winnerUsername = line.slice('|win|'.length).split('|')[0].trim();
+    } else if (line.startsWith('|tie')) {
+      isTie = true;
+    } else if (line.startsWith('|player|')) {
+      // |player|p1|USERNAME|... — captures usernames into battle.p1/p2 the
+      // same way the live path does, so handleMatchEnd's userid math works.
+      const parts = line.split('|');
+      const side = parts[2];
+      const username = parts[3];
+      if (side === 'p1' && username) battle.p1 = toUserid(username);
+      if (side === 'p2' && username) battle.p2 = toUserid(username);
+    }
+  }
+
+  if (!winnerUsername && !isTie) {
+    // Replay was saved but never reached |win|/|tie| — match was abandoned
+    // mid-game on the PS server. Don't auto-complete; leave for admin review.
+    console.log(`[PS Bot] Disk replay for ${match.id} has no |win|/|tie| — skipping`);
+    return false;
+  }
+
+  // Resolve orientation now that |player| lines have populated battle.p1/p2.
+  battle.homeSide =
+    useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1'
+      : useridToTeam.get(battle.p2)?.teamId === match.homeTeamId ? 'p2'
+        : null;
+
+  console.log(`[PS Bot] Recovering ${match.id} from disk replay (${roomId})`);
+  handleMatchEnd(battle, winnerUsername);
+  return true;
+}
+
+/**
  * On bot reconnect, re-join any battle rooms we were observing before the
  * disconnect. Matches stuck in `in_progress` with a known psRoomId can be
  * rescued; matches in `ready` without a psRoomId have to time out and retry.
+ *
+ * Two passes:
+ *   1. Try to /join each room — if PS still has it open, the bot resumes
+ *      observing live and the |win| we missed will come through naturally
+ *      (PS replays the room state to spectators on join).
+ *   2. For any in_progress matches still NOT in the live monitored set after
+ *      the join sweep, fall back to reading the autosaved replay log from
+ *      disk and replaying it through the same completion path.
  */
 function rejoinInProgressBattles() {
   const open = db.select().from(schema.matches)
@@ -345,6 +504,13 @@ function rejoinInProgressBattles() {
   for (const match of open) {
     const roomId = match.psRoomId!;
     if (monitoredBattles.has(roomId)) continue;
+
+    // Disk-replay fallback first: PS only autosaves `{roomId}.log.json` once
+    // the battle is over (`|win|` / `|tie|`). If a log file exists, the room
+    // is gone — there's nothing to /join and the result would be lost
+    // forever without this path. Replay from disk through the standard
+    // completion handler.
+    if (replayFromDisk(match)) continue;
 
     // Restore state. The replay parser starts blank — we won't recover anything
     // that happened while the bot was offline, but we can still record |win|.
