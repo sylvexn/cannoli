@@ -100,17 +100,23 @@ export function ReplaysPage() {
     return () => { cancelled = true; };
   }, [entries, summaries]);
 
-  // Open a specific replay if ?match=ID is in the URL — for share links
+  // Open a specific replay if ?match=ID is in the URL — for share links and
+  // deep-links from other pages (pokemon detail, profiles). Re-syncs whenever
+  // the URL param changes so navigating from one match link to another while
+  // already on the page swaps the open replay instead of sticking on the first.
   useEffect(() => {
     const matchId = searchParams.get('match');
-    if (matchId && entries.length > 0 && !viewingReplay) {
-      const found = entries.find(e => e.match.id === matchId);
-      if (found) {
-        setViewingReplay(found);
-        // If the deep-linked replay is filtered out by current filters,
-        // reset filters so the user actually sees the row in context.
-        setTimeFilter('all');
-      }
+    if (!matchId) return;
+    if (entries.length === 0) return;
+    if (viewingReplay?.match.id === matchId) return;
+    const found = entries.find(e => e.match.id === matchId);
+    if (found) {
+      setViewingReplay(found);
+      // Make sure the row is actually visible in the grid below the viewer —
+      // otherwise an active filter could hide the deep-linked match entirely.
+      setTimeFilter('all');
+      setLeagueFilter(new Set());
+      setSearch('');
     }
   }, [searchParams, entries, viewingReplay]);
 
