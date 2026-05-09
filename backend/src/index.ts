@@ -17,6 +17,7 @@ import { matchRoutes } from './routes/matches';
 import { feedbackRoutes } from './routes/feedback';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
+import { psInternalRoutes } from './routes/ps-internal';
 import { pinRoutes } from './routes/pins';
 import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
@@ -172,6 +173,7 @@ const app = new Elysia()
   .use(feedbackRoutes)
   .use(arenaRoutes)
   .use(psLoginRoutes)
+  .use(psInternalRoutes)
 
   .listen(3001);
 

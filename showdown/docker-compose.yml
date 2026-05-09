@@ -39,6 +39,13 @@ services:
       PS_KEY_ID: "4"
       # Paste the contents of ps_public.pem here (or use --env-file)
       PS_RSA_PUBLIC_KEY: ${PS_RSA_PUBLIC_KEY:?set PS_RSA_PUBLIC_KEY in .env or shell}
+      # Where the PS startup hook fetches active leagues from. Same backend
+      # that serves /api/ps/login. Used to materialise league chat rooms.
+      CANNOLI_BACKEND_URL: http://host.docker.internal:3001
+      # Shared secret gating /api/internal/ps/leagues. Backend (host) and
+      # ps-server (compose) must match. Default 'dev' for local; override
+      # with PS_INTERNAL_SECRET in .env or shell.
+      PS_INTERNAL_SECRET: ${PS_INTERNAL_SECRET:-dev-internal-secret}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
