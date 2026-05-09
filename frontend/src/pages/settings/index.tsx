@@ -1,13 +1,15 @@
 import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { User, IdCard, Sliders, Lock } from 'lucide-react';
+import { User, IdCard, Sliders, Lock, CalendarRange } from 'lucide-react';
 import { AccountTab } from './account-tab';
 import { ProfileTab } from './profile-tab';
 import { PreferencesTab } from './preferences-tab';
 import { SecurityTab } from './security-tab';
+import { AvailabilityTab } from './availability-tab';
 
 const TABS = [
   { value: 'profile', label: 'Profile', icon: User },
+  { value: 'availability', label: 'Availability', icon: CalendarRange },
   { value: 'account', label: 'Account', icon: IdCard },
   { value: 'preferences', label: 'Preferences', icon: Sliders },
   { value: 'security', label: 'Security', icon: Lock },
@@ -62,6 +64,7 @@ export function UserSettingsPage() {
 
           <div className="min-w-0 mt-4 md:mt-0">
             <TabsContent value="profile"><ProfileTab /></TabsContent>
+            <TabsContent value="availability"><AvailabilityTab /></TabsContent>
             <TabsContent value="account"><AccountTab /></TabsContent>
             <TabsContent value="preferences"><PreferencesTab /></TabsContent>
             <TabsContent value="security"><SecurityTab /></TabsContent>
