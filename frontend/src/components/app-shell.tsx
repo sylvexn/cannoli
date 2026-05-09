@@ -382,9 +382,14 @@ export function AppShell() {
         />
       </aside>
 
-      {/* Main content */}
+      {/* Main content.
+          Non-wide routes use a fluid cap: 1280px floor (preserves the
+          comfortable column on smaller monitors), grows with viewport up to
+          1600px (so a 1920×1080 screen leaves only ~80px of margin per side
+          instead of ~320px), and never exceeds that ceiling on 1440p+ where
+          the original 1280 column already reads well. */}
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
-        <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-7xl mx-auto p-6'}>
+        <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6'}>
           {/* Show a return-to-league pill on global routes if we know which
               league the user was last in. Skip on League Overview / My Hub
               where it would just be noise. */}
