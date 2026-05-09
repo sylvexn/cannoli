@@ -921,6 +921,181 @@ if (MODE === 'mock') {
   }
 }
 
+// ─── Schedule variety (mock-only) ──────────────────────────────────────────
+// Stamps deadlines on every regular-season match across the active S10
+// leagues + flips one league (sapphire) into a mid-season state so the
+// /schedule surface has a realistic mix of completed / in-progress /
+// scheduled rows instead of an all-completed wall. Strictly additive
+// w.r.t. the rest of the seed pipeline:
+//   - emerald + ruby keep their fully-scored, finalized state (archive,
+//     finish positions, pins are untouched).
+//   - sapphire's regular-season weeks 1-6 stay scored; week 7 becomes a
+//     mix (some completed, one in-progress, two scheduled); weeks 8-11
+//     are reset to scheduled (scores cleared, deadlines stamped) and the
+//     league phase rolls back to `regular` at currentWeek=7. Sapphire's
+//     playoff rows + finish positions are cleared since the mid-season
+//     league hasn't reached them yet. (Sapphire has no manual S10 pins
+//     beyond the auto champion-style awards minted upstream — those
+//     remain in pins but are stale entries on a now-mid-season league,
+//     which is an acceptable mock incongruity.)
+if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
+  console.log('\n── Seeding schedule variety ──');
+
+  const s10LeagueIds = S10_CONFIG.files.map((f) => f.id);
+
+  // Match-night cadence: home games rotate Sat 7pm / Sun 7pm / Tue 8pm /
+  // Wed 8pm / Thu 8pm UTC across each week so the grid shows variation.
+  // Picked deterministically from a hash of (matchId) so reseeds produce
+  // the same timestamps.
+  const NIGHT_SLOTS: Array<{ dow: number; hour: number }> = [
+    { dow: 6, hour: 19 }, // Sat 7pm
+    { dow: 0, hour: 19 }, // Sun 7pm
+    { dow: 2, hour: 20 }, // Tue 8pm
+    { dow: 3, hour: 20 }, // Wed 8pm
+    { dow: 4, hour: 20 }, // Thu 8pm
+  ];
+
+  function hashStr(s: string): number {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return h >>> 0;
+  }
+
+  function deadlineFor(matchId: string, weekStartIso: string | null): string | null {
+    if (!weekStartIso) return null;
+    const slot = NIGHT_SLOTS[hashStr(matchId) % NIGHT_SLOTS.length]!;
+    const start = new Date(weekStartIso + 'T00:00:00Z');
+    const startDow = start.getUTCDay();
+    let offset = slot.dow - startDow;
+    if (offset < 0) offset += 7;
+    const d = new Date(start);
+    d.setUTCDate(d.getUTCDate() + offset);
+    d.setUTCHours(slot.hour, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  // Step 1. Stamp deadlines on every regular-season match in S10. Picks
+  // a per-match evening slot inside that week's date range.
+  const allRegular = sqlite.prepare(
+    `SELECT m.id as id, m.league_id as leagueId, m.week as week, l.week_dates as weekDates
+       FROM matches m
+       JOIN leagues l ON l.id = m.league_id
+      WHERE m.league_id IN (${s10LeagueIds.map(() => '?').join(',')})
+        AND m.phase = 'regular'`,
+  ).all(...s10LeagueIds) as { id: string; leagueId: string; week: number; weekDates: string | null }[];
+
+  const setDeadline = sqlite.prepare(`UPDATE matches SET deadline = ? WHERE id = ?`);
+  const stampMany = sqlite.transaction((rows: Array<[string | null, string]>) => {
+    for (const r of rows) setDeadline.run(...r);
+  });
+  const deadlineRows: Array<[string | null, string]> = [];
+  for (const m of allRegular) {
+    const wd: Record<string, string> = m.weekDates ? JSON.parse(m.weekDates) : {};
+    const weekStart = wd[String(m.week)] ?? null;
+    const dl = deadlineFor(m.id, weekStart);
+    if (dl) deadlineRows.push([dl, m.id]);
+  }
+  stampMany(deadlineRows);
+  console.log(`  stamped deadlines on ${deadlineRows.length} regular-season matches`);
+
+  // Step 2. Flip sapphire to a mid-season state. Pick week 7 as "current".
+  const ACTIVE_LEAGUE = 'sapphire';
+  const ACTIVE_WEEK = 7;
+  const TOTAL_REG_WEEKS = 11;
+
+  // 2a. Reset weeks > ACTIVE_WEEK back to scheduled with scores cleared
+  // and a stamped deadline so the schedule grid shows real upcoming rows.
+  // The deadline stamped above is reused — already covers every regular
+  // match. Just clear the score + status here.
+  sqlite.prepare(
+    `UPDATE matches
+        SET home_score = NULL, away_score = NULL,
+            status = 'scheduled',
+            replay_url = NULL, replay_log = NULL,
+            completed_at = NULL, started_at = NULL,
+            ready_home = 0, ready_away = 0,
+            ps_room_id = NULL, warnings = NULL
+      WHERE league_id = ? AND phase = 'regular' AND week > ?`,
+  ).run(ACTIVE_LEAGUE, ACTIVE_WEEK);
+
+  // 2b. Inside ACTIVE_WEEK: keep the first 3 (by id) as completed, set
+  // the 4th to in_progress, and 5th + 6th to scheduled. Match ids are
+  // stable (`sapphire-w7m1` … `sapphire-w7m6`).
+  const wkMatches = sqlite.prepare(
+    `SELECT id FROM matches
+      WHERE league_id = ? AND phase = 'regular' AND week = ?
+      ORDER BY id`,
+  ).all(ACTIVE_LEAGUE, ACTIVE_WEEK) as { id: string }[];
+
+  const inProgressId = wkMatches[3]?.id;
+  const scheduledIds = wkMatches.slice(4).map((m) => m.id);
+
+  if (inProgressId) {
+    sqlite.prepare(
+      `UPDATE matches
+          SET home_score = NULL, away_score = NULL,
+              status = 'in_progress',
+              ready_home = 1, ready_away = 1,
+              started_at = ?,
+              completed_at = NULL,
+              replay_url = NULL, replay_log = NULL,
+              ps_room_id = ?
+        WHERE id = ?`,
+    ).run(
+      // Started ~30min ago in real time so the HUD-ish UI reads "live now".
+      new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      `battle-gen9doublesou-${Math.floor(Math.random() * 1e9)}`,
+      inProgressId,
+    );
+  }
+
+  for (const id of scheduledIds) {
+    sqlite.prepare(
+      `UPDATE matches
+          SET home_score = NULL, away_score = NULL,
+              status = 'scheduled',
+              replay_url = NULL, replay_log = NULL,
+              completed_at = NULL, started_at = NULL,
+              ready_home = 0, ready_away = 0,
+              ps_room_id = NULL
+        WHERE id = ?`,
+    ).run(id);
+  }
+
+  // 2c. Drop sapphire's playoff matches — the mid-season league hasn't
+  // reached them. Clean up dependent match_pokemon rows first via
+  // ON DELETE CASCADE (declared in schema). bye_weeks aren't touched.
+  const playoffDeleted = sqlite.prepare(
+    `DELETE FROM matches WHERE league_id = ? AND phase = 'playoffs'`,
+  ).run(ACTIVE_LEAGUE);
+
+  // 2d. Clear finish_position / finish_label on sapphire teams so the
+  // standings UI doesn't show "Champion" badges on a still-running
+  // league. Pin rows are left as-is (acceptable mock incongruity).
+  sqlite.prepare(
+    `UPDATE teams SET finish_position = NULL, finish_label = NULL
+      WHERE league_id = ?`,
+  ).run(ACTIVE_LEAGUE);
+
+  // 2e. Roll the league phase + currentWeek back. Keep the existing
+  // week_dates blob so the date subtitles still render.
+  sqlite.prepare(
+    `UPDATE leagues
+        SET phase = 'regular', current_week = ?
+      WHERE id = ?`,
+  ).run(ACTIVE_WEEK, ACTIVE_LEAGUE);
+
+  // Summary: how many rows in each bucket now? Useful to eyeball after
+  // a reseed.
+  const counts = sqlite.prepare(
+    `SELECT status, COUNT(*) as c
+       FROM matches WHERE league_id = ?
+       GROUP BY status`,
+  ).all(ACTIVE_LEAGUE) as { status: string; c: number }[];
+  const pretty = counts.map((c) => `${c.status}=${c.c}`).join(' ');
+  console.log(`  ${ACTIVE_LEAGUE} reset to regular wk${ACTIVE_WEEK}: ${pretty} (deleted ${playoffDeleted.changes} playoff rows)`);
+}
+
 // ─── Final summary ──────────────────────────────────────────────────────────
 
 console.log('\n=== Seed Complete ===');
