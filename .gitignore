@@ -46,6 +46,7 @@ showdown/*
 !showdown/nginx.conf
 !showdown/ps-client-config.js
 !showdown/ps-testclient-key.js
+!showdown/cannoli-replay-embed.html
 !showdown/docker-compose.yml
 !showdown/.env.example
 !showdown/.dockerignore
