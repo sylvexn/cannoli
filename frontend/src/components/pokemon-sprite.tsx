@@ -124,6 +124,29 @@ export function PokemonSprite({ name, size = 'md', className, animated = false, 
       src={url}
       alt={name}
       className={cn(sizeMap[size], 'object-contain pixelated', className)}
+      onError={(e) => {
+        // Network/CORS failure after the cache said "loaded" — swap to a
+        // transparent fallback and mark the URL bad so siblings render the
+        // skeleton/placeholder instead of re-firing the error. We only log
+        // the first failure per URL so DevTools doesn't flood when the same
+        // sprite appears in dozens of rows.
+        const img = e.currentTarget;
+        if (img.dataset.fallback === '1') return;
+        img.dataset.fallback = '1';
+        img.src = TRANSPARENT_PIXEL;
+        if (!loggedErrors.has(url)) {
+          loggedErrors.add(url);
+          spriteCache.set(url, 'error');
+        }
+      }}
     />
   );
 }
+
+// 1x1 transparent gif used as a silent fallback when sprite <img> errors out.
+const TRANSPARENT_PIXEL =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// Names whose sprite has already errored — keep the Set module-scoped so
+// DevTools logs a given missing sprite at most once per page lifetime.
+const loggedErrors = new Set<string>();
