@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
-import { TeamLink } from '@/components/team-link';
+import { TeamLogoSwap } from '@/components/team-logo-swap';
 import { useLeague } from '@/lib/league-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { getPokemonData } from '@/data/pokemon-data';
@@ -93,20 +93,18 @@ export function DraftPickLog({
                 {pick.overallPick}
               </span>
 
-              {/* Team pip */}
+              {/* Team pip — logo by default, hover to peek the coach's avatar */}
               {player && (
-                <TeamLink
+                <TeamLogoSwap
                   team={{
                     leagueId: league.id,
                     teamId: player.id,
-                    teamName: player.teamName,
                     teamAbbrev: player.teamAbbrev,
                     teamColor: player.teamColor,
                     logoPath: player.logoPath,
-                    record: player.record,
+                    owner: player.owner,
                   }}
-                  logoOnly
-                  logoSize="sm"
+                  size="sm"
                 />
               )}
 

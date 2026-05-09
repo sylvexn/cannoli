@@ -14,6 +14,7 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CoachLink } from '@/components/coach-link';
+import { TeamLogo } from '@/components/team-logo';
 import { EventDescription } from '@/components/event-description';
 import { EmptyState } from '@/components/empty-state';
 import { useAppData } from '@/lib/app-data-context';
@@ -143,6 +144,14 @@ function ActivityFeedItem({ event, teamsPerLeague, variant, index }: ActivityFee
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
   const tone = getEventTone(event);
 
+  // Team-scoped events get a tiny team-logo badge tucked into the bottom-right
+  // of the actor's avatar — gives instant "who/where" without spending another
+  // line of horizontal space. We resolve the team by matching the actor against
+  // owners in the league's team list (passed in via teamsPerLeague).
+  const actorTeam = event.leagueId && teamsPerLeague?.[event.leagueId]
+    ? teamsPerLeague[event.leagueId].find(t => t.owner?.username === event.actor)
+    : null;
+
   if (variant === 'compact') {
     // Compact: single line, sprite/icon + truncated text. Sized for narrow
     // side columns. The whole row is a coach link for affordance, but inner
@@ -180,14 +189,31 @@ function ActivityFeedItem({ event, teamsPerLeague, variant, index }: ActivityFee
         ['--card-accent' as never]: league?.color ?? 'var(--color-neon)',
       }}
     >
-      <CoachLink
-        coach={{ username: event.actor }}
-        showAvatar
-        avatarSize="lg"
-        avatarOnly
-        size="xs"
-        className="shrink-0 mt-0.5"
-      />
+      <div className="relative shrink-0 mt-0.5">
+        <CoachLink
+          coach={{ username: event.actor }}
+          showAvatar
+          avatarSize="lg"
+          avatarOnly
+          size="xs"
+        />
+        {actorTeam && (
+          <Link
+            to={`/league/${event.leagueId}/teams/${actorTeam.id}`}
+            onClick={e => e.stopPropagation()}
+            title={actorTeam.teamName}
+            className="absolute -bottom-1 -right-1 block rounded-full"
+            style={{ boxShadow: '0 0 0 2px rgb(11 12 18)' }}
+          >
+            <TeamLogo
+              abbrev={actorTeam.teamAbbrev}
+              color={actorTeam.teamColor}
+              logoPath={actorTeam.logoPath}
+              size="xs"
+            />
+          </Link>
+        )}
+      </div>
       <div className="flex-1 min-w-0 overflow-hidden">
         <div className="text-[13px] font-heading text-text-secondary leading-snug">
           <CoachLink coach={{ username: event.actor }} size="sm" />
