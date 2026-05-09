@@ -57,8 +57,8 @@ export function RulesPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-pink">League</span>
-          <span className="text-text-primary ml-1">Rules</span>
+          <span className="text-pink">League</span>{' '}
+          <span className="text-text-primary">Rules</span>
         </h1>
         <p className="text-sm text-text-muted">Cannoli draft and battle rules — read before drafting.</p>
       </div>

@@ -57,8 +57,8 @@ export function TierListPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-purple-400">Tier</span>
-          <span className="text-text-primary ml-1">List</span>
+          <span className="text-purple-400">Tier</span>{' '}
+          <span className="text-text-primary">List</span>
         </h1>
         <p className="text-sm text-text-muted">
           Browse the full draft pool by tier. {totalCount} Pokémon · {captainCount} captain-eligible · {banCount} tera-banned.

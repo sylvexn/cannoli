@@ -50,6 +50,17 @@ export function StandingsPage() {
   const recentMatches = useMemo(() => recentWeek > 0 ? getWeekMatches(recentWeek) : [], [getWeekMatches, recentWeek]);
   const upcomingMatches = useMemo(() => upcomingWeek > 0 ? getWeekMatches(upcomingWeek) : [], [getWeekMatches, upcomingWeek]);
 
+  // The regular season is only truly "complete" when the league has advanced
+  // out of regular play. `upcomingMatches.length === 0` is a flaky proxy: it
+  // also fires before the schedule for the next week is generated mid-season,
+  // which used to mislabel the card as "Season Complete" / "Final". Use the
+  // league phase + currentWeek vs totalWeeks as the real signal.
+  const isSeasonComplete =
+    currentSeason.phase === 'playoffs' ||
+    currentSeason.phase === 'offseason' ||
+    currentSeason.archived === true ||
+    currentSeason.currentWeek > currentSeason.totalWeeks;
+
   function findPlayer(id: string) {
     return players.find(p => p.id === id);
   }
@@ -78,8 +89,8 @@ export function StandingsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-win">League</span>
-          <span className="text-text-primary ml-1">Hub</span>
+          <span className="text-win">League</span>{' '}
+          <span className="text-text-primary">Hub</span>
         </h1>
         <p className="text-sm text-text-muted">
           Season {currentSeason.seasonNumber} &middot; Week {currentSeason.currentWeek} of {currentSeason.totalWeeks}
@@ -118,10 +129,23 @@ export function StandingsPage() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base text-text-primary">
-                  {upcomingWeek > 0 ? `Week ${upcomingWeek}` : 'Season Complete'}
+                  {upcomingWeek > 0
+                    ? `Week ${upcomingWeek}`
+                    : isSeasonComplete
+                      ? 'Season Complete'
+                      : `Week ${currentSeason.currentWeek + 1}`}
                 </CardTitle>
-                <Badge variant="outline" className={upcomingWeek > 0 ? 'text-neon border-neon/30 text-[10px]' : 'text-text-muted border-border-default text-[10px]'}>
-                  {upcomingWeek > 0 ? 'Upcoming' : 'Final'}
+                <Badge
+                  variant="outline"
+                  className={
+                    upcomingWeek > 0
+                      ? 'text-neon border-neon/30 text-[10px]'
+                      : isSeasonComplete
+                        ? 'text-text-muted border-border-default text-[10px]'
+                        : 'text-text-muted border-border-default text-[10px]'
+                  }
+                >
+                  {upcomingWeek > 0 ? 'Upcoming' : isSeasonComplete ? 'Final' : 'Pending'}
                 </Badge>
               </div>
             </CardHeader>
@@ -146,11 +170,19 @@ export function StandingsPage() {
                     </Link>
                   </div>
                 );
-              }) : (
+              }) : isSeasonComplete ? (
                 <EmptyState
                   variant="season-done"
                   title="Regular season's done."
                   subtitle="Playoffs next."
+                  spriteSize="md"
+                  padding="sm"
+                />
+              ) : (
+                <EmptyState
+                  variant="quiet"
+                  title="No matches scheduled yet."
+                  subtitle="Check back when the next week's bracket goes live."
                   spriteSize="md"
                   padding="sm"
                 />

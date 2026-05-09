@@ -20,6 +20,7 @@ import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
 import { SidebarFooter } from './app-shell/sidebar-footer';
+import { PageErrorBoundary } from './page-error-boundary';
 
 // Routes that need full-width layout (no max-w constraint)
 const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
@@ -405,7 +406,9 @@ export function AppShell() {
               </NavLink>
             </div>
           )}
-          <Outlet />
+          <PageErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </PageErrorBoundary>
         </div>
       </main>
 
