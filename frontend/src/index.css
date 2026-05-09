@@ -628,6 +628,22 @@ aside {
   }
 }
 
+/* Globally hide scrollbars across the app while keeping scroll functionality.
+   Wheel, trackpad, keyboard, drag-select-edge — all still scroll. The bars
+   themselves never paint, so the dark surface stays uninterrupted regardless
+   of OS (Windows in particular paints a chunky default bar that doesn't fit
+   the theme). Applied at * because any element with overflow: auto/scroll
+   could otherwise show one — main, sidebar nav, command palette, popovers,
+   inner tables. If you ever need a real scrollbar somewhere (e.g. a full
+   editor surface), opt back in with `scrollbar-width: thin` on that node. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─── Design pass primitives ───────────────────────────────────────────── */
 
 /* List entrance — applied to row maps for staggered fade-in.
