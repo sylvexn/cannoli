@@ -84,7 +84,7 @@ export function NextMatchBanner({
         to={`/league/${leagueId}/teams/${opponent.id}`}
         className="flex items-center gap-1.5 min-w-0 flex-1 hover:opacity-80 transition-opacity"
       >
-        <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
+        <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" logoPath={opponent.logoPath} />
         <span className="text-xs font-medium text-text-primary truncate">{opponent.teamName}</span>
         <span className="text-[10px] text-text-muted font-mono shrink-0">
           ({opponent.record.wins}-{opponent.record.losses})

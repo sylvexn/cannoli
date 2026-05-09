@@ -166,7 +166,7 @@ function EventTile({
             className="text-[10px] font-mono text-text-muted hover:text-neon transition-colors flex items-center gap-1"
           >
             <span>from</span>
-            <TeamLogo abbrev={other.teamAbbrev} color={other.teamColor} size="sm" />
+            <TeamLogo abbrev={other.teamAbbrev} color={other.teamColor} size="sm" logoPath={other.logoPath} />
             <span className="truncate">{other.teamAbbrev}</span>
           </Link>
         )}
@@ -228,7 +228,7 @@ function EventTile({
           className="text-[10px] font-mono text-text-muted hover:text-neon transition-colors flex items-center gap-1"
         >
           <span>vs</span>
-          <TeamLogo abbrev={opp.teamAbbrev} color={opp.teamColor} size="sm" />
+          <TeamLogo abbrev={opp.teamAbbrev} color={opp.teamColor} size="sm" logoPath={opp.logoPath} />
           <span className="truncate">{opp.teamAbbrev}</span>
         </Link>
       )}

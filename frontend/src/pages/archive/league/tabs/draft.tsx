@@ -44,7 +44,7 @@ function DraftTeamCard({ team, picks }: { team: TeamRow; picks: DraftPick[] }) {
     <Card className="bg-surface-raised border-border-default">
       <CardContent className="p-3 space-y-1">
         <div className="flex items-center gap-2 mb-1">
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
           <span className="text-sm font-medium text-text-primary truncate">{team.teamName}</span>
           <span className="font-mono text-[10px] text-text-muted ml-auto">{totalPts}pts</span>
         </div>

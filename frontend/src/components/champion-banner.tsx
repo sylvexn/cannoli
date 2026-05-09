@@ -27,6 +27,7 @@ export interface ChampionBannerData {
     teamName: string;
     teamAbbrev: string;
     teamColor: string;
+    logoPath?: string | null;
     /** Optional — if present, coach name links to /coach/:username. */
     coachUsername?: string | null;
   };
@@ -87,6 +88,7 @@ export function ChampionBanner({
           <TeamLogo
             abbrev={team.teamAbbrev}
             color={team.teamColor}
+            logoPath={team.logoPath}
             size={compact ? 'lg' : 'xl'}
           />
         </div>

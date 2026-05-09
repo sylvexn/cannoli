@@ -126,6 +126,12 @@ function toPlayer(a: ApiTeam): Player {
     teamAbbrev: a.teamAbbrev,
     teamColor: a.teamColor,
     userId: a.userId,
+    logoPath: a.logoPath ?? null,
+    bannerPath: a.bannerPath ?? null,
+    bio: a.bio ?? null,
+    captainNote: a.captainNote ?? null,
+    captainsLocked: a.captainsLocked,
+    owner: a.owner ?? null,
     record: a.record,
     roster: a.roster.map(toRosterPokemon),
   };

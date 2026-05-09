@@ -94,6 +94,7 @@ export function DraftOnTheClock({
               teamName: player.teamName,
               teamAbbrev: player.teamAbbrev,
               teamColor: player.teamColor,
+              logoPath: player.logoPath,
               record: player.record,
             }}
             logoOnly

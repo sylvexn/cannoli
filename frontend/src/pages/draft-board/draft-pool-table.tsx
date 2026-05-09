@@ -168,7 +168,7 @@ export function DraftPoolTable({
               <TableCell className="px-2 py-1">
                 {owner ? (
                   <div className="flex items-center gap-1.5">
-                    <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="sm" />
+                    <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="sm" logoPath={owner.logoPath} />
                     <span className="text-[11px] text-text-secondary">{owner.teamAbbrev}</span>
                     {ownership!.acquisition.method === 'traded' && (
                       <ArrowRightLeft size={10} className="text-pink" />

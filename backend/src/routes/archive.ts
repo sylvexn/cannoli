@@ -89,6 +89,8 @@ export const archiveDeepRoutes = new Elysia()
           teamName: team.teamName,
           teamAbbrev: team.teamAbbrev,
           teamColor: team.teamColor,
+          logoPath: team.logoPath,
+          bannerPath: team.bannerPath,
           userId: team.userId,
           rank: team.rank,
           finishPosition: team.finishPosition,
@@ -303,6 +305,7 @@ export const archiveDeepRoutes = new Elysia()
       teamName: schema.teams.teamName,
       teamAbbrev: schema.teams.teamAbbrev,
       teamColor: schema.teams.teamColor,
+      logoPath: schema.teams.logoPath,
     })
       .from(schema.teams)
       .where(eq(schema.teams.leagueId, params.leagueId))
@@ -315,6 +318,8 @@ export const archiveDeepRoutes = new Elysia()
         teamName: team.teamName,
         teamAbbrev: team.teamAbbrev,
         teamColor: team.teamColor,
+        logoPath: team.logoPath,
+        bannerPath: team.bannerPath,
         userId: team.userId,
         finishPosition: team.finishPosition,
         finishLabel: team.finishLabel,
@@ -436,6 +441,7 @@ export const archiveDeepRoutes = new Elysia()
           teamName: team.teamName,
           teamAbbrev: team.teamAbbrev,
           teamColor: team.teamColor,
+          logoPath: team.logoPath,
           coachName: team.coachName,
           userId: team.userId,
         };

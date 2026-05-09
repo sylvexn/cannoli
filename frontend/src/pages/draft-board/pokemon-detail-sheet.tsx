@@ -240,6 +240,7 @@ export function PokemonDetailSheet({
                         teamName: owner.teamName,
                         teamAbbrev: owner.teamAbbrev,
                         teamColor: owner.teamColor,
+                        logoPath: owner.logoPath,
                         record: owner.record,
                       }}
                       logoOnly

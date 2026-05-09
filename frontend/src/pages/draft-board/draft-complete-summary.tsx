@@ -177,6 +177,7 @@ export function DraftCompleteSummary({
                                 teamName: player.teamName,
                                 teamAbbrev: player.teamAbbrev,
                                 teamColor: player.teamColor,
+                                logoPath: player.logoPath,
                                 record: player.record,
                               }}
                               logoOnly
@@ -274,6 +275,7 @@ function RoundRow({ round, picks, playerById, leagueId }: RoundRowProps) {
                     teamName: player.teamName,
                     teamAbbrev: player.teamAbbrev,
                     teamColor: player.teamColor,
+                    logoPath: player.logoPath,
                     record: player.record,
                   }}
                   logoOnly
@@ -322,6 +324,7 @@ function TeamSummaryCard({
             teamName: player.teamName,
             teamAbbrev: player.teamAbbrev,
             teamColor: player.teamColor,
+            logoPath: player.logoPath,
             record: player.record,
           }}
           logoOnly

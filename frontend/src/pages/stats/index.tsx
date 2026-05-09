@@ -192,6 +192,7 @@ export function StatsPage() {
                       teamName: team.teamName,
                       teamAbbrev: team.teamAbbrev,
                       teamColor: team.teamColor,
+                      logoPath: team.logoPath,
                       record: team.record,
                     }}
                     logoSize="sm"
@@ -287,7 +288,7 @@ export function StatsPage() {
                                 to={leagueUrl(`/teams/${team.id}`)} viewTransition
                                 className="flex items-center gap-1 group/team"
                               >
-                                <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+                                <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
                                 <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
                                   {team.teamName}
                                 </span>

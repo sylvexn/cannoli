@@ -311,7 +311,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
                 to={`/league/${t.leagueId}/teams/${t.teamId}`}
                 className="flex items-center gap-2 text-xs hover:bg-surface-overlay/40 rounded px-1 -mx-1 py-0.5 transition-colors"
               >
-                <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="sm" />
+                <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="sm" logoPath={t.logoPath} />
                 <span className="text-text-primary font-medium truncate">{t.teamName}</span>
                 <span className="text-[10px] font-mono text-text-muted">{t.teamAbbrev}</span>
               </Link>

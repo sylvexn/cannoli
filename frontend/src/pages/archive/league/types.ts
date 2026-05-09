@@ -31,6 +31,7 @@ export interface TeamRow {
   teamName: string;
   teamAbbrev: string;
   teamColor: string;
+  logoPath: string | null;
   userId: number | null;
   rank: number;
   /** Final placement (1 = Champion, 2 = Runner-up, 3 = Semifinalist, 5 =

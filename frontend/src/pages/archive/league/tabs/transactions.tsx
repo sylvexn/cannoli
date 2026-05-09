@@ -75,7 +75,7 @@ function TransactionRowDisplay({ txn, teamMap }: { txn: TransactionRow; teamMap:
           to={`/archive/${seasonId}/${leagueId}/${team.id}`}
           className="flex items-center gap-1 hover:text-text-primary"
         >
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
           <span className="text-text-secondary">{team.teamAbbrev}</span>
         </Link>
       )}
@@ -125,7 +125,7 @@ function TransactionRowDisplay({ txn, teamMap }: { txn: TransactionRow; teamMap:
             to={`/archive/${seasonId}/${leagueId}/${other.id}`}
             className="flex items-center gap-1 hover:text-text-primary"
           >
-            <TeamLogo abbrev={other.teamAbbrev} color={other.teamColor} size="sm" />
+            <TeamLogo abbrev={other.teamAbbrev} color={other.teamColor} size="sm" logoPath={other.logoPath} />
             <span>{other.teamAbbrev}</span>
           </Link>
         </div>

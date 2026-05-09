@@ -141,7 +141,7 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
               style={{ gridTemplateColumns: `120px repeat(${weekDays.length}, 1fr)` }}
             >
               <div className="px-2 py-1.5 flex items-center gap-1.5">
-                <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+                <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" logoPath={player.logoPath} />
                 <span className="text-[11px] text-text-secondary font-medium truncate">{player.teamAbbrev}</span>
               </div>
               {weekDays.map(day => {

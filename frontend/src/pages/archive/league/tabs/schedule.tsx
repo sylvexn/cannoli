@@ -51,7 +51,7 @@ function ScheduleMatchRow({ match, teamMap }: { match: ScheduleMatch; teamMap: M
     )}>
       <div className="flex items-center gap-2">
         <div className={cn('flex items-center gap-1.5 min-w-0 flex-1', homeWon && 'font-medium text-text-primary', awayWon && 'text-text-muted')}>
-          {home && <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />}
+          {home && <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" logoPath={home.logoPath} />}
           <span className="truncate">{home?.teamAbbrev ?? '???'}</span>
         </div>
         <span className={cn(
@@ -69,7 +69,7 @@ function ScheduleMatchRow({ match, teamMap }: { match: ScheduleMatch; teamMap: M
         </span>
         <div className={cn('flex items-center gap-1.5 min-w-0 flex-1 justify-end', awayWon && 'font-medium text-text-primary', homeWon && 'text-text-muted')}>
           <span className="truncate">{away?.teamAbbrev ?? '???'}</span>
-          {away && <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />}
+          {away && <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" logoPath={away.logoPath} />}
         </div>
       </div>
       <div className="flex items-center gap-1 justify-end mt-0.5 text-[9px]">

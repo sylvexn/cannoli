@@ -143,6 +143,7 @@ export const archiveRoutes = new Elysia()
             teamName: team.teamName,
             teamAbbrev: team.teamAbbrev,
             teamColor: team.teamColor,
+            logoPath: team.logoPath,
             rank: team.rank,
             finishPosition: team.finishPosition,
             finishLabel: team.finishLabel,

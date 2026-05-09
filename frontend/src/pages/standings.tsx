@@ -162,13 +162,13 @@ export function StandingsPage() {
                     className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
                     <Link to={leagueUrl(`/teams/${home.id}`)} viewTransition className="flex items-center gap-2 group/home">
-                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
+                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" logoPath={home.logoPath} />
                       <span className="text-sm font-medium text-text-primary group-hover/home:text-neon transition-colors">{home.teamAbbrev}</span>
                     </Link>
                     <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
                     <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
                       <span className="text-sm font-medium text-text-primary group-hover/away:text-pink transition-colors">{away.teamAbbrev}</span>
-                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
+                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" logoPath={away.logoPath} />
                     </Link>
                   </div>
                 );
@@ -215,7 +215,7 @@ export function StandingsPage() {
                     className="grid grid-cols-[1fr_auto_1fr] items-center py-2 px-3 rounded-md transition-all duration-200 hover:bg-surface-overlay/60"
                   >
                     <Link to={leagueUrl(`/teams/${home.id}`)} viewTransition className="flex items-center gap-2 group/home">
-                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" />
+                      <TeamLogo abbrev={home.teamAbbrev} color={home.teamColor} size="sm" logoPath={home.logoPath} />
                       <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
@@ -239,7 +239,7 @@ export function StandingsPage() {
                       <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
-                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" />
+                      <TeamLogo abbrev={away.teamAbbrev} color={away.teamColor} size="sm" logoPath={away.logoPath} />
                     </Link>
                   </div>
                 );
@@ -326,7 +326,7 @@ function StandingsRow({
             onClick={e => e.stopPropagation()}
             className="group/team transition-transform duration-200 hover:scale-110"
           >
-            <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+            <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" logoPath={player.logoPath} />
           </Link>
           <div className="min-w-0 text-left">
             <Link

@@ -152,7 +152,7 @@ export function DraftAdminOverrides({
                   {draftOrder.map(p => (
                     <SelectItem key={p.id} value={p.id} className="text-xs">
                       <span className="flex items-center gap-1.5">
-                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
+                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
                         {p.teamAbbrev} — {p.name}
                       </span>
                     </SelectItem>

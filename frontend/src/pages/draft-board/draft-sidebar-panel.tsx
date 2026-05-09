@@ -388,7 +388,7 @@ function UnifiedTeamRow({
         {showOnline && (
           <Circle size={5} className={cn('shrink-0', isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60')} />
         )}
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" logoPath={player.logoPath} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span className={cn('text-xs font-medium truncate', isUser ? 'text-text-primary' : 'text-text-secondary')}>

@@ -95,7 +95,7 @@ function RosterPicker({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
+        <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
         <span className="text-xs font-medium text-text-primary">{team.teamAbbrev}</span>
         <span className={cn('text-[10px] font-mono uppercase tracking-wider', labelColor)}>{label}</span>
         {selected.size > 0 && (

@@ -390,6 +390,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
               teamName: team.teamName,
               teamAbbrev: team.teamAbbrev,
               teamColor: team.teamColor,
+              logoPath: team.logoPath ?? null,
               record: team.record,
             }}
             logoOnly
@@ -684,6 +685,7 @@ function OpponentMatchupCard({
             teamName: opponent.teamName,
             teamAbbrev: opponent.teamAbbrev,
             teamColor: opponent.teamColor,
+            logoPath: opponent.logoPath ?? null,
             record: opponent.record,
           }}
           logoSize="sm"
