@@ -49,11 +49,10 @@ test.describe('Practice draft simulator', () => {
     await page.goto('/league/sapphire/draft/practice');
 
     // Configuring panel: team picker + Start button. The team picker is the
-    // combobox showing literal text "none" before any team is chosen — Base
-    // UI renders the raw `value` since the Select is initialized to 'none'
-    // rather than left undefined. Filter-bar selects on the same page render
-    // "all" / "tier-desc", so this filter is unambiguous.
-    const teamPicker = page.getByRole('combobox').filter({ hasText: 'none' }).first();
+    // combobox rendering the "Pick your team..." placeholder; filter-bar
+    // selects on the same page render "all" / "tier-desc" so this filter
+    // is unambiguous.
+    const teamPicker = page.getByRole('combobox').filter({ hasText: /pick your team/i }).first();
     await expect(teamPicker).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/this page hit an unexpected error/i)).toHaveCount(0);
 
