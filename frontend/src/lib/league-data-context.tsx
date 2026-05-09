@@ -57,6 +57,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         userId: t.userId,
         owner: t.owner ?? null,
         captainsLocked: t.captainsLocked,
+        logoPath: t.logoPath ?? null,
         bannerPath: t.bannerPath ?? null,
         bio: t.bio ?? null,
         captainNote: t.captainNote ?? null,
