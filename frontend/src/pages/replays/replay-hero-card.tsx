@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { ReplayEntry } from './replay-types';
+import { BroughtPreview } from './brought-preview';
 
 interface ReplayHeroCardProps {
   entry: ReplayEntry;
@@ -55,10 +56,20 @@ export function ReplayHeroCard({
             background: `radial-gradient(ellipse at 30% 50%, ${league.color}18 0%, transparent 70%)`,
           }}
         >
-          <div className="flex flex-col items-center gap-2 text-text-muted/70">
-            <ImageIcon size={28} strokeWidth={1.25} />
-            <span className="text-[10px] font-mono uppercase tracking-widest">No preview yet</span>
-          </div>
+          {summary && (summary.home.length > 0 || summary.away.length > 0) ? (
+            <BroughtPreview
+              home={summary.home}
+              away={summary.away}
+              homeColor={homeTeam?.teamColor}
+              awayColor={awayTeam?.teamColor}
+              size="md"
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-text-muted/70">
+              <ImageIcon size={28} strokeWidth={1.25} />
+              <span className="text-[10px] font-mono uppercase tracking-widest">No preview yet</span>
+            </div>
+          )}
 
           <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-neon/10 border border-neon/30 text-neon text-[9px] font-mono font-bold uppercase tracking-widest">
             <Sparkles size={10} />
