@@ -19,11 +19,17 @@ const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
 export function ShowdownPage() {
   return (
-    <div className="flex flex-col h-full rounded-lg border border-border-default overflow-hidden">
+    <div className="relative flex flex-col h-full rounded-lg border border-border-default overflow-hidden">
       {/* PS iframe — flex-1 so it gets all leftover space above the footer.
           Border + rounding live on the outer wrapper now so the footer pill
           bar visually anchors flush to the iframe edge (no gap from a
-          double-bordered child). */}
+          double-bordered child).
+
+          When the footer is in collapsed mode the pill bar is absolute-
+          positioned and overlays the iframe's bottom edge (see ArenaFooter)
+          — the PS client's internal grey bottom margin lives there, so we
+          occlude that strip rather than letting it push the pill bar far
+          below the visible canvas content. */}
       <div
         className="flex-1 min-h-0 relative"
         style={{ overflow: 'hidden', maxWidth: '100%', maxHeight: '100%' }}
@@ -36,7 +42,7 @@ export function ShowdownPage() {
         />
       </div>
 
-      {/* Arena footer — collapsible, sibling beneath the iframe */}
+      {/* Arena footer — collapsible, anchors flush to the iframe edge */}
       <ArenaFooter />
     </div>
   );
