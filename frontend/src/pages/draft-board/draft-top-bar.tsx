@@ -9,6 +9,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu';
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -87,37 +88,39 @@ export function DraftTopBar({
               <MoreVertical size={14} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-44">
-              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-text-muted">
-                Draft
-              </DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => navigate('/rules')} className="text-xs">
-                <ScrollText size={12} className="mr-2 text-text-muted" />
-                <span>Rules</span>
-              </DropdownMenuItem>
-              {!isPractice && draftDemoVisible && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => navigate(`/league/${leagueId}/draft/practice`)}
-                    className="text-xs"
-                  >
-                    <FlaskConical size={12} className="mr-2 text-text-muted" />
-                    <span>Practice draft</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-              {isPractice && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => navigate(`/league/${leagueId}/draft`)}
-                    className="text-xs"
-                  >
-                    <Radio size={12} className="mr-2 text-text-muted" />
-                    <span>Back to draft</span>
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-text-muted">
+                  Draft
+                </DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => navigate('/rules')} className="text-xs">
+                  <ScrollText size={12} className="mr-2 text-text-muted" />
+                  <span>Rules</span>
+                </DropdownMenuItem>
+                {!isPractice && draftDemoVisible && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/league/${leagueId}/draft/practice`)}
+                      className="text-xs"
+                    >
+                      <FlaskConical size={12} className="mr-2 text-text-muted" />
+                      <span>Practice draft</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {isPractice && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => navigate(`/league/${leagueId}/draft`)}
+                      className="text-xs"
+                    >
+                      <Radio size={12} className="mr-2 text-text-muted" />
+                      <span>Back to draft</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -322,30 +325,32 @@ function ClusterDensity({ density, onChange }: ClusterDensityProps) {
         <Icon size={13} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-text-muted">
-          Card density
-        </DropdownMenuLabel>
-        <DensityItem
-          active={density === 'compact'}
-          onClick={() => onChange('compact')}
-          label="Compact"
-          hint="Sprites only"
-          icon={<Rows3 size={12} />}
-        />
-        <DensityItem
-          active={density === 'comfortable'}
-          onClick={() => onChange('comfortable')}
-          label="Comfortable"
-          hint="Default"
-          icon={<Rows2 size={12} />}
-        />
-        <DensityItem
-          active={density === 'detailed'}
-          onClick={() => onChange('detailed')}
-          label="Detailed"
-          hint="Larger sprite + types"
-          icon={<StretchHorizontal size={12} />}
-        />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-text-muted">
+            Card density
+          </DropdownMenuLabel>
+          <DensityItem
+            active={density === 'compact'}
+            onClick={() => onChange('compact')}
+            label="Compact"
+            hint="Sprites only"
+            icon={<Rows3 size={12} />}
+          />
+          <DensityItem
+            active={density === 'comfortable'}
+            onClick={() => onChange('comfortable')}
+            label="Comfortable"
+            hint="Default"
+            icon={<Rows2 size={12} />}
+          />
+          <DensityItem
+            active={density === 'detailed'}
+            onClick={() => onChange('detailed')}
+            label="Detailed"
+            hint="Larger sprite + types"
+            icon={<StretchHorizontal size={12} />}
+          />
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

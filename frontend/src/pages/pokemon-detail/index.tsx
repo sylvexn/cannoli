@@ -14,7 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
 import { Swords, ArrowLeft, Shield, Gauge, UsersRound } from 'lucide-react';
-import { ScoutingContext } from './scouting-context';
 import type { League, Player } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 
@@ -89,8 +88,6 @@ export function PokemonDetailPage() {
         </div>
       </div>
 
-      {/* Bottom: full-width scouting context strip */}
-      <ScoutingContext pokemonName={decodedName} />
     </div>
   );
 }

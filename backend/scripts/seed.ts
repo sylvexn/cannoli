@@ -736,10 +736,42 @@ if (PRIMARY_CONFIG.seasonNumber === 10) {
 
   // Advance phase + bump currentWeek so the offseason surfaces show real
   // post-final state instead of "in playoffs". Don't archive the season.
+  //
+  // Also stamp draft_date + week_dates so the Schedule page renders the
+  // week selector with date subtitles + the "Week of …" header instead of
+  // bare week numbers. The XLSX import doesn't carry these — they're a
+  // mock-aesthetic detail that the live admin would normally fill in via
+  // the Season wizard.
+  //
+  // Cadence: draft on Sat 2025-09-20, week 1 starts Mon 2025-10-06,
+  // weeks 2..11 auto-fill at +7d each. Playoffs roll directly off week 11.
+  // All three leagues share one rhythm — same season, same tournament.
+  const week1 = new Date(Date.UTC(2025, 9, 6)); // 2025-10-06 (Mon)
+  const s10WeekDates: Record<string, string> = {};
+  for (let w = 1; w <= 11; w++) {
+    const d = new Date(week1);
+    d.setUTCDate(d.getUTCDate() + (w - 1) * 7);
+    s10WeekDates[String(w)] = d.toISOString().slice(0, 10);
+  }
+  const s10DraftDates: Record<string, string> = {
+    sapphire: '2025-09-20T19:00:00Z',
+    ruby: '2025-09-21T19:00:00Z',
+    emerald: '2025-09-27T19:00:00Z',
+  };
   for (const leagueId of s10LeagueIds) {
     sqlite.prepare(
-      `UPDATE leagues SET phase = 'offseason', current_week = 11 WHERE id = ?`,
-    ).run(leagueId);
+      `UPDATE leagues
+          SET phase = 'offseason',
+              current_week = 11,
+              draft_date = COALESCE(draft_date, ?),
+              week_dates = COALESCE(NULLIF(week_dates, ''), ?),
+              week_dates_auto_filled = 1
+        WHERE id = ?`,
+    ).run(
+      s10DraftDates[leagueId] ?? null,
+      JSON.stringify(s10WeekDates),
+      leagueId,
+    );
   }
 }
 
