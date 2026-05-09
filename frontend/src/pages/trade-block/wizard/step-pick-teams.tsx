@@ -41,7 +41,7 @@ export function PickTeamsStep({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Your Team</label>
-          <Select value={proposerTeamId ?? ''} onValueChange={setProposerTeamId}>
+          <Select value={proposerTeamId ?? ''} onValueChange={(v) => v && setProposerTeamId(v)}>
             <SelectTrigger className="h-9 text-xs bg-surface-overlay">
               <SelectValue placeholder="Select team..." />
             </SelectTrigger>
@@ -60,7 +60,7 @@ export function PickTeamsStep({
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Trade Partner</label>
-          <Select value={recipientId ?? ''} onValueChange={setRecipientId}>
+          <Select value={recipientId ?? ''} onValueChange={(v) => v && setRecipientId(v)}>
             <SelectTrigger className="h-9 text-xs bg-surface-overlay">
               <SelectValue placeholder="Select team..." />
             </SelectTrigger>
