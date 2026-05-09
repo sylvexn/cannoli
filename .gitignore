@@ -32,6 +32,10 @@ bun.lockb
 *.db-journal
 *.db-wal
 
+# Scraped replay cache — dev/mock data, regenerate via
+# `bun run scripts/scrape-s10-replays.ts`
+backend/imports/replays/
+
 # Showdown (cloned repos + keys, managed by setup:showdown)
 showdown/*
 !showdown/Dockerfile.*

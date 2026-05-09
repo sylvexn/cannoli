@@ -451,6 +451,13 @@ if (MODE === 'live') {
   }
 }
 
+// Attach scraped replay protocol logs to S10 matches (when cache is present)
+if (PRIMARY_CONFIG.seasonNumber === 10) {
+  const { importReplays } = await import('./import-replays');
+  console.log('\n── Attaching S10 replays ──');
+  importReplays(sqlite);
+}
+
 // Seed supplementary data (both modes)
 seedSiteSettings();
 seedMoveCategories();
