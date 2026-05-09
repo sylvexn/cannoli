@@ -289,7 +289,8 @@ export function AdminLeagues() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {DRAFT_FORMATS.map(f => (
+                        {/* Other formats temporarily hidden — only gen9natdex is supported in S10+. */}
+                        {DRAFT_FORMATS.filter(f => f === 'gen9natdex').map(f => (
                           <SelectItem key={f} value={f} className="text-xs">{FORMAT_LABELS[f]}</SelectItem>
                         ))}
                       </SelectContent>

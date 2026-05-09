@@ -193,13 +193,13 @@ export function PokemonCompactCard({
         !owner && !looksPickable && !queuePosition && !hasConflict && 'border-border-subtle hover:border-border-default',
         // Persistent pickable affordance — soft neon edge + tiny inner glow.
         // AMP UP on hover (full glow).
-        looksPickable && 'border-[1.5px] border-neon/40 shadow-[inset_0_0_6px_rgba(34,211,238,0.10)] hover:border-neon hover:shadow-[0_0_14px_rgba(34,211,238,0.30)]',
+        looksPickable && 'border border-neon/20 shadow-[inset_0_0_6px_rgba(34,211,238,0.05)] hover:border-neon hover:shadow-[0_0_14px_rgba(34,211,238,0.18)]',
         // Owned — solid 1px owner border
-        owner && 'border-[var(--owner)]/70',
+        owner && 'border-[var(--owner)]/45',
         // Highlighted via team sidebar
         isHighlighted && 'ring-2 ring-offset-1 ring-offset-surface',
-        // Queued — pink edge
-        queuePosition && !owner && 'border-pink/70 shadow-[0_0_8px_rgba(232,121,249,0.18)]',
+        // Queued — subtler pink edge, no shadow
+        queuePosition && !owner && 'border-pink/45',
         // Conflict — desaturated, no loud bg tint (warning dot carries the signal)
         hasConflict && 'opacity-70 grayscale-[40%]',
         // Unaffordable — readable, dimmed
