@@ -73,7 +73,7 @@ export function ReplayViewerPanel({
       <iframe
         src={embedUrl}
         className={cn('w-full border-0 bg-[#0e0e10]', theater ? 'flex-1' : '')}
-        style={!theater ? { height: '500px' } : undefined}
+        style={!theater ? { height: '600px' } : undefined}
         title="Replay viewer"
         sandbox="allow-scripts allow-same-origin"
       />
