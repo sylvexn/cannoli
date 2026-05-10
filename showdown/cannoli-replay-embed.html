@@ -11,6 +11,12 @@
   is intentionally tiny — it just wires up the player and points it at
   the Cannoli backend's replay JSON endpoint (/replay/data/<id>.json,
   proxied to cannoli-backend:3001).
+
+  Renders our own control bar driving the same Battle API that the
+  upstream replay panel uses (pause/play/reset/seekTurn/seekBy/setMute,
+  messageShownTime/messageFadeTime + scene.updateAcceleration for speed,
+  switchViewpoint). Defaults to paused so the iframe doesn't blast sound
+  on page load.
 -->
 <html lang="en">
 <head>
@@ -28,7 +34,7 @@
     margin: 0; padding: 0;
     background: #0e0e10;
     color: #ddd;
-    font-family: Verdana, Helvetica, sans-serif;
+    font-family: 'Inter', Verdana, Helvetica, sans-serif;
     overflow-x: hidden;
   }
   #wrap {
@@ -43,6 +49,7 @@
     font-size: 13px;
   }
   #status.error { color: #f77; }
+
   /* Side-by-side battle frame + log on wide viewports, stacked on narrow */
   .battle-wrap {
     display: flex;
@@ -50,9 +57,7 @@
     gap: 8px;
     align-items: flex-start;
   }
-  .battle {
-    margin: 0 auto;
-  }
+  .battle { margin: 0 auto; }
   .battle-log {
     flex: 1 1 320px;
     min-width: 280px;
@@ -64,6 +69,72 @@
     .battle-wrap { flex-direction: column; }
     .battle-log { width: 100%; max-width: none; height: 280px; }
   }
+
+  /* ─── Control bar ─── */
+  #controls {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+    margin: 0 0 8px 0;
+    background: #16161a;
+    border: 1px solid #26262e;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #ccc;
+  }
+  #controls button {
+    background: #1f1f25;
+    border: 1px solid #2c2c34;
+    color: #ddd;
+    padding: 5px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: inherit;
+  }
+  #controls button:hover:not(:disabled) {
+    background: #2a2a32;
+    border-color: #00d9ff;
+    color: #00d9ff;
+  }
+  #controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #controls button.active {
+    background: rgba(0, 217, 255, 0.12);
+    border-color: #00d9ff;
+    color: #00d9ff;
+  }
+  #controls .group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  #controls .sep {
+    width: 1px;
+    align-self: stretch;
+    background: #26262e;
+    margin: 2px 4px;
+  }
+  #controls label {
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    margin-right: 2px;
+  }
+  #turn-display {
+    color: #888;
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+    padding-right: 4px;
+    font-size: 11px;
+  }
+  #turn-display strong { color: #00d9ff; font-weight: 600; }
 </style>
 
 <!-- PS expects window.Config to exist before battle.js loads -->
@@ -72,6 +143,56 @@
 <body>
 <div id="wrap">
   <div id="status">Loading replay…</div>
+
+  <div id="controls" role="toolbar" aria-label="Replay controls">
+    <div class="group">
+      <button data-action="play-pause" title="Play / pause (space)" aria-label="Play / pause">
+        <i class="fa fa-play" id="play-icon"></i>
+      </button>
+      <button data-action="reset" title="Reset to turn 0" aria-label="Reset">
+        <i class="fa fa-undo"></i>
+      </button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="group">
+      <button data-action="prev-turn" title="Previous turn" aria-label="Previous turn">
+        <i class="fa fa-step-backward"></i>
+      </button>
+      <button data-action="next-turn" title="Next turn" aria-label="Next turn">
+        <i class="fa fa-step-forward"></i>
+      </button>
+      <button data-action="goto-turn" title="Go to turn…" aria-label="Go to turn">
+        <i class="fa fa-fast-forward"></i>
+      </button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="group">
+      <label>Speed</label>
+      <button data-speed="hyperfast" title="Hyperfast">»»</button>
+      <button data-speed="fast" title="Fast">»</button>
+      <button data-speed="normal" class="active" title="Normal">1×</button>
+      <button data-speed="slow" title="Slow">«</button>
+      <button data-speed="reallyslow" title="Really slow">««</button>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="group">
+      <button data-action="mute" title="Mute / unmute" aria-label="Mute / unmute">
+        <i class="fa fa-volume-up" id="sound-icon"></i>
+      </button>
+      <button data-action="switch" title="Switch sides" aria-label="Switch sides">
+        <i class="fa fa-random"></i>
+      </button>
+    </div>
+
+    <span id="turn-display">Turn <strong>0</strong></span>
+  </div>
+
   <div class="battle-wrap" id="player" style="display:none;">
     <div class="battle"></div>
     <div class="battle-log"></div>
@@ -99,6 +220,13 @@
 
 <script defer>
 (function () {
+  // PS speed → fade/delay timings, lifted verbatim from
+  // replay.pokemonshowdown.com/src/replay.js so behaviour matches the
+  // upstream replay player exactly (no perceptible difference between
+  // "Fast" here and "Fast" on the official site).
+  var FADE_TABLE = { hyperfast: 40, fast: 50, normal: 300, slow: 500, reallyslow: 1000 };
+  var DELAY_TABLE = { hyperfast: 1, fast: 1, normal: 1, slow: 1000, reallyslow: 3000 };
+
   function ready(fn) {
     if (document.readyState !== 'loading') return fn();
     document.addEventListener('DOMContentLoaded', fn);
@@ -118,6 +246,103 @@
     // the query string on certain proxies)
     var m = window.location.pathname.match(/\/replay\/embed\.html\/(.+)$/);
     return m ? m[1] : null;
+  }
+
+  function setSpeed(battle, value) {
+    battle.messageShownTime = DELAY_TABLE[value];
+    battle.messageFadeTime = FADE_TABLE[value];
+    if (battle.scene && typeof battle.scene.updateAcceleration === 'function') {
+      battle.scene.updateAcceleration();
+    }
+  }
+
+  // Wire control bar to a live battle instance. Subscribe to state so
+  // the play/pause icon and turn counter stay in sync when the player
+  // auto-pauses at log end or transitions between turns.
+  function attachControls(battle) {
+    var controls = document.getElementById('controls');
+    var playIcon = document.getElementById('play-icon');
+    var soundIcon = document.getElementById('sound-icon');
+    var turnDisplay = document.querySelector('#turn-display strong');
+    controls.style.display = 'flex';
+
+    var muted = false;
+
+    function refresh() {
+      if (battle.paused) {
+        playIcon.className = 'fa fa-play';
+      } else {
+        playIcon.className = 'fa fa-pause';
+      }
+      soundIcon.className = muted ? 'fa fa-volume-off' : 'fa fa-volume-up';
+      var t = battle.turn != null && battle.turn >= 0 ? battle.turn : 0;
+      turnDisplay.textContent = t;
+    }
+
+    controls.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn) return;
+
+      var speed = btn.getAttribute('data-speed');
+      if (speed) {
+        setSpeed(battle, speed);
+        controls.querySelectorAll('button[data-speed]').forEach(function (b) {
+          b.classList.toggle('active', b === btn);
+        });
+        return;
+      }
+
+      var action = btn.getAttribute('data-action');
+      switch (action) {
+        case 'play-pause':
+          if (battle.paused) battle.play(); else battle.pause();
+          break;
+        case 'reset':
+          battle.reset();
+          break;
+        case 'prev-turn':
+          battle.seekBy(-1);
+          break;
+        case 'next-turn':
+          battle.skipTurn();
+          break;
+        case 'goto-turn': {
+          var t = window.prompt('Go to turn (e/end for final):');
+          if (t == null) break;
+          t = String(t).trim();
+          if (!t) break;
+          if (t === 'e' || t === 'end' || t === 'f' || t === 'finish') {
+            battle.seekTurn(Infinity);
+          } else {
+            var n = Number(t);
+            if (isNaN(n) || n < 0) { window.alert('Invalid turn'); break; }
+            battle.seekTurn(n);
+          }
+          break;
+        }
+        case 'mute':
+          muted = !muted;
+          battle.setMute(muted);
+          break;
+        case 'switch':
+          battle.switchViewpoint();
+          break;
+      }
+      refresh();
+    });
+
+    // Spacebar toggles play/pause when the iframe has focus, matching
+    // the muscle memory from PS's keyboard shortcut.
+    document.addEventListener('keydown', function (e) {
+      if (e.code === 'Space' && e.target === document.body) {
+        e.preventDefault();
+        if (battle.paused) battle.play(); else battle.pause();
+        refresh();
+      }
+    });
+
+    battle.subscribe(refresh);
+    refresh();
   }
 
   ready(function () {
@@ -161,11 +386,16 @@
           $logFrame: $player.find('.battle-log'),
           log: String(replay.log).split('\n'),
           isReplay: true,
-          paused: false,
+          // Default paused: the iframe loads on /replays without user
+          // intent so we don't want sound + animation auto-firing on
+          // every visit. Users hit play to start.
+          paused: true,
           autoresize: true,
         });
         // Mirrors replays-battle.tsx — surface for debugging.
         window.battle = battle;
+
+        attachControls(battle);
       }).catch(function (err) {
         showError('Failed to load replay: ' + (err && err.message || err));
       });
