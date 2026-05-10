@@ -18,7 +18,7 @@ function extractBattleLog(htmlPath: string): string {
   return html.slice(logStart, end);
 }
 
-const replayDir = join(__dirname, '../../../frontend/public/replays');
+const replayDir = join(__dirname, '../../test/fixtures/replays');
 
 describe('ReplayParser', () => {
   describe('ROA_Bio vs hellofellorat', () => {
