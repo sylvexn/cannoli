@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Film } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiTeam } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
