@@ -164,11 +164,19 @@ hand-promoted staff above this baseline keep their rank.
 ## Initial seeding
 
 Backend containers start with an empty SQLite DB on first deploy.
-`backend/entrypoint.sh` runs `scripts/seed.ts` automatically when the DB file
-is missing (or when `RUN_SEED=1`), and skips it once a DB exists.
+`backend/entrypoint.sh` runs `scripts/seed-sim.ts` automatically (via
+`bun run seed:sim`) when the DB file is missing (or when `RUN_SEED=1`), and
+skips it once a DB exists.
 
-- **mock** — `CANNOLI_MODE=mock`. Seeds the demo dataset. (Will be replaced by
-  the `seed-sim.ts` synthetic-season simulator — see `plan/simulator.md`.)
+- **mock** — `CANNOLI_MODE=mock`. Seeds the **synthetic-season simulator**: two
+  fictional seasons (one finished, one mid-season), 3 gem leagues each, 12 teams
+  per league, full drafted rosters, complete regular-season results, and a
+  finished playoff bracket for season 1. Data is entirely fictional — no real
+  coaches or teams. The seed is deterministic (`masterSeed=0xcafe`). Run locally
+  with `bun run seed:sim` from `backend/`. Design record: `plan/simulator.md`.
+  - `/api/admin/sim/*` — simulator control API, **mock-only** (404 in live).
+  - `POST /api/auth/demo-session` — creates a no-password demo admin session,
+    **mock-only** (404 in live). Used by the public-facing simulator panel.
 - **live** — does **not** self-seed in place. The live DB is built locally and
   shipped onto the volume — see the migration runbook below.
 

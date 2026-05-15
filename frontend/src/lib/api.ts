@@ -1229,7 +1229,87 @@ export const api = {
    *  auto-awarded pin without revoke + re-award). */
   updatePinRecipient: (id: number, data: { userId?: number; metadata?: Record<string, unknown> }) =>
     mutateJson<{ success: boolean }>('PATCH', `/api/admin/pins/${id}`, data),
+
+  // ─── Season Simulator (mock-mode only) ──────────────────────────────────
+  // Drives the mock.cannoli.live interactive season simulator. Every endpoint
+  // is mock-gated server-side — calls 403 on a live backend.
+  getSimState: () => fetchJson<ApiSimState>('/api/admin/sim/state'),
+
+  simAdvanceWeek: (leagueId: string) =>
+    postJson<{ ok: boolean; leagueId: string; matchesPlayed: number; weekBefore: number; weekAfter: number }>(
+      '/api/admin/sim/advance-week', { leagueId },
+    ),
+
+  simMatch: (matchId: string) =>
+    postJson<{ ok: boolean; matchId: string; homeScore: number; awayScore: number }>(
+      `/api/admin/sim/match/${matchId}`,
+    ),
+
+  simWeek: (leagueId: string, week: number) =>
+    postJson<{ ok: boolean; leagueId: string; week: number; matchesPlayed: number; throughWeek: number }>(
+      `/api/admin/sim/week/${week}`, { leagueId },
+    ),
+
+  simAutoCompleteDraft: (leagueId: string) =>
+    postJson<{ ok: boolean; leagueId: string; picks: number; captainsAssigned: number }>(
+      '/api/admin/sim/draft/auto-complete', { leagueId },
+    ),
+
+  simGeneratePlayoffs: (leagueId: string) =>
+    postJson<{ ok: boolean; leagueId: string; matchesPlayed: number; championId: string }>(
+      '/api/admin/sim/playoffs/generate', { leagueId },
+    ),
+
+  simPhase: (leagueId: string, phase: string, opts?: { override?: boolean; confirm?: boolean }) =>
+    postJson<{ ok: boolean; leagueId: string; from: string; to: string; teams: number }>(
+      '/api/admin/sim/phase', { leagueId, phase, ...opts },
+    ),
+
+  simReset: (opts?: { masterSeed?: string }) =>
+    postJson<{
+      ok: boolean;
+      droppedTables: number;
+      masterSeed: string;
+      totals: Record<string, number>;
+      seasons: ApiSimSeason[];
+    }>('/api/admin/sim/reset', { confirm: 'reset', ...(opts?.masterSeed ? { masterSeed: opts.masterSeed } : {}) }),
+
+  simResetWeek: (leagueId: string, week: number) =>
+    postJson<{ ok: boolean; leagueId: string; week: number; matchesVoided: number; currentWeek: number }>(
+      `/api/admin/sim/reset-week/${week}`, { leagueId },
+    ),
+
+  simResetMatch: (matchId: string) =>
+    postJson<{ ok: boolean; matchId: string }>(`/api/admin/sim/reset-match/${matchId}`),
 };
+
+// ─── Simulator types ─────────────────────────────────────────────────────────
+
+export interface ApiSimSeason {
+  id: number;
+  seasonNumber: number;
+  pointCap: number;
+  teraCaptainSlots: number;
+}
+
+export interface ApiSimLeague {
+  id: string;
+  name: string;
+  seasonId: number;
+  phase: 'predraft' | 'draft' | 'regular' | 'playoffs' | 'offseason';
+  currentWeek: number;
+  totalWeeks: number;
+  paused: boolean;
+  regular: { completed: number; total: number };
+  playoffs: { completed: number; total: number };
+}
+
+export interface ApiSimState {
+  ok: boolean;
+  mode: 'live' | 'mock';
+  seasons: ApiSimSeason[];
+  leagues: ApiSimLeague[];
+}
 
 /** Mirrors `ManualAward` in backend/src/lib/pins/awards-data.ts. The discriminated
  *  union over `username` vs `pokemon` is flattened to optional fields here
