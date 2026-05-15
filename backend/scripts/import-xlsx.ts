@@ -12,6 +12,7 @@ import XLSX from 'xlsx';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
+import { existsSync } from 'fs';
 import { hashSync } from 'bcryptjs';
 import * as schema from '../src/db/schema';
 import { getFormCategory } from '../src/lib/pokedex';
@@ -195,55 +196,15 @@ export interface ImportResult {
 }
 
 /**
- * Import a season's data from XLSX files.
- * Creates users for coaches if createUsers=true.
+ * Read the Pokemon master sheet (tiers, costs, types, stats, abilities) plus
+ * the Draft Board banlist from one S10/S11-layout XLSX and populate ONLY the
+ * `pokemon` table. Shared by `importSeason` and the standalone
+ * `importPokemonOnly` export. `INSERT OR IGNORE` makes it safe to call against
+ * a DB that may already hold some Pokemon rows.
  */
-export function importSeason(
-  sqlite: Database,
-  config: SeasonConfig,
-  opts: { createUsers?: boolean; clearExisting?: boolean } = {},
-): ImportResult {
-  const { createUsers = false, clearExisting = false } = opts;
-  const db = drizzle(sqlite, { schema });
-
-  sqlite.exec('PRAGMA foreign_keys = OFF');
-
-  if (clearExisting) {
-    sqlite.exec(`
-      DELETE FROM match_pokemon;
-      DELETE FROM matches;
-      DELETE FROM transactions;
-      DELETE FROM draft_picks;
-      DELETE FROM rosters;
-      DELETE FROM teams;
-      DELETE FROM leagues;
-      DELETE FROM seasons;
-      DELETE FROM pokemon;
-    `);
-  }
-
-  const allCoachTeamIds = new Map<string, string>();
-  const allCoachUserIds = new Map<string, number>();
-
-  // ─── Season ──────────────────────────────────────────────────────────────
-
-  console.log(`Creating season ${config.seasonNumber}...`);
-  const seasonRow = db.insert(schema.seasons).values({
-    seasonNumber: config.seasonNumber,
-    pointCap: 110,
-    teraCaptainSlots: 2,
-  }).returning().get();
-  const seasonId = seasonRow.id;
-  // Lifecycle defaults applied per league below — phase/currentWeek/totalWeeks
-  // moved off `seasons`.
-  const leaguePhase = config.phase || 'regular';
-  const leagueCurrentWeek = config.currentWeek ?? 11;
-  const leagueTotalWeeks = config.totalWeeks ?? 11;
-
-  // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
-
+function importPokemonReference(sqlite: Database, xlsxPath: string): number {
   console.log('Importing Pokemon reference data...');
-  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file));
+  const refWb = XLSX.readFile(xlsxPath);
   const pokemonSheet = sheet(refWb, 'Pokemon');
   // Row 1 = headers: Pokemon, Pts, Sprite, Mono Sprite, Smogon Name, Github Name, BW Sprite, Type1, Type2, HP, ATK, DEF, SPA, SPD, SPE, Ability1, Ability2, Hidden Ability, Shiny, Pokemon, Tera Banned
   const pokemonRows: typeof schema.pokemon.$inferInsert[] = [];
@@ -311,6 +272,80 @@ export function importSeason(
     );
   }
   console.log(`  Inserted ${pokemonRows.length} Pokemon`);
+  return pokemonRows.length;
+}
+
+/**
+ * Populate ONLY the `pokemon` reference table — no seasons, leagues, teams, or
+ * matches. Used by the season simulator's `buildSimWorld()` so a synthetic
+ * fictional draft has real tier/cost/type data to draft against without
+ * importing any real S9/S10 team or match history.
+ *
+ * Picks the first available S10 XLSX from `backend/imports/`. The Pokemon
+ * master sheet is identical across the three league files, so any one works.
+ */
+export function importPokemonOnly(sqlite: Database): number {
+  for (const f of S10_CONFIG.files) {
+    const path = resolve(IMPORTS_DIR, f.file);
+    if (existsSync(path)) {
+      return importPokemonReference(sqlite, path);
+    }
+  }
+  throw new Error(
+    `importPokemonOnly: no S10 XLSX found in ${IMPORTS_DIR} — expected one of: ` +
+      S10_CONFIG.files.map((f) => f.file).join(', '),
+  );
+}
+
+/**
+ * Import a season's data from XLSX files.
+ * Creates users for coaches if createUsers=true.
+ */
+export function importSeason(
+  sqlite: Database,
+  config: SeasonConfig,
+  opts: { createUsers?: boolean; clearExisting?: boolean } = {},
+): ImportResult {
+  const { createUsers = false, clearExisting = false } = opts;
+  const db = drizzle(sqlite, { schema });
+
+  sqlite.exec('PRAGMA foreign_keys = OFF');
+
+  if (clearExisting) {
+    sqlite.exec(`
+      DELETE FROM match_pokemon;
+      DELETE FROM matches;
+      DELETE FROM transactions;
+      DELETE FROM draft_picks;
+      DELETE FROM rosters;
+      DELETE FROM teams;
+      DELETE FROM leagues;
+      DELETE FROM seasons;
+      DELETE FROM pokemon;
+    `);
+  }
+
+  const allCoachTeamIds = new Map<string, string>();
+  const allCoachUserIds = new Map<string, number>();
+
+  // ─── Season ──────────────────────────────────────────────────────────────
+
+  console.log(`Creating season ${config.seasonNumber}...`);
+  const seasonRow = db.insert(schema.seasons).values({
+    seasonNumber: config.seasonNumber,
+    pointCap: 110,
+    teraCaptainSlots: 2,
+  }).returning().get();
+  const seasonId = seasonRow.id;
+  // Lifecycle defaults applied per league below — phase/currentWeek/totalWeeks
+  // moved off `seasons`.
+  const leaguePhase = config.phase || 'regular';
+  const leagueCurrentWeek = config.currentWeek ?? 11;
+  const leagueTotalWeeks = config.totalWeeks ?? 11;
+
+  // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
+
+  importPokemonReference(sqlite, resolve(IMPORTS_DIR, config.files[0].file));
 
   // ─── Per-league data ─────────────────────────────────────────────────────
 
