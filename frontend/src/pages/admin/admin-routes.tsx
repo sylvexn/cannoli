@@ -6,7 +6,7 @@
  * Pin definitions and Pin award are split into two sibling routes that share
  * the same /admin/pins parent header (with sub-tab nav). Other tabs are 1:1.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -27,10 +27,11 @@ import { AdminActivityLog } from './admin-activity-log';
 import { AdminFeedback } from './admin-feedback';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
+import { AdminSim } from './admin-sim';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -93,6 +94,31 @@ export const AdminPinsRoute = () => (
   </AdminSection>
 );
 export const AdminPinsLegacyRedirect = () => <Navigate to="/admin/pins" replace />;
+
+/**
+ * Season Simulator route — mock-mode only.
+ *
+ * Probes /api/health on mount; redirects to /admin when the backend is in
+ * live mode (the simulator API is mock-gated server-side, so this is purely
+ * a UX guard so the route is never reachable on a live deployment). The
+ * page renders its own monospace split-color header, so it isn't wrapped in
+ * <AdminSection>.
+ */
+export const AdminSimRoute = () => {
+  const [mode, setMode] = useState<'live' | 'mock' | 'loading'>('loading');
+  useEffect(() => {
+    api.getHealth().then(h => setMode(h.mode)).catch(() => setMode('live'));
+  }, []);
+  if (mode === 'loading') {
+    return <div className="py-12 text-center text-sm text-text-muted font-mono">Checking deployment mode…</div>;
+  }
+  if (mode !== 'mock') return <Navigate to="/admin" replace />;
+  return (
+    <AdminSection icon={FlaskConical} title="Simulator">
+      <AdminSim />
+    </AdminSection>
+  );
+};
 
 /**
  * Header action for the Activity Log: trigger pin audit-log backfill.

@@ -21,6 +21,7 @@ import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
 import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
+import { SimBanner } from './sim-banner';
 
 // Routes that need full-width layout (no max-w constraint)
 const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
@@ -162,7 +163,10 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden">
+      {/* Site-wide simulator banner — only renders on mock.cannoli.live */}
+      <SimBanner />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-surface-raised border-r border-border-default flex flex-col">
         {/* Logo */}
@@ -410,6 +414,7 @@ export function AppShell() {
         </div>
       </main>
 
+      </div>
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       <MatchBanner />
     </div>

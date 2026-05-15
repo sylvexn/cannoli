@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical,
 } from 'lucide-react';
 
 interface NavItem {
@@ -74,6 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/**
+ * The Simulator tab is mock-deployment only — appended to the System group
+ * when the /api/health probe reports `mode === 'mock'`.
+ */
+const SIM_NAV_ITEM: NavItem = { slug: 'sim', label: 'Simulator', icon: FlaskConical };
+
 export function AdminPage() {
   const [mode, setMode] = useState<'live' | 'mock' | null>(null);
 
@@ -82,6 +88,14 @@ export function AdminPage() {
   useEffect(() => {
     api.getHealth().then(h => setMode(h.mode)).catch(() => setMode(null));
   }, []);
+
+  // Append the mock-only Simulator tab to the System group when the backend
+  // reports mock mode. Other groups pass through unchanged.
+  const navGroups: NavGroup[] = mode === 'mock'
+    ? NAV_GROUPS.map(g =>
+        g.label === 'System' ? { ...g, items: [...g.items, SIM_NAV_ITEM] } : g,
+      )
+    : NAV_GROUPS;
 
   return (
     <div className="flex gap-0">
@@ -107,7 +121,7 @@ export function AdminPage() {
           </h1>
           <p className="px-3 text-[10px] text-text-muted">Site management</p>
         </div>
-        {NAV_GROUPS.map(group => (
+        {navGroups.map(group => (
           <div key={group.label}>
             <div className="px-3 mb-1 text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-text-muted/50">
               {group.label}

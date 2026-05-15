@@ -27,7 +27,7 @@ import {
   AdminTemplatesRoute,
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
   AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
-  AdminPinsLegacyRedirect,
+  AdminPinsLegacyRedirect, AdminSimRoute,
 } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
 import { ArchiveHubPage } from '@/pages/archive/hub';
@@ -128,6 +128,8 @@ export default function App() {
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
                     <Route path="feedback" element={<AdminFeedbackRoute />} />
+                    {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
+                    <Route path="sim" element={<AdminSimRoute />} />
                   </Route>
                 </Route>
               </Route>
