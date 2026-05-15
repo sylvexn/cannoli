@@ -598,6 +598,8 @@ export const api = {
 
   logout: () => postJson<{ success: boolean }>('/api/auth/logout'),
 
+  demoLogin: () => postJson<{ user: ApiAuthUser }>('/api/auth/demo-session'),
+
   me: () => fetchJson<{ user: ApiAuthUser | null }>('/api/auth/me'),
 
   changePassword: (currentPassword: string, newPassword: string) =>
