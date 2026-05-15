@@ -8,8 +8,8 @@ import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
-import { validatePokemonDataForMatch } from '../lib/match-validation';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
+import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 
 export const matchRoutes = new Elysia()
 
@@ -273,126 +273,20 @@ export const matchRoutes = new Elysia()
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const match = db.select().from(schema.matches)
-      .where(eq(schema.matches.id, params.matchId))
-      .get();
-    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+    const { homeScore, awayScore, replayUrl, pokemonData, warnings } =
+      body as RecordResultInput;
 
-    // State machine enforcement
-    if (match.status === 'completed' || match.status === 'disputed') {
-      set.status = 400;
-      return { error: `Match already ${match.status} — dismiss warnings or contact admin to re-record` };
+    const outcome = recordMatchResult(
+      params.matchId,
+      { homeScore, awayScore, replayUrl, pokemonData, warnings },
+      user.username,
+    );
+    if (!outcome.ok) {
+      set.status = outcome.status ?? 400;
+      const { ok, status, result, ...err } = outcome;
+      return err;
     }
-    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') {
-      set.status = 400;
-      return { error: 'Cannot record result for a match with TBD teams' };
-    }
-
-    const { homeScore, awayScore, replayUrl, pokemonData, warnings } = body as {
-      homeScore: number;
-      awayScore: number;
-      replayUrl?: string;
-      pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
-      warnings?: string[];
-    };
-
-    if (homeScore === undefined || awayScore === undefined) {
-      set.status = 400;
-      return { error: 'homeScore and awayScore required' };
-    }
-
-    // Validate pokemonData (teamId in {home,away}; pokemonName on roster).
-    // Done before the tx so we don't churn the WAL on bad input.
-    let mergedWarnings: string[] = warnings?.slice() ?? [];
-    if (pokemonData?.length) {
-      const validation = validatePokemonDataForMatch(
-        pokemonData,
-        match.homeTeamId,
-        match.awayTeamId,
-        { homeScore, awayScore },
-      );
-      if (!validation.ok) {
-        set.status = 400;
-        return {
-          error: 'Invalid pokemonData entries',
-          code: 'invalid_pokemon_data',
-          invalid: validation.errors,
-        };
-      }
-      // Soft warnings (score/deaths sum mismatch, >6 mons) flow into the
-      // existing disputed-status path rather than blocking — admin can
-      // dismiss them post-record.
-      if (validation.warnings.length > 0) {
-        mergedWarnings = mergedWarnings.concat(validation.warnings);
-      }
-    }
-
-    const newStatus = mergedWarnings.length > 0 ? 'disputed' : 'completed';
-
-    return tx(() => {
-    // Update match
-    db.update(schema.matches).set({
-      homeScore,
-      awayScore,
-      replayUrl: replayUrl || match.replayUrl,
-      status: newStatus,
-      completedAt: new Date().toISOString(),
-      warnings: mergedWarnings.length ? JSON.stringify(mergedWarnings) : null,
-    }).where(eq(schema.matches.id, params.matchId)).run();
-
-    // Insert per-pokemon K/D if provided
-    if (pokemonData?.length) {
-      // Clear existing pokemon data for this match
-      db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.matchId, params.matchId)).run();
-
-      for (const p of pokemonData) {
-        db.insert(schema.matchPokemon).values({
-          matchId: params.matchId,
-          teamId: p.teamId,
-          pokemonName: p.pokemonName,
-          kills: p.kills,
-          deaths: p.deaths,
-          teraUsed: p.teraUsed ?? false,
-          teraType: p.teraType ?? null,
-        }).run();
-      }
-    }
-
-    // Activity log
-    db.insert(schema.activityLog).values({
-      type: 'match_result',
-      category: 'match',
-      actor: user.username,
-      leagueId: match.leagueId,
-      description: `Recorded result for ${match.homeTeamId} vs ${match.awayTeamId}: ${homeScore}-${awayScore}`,
-      metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, warningCount: mergedWarnings.length }),
-    }).run();
-
-    // ─── Playoff auto-advancement ─────────────────────────────────
-    if (newStatus === 'completed' && match.phase === 'playoffs' && match.playoffRound) {
-      const winnerId = homeScore > awayScore ? match.homeTeamId : match.awayTeamId;
-      const winnerSeed = homeScore > awayScore ? match.homeSeed : match.awaySeed;
-
-      advancePlayoffWinner({
-        matchId: params.matchId,
-        leagueId: match.leagueId,
-        playoffRound: match.playoffRound,
-        winnerId,
-        winnerSeed,
-      });
-    }
-
-    // ─── Auto-award per-match pins (Kingslayer, Flawless) ─────────
-    // Idempotent — re-running on a re-record (after dismiss-warnings) will
-    // skip already-awarded rows via the unique index. Safe to run on
-    // disputed-status results too: the helpers gate on status='completed'
-    // internally, so a 'disputed' record waits until warnings clear.
-    if (newStatus === 'completed') {
-      runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
-    }
-
     return { success: true };
-    });
   })
 
   // ─── Dismiss match warnings ──────────────────────────────────────────
