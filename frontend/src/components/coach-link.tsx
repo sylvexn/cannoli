@@ -8,6 +8,10 @@ import { formatRecord, formatTenure } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Shield, Code2 } from 'lucide-react';
 
+/** Named avatar size scale shared with CoachAvatar. Re-exported for callers
+ *  that want to align with the design tokens without importing two files. */
+type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number;
+
 const FALLBACK_PRIMARY = '#7dd3fc';
 const FALLBACK_SECONDARY = '#a78bfa';
 
@@ -26,8 +30,12 @@ interface CoachLinkProps {
   coach: CoachRef;
   /** Show the avatar inline before the name. */
   showAvatar?: boolean;
-  /** Avatar size when showAvatar is true. Default 16. */
-  avatarSize?: number;
+  /** Avatar size when showAvatar is true. Accepts the named scale (`xs`–`2xl`)
+   *  or a raw pixel number. Default `xs` (16px) — meant for inline pills.
+   *  Use `md`/`lg` for activity feeds and standings rows. */
+  avatarSize?: AvatarSize;
+  /** Optional presence indicator passed straight to the avatar. */
+  presence?: 'online' | 'away' | 'in-draft';
   /** Render only the avatar (no name text). Useful for tight chips. */
   avatarOnly?: boolean;
   /** Disable the hover card (still renders the link). */
@@ -51,7 +59,8 @@ interface CoachLinkProps {
 export function CoachLink({
   coach,
   showAvatar = false,
-  avatarSize = 16,
+  avatarSize = 'xs',
+  presence,
   avatarOnly = false,
   noHoverCard = false,
   static: staticRender = false,
@@ -100,13 +109,14 @@ export function CoachLink({
           primaryColor={primary}
           secondaryColor={secondary}
           size={avatarSize}
+          presence={presence}
         />
       )}
       {nameNode}
       {coach.role === 'dev' && (
         <span
           aria-label="dev"
-          className="inline-flex items-center justify-center rounded px-1 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-neon/15 text-neon ring-1 ring-neon/30"
+          className="inline-flex items-center justify-center rounded-full px-1.5 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-neon/15 text-neon ring-1 ring-neon/30"
           title="Dev"
         >
           <Code2 size={8} />
@@ -115,7 +125,7 @@ export function CoachLink({
       {coach.role === 'admin' && (
         <span
           aria-label="admin"
-          className="inline-flex items-center justify-center rounded px-1 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
+          className="inline-flex items-center justify-center rounded-full px-1.5 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
           title="Admin"
         >
           <Shield size={8} />
@@ -225,21 +235,21 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
         className="w-72 p-0 overflow-hidden border-border-default"
       >
         {/* Banner */}
-        <div className="relative h-12 w-full" style={bannerStyle}>
-          <div className="absolute -bottom-5 left-3">
+        <div className="relative h-14 w-full" style={bannerStyle}>
+          <div className="absolute -bottom-6 left-3">
             <CoachAvatar
               username={merged.username}
               displayName={merged.displayName}
               avatarPath={merged.avatarPath}
               primaryColor={primary}
               secondaryColor={secondary}
-              size={40}
+              size={48}
             />
           </div>
         </div>
 
         {/* Identity */}
-        <div className="pt-6 px-3 pb-2.5">
+        <div className="pt-7 px-3 pb-2.5">
           <div className="flex items-baseline gap-1.5 min-w-0">
             <Link
               to={linkPath}
@@ -249,12 +259,12 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
               {display}
             </Link>
             {coach.role === 'dev' && (
-              <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-neon/15 text-neon px-1 py-px rounded ring-1 ring-neon/30 shrink-0">
+              <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-neon/15 text-neon px-1.5 py-px rounded-full ring-1 ring-neon/30 shrink-0">
                 Dev
               </span>
             )}
             {coach.role === 'admin' && (
-              <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 px-1 py-px rounded ring-1 ring-amber-400/30 shrink-0">
+              <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 px-1.5 py-px rounded-full ring-1 ring-amber-400/30 shrink-0">
                 Admin
               </span>
             )}

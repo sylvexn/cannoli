@@ -5,11 +5,14 @@ interface TeamCoachProps {
   player: Pick<Player, 'name' | 'owner'>;
   /** Show the avatar inline before the name. */
   showAvatar?: boolean;
-  avatarSize?: number;
+  /** Avatar size — accepts CoachAvatar's named scale or raw px. */
+  avatarSize?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | number;
   size?: 'xs' | 'sm' | 'md';
   className?: string;
   /** Disable the hover card (still renders the link if owner exists). */
   noHoverCard?: boolean;
+  /** Optional presence indicator forwarded to the avatar. */
+  presence?: 'online' | 'away' | 'in-draft';
 }
 
 /**
@@ -21,10 +24,11 @@ interface TeamCoachProps {
 export function TeamCoach({
   player,
   showAvatar = false,
-  avatarSize = 16,
+  avatarSize = 'xs',
   size,
   className,
   noHoverCard = false,
+  presence,
 }: TeamCoachProps) {
   if (player.owner) {
     return (
@@ -42,6 +46,7 @@ export function TeamCoach({
         avatarSize={avatarSize}
         size={size}
         noHoverCard={noHoverCard}
+        presence={presence}
         className={className}
       />
     );
