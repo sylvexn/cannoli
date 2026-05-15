@@ -9,6 +9,7 @@
     "seed": "bun run scripts/seed.ts",
     "seed:activity": "bun run scripts/seed-activity.ts",
     "seed:fresh": "bun run scripts/seed-fresh.ts",
+    "seed:sim": "CANNOLI_MODE=mock bun run scripts/seed-sim.ts",
     "seed:s11": "CANNOLI_SEED_SEASON=11 bun run scripts/seed.ts",
     "seed:s11:fresh": "CANNOLI_SEED_SEASON=11 bun run scripts/seed-fresh.ts",
     "test": "bun test tests/"
