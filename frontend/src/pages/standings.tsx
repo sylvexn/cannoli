@@ -318,8 +318,8 @@ function StandingsRow({
             >
               {player.teamName}
             </Link>
-            <span onClick={e => e.stopPropagation()} className="block leading-snug text-left text-[10px]">
-              <TeamCoach player={player} size="xs" />
+            <span onClick={e => e.stopPropagation()} className="flex items-center gap-1.5 leading-snug text-left text-[10px]">
+              <TeamCoach player={player} size="xs" showAvatar avatarSize="sm" />
             </span>
           </div>
         </div>

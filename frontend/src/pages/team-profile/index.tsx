@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { EmptyState } from '@/components/empty-state';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -70,7 +70,19 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     preloadSprites(player.roster.map(m => m.name));
   }, [player]);
 
-  const [theorycraftMode, setTheorycraftMode] = useState(false);
+  // Allow deep-link from My Hub: /league/.../teams/...?theorycraft=1
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isOwner = !!(user && player.userId != null && String(player.userId) === user.id);
+  const initialTheorycraft = searchParams.get('theorycraft') === '1' && (isOwner || isAdmin);
+  const [theorycraftMode, setTheorycraftMode] = useState(initialTheorycraft);
+  // Strip the param after consumption so refresh doesn't re-enter mode unintentionally
+  useEffect(() => {
+    if (searchParams.get('theorycraft') === '1') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('theorycraft');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [swaps, setSwaps] = useState<SwapEntry[]>([]);
   const [teraEdits, setTeraEdits] = useState<TeraEdit[]>([]);
   const [removedIndices, setRemovedIndices] = useState<Set<number>>(new Set());

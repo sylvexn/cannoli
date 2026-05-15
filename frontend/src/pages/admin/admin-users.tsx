@@ -177,7 +177,7 @@ export function AdminUsers() {
             )}
           >
             {/* Username — links to public profile + opens hover card */}
-            <span className="w-[160px] truncate text-[13px] font-medium">
+            <span className="w-[180px] truncate text-[13px] font-medium">
               <CoachLink
                 coach={{
                   username: user.username,
@@ -188,6 +188,8 @@ export function AdminUsers() {
                   tertiaryColor: user.tertiaryColor,
                   role: user.role,
                 }}
+                showAvatar
+                avatarSize="md"
                 size="sm"
               />
             </span>

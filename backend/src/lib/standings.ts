@@ -142,6 +142,7 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
     }).from(schema.matches)
       .where(and(
         eq(schema.matches.homeTeamId, team.id),
+        eq(schema.matches.status, 'completed'),
         sql`home_score IS NOT NULL`,
         phaseClause,
       ))
@@ -155,6 +156,7 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
     }).from(schema.matches)
       .where(and(
         eq(schema.matches.awayTeamId, team.id),
+        eq(schema.matches.status, 'completed'),
         sql`away_score IS NOT NULL`,
         phaseClause,
       ))
@@ -191,6 +193,7 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.phase, 'regular'),
+      eq(schema.matches.status, 'completed'),
       sql`home_score IS NOT NULL`,
     ))
     .all()

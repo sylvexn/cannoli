@@ -260,11 +260,11 @@ export const leagueAdminRoutes = new Elysia()
         .where(and(
           eq(schema.matches.leagueId, params.leagueId),
           eq(schema.matches.phase, 'regular'),
-          sql`(home_score IS NULL OR away_score IS NULL)`,
+          sql`(home_score IS NULL OR away_score IS NULL OR status = 'disputed')`,
         )).get()?.count ?? 0;
       if (incomplete > 0 && !override) {
         set.status = 400;
-        return { error: `${incomplete} regular-season matches still missing scores`, code: 'REGULAR_INCOMPLETE' };
+        return { error: `${incomplete} regular-season matches still missing scores or disputed`, code: 'REGULAR_INCOMPLETE' };
       }
     }
 

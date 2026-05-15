@@ -352,8 +352,17 @@ function ActivityFeedItem({
       className="relative flex items-start gap-2 px-3 py-2 hover:bg-surface-overlay/30 transition-colors overflow-hidden border-l-2"
       style={{ borderLeftColor: `${tone.color}80` }}
     >
-      <Icon size={12} className={cn('shrink-0 mt-0.5', tone.iconClass)} />
-      <div className="flex-1 min-w-0 overflow-hidden">
+      <Icon size={12} className={cn('shrink-0 mt-1', tone.iconClass)} />
+      <div className="flex-1 min-w-0 overflow-hidden flex items-start gap-2">
+        <CoachLink
+          coach={{ username: event.actor }}
+          showAvatar
+          avatarSize="lg"
+          avatarOnly
+          size="xs"
+          className="mt-0.5"
+        />
+        <div className="flex-1 min-w-0">
         <p className="text-[11px] text-text-secondary leading-tight">
           <CoachLink coach={{ username: event.actor }} size="xs" />
           {' '}
@@ -368,6 +377,7 @@ function ActivityFeedItem({
           <span className="text-[9px] text-text-muted shrink-0">
             {event.timestamp ? formatRelativeTime(event.timestamp) : ''}
           </span>
+        </div>
         </div>
       </div>
     </div>

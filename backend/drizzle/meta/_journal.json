@@ -169,6 +169,13 @@
       "when": 1779600000000,
       "tag": "0023_clubhouse_surface",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1779700000000,
+      "tag": "0024_coach_flair",
+      "breakpoints": true
     }
   ]
 }
