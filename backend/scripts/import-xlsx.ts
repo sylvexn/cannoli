@@ -146,10 +146,11 @@ interface SeasonConfig {
 
 export const S10_CONFIG: SeasonConfig = {
   seasonNumber: 10,
-  // Mock seed sits at "finals pending" — regular season + QF + SF reported,
-  // finals matches still scheduled with no result. The rewindToFinalsPending
-  // post-step (called from seed.ts) clears the finals score/replay/status
-  // after the XLSX has populated the full bracket.
+  // S10 is imported from the XLSX then fully finalized by seed.ts: finals are
+  // scored to the Discord-announced champions, finish positions stamped, and
+  // phase advanced to 'offseason'. In live mode the season is also archived
+  // (read-only). rewindToFinalsPending is still used internally as an
+  // intermediate step to fabricate SF rows and create the finals match rows.
   phase: 'playoffs',
   currentWeek: 11,
   totalWeeks: 11,
