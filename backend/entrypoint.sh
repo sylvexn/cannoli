@@ -4,9 +4,17 @@ set -e
 # Seed the DB only on first boot (no existing file) or when explicitly requested.
 DB_PATH="/app/backend/data/cannoli.db"
 
+# Pick the seed by deployment mode: mock runs the synthetic season simulator
+# (seed-sim.ts), every other mode runs the real XLSX-import seed (seed.ts).
+if [ "$CANNOLI_MODE" = "mock" ]; then
+  SEED_SCRIPT="scripts/seed-sim.ts"
+else
+  SEED_SCRIPT="scripts/seed.ts"
+fi
+
 if [ "$RUN_SEED" = "1" ] || [ ! -f "$DB_PATH" ]; then
-  echo "[entrypoint] seeding database (RUN_SEED=$RUN_SEED, db_exists=$([ -f "$DB_PATH" ] && echo yes || echo no))"
-  bun run scripts/seed.ts
+  echo "[entrypoint] seeding database via $SEED_SCRIPT (RUN_SEED=$RUN_SEED, db_exists=$([ -f "$DB_PATH" ] && echo yes || echo no))"
+  bun run "$SEED_SCRIPT"
 else
   echo "[entrypoint] db exists at $DB_PATH, skipping seed"
 fi
