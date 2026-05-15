@@ -19,6 +19,16 @@ export const users = sqliteTable('users', {
   displayName: text('display_name'),
   /** Short profile bio — ≤ 280 chars enforced at API layer */
   bio: text('bio'),
+  /** One-liner status, ≤ 80 chars (e.g. "looking for water-types"). */
+  statusMessage: text('status_message'),
+  /** Path to uploaded profile banner (relative to backend/uploads/). When
+   *  null, the profile page falls back to the gemstone gradient generated
+   *  from the user's accent colors. */
+  bannerUrl: text('banner_url'),
+  /** Last time we observed an authenticated request from this user.
+   *  Touched by the heartbeat middleware on /api/* hits; powers the
+   *  who's-online sidebar widget. */
+  lastSeenAt: text('last_seen_at'),
   /** Path to uploaded user avatar (relative to backend/uploads/) */
   avatarPath: text('avatar_path'),
 });
@@ -101,6 +111,11 @@ export const teams = sqliteTable('teams', {
   bannerPath: text('banner_path'),
   /** Short team description — ≤ 280 chars enforced at API layer */
   bio: text('bio'),
+  /** Short team motto — ≤ 80 chars (e.g. "fortune favors the bold"). */
+  motto: text('motto'),
+  /** Owner-authored captain note — ≤ 280 chars. Surfaced on the team
+   *  profile under the captain strip; intended for trash talk + flavor. */
+  captainNote: text('captain_note'),
   /**
    * Set true once the team owner (or staff) saves their tera captains for
    * this draft cycle. Draft → regular advance is gated on every team in the
