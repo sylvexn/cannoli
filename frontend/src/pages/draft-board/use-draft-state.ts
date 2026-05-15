@@ -1,9 +1,8 @@
-import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'react';
+import { useReducer, useMemo, useEffect, useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { TIER_LIST, BANNED } from '@/data/tier-list';
 import {
-  findPickConflict, describeConflict,
-  captainHeadroomNeeded, type ConflictInputRoster,
+  findPickConflict, describeConflict, type ConflictInputRoster,
 } from '@/lib/draft-rules';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
@@ -14,296 +13,38 @@ import { useDraftWebSocket } from './use-draft-websocket';
 import type { DraftPresenceData } from './use-draft-websocket';
 import { generateDraftOrder, transactionsToTrades } from './generate-draft-order';
 import type {
-  DraftState, DraftAction, DraftPickEntry, SnakeSlot,
+  DraftState, DraftPickEntry, DraftSource,
 } from './types';
 import { DEFAULT_FILTERS } from './types';
 import { useDraftSettings } from './use-draft-settings';
 import { useDraftTimer } from './use-draft-timer';
 import { useDraftPool } from './use-draft-pool';
 import { useDraftTeams } from './use-draft-teams';
+import { useDraftAutoPickers } from './use-draft-auto-pickers';
+import { draftReducer, generateSnakeSlots } from './draft-reducer';
 
-const DEMO_TIMER_DEFAULT = 30;
+const DEFAULT_TIMER = 30;
 const BANNED_SET = new Set(BANNED);
 
-// ─── Demo AI: pick a random valid Pokemon ───────────────────────────────────
+// Re-export so existing callers (e.g. control bar) keep working.
+export { generateSnakeSlots };
+
+interface UseDraftStateOptions {
+  /** Initial draft source. 'server' for the live route, 'simulator' for /draft/practice. */
+  source?: DraftSource;
+}
 
 /**
- * Mirrors backend draft-engine.getAutoPick: filters banned, drafted, and any
- * pick that would fail findPickConflict (same-species, mega-cap, over-budget,
- * or roster-reserve when picksLeft is provided).
+ * Top-level draft hook. Wires the reducer, WS sync, simulator AI, and derived
+ * lookups together. Kept thin — heavy lifting lives in:
+ *   - draft-reducer.ts
+ *   - use-draft-pool.ts
+ *   - use-draft-teams.ts
+ *   - use-draft-timer.ts
+ *   - use-draft-auto-pickers.ts
+ *   - use-draft-websocket.ts
  */
-function demoAutoPick(
-  drafted: Set<string>,
-  roster: ConflictInputRoster,
-  pointCap: number,
-): { name: string; tier: number } | null {
-  const available = TIER_LIST.filter(e => {
-    if (drafted.has(e.name)) return false;
-    if (BANNED_SET.has(e.name)) return false;
-    if (e.tier <= 0) return false;
-    if (findPickConflict(e.name, e.tier, roster, pointCap)) return false;
-    return true;
-  });
-  if (available.length === 0) return null;
-
-  // Pick from top 3 tiers available, weighted random
-  available.sort((a, b) => b.tier - a.tier);
-  const topTier = available[0].tier;
-  const candidates = available.filter(e => e.tier >= topTier - 2);
-  return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-// ─── Snake order generation (client-side) ───────────────────────────────────
-
-export function generateSnakeSlots(teamIds: string[], rounds: number): SnakeSlot[] {
-  const slots: SnakeSlot[] = [];
-  for (let round = 1; round <= rounds; round++) {
-    const order = round % 2 === 1 ? teamIds : [...teamIds].reverse();
-    for (let i = 0; i < order.length; i++) {
-      slots.push({
-        round,
-        pick: i + 1,
-        overallPick: slots.length + 1,
-        teamId: order[i],
-      });
-    }
-  }
-  return slots;
-}
-
-// ─── Reducer ────────────────────────────────────────────────────────────────
-
-function draftReducer(state: DraftState, action: DraftAction): DraftState {
-  switch (action.type) {
-    case 'SET_MODE': {
-      if (action.mode === 'season') {
-        return { ...state, mode: 'season', demoStarted: false, isPlaying: false, filters: DEFAULT_FILTERS };
-      }
-      if (action.mode === 'demo') {
-        return {
-          ...state,
-          mode: 'demo',
-          allPicks: [],
-          currentPickIndex: 0,
-          snakeOrder: [],
-          isPlaying: false,
-          timerSeconds: state.timerDuration,
-          demoStarted: false,
-        };
-      }
-      // Live: clear any demo-mode draft state so we don't render a stale snake
-      // order or pick log between the mode switch and the first LIVE_SYNC from
-      // the WS / state fetch.
-      return {
-        ...state,
-        mode: 'live',
-        allPicks: [],
-        snakeOrder: [],
-        currentPickIndex: 0,
-        demoStarted: false,
-        isPlaying: false,
-        timerSeconds: state.timerDuration,
-        timerPaused: false,
-        draftQueue: [],
-        liveTimerExpiresAt: null,
-      };
-    }
-
-    case 'SET_VIEW_MODE':
-      return { ...state, viewMode: action.mode };
-
-    case 'SELECT_TEAM':
-      return { ...state, selectedTeamId: state.selectedTeamId === action.teamId ? null : action.teamId };
-
-    case 'UPDATE_FILTERS':
-      return { ...state, filters: { ...state.filters, ...action.filters } };
-
-    case 'SET_DETAIL':
-      return { ...state, detailPokemon: action.name };
-
-    case 'SET_USER_TEAM':
-      return { ...state, userTeamId: action.teamId };
-
-    // ─── Season mode ──────────────────────────────────────────────────
-    case 'SYNC_DATA':
-      return {
-        ...state,
-        allPicks: action.allPicks,
-        trades: action.trades,
-        currentPickIndex: state.mode === 'season' ? action.allPicks.length : state.currentPickIndex,
-      };
-
-    // ─── Demo mode ────────────────────────────────────────────────────
-    case 'DEMO_START':
-      return {
-        ...state,
-        mode: 'demo',
-        snakeOrder: action.snakeOrder,
-        userTeamId: action.userTeamId,
-        timerDuration: action.timerDuration,
-        timerSeconds: action.timerDuration,
-        pointCap: action.pointCap,
-        allPicks: [],
-        currentPickIndex: 0,
-        isPlaying: true,
-        demoStarted: true,
-        timerPaused: false,
-        // Auto-switch to free-agent filter for drafting
-        filters: { ...state.filters, ownership: 'free-agent' },
-      };
-
-    case 'DEMO_PICK': {
-      const slot = state.snakeOrder[state.currentPickIndex];
-      if (!slot) return state;
-
-      const newPick: DraftPickEntry = {
-        round: slot.round,
-        pick: slot.pick,
-        overallPick: slot.overallPick,
-        playerId: slot.teamId,
-        pokemonName: action.pokemonName,
-        tier: action.tier,
-        isTeraCaptain: false,
-      };
-
-      const newPicks = [...state.allPicks, newPick];
-      const nextIndex = state.currentPickIndex + 1;
-      const isComplete = nextIndex >= state.snakeOrder.length;
-      const nextSlot = state.snakeOrder[nextIndex];
-      const isUserNext = nextSlot?.teamId === state.userTeamId;
-
-      return {
-        ...state,
-        allPicks: newPicks,
-        currentPickIndex: nextIndex,
-        timerSeconds: state.timerDuration,
-        isPlaying: isComplete ? false : !isUserNext,
-        // Remove drafted Pokemon from queue
-        draftQueue: state.draftQueue.filter(n => n !== action.pokemonName),
-      };
-    }
-
-    case 'DEMO_TICK': {
-      if (state.timerSeconds <= 1) {
-        // Timer expired — will be handled by the effect (auto-pick)
-        return { ...state, timerSeconds: 0 };
-      }
-      return { ...state, timerSeconds: state.timerSeconds - 1 };
-    }
-
-    case 'DEMO_RESET':
-      return {
-        ...state,
-        allPicks: [],
-        currentPickIndex: 0,
-        isPlaying: false,
-        timerSeconds: state.timerDuration,
-        timerPaused: false,
-        demoStarted: false,
-        draftQueue: [],
-      };
-
-    // ─── Live mode ─────────────────────────────────────────────────────
-    case 'LIVE_SYNC': {
-      const snap = action.snapshot;
-      const snakeOrder: SnakeSlot[] = (snap.snakeOrder ?? []).map(s => ({
-        round: s.round,
-        pick: s.pick,
-        overallPick: s.overallPick,
-        teamId: s.teamId,
-      }));
-      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map((p, i) => {
-        const slot = snakeOrder[i];
-        return {
-          round: slot?.round ?? 1,
-          pick: slot?.pick ?? 1,
-          overallPick: i + 1,
-          playerId: p.teamId,
-          pokemonName: p.pokemonName,
-          tier: p.tier,
-          isTeraCaptain: false,
-        };
-      });
-
-      // Compute timer from server expiry
-      let timerSeconds = state.timerDuration;
-      if (snap.timerExpiresAt) {
-        const remaining = Math.max(0, Math.floor((new Date(snap.timerExpiresAt).getTime() - Date.now()) / 1000));
-        timerSeconds = remaining;
-      }
-
-      return {
-        ...state,
-        mode: 'live',
-        snakeOrder,
-        allPicks,
-        currentPickIndex: snap.currentPickIndex,
-        timerDuration: snap.timerDuration,
-        timerSeconds,
-        liveTimerExpiresAt: snap.timerExpiresAt ?? null,
-        demoStarted: snap.status === 'in_progress' || snap.status === 'completed',
-        isPlaying: snap.status === 'in_progress',
-        pointCap: 110,
-      };
-    }
-
-    case 'LIVE_PICK_MADE': {
-      const pick = action.pick;
-      const slot = state.snakeOrder[state.allPicks.length];
-      const newPick: DraftPickEntry = {
-        round: slot?.round ?? 1,
-        pick: slot?.pick ?? 1,
-        overallPick: state.allPicks.length + 1,
-        playerId: pick.playerId,
-        pokemonName: pick.pokemonName,
-        tier: pick.tier,
-        isTeraCaptain: false,
-      };
-      return {
-        ...state,
-        allPicks: [...state.allPicks, newPick],
-        currentPickIndex: state.currentPickIndex + 1,
-        timerSeconds: state.timerDuration,
-        draftQueue: state.draftQueue.filter(n => n !== pick.pokemonName),
-      };
-    }
-
-    // ─── Timer controls (admin/dev) ──────────────────────────────────
-    case 'SET_TIMER_DURATION':
-      return { ...state, timerDuration: action.duration, timerSeconds: state.demoStarted ? state.timerSeconds : action.duration };
-
-    case 'PAUSE_TIMER':
-      return { ...state, timerPaused: true };
-
-    case 'RESUME_TIMER':
-      return { ...state, timerPaused: false };
-
-    case 'ADD_TIME':
-      return { ...state, timerSeconds: state.timerSeconds + action.seconds };
-
-    // ─── Draft queue ──────────────────────────────────────────────────
-    case 'QUEUE_ADD': {
-      if (state.draftQueue.length >= 3 || state.draftQueue.includes(action.name)) return state;
-      return { ...state, draftQueue: [...state.draftQueue, action.name] };
-    }
-
-    case 'QUEUE_REMOVE':
-      return { ...state, draftQueue: state.draftQueue.filter(n => n !== action.name) };
-
-    case 'QUEUE_REORDER':
-      return { ...state, draftQueue: action.queue };
-
-    case 'TOGGLE_AUTO_DRAFT_QUEUE':
-      return { ...state, autoDraftQueue: !state.autoDraftQueue };
-
-    default:
-      return state;
-  }
-}
-
-// ─── Hook ───────────────────────────────────────────────────────────────────
-
-export function useDraftState() {
+export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) {
   const league = useLeague();
   const { players, standings, transactions } = useLeagueData();
   const { user } = useAuth();
@@ -330,22 +71,22 @@ export function useDraftState() {
 
   // ─── Reducer ──────────────────────────────────────────────────────
   const initialState: DraftState = {
-    mode: 'season',
+    view: 'history',
+    status: 'idle',
+    source,
     allPicks: seasonPicks,
     trades,
     snakeOrder: [],
     currentPickIndex: seasonPicks.length,
-    isPlaying: false,
     speed: 1,
-    timerSeconds: DEMO_TIMER_DEFAULT,
-    timerDuration: DEMO_TIMER_DEFAULT,
+    timerSeconds: DEFAULT_TIMER,
+    timerDuration: DEFAULT_TIMER,
     timerPaused: false,
     userTeamId: null,
     viewMode: 'grid',
     selectedTeamId: null,
     filters: DEFAULT_FILTERS,
     detailPokemon: null,
-    demoStarted: false,
     pointCap: 110,
     draftQueue: [],
     autoDraftQueue: false,
@@ -376,102 +117,17 @@ export function useDraftState() {
 
   const teraCaptainSlots = league.season.teraCaptainSlots ?? 0;
 
-  // Build a ConflictInputRoster for any team (used by AI auto-pick + user pick + queue auto-draft).
-  // Returns undefined when we have no draft context for that team (season mode).
-  const buildConflictRoster = useCallback((teamId: string): ConflictInputRoster | undefined => {
-    if (state.mode === 'season') return undefined;
-    const names = demoTeamRosterNames.get(teamId) ?? [];
-    const pointsUsed = demoTeamPoints.get(teamId) ?? 0;
-    const picksLeft = picksLeftByTeam.get(teamId);
-    // captainHeadroom needs {name, tier} entries — reconstruct from allPicks for this team.
-    const rosterEntries = state.allPicks
-      .filter(p => p.playerId === teamId)
-      .map(p => ({ name: p.pokemonName, tier: p.tier }));
-    const captainReserve = teraCaptainSlots > 0
-      ? captainHeadroomNeeded(rosterEntries, teraCaptainSlots)
-      : 0;
-    return { pokemonNames: names, pointsUsed, picksLeft, captainReserve };
-  }, [state.mode, state.allPicks, demoTeamRosterNames, demoTeamPoints, picksLeftByTeam, teraCaptainSlots]);
+  // ─── Auto-pickers (simulator AI + queue auto-draft + your-turn toast) ──
+  const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
+    state, dispatch, draftedSet,
+    demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
+    teraCaptainSlots,
+  });
 
-  // AI auto-pick: when it's not the user's turn and demo is playing, auto-pick
-  const currentSlot = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted
-    ? state.snakeOrder[state.currentPickIndex] ?? null
-    : null;
+  const isDraftComplete = state.view === 'active' && state.status === 'complete';
 
-  const isUserTurn = (state.mode === 'demo' || state.mode === 'live') && currentSlot?.teamId === state.userTeamId;
-  const isDemoComplete = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted && state.currentPickIndex >= state.snakeOrder.length;
-
-  // Toast when it becomes the user's turn
-  const prevIsUserTurn = useRef(false);
-  useEffect(() => {
-    if (isUserTurn && !prevIsUserTurn.current && state.demoStarted && !isDemoComplete) {
-      toast.warning("It's your turn to pick!", { duration: 8000 });
-    }
-    prevIsUserTurn.current = isUserTurn;
-  }, [isUserTurn, state.demoStarted, isDemoComplete]);
-
-  useEffect(() => {
-    if (state.mode !== 'demo' || !state.demoStarted || isDemoComplete) return;
-    if (!currentSlot || isUserTurn) return;
-
-    // AI picks after a short delay (simulates thinking)
-    const delay = setTimeout(() => {
-      const ctx = buildConflictRoster(currentSlot.teamId);
-      if (!ctx) return;
-      const pick = demoAutoPick(draftedSet, ctx, state.pointCap);
-      if (pick) {
-        dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
-      }
-    }, 300 + Math.random() * 700); // 300-1000ms thinking time
-
-    return () => clearTimeout(delay);
-  }, [state.mode, state.demoStarted, currentSlot, isUserTurn, isDemoComplete, buildConflictRoster, draftedSet, state.pointCap]);
-
-  // Auto-pick for user on timer expiry
-  useEffect(() => {
-    if (state.mode !== 'demo' || !state.demoStarted || !isUserTurn) return;
-    if (state.timerSeconds > 0) return;
-
-    const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
-    if (!ctx) return;
-    const pick = demoAutoPick(draftedSet, ctx, state.pointCap);
-    if (pick) {
-      dispatch({ type: 'DEMO_PICK', pokemonName: pick.name, tier: pick.tier });
-    }
-  }, [state.mode, state.demoStarted, isUserTurn, state.timerSeconds, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId]);
-
-  // Auto-draft from queue when it's user's turn and autoDraftQueue is enabled
-  useEffect(() => {
-    if (!isUserTurn || !state.autoDraftQueue || state.draftQueue.length === 0) return;
-    if (!state.demoStarted || isDemoComplete) return;
-
-    // Find first queued Pokemon that's still draftable per findPickConflict
-    // (handles drafted, dup species, mega cap, budget + roster reservation).
-    const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
-    if (!ctx) return;
-
-    let chosen: { name: string; tier: number } | null = null;
-    for (const name of state.draftQueue) {
-      if (draftedSet.has(name)) continue;
-      const entry = TIER_LIST.find(e => e.name === name);
-      if (!entry) continue;
-      if (findPickConflict(name, entry.tier, ctx, state.pointCap)) continue;
-      chosen = { name, tier: entry.tier };
-      break;
-    }
-    if (!chosen) return;
-
-    // Small delay so the user sees it's their turn before auto-pick fires
-    const picked = chosen;
-    const delay = setTimeout(() => {
-      dispatch({ type: 'DEMO_PICK', pokemonName: picked.name, tier: picked.tier });
-    }, 500);
-
-    return () => clearTimeout(delay);
-  }, [isUserTurn, state.autoDraftQueue, state.draftQueue, state.demoStarted, isDemoComplete, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId]);
-
-  // ─── Live mode: WebSocket connection ──────────────────────────────
-  const wsEnabled = state.mode === 'live';
+  // ─── Server-source: WebSocket connection ──────────────────────────
+  const wsEnabled = state.source === 'server' && state.view === 'active';
 
   const { connected: wsConnected, sendPick: wsSendPick, identify: wsIdentify } = useDraftWebSocket({
     leagueId: league.id,
@@ -480,20 +136,19 @@ export function useDraftState() {
       dispatch({ type: 'LIVE_SYNC', snapshot });
     }, []),
     onPickMade: useCallback((data) => {
-      dispatch({
-        type: 'LIVE_PICK_MADE',
-        pick: {
-          playerId: data.pick.teamId,
-          pokemonName: data.pick.pokemonName,
-          tier: data.pick.tier,
-          round: 0,
-          pick: 0,
-          overallPick: 0,
-          isTeraCaptain: false,
-        },
-      });
+      // Server is authoritative — apply the post-pick snapshot. The animation
+      // signal is implicit via state.allPicks growing; downstream effects in
+      // draft-board.tsx watch that to fire cries / pick-log freshness.
       if (data.snapshot) {
         dispatch({ type: 'LIVE_SYNC', snapshot: data.snapshot });
+      } else {
+        // Defensive fallback when snapshot missing: append from confirmed pick.
+        dispatch({
+          type: 'PICK_LANDED',
+          pokemonName: data.pick.pokemonName,
+          tier: data.pick.tier,
+          playerId: data.pick.teamId,
+        });
       }
     }, []),
     onPresence: useCallback((data: DraftPresenceData) => {
@@ -520,36 +175,34 @@ export function useDraftState() {
     wsIdentify(teamId, user.username, user.role);
   }, [wsConnected, user, state.userTeamId, wsIdentify]);
 
-  // Fetch initial draft state when switching to live mode
+  // Fetch initial draft state when entering server-sourced active view
   useEffect(() => {
-    if (state.mode !== 'live') return;
+    if (state.source !== 'server' || state.view !== 'active') return;
     api.getDraftState(league.id).then(snapshot => {
       if (snapshot.status && snapshot.status !== 'not_started') {
         dispatch({ type: 'LIVE_SYNC', snapshot });
       }
     }).catch(() => {});
-  }, [state.mode, league.id]);
+  }, [state.source, state.view, league.id]);
 
-  // Live mode: handle user pick via WS
+  // Server-source: handle user pick via WS
   const handleLivePick = useCallback((pokemonName: string) => {
-    if (state.mode !== 'live' || !isUserTurn || !state.userTeamId) return;
+    if (state.source !== 'server' || !isUserTurn || !state.userTeamId) return;
     wsSendPick(pokemonName, state.userTeamId);
-  }, [state.mode, isUserTurn, state.userTeamId, wsSendPick]);
+  }, [state.source, isUserTurn, state.userTeamId, wsSendPick]);
 
   // ─── User pick handler ────────────────────────────────────────────
   const handleUserPick = useCallback((pokemonName: string) => {
     if (!isUserTurn) return;
 
-    if (state.mode === 'live') {
+    if (state.source === 'server') {
       // Backend is authoritative; let it surface errors via WS error events.
       handleLivePick(pokemonName);
       return;
     }
 
-    if (state.mode !== 'demo') return;
-
-    // Demo-side validation. Mirrors backend draft-engine.validatePick so the user gets
-    // immediate feedback on illegal picks (drafted, banned, dupe species, mega cap, over budget).
+    // Simulator path. Validation mirrors backend draft-engine.validatePick so
+    // the user gets immediate feedback on illegal picks.
     if (draftedSet.has(pokemonName)) {
       toast.error(`${pokemonName} is already drafted`);
       return;
@@ -574,14 +227,14 @@ export function useDraftState() {
       }
     }
 
-    dispatch({ type: 'DEMO_PICK', pokemonName, tier: entry.tier });
-  }, [state.mode, isUserTurn, draftedSet, buildConflictRoster, state.userTeamId, state.pointCap, handleLivePick]);
+    dispatch({ type: 'PICK_LANDED', pokemonName, tier: entry.tier });
+  }, [state.source, isUserTurn, draftedSet, buildConflictRoster, state.userTeamId, state.pointCap, handleLivePick]);
 
   // ─── Current pick info ───────────────────────────────────────────
   const currentPick = useMemo((): DraftPickEntry | null => {
-    if (state.mode === 'season') return null;
-    if (!state.demoStarted) return null;
-    const slot = state.snakeOrder[state.currentPickIndex];
+    if (state.view !== 'active') return null;
+    if (state.status !== 'running') return null;
+    const slot = currentSlot;
     if (!slot) return null;
     // Return a placeholder pick entry for the on-the-clock banner
     return {
@@ -593,7 +246,7 @@ export function useDraftState() {
       tier: 0,
       isTeraCaptain: false,
     };
-  }, [state.mode, state.demoStarted, state.snakeOrder, state.currentPickIndex]);
+  }, [state.view, state.status, currentSlot]);
 
   // Conflict context for the user's roster — used by pool grid + popover to flag
   // picks that would fail validation (mega cap / dup species / over budget / reserve).
@@ -635,7 +288,7 @@ export function useDraftState() {
     rosterLookup,
     playerLookup,
     isUserTurn,
-    isDemoComplete,
+    isDraftComplete,
     draftOrder,
     handleUserPick,
     draftedSet,
@@ -647,9 +300,9 @@ export function useDraftState() {
     draftTimerEnabled,
     draftDemoVisible,
     /**
-     * Seconds-remaining to display in UI. In live mode, derived from the server
-     * deadline (state.liveTimerExpiresAt) every second. In demo, the reducer
-     * decrements state.timerSeconds directly.
+     * Seconds-remaining to display in UI. In server source, derived from the
+     * server deadline (state.liveTimerExpiresAt) every second. In simulator,
+     * the reducer decrements state.timerSeconds directly.
      */
     displayTimerSeconds,
   };

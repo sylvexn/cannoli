@@ -4,8 +4,8 @@ import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
 import {
-  LayoutGrid, Table, Zap, History, Radio, Wifi, Loader2, Monitor, ScrollText,
-  Volume2, VolumeX,
+  LayoutGrid, Table, History, Radio, Wifi, Loader2, Monitor, ScrollText,
+  Volume2, VolumeX, FlaskConical, Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
@@ -23,42 +23,23 @@ import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftPickLog } from './draft-board/draft-pick-log';
 import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
 import { DraftCaptainGate } from './draft-board/draft-captain-gate';
+import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
+import { SegmentedToggle } from './draft-board/segmented-toggle';
 import { TIER_LIST } from '@/data/tier-list';
 import { getTierEntry } from '@/data/tier-list';
 import { playCry } from '@/lib/pokemon';
+import type { DraftSource, DraftView } from './draft-board/types';
 
-/** Simple segmented toggle button group */
-function SegmentedToggle<T extends string>({
-  value,
-  options,
-  onChange,
-}: {
-  value: T;
-  options: { value: T; label: string; icon?: React.ReactNode; activeClass?: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex rounded-lg border border-border-default overflow-hidden">
-      {options.map(opt => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          className={cn(
-            'flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors',
-            value === opt.value
-              ? opt.activeClass ?? 'bg-surface-overlay text-text-primary'
-              : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-          )}
-        >
-          {opt.icon}
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
+interface DraftBoardPageProps {
+  /**
+   * Initial draft source. Defaults to 'server' for the standard /league/.../draft
+   * route. The /draft/practice route mounts this page with 'simulator' so it
+   * runs the client-side AI engine instead of connecting to the WS.
+   */
+  source?: DraftSource;
 }
 
-export function DraftBoardPage() {
+export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) {
   const { user } = useAuth();
   const { muted, toggleMuted, hintShown, markHintShown } = useDraftMute();
   const {
@@ -66,23 +47,25 @@ export function DraftBoardPage() {
     league, players,
     ownershipMap, filteredPool, poolByTier,
     currentPick, teamRosters, teamPoints,
-    rosterLookup, playerLookup, isUserTurn, isDemoComplete,
+    rosterLookup, playerLookup, isUserTurn, isDraftComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
     userMaxAffordableCost, userConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
-  } = useDraftState();
+  } = useDraftState({ source });
+
+  const isPractice = source === 'simulator';
 
   // One-time "sound on — click to mute" chip. Auto-dismisses after 5s and
   // records the flag so it never resurfaces.
   const [hintVisible, setHintVisible] = useState(false);
 
-  // Captain gate is open while every team has finished drafting (live mode +
-  // isDemoComplete) but the league is still in phase=draft (= some team
+  // Captain gate is open while every team has finished drafting (server source +
+  // isDraftComplete) but the league is still in phase=draft (= some team
   // hasn't locked captains yet). Once the last team locks, the backend flips
   // phase → regular and a fresh /api/leagues fetch closes the gate.
-  const captainGateOpen = state.mode === 'live'
-    && isDemoComplete
+  const captainGateOpen = state.source === 'server'
+    && isDraftComplete
     && league.season?.phase === 'draft'
     && players.length > 0
     && !players.every(p => p.captainsLocked);
@@ -111,12 +94,15 @@ export function DraftBoardPage() {
     preloadSprites(filteredPool.map(e => e.name));
   }, [filteredPool]);
 
-  const isLiveMode = (state.mode === 'demo' || state.mode === 'live') && state.demoStarted;
+  // True whenever a draft is on the clock (running). Was previously called
+  // `isLiveMode` and conflated "the draft is happening" with "we're connected
+  // to live". Renamed so its meaning is unambiguous post-refactor.
+  const isDraftRunning = state.view === 'active' && state.status === 'running';
 
   const handleCardClick = useCallback((name: string) => {
-    // During draft, show popover for free agents (for drafting or queueing).
+    // During an active draft, show popover for free agents (for drafting or queueing).
     // Open the popover even if the pick has a conflict so the user can read why.
-    if (isLiveMode && !ownershipMap.has(name)) {
+    if (isDraftRunning && !ownershipMap.has(name)) {
       const tierEntry = getTierEntry(name);
       const fitsRawBudget = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
       if (fitsRawBudget || !isUserTurn) {
@@ -130,12 +116,10 @@ export function DraftBoardPage() {
     }
     // Otherwise open the detail sheet
     dispatch({ type: 'SET_DETAIL', name });
-  }, [dispatch, isLiveMode, isUserTurn, ownershipMap, userBudgetRemaining]);
+  }, [dispatch, isDraftRunning, isUserTurn, ownershipMap, userBudgetRemaining]);
 
   const handleCardHoverStart = useCallback((name: string, rect: DOMRect) => {
-    // Store rect for later popover positioning
     cardRectsRef.current.set(name, rect);
-    // Don't show hover while popover is open
     if (!confirmPopover) {
       setHoverInfo({ name, rect });
     }
@@ -146,9 +130,6 @@ export function DraftBoardPage() {
   }, []);
 
   const handleQueueAdd = useCallback((name: string) => {
-    // Block queueing Pokemon that wouldn't fit even ignoring conflicts.
-    // We compare to userMaxAffordableCost so a t10 mon with 8pt headroom (because
-    // 2pt is reserved for the remaining slot) is also blocked.
     const cap = userMaxAffordableCost ?? userBudgetRemaining;
     if (cap != null) {
       const entry = TIER_LIST.find(e => e.name === name);
@@ -174,32 +155,26 @@ export function DraftBoardPage() {
     }
   }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
 
-  // Play Pokemon cry on EVERY broadcast pick (demo or live). All connected
-  // clients hear the cry on every pick — moved out of the per-user gate so the
-  // draft feels live and shared. Per-user mute toggle controls audibility.
-  // Also auto-expands the pick log so the celebration sequence (sprite scale,
-  // type-color glow, tier badge slide) is always seen — collapsed log meant
-  // celebrations were silently invisible. Users can manually re-collapse.
+  // Play Pokemon cry on EVERY broadcast pick (server or simulator). All
+  // connected clients hear the cry on every pick. Per-user mute toggle
+  // controls audibility. Also auto-expands the pick log so the celebration
+  // sequence is always seen.
   const prevPickCountRef = useRef(state.allPicks.length);
   useEffect(() => {
     const prev = prevPickCountRef.current;
     prevPickCountRef.current = state.allPicks.length;
-    if (isLiveMode && state.allPicks.length > prev && state.allPicks.length > 0) {
+    if (isDraftRunning && state.allPicks.length > prev && state.allPicks.length > 0) {
       const lastPick = state.allPicks[state.allPicks.length - 1];
-      // Make sure the pick log is open so the celebration is visible. The
-      // DraftPickLog uses mount as its "freshly landed" trigger, so we want
-      // it mounted before the pick state propagates further.
       setPickLogExpanded(true);
       if (lastPick.pokemonName && !muted) {
         playCry(lastPick.pokemonName, 0.15);
-        // Surface the one-time hint the first time a cry actually plays.
         if (!hintShown) {
           setHintVisible(true);
           markHintShown();
         }
       }
     }
-  }, [state.allPicks.length, isLiveMode, muted, hintShown, markHintShown]);
+  }, [state.allPicks.length, isDraftRunning, muted, hintShown, markHintShown]);
 
   // Auto-dismiss the hint chip after 5s.
   useEffect(() => {
@@ -212,7 +187,7 @@ export function DraftBoardPage() {
   const prevQueueRef = useRef<string[]>([]);
   useEffect(() => {
     const prev = prevQueueRef.current;
-    if (prev.length > 0 && isLiveMode) {
+    if (prev.length > 0 && isDraftRunning) {
       for (const name of prev) {
         if (!state.draftQueue.includes(name) && ownershipMap.has(name)) {
           const owner = ownershipMap.get(name);
@@ -223,7 +198,7 @@ export function DraftBoardPage() {
       }
     }
     prevQueueRef.current = state.draftQueue;
-  }, [state.draftQueue, ownershipMap, isLiveMode, playerLookup]);
+  }, [state.draftQueue, ownershipMap, isDraftRunning, playerLookup]);
 
   const handleConfirmDraft = useCallback((name: string) => {
     handleUserPick(name);
@@ -235,7 +210,6 @@ export function DraftBoardPage() {
     dispatch({ type: 'SET_DETAIL', name });
   }, [dispatch]);
 
-  // Compute budget after pick for popover
   const popoverBudgetAfter = confirmPopover
     ? (() => {
         const tierEntry = getTierEntry(confirmPopover.name);
@@ -245,7 +219,7 @@ export function DraftBoardPage() {
     : undefined;
 
   // Mobile warning for active draft participants
-  if (isMobile && isLiveMode && state.userTeamId && !isDemoComplete) {
+  if (isMobile && isDraftRunning && state.userTeamId && !isDraftComplete) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
         <Monitor size={40} className="text-text-muted" />
@@ -257,11 +231,38 @@ export function DraftBoardPage() {
     );
   }
 
-  const showFooter = state.mode === 'demo' || state.mode === 'live';
+  // Post-draft summary surface — replaces the running layout once status === 'complete'.
+  if (state.view === 'active' && state.status === 'complete') {
+    return (
+      <UserAccentScope user={user} className="contents">
+        <div className="flex flex-col h-full overflow-hidden">
+          <DraftCompleteSummary
+            picks={state.allPicks}
+            draftOrder={draftOrder}
+            teamRosters={teamRosters}
+            teamPoints={teamPoints}
+            pointCap={state.pointCap}
+            players={players}
+            userTeamId={state.userTeamId}
+            leagueId={league.id}
+            teraCaptainSlots={league.season?.teraCaptainSlots ?? 2}
+            showCaptainGate={!!captainGateOpen}
+            onBackToHistory={() => dispatch({ type: 'SET_VIEW', view: 'history' })}
+          />
+        </div>
+      </UserAccentScope>
+    );
+  }
+
+  const showFooter = state.view === 'active';
 
   // Pulse-glow on the draft room body when it's THIS user's turn — peripheral
   // signal to remove "did I miss my turn?" anxiety. Color = user accent.
-  const showOnTheClockGlow = isLiveMode && isUserTurn && !isDemoComplete;
+  const showOnTheClockGlow = isDraftRunning && isUserTurn && !isDraftComplete;
+
+  // Top-bar segmented toggle: History vs Live. Demo (simulator) is reachable
+  // via /draft/practice instead of being a peer toggle.
+  const viewToggleValue: DraftView = state.view;
 
   return (
     <UserAccentScope user={user} className="contents">
@@ -269,12 +270,17 @@ export function DraftBoardPage() {
       'flex flex-col h-full overflow-hidden',
       showOnTheClockGlow && 'pulse-glow',
     )}>
-      {/* Top bar: title + mode + view toggle — always compact */}
+      {/* Top bar: title + view + connection — always compact */}
       <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-mono font-bold tracking-tight uppercase">
             <span className="text-draw">Draft</span>
             <span className="text-text-primary ml-1">Board</span>
+            {isPractice && (
+              <span className="ml-2 text-[10px] font-mono uppercase tracking-widest text-pink/80 align-middle">
+                Practice
+              </span>
+            )}
           </h1>
           <Link
             to="/rules"
@@ -283,16 +289,41 @@ export function DraftBoardPage() {
             <ScrollText size={11} />
             Rules
           </Link>
-          <SegmentedToggle
-            value={state.mode}
-            onChange={mode => dispatch({ type: 'SET_MODE', mode })}
-            options={[
-              { value: 'season', label: 'Season', icon: <History size={13} />, activeClass: 'bg-neon/10 text-neon' },
-              ...(draftDemoVisible ? [{ value: 'demo' as const, label: 'Demo', icon: <Zap size={13} />, activeClass: 'bg-pink/10 text-pink' }] : []),
-              { value: 'live', label: 'Live', icon: <Radio size={13} />, activeClass: 'bg-win/10 text-win' },
-            ]}
-          />
-          {state.mode === 'live' && (
+          {/* Practice link — gated by admin draftDemoVisible setting. Hidden when
+              we're already on the practice route. */}
+          {!isPractice && draftDemoVisible && (
+            <Link
+              to={`/league/${league.id}/draft/practice`}
+              className="hidden md:inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-pink transition-colors"
+              title="Open the client-side practice draft"
+            >
+              <FlaskConical size={11} />
+              Practice
+            </Link>
+          )}
+          {/* Practice route exposes only the active view (simulator); we hide
+              the History/Live toggle so users don't accidentally land in
+              read-only history while testing. */}
+          {!isPractice && (
+            <SegmentedToggle
+              value={viewToggleValue}
+              onChange={view => dispatch({ type: 'SET_VIEW', view, source: 'server' })}
+              options={[
+                { value: 'history' as const, label: 'History', icon: <History size={13} />, activeClass: 'bg-neon/10 text-neon' },
+                { value: 'active' as const, label: 'Live', icon: <Radio size={13} />, activeClass: 'bg-win/10 text-win' },
+              ]}
+            />
+          )}
+          {isPractice && (
+            <Badge
+              variant="outline"
+              className="text-[10px] gap-1.5 px-2 py-0.5 font-mono text-pink border-pink/30 bg-pink/10"
+            >
+              <Zap size={10} />
+              Simulator
+            </Badge>
+          )}
+          {!isPractice && state.view === 'active' && state.source === 'server' && (
             <Badge
               variant="outline"
               className={cn(
@@ -319,7 +350,7 @@ export function DraftBoardPage() {
 
         <div className="flex items-center gap-2">
           {/* Recent picks toggle (inline badge) */}
-          {isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
+          {isDraftRunning && state.allPicks.length > 0 && !isDraftComplete && (
             <button
               onClick={() => setPickLogExpanded(!pickLogExpanded)}
               className={cn(
@@ -333,9 +364,7 @@ export function DraftBoardPage() {
             </button>
           )}
 
-          {/* Cry mute toggle — always visible during live/demo so spectators
-              can pre-mute before the first pick fires. */}
-          {isLiveMode && (
+          {isDraftRunning && (
             <div className="relative">
               <button
                 onClick={toggleMuted}
@@ -381,8 +410,9 @@ export function DraftBoardPage() {
 
       {/* Captain gate — surfaces between draft completion and league
           advancing to regular play. The user's team profile is the canonical
-          place to actually pick captains; we just nudge them there. */}
-      {captainGateOpen && (
+          place to actually pick captains; we just nudge them there.
+          Only shown during running (not complete — the summary surface owns it then). */}
+      {captainGateOpen && !isDraftComplete && (
         <DraftCaptainGate
           players={players}
           userTeamId={state.userTeamId}
@@ -392,7 +422,7 @@ export function DraftBoardPage() {
       )}
 
       {/* Pick log — collapsible, only when toggled */}
-      {pickLogExpanded && isLiveMode && state.allPicks.length > 0 && !isDemoComplete && (
+      {pickLogExpanded && isDraftRunning && state.allPicks.length > 0 && !isDraftComplete && (
         <DraftPickLog
           picks={state.allPicks}
           playerLookup={playerLookup}
@@ -414,7 +444,7 @@ export function DraftBoardPage() {
         {/* Pool column: hero + pool + chrome bar stacked (chrome doesn't extend under sidebar) */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           {/* OTC hero — docks above the pool when a draft is active */}
-          {isLiveMode && currentPick && !isDemoComplete && (() => {
+          {isDraftRunning && currentPick && !isDraftComplete && (() => {
             const drafter = playerLookup.get(currentPick.playerId);
             if (!drafter) return null;
             return (
@@ -445,11 +475,11 @@ export function DraftBoardPage() {
               rosterLookup={rosterLookup}
               selectedTeamId={state.selectedTeamId}
               isUserPickable={isUserTurn}
-              showTierBadges={isLiveMode}
-              userMaxAffordableCost={isLiveMode ? userMaxAffordableCost : undefined}
-              userConflictRoster={isLiveMode ? userConflictRoster : undefined}
+              showTierBadges={isDraftRunning}
+              userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
+              userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
               pointCap={state.pointCap}
-              draftQueue={isLiveMode ? state.draftQueue : undefined}
+              draftQueue={isDraftRunning ? state.draftQueue : undefined}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -462,8 +492,8 @@ export function DraftBoardPage() {
                 playerLookup={playerLookup}
                 rosterLookup={rosterLookup}
                 selectedTeamId={state.selectedTeamId}
-                showTierBadges={isLiveMode}
-                userMaxAffordableCost={isLiveMode ? userMaxAffordableCost : undefined}
+                showTierBadges={isDraftRunning}
+                userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
                 onRowClick={handleCardClick}
               />
             </div>
@@ -475,7 +505,7 @@ export function DraftBoardPage() {
               <DraftControlBar
                 state={state}
                 dispatch={dispatch}
-                isDemoComplete={isDemoComplete}
+                isDraftComplete={isDraftComplete}
                 draftOrder={draftOrder}
                 presence={presence}
                 wsConnected={wsConnected}
@@ -495,7 +525,7 @@ export function DraftBoardPage() {
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(c => !c)}
           currentDrafterId={currentPick?.playerId ?? null}
-          isLiveMode={isLiveMode}
+          isLiveMode={isDraftRunning}
           userTeamId={state.userTeamId}
           pointCap={state.pointCap}
           draftQueue={state.draftQueue}
@@ -534,7 +564,7 @@ export function DraftBoardPage() {
         isQueued={confirmPopover ? state.draftQueue.includes(confirmPopover.name) : false}
         queueFull={state.draftQueue.length >= 3}
         isUserTurn={isUserTurn}
-        userConflictRoster={isLiveMode ? userConflictRoster : undefined}
+        userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
         pointCap={state.pointCap}
       />
 
@@ -551,4 +581,9 @@ export function DraftBoardPage() {
     </div>
     </UserAccentScope>
   );
+}
+
+/** /draft/practice route entry — same page, simulator source. */
+export function DraftPracticePage() {
+  return <DraftBoardPage source="simulator" />;
 }

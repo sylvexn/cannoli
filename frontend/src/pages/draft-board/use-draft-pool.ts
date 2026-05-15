@@ -32,7 +32,7 @@ export function useDraftPool(state: DraftState, players: Player[]) {
   const ownershipMap = useMemo(() => {
     const map = new Map<string, PoolOwnership>();
 
-    if (state.mode === 'season') {
+    if (state.view === 'history') {
       // Show all historical picks
       for (const pick of state.allPicks) {
         map.set(pick.pokemonName, {
@@ -51,7 +51,7 @@ export function useDraftPool(state: DraftState, players: Player[]) {
         }
       }
     } else {
-      // Demo/live: show picks made so far
+      // Active view: show picks made so far
       for (const pick of state.allPicks) {
         map.set(pick.pokemonName, {
           teamId: pick.playerId,
@@ -61,7 +61,7 @@ export function useDraftPool(state: DraftState, players: Player[]) {
     }
 
     return map;
-  }, [state.allPicks, state.trades, state.mode]);
+  }, [state.allPicks, state.trades, state.view]);
 
   // Filtered pool ────────────────────────────────────────────────
   const filteredPool = useMemo(() => {

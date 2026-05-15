@@ -74,25 +74,33 @@ export const DEFAULT_FILTERS: DraftFilters = {
 };
 
 /**
- * Draft modes:
- * - season: historical view of completed draft + trades
- * - demo: client-side simulated draft with AI auto-picks
- * - live: real-time draft via WebSocket (future)
+ * Three orthogonal axes that replace the old `mode: 'season'|'demo'|'live'`:
+ *
+ * - `view`:   what the user is looking at — historical season recap vs. an
+ *             active draft (current or future).
+ * - `status`: where the active draft is in its lifecycle.
+ * - `source`: which engine drives an active draft — server (WS-backed live) or
+ *             simulator (client-side practice).
+ *
+ * `view === 'history'` always implies `status === 'idle'` and ignores `source`.
  */
-export type DraftMode = 'season' | 'demo' | 'live';
+export type DraftView = 'history' | 'active';
+export type DraftStatus = 'idle' | 'configuring' | 'running' | 'complete';
+export type DraftSource = 'server' | 'simulator';
 
 /** Draft state for the page */
 export interface DraftState {
-  mode: DraftMode;
-  /** Season mode: historical picks. Demo/live: picks made so far. */
+  view: DraftView;
+  status: DraftStatus;
+  source: DraftSource;
+  /** History view: historical picks. Active view: picks made so far. */
   allPicks: DraftPickEntry[];
-  /** Season mode only: trades to overlay on draft ownership */
+  /** History view only: trades to overlay on draft ownership */
   trades: MockTrade[];
-  /** Snake draft slot sequence (demo/live mode) */
+  /** Snake draft slot sequence (active view) */
   snakeOrder: SnakeSlot[];
-  /** In demo/live: how many picks have been made (0..totalPicks) */
+  /** In active view: how many picks have been made (0..totalPicks) */
   currentPickIndex: number;
-  isPlaying: boolean;
   speed: 1 | 2 | 5;
   timerSeconds: number;
   timerDuration: number;
@@ -102,31 +110,29 @@ export interface DraftState {
   selectedTeamId: string | null;
   filters: DraftFilters;
   detailPokemon: string | null;
-  /** Demo mode: whether the draft has started */
-  demoStarted: boolean;
   /** Point cap for validation */
   pointCap: number;
   /** Queued Pokemon names the user wants to draft (max 3, priority order) */
   draftQueue: string[];
   /** Auto-draft the first available queued Pokemon when it's user's turn */
   autoDraftQueue: boolean;
-  /** Live mode only: server-broadcast deadline (ISO). UI derives countdown from this. */
+  /** Server-source only: server-broadcast deadline (ISO). UI derives countdown from this. */
   liveTimerExpiresAt: string | null;
 }
 
 export type DraftAction =
-  | { type: 'SET_MODE'; mode: DraftMode }
+  | { type: 'SET_VIEW'; view: DraftView; source?: DraftSource }
   | { type: 'SET_VIEW_MODE'; mode: 'grid' | 'table' }
   | { type: 'SELECT_TEAM'; teamId: string | null }
   | { type: 'UPDATE_FILTERS'; filters: Partial<DraftFilters> }
   | { type: 'SET_DETAIL'; name: string | null }
-  // Season mode: sync historical data
+  // History view: sync historical data
   | { type: 'SYNC_DATA'; allPicks: DraftPickEntry[]; trades: MockTrade[] }
-  // Demo mode actions
-  | { type: 'DEMO_START'; snakeOrder: SnakeSlot[]; userTeamId: string; timerDuration: number; pointCap: number }
-  | { type: 'DEMO_PICK'; pokemonName: string; tier: number }
-  | { type: 'DEMO_TICK' }
-  | { type: 'DEMO_RESET' }
+  // Active draft lifecycle
+  | { type: 'DRAFT_START'; snakeOrder: SnakeSlot[]; userTeamId: string; timerDuration: number; pointCap: number }
+  | { type: 'PICK_LANDED'; pokemonName: string; tier: number; playerId?: string }
+  | { type: 'TIMER_TICK' }
+  | { type: 'DRAFT_RESET' }
   | { type: 'SET_USER_TEAM'; teamId: string | null }
   // Timer controls (admin/dev)
   | { type: 'SET_TIMER_DURATION'; duration: number }
@@ -138,6 +144,5 @@ export type DraftAction =
   | { type: 'QUEUE_REMOVE'; name: string }
   | { type: 'QUEUE_REORDER'; queue: string[] }
   | { type: 'TOGGLE_AUTO_DRAFT_QUEUE' }
-  // Live mode actions (future)
-  | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState }
-  | { type: 'LIVE_PICK_MADE'; pick: DraftPickEntry };
+  // Server-source authoritative snapshot
+  | { type: 'LIVE_SYNC'; snapshot: import('@/lib/api').ApiDraftState };
