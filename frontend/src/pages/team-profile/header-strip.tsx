@@ -32,7 +32,7 @@ export function HeaderStrip({
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-heading font-bold text-text-primary tracking-tight leading-none">{player.teamName}</h1>
           <p className="text-[11px] text-text-muted mt-1.5 font-medium tracking-wide flex items-center gap-1.5">
-            <TeamCoach player={player} showAvatar avatarSize={14} size="xs" />
+            <TeamCoach player={player} showAvatar avatarSize="md" size="sm" />
             <span className="text-border-default">/</span>
             <span>{player.teamAbbrev}</span>
           </p>

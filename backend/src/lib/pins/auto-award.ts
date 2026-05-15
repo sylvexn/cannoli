@@ -1,26 +1,24 @@
 /**
- * Auto-award job — hands out the seeded auto pins.
+ * Auto-award job — hands out the season's stat-derived pins.
  *
  * Idempotent: every insert is `INSERT OR IGNORE` against the
- * (user_id, pin_def_id, season_id) unique index. The job is safe to run
- * multiple times; it's invoked at two natural moments:
+ * (user_id, pin_def_id, season_id) unique index. Safe to re-run.
  *
  *   * `runAutoAwards(leagueId, { trigger: 'season-end' })` — called once when
- *     a league transitions to phase=offseason. Awards the season-scoped pins:
- *     Champion, MVP, Iron Man, Sweep, Trade Machine.
+ *     a league transitions to phase=offseason. Awards the season-scoped
+ *     stats pins: Garchomp (most KOs), Cannoli (best regular-season record),
+ *     Cynthia (longest win streak).
  *
  *   * `runAutoAwards(leagueId, { trigger: 'match', matchId })` — called after
- *     every recorded regular-season match result. Awards the per-match pins:
- *     Kingslayer, Flawless. (Sweep / MVP / Iron Man only crystallize at end
- *     of season, so they're skipped on this trigger.)
+ *     every recorded regular-season match result. Awards the per-match
+ *     bonus pins: Kingslayer, Flawless.
  *
- * Pins that are *not* implemented here yet — Finalist, First Blood, Tera
- * Maestro — are listed in the seed but admins mint by hand for now. Adding
- * them later is just a function in this file plus a new branch in the
- * trigger switch.
+ * The subjective Elite-4 / Mix / Player awards (Baxcalibur, Kingambit, Ash,
+ * Best Draft, Dragapult, Charizard, Florges, Rotom, Pikachu, Red) are
+ * minted by hand from the admin UI.
  */
 import { db, schema } from '../../db';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 type Trigger = 'season-end' | 'match';
 
@@ -41,13 +39,11 @@ interface AwardSummary {
 }
 
 const PIN = {
-  champion:     'champion',
-  mvp:          'mvp',
-  ironMan:      'iron-man',
-  sweep:        'sweep',
-  kingslayer:   'kingslayer',
-  flawless:     'flawless',
-  tradeMachine: 'trade-machine',
+  garchomp:   'garchomp',
+  cannoli:    'cannoli',
+  cynthia:    'cynthia',
+  kingslayer: 'kingslayer',
+  flawless:   'flawless',
 } as const;
 
 export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
@@ -71,13 +67,116 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
   }
 
   // trigger === 'season-end'
-  awardChampion(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardSeasonSweep(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardMvp(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardIronMan(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardTradeMachine(leagueId, seasonId, opts.awardedBy ?? null, summary);
+  // Clear prior auto-awarded season-end pins for this league/season so a
+  // re-run after a data correction picks the new winners cleanly. Only
+  // touches awarded_by IS NULL rows (auto pins) — admin-minted pins are
+  // preserved.
+  db.run(sql`
+    DELETE FROM pins
+    WHERE pin_def_id IN (${PIN.garchomp}, ${PIN.cannoli}, ${PIN.cynthia})
+      AND season_id = ${seasonId}
+      AND awarded_by IS NULL
+      AND user_id IN (SELECT user_id FROM teams WHERE league_id = ${leagueId} AND user_id IS NOT NULL)
+  `);
+
+  awardGarchomp(leagueId, seasonId, opts.awardedBy ?? null, summary);
+  awardCannoli(leagueId, seasonId, opts.awardedBy ?? null, summary);
+  awardCynthia(leagueId, seasonId, opts.awardedBy ?? null, summary);
 
   return summary;
+}
+
+// ─── Pure helpers (testable without DB) ───────────────────────────────────
+
+export interface GarchompRow { teamId: string; pokemon: string; kills: number }
+export interface GarchompWinner { teamId: string; pokemon: string; kills: number }
+
+/**
+ * Pick Garchomp winners from pre-aggregated rows. Rows are expected to be
+ * grouped by (teamId, LOWER(pokemonName)) — the SQL caller already does this,
+ * but the pure helper additionally re-coalesces casing variants defensively
+ * so unit tests can pass raw mixed-case inputs.
+ */
+export function pickGarchompWinners(rows: GarchompRow[]): GarchompWinner[] {
+  if (rows.length === 0) return [];
+  const merged = new Map<string, GarchompWinner>();
+  for (const r of rows) {
+    const key = `${r.teamId}|${(r.pokemon ?? '').toLowerCase()}`;
+    const prev = merged.get(key);
+    if (prev) prev.kills += (r.kills ?? 0);
+    else merged.set(key, { teamId: r.teamId, pokemon: (r.pokemon ?? '').toLowerCase(), kills: r.kills ?? 0 });
+  }
+  const all = [...merged.values()];
+  const top = all.reduce((acc, r) => Math.max(acc, r.kills), 0);
+  if (top === 0) return [];
+  return all.filter(r => r.kills === top);
+}
+
+export interface CannoliRecord {
+  teamId: string;
+  userId: number | null;
+  wins: number;
+  losses: number;
+  diff: number;
+  played: number;
+}
+
+/**
+ * Pick Cannoli winners (best regular-season record) from pre-computed records.
+ * Most wins, tiebreak by diff. Excludes teams with no userId (orphans) from
+ * the winner set but they still participate in the wins/diff comparison.
+ */
+export function pickCannoliWinners(records: CannoliRecord[]): CannoliRecord[] {
+  const playing = records.filter(r => r.played > 0);
+  if (playing.length === 0) return [];
+  const topWins = playing.reduce((a, r) => Math.max(a, r.wins), 0);
+  const winners = playing.filter(r => r.wins === topWins);
+  const topDiff = winners.reduce((a, r) => Math.max(a, r.diff), Number.NEGATIVE_INFINITY);
+  return winners.filter(r => r.diff === topDiff);
+}
+
+export interface CynthiaStreak { teamId: string; userId: number | null; best: number }
+
+/**
+ * Pick Cynthia winners from pre-computed streaks. Returns all teams tied at
+ * the top, provided the top streak >= `min` (default 2).
+ */
+export function pickCynthiaWinners(streaks: CynthiaStreak[], min = 2): CynthiaStreak[] {
+  if (streaks.length === 0) return [];
+  const top = streaks.reduce((a, s) => Math.max(a, s.best), 0);
+  if (top < min) return [];
+  return streaks.filter(s => s.best === top);
+}
+
+export interface StreakMatch {
+  homeTeamId: string;
+  awayTeamId: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  forfeitedBy?: 'home' | 'away' | 'both' | null;
+}
+
+/**
+ * Compute the longest consecutive-win streak for `teamId` over `matches`.
+ * Matches are consumed in the order given (caller orders by week, id).
+ * Rules:
+ *   - `forfeitedBy === 'both'` matches are SKIPPED (neither extend nor break).
+ *   - NULL scores reset the streak (treated as a non-win).
+ *   - Ties (homeScore === awayScore) reset the streak.
+ *   - Wins increment current streak; current is reset on any loss/tie/null.
+ */
+export function computeStreak(matches: StreakMatch[], teamId: string): number {
+  let best = 0, current = 0;
+  for (const m of matches) {
+    if (m.forfeitedBy === 'both') continue;
+    if (m.homeScore == null || m.awayScore == null) { current = 0; continue; }
+    const isHome = m.homeTeamId === teamId;
+    const my = isHome ? m.homeScore : m.awayScore;
+    const opp = isHome ? m.awayScore : m.homeScore;
+    if (my > opp) { current++; if (current > best) best = current; }
+    else { current = 0; }
+  }
+  return best;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -90,15 +189,11 @@ function tryInsert(
   metadata: Record<string, unknown> | null,
   summary: AwardSummary,
 ): boolean {
-  // INSERT OR IGNORE so re-runs are no-ops.
   const stmt = sql`
     INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
     VALUES (${userId}, ${pinDefId}, ${seasonId}, ${awardedBy}, ${metadata ? JSON.stringify(metadata) : null})
   `;
   const res = db.run(stmt);
-  // drizzle's run() return is typed as `void` but bun:sqlite resolves to a
-  // Changes object with a `changes` count — go through `unknown` to satisfy
-  // strict tsc.
   const changed = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
   if (changed > 0) {
     summary.awarded.push({ pinDefId, userId, metadata: metadata ?? undefined });
@@ -114,86 +209,25 @@ function teamUserId(teamId: string): number | null {
   return team?.userId ?? null;
 }
 
-// ─── Champion ─────────────────────────────────────────────────────────────
-// Find the completed Finals match for this league; winner gets the pin.
+// ─── Garchomp (most KOs across the regular season) ────────────────────────
+// Sums match_pokemon.kills per team across regular-season completed matches;
+// the team owning the Pokemon (well, the team) with the highest single-Mon
+// kill count gets it. We track per-Pokemon to surface the actual headline
+// ("DRAGAPULT with 16 kills"), not per-team.
 
-function awardChampion(
+function awardGarchomp(
   leagueId: string,
   seasonId: number,
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
-  const finals = db.select().from(schema.matches).where(and(
-    eq(schema.matches.leagueId, leagueId),
-    eq(schema.matches.phase, 'playoffs'),
-    eq(schema.matches.playoffRound, 'f'),
-    eq(schema.matches.status, 'completed'),
-  )).get();
-  if (!finals || finals.homeScore == null || finals.awayScore == null) return;
-  const winnerTeamId = finals.homeScore > finals.awayScore ? finals.homeTeamId : finals.awayTeamId;
-  const userId = teamUserId(winnerTeamId);
-  if (!userId) return;
-  tryInsert(
-    PIN.champion, userId, seasonId, awardedBy,
-    { teamId: winnerTeamId, matchId: finals.id, scoreLine: `${finals.homeScore}-${finals.awayScore}` },
-    summary,
-  );
-}
-
-// ─── Sweep (regular season undefeated) ────────────────────────────────────
-// A team that finished the regular season with zero losses (no incomplete /
-// disputed matches blocking us — completed only).
-
-function awardSeasonSweep(
-  leagueId: string,
-  seasonId: number,
-  awardedBy: number | null,
-  summary: AwardSummary,
-) {
-  const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  for (const t of teams) {
-    const matches = db.select().from(schema.matches).where(and(
-      eq(schema.matches.leagueId, leagueId),
-      eq(schema.matches.phase, 'regular'),
-      eq(schema.matches.status, 'completed'),
-      sql`(${schema.matches.homeTeamId} = ${t.id} OR ${schema.matches.awayTeamId} = ${t.id})`,
-    )).all();
-    if (matches.length === 0) continue;
-    let undefeated = true;
-    for (const m of matches) {
-      if (m.homeScore == null || m.awayScore == null) { undefeated = false; break; }
-      const isHome = m.homeTeamId === t.id;
-      const myScore = isHome ? m.homeScore : m.awayScore;
-      const oppScore = isHome ? m.awayScore : m.homeScore;
-      if (myScore <= oppScore) { undefeated = false; break; }
-    }
-    if (!undefeated) continue;
-    const uid = t.userId;
-    if (!uid) continue;
-    tryInsert(
-      PIN.sweep, uid, seasonId, awardedBy,
-      { teamId: t.id, matchesPlayed: matches.length },
-      summary,
-    );
-  }
-}
-
-// ─── MVP (top season K/D among the league's rostered Pokemon) ────────────
-// "Top season K/D" = highest sum of kills minus deaths across the team's
-// match_pokemon rows, restricted to regular-season completed matches. Tie:
-// every tied user gets the pin.
-
-function awardMvp(
-  leagueId: string,
-  seasonId: number,
-  awardedBy: number | null,
-  summary: AwardSummary,
-) {
-  // Aggregate per team in this league (regular season only).
+  // NOTE: groups by LOWER(pokemonName) to coalesce casing variants. Does NOT
+  // canonicalize form variants (e.g. "Urshifu" vs "Urshifu-Rapid-Strike") —
+  // those still split. Admin UI re-canonicalizes display casing against roster.
   const rows = db.select({
     teamId: schema.matchPokemon.teamId,
+    pokemon: sql<string>`LOWER(${schema.matchPokemon.pokemonName})`,
     kills: sql<number>`COALESCE(SUM(${schema.matchPokemon.kills}), 0)`,
-    deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
   })
     .from(schema.matchPokemon)
     .innerJoin(schema.matches, eq(schema.matches.id, schema.matchPokemon.matchId))
@@ -202,93 +236,103 @@ function awardMvp(
       eq(schema.matches.phase, 'regular'),
       eq(schema.matches.status, 'completed'),
     ))
-    .groupBy(schema.matchPokemon.teamId)
+    .groupBy(schema.matchPokemon.teamId, sql`LOWER(${schema.matchPokemon.pokemonName})`)
     .all();
-  if (rows.length === 0) return;
-  const scored = rows.map(r => ({ teamId: r.teamId, diff: (r.kills ?? 0) - (r.deaths ?? 0), kills: r.kills ?? 0, deaths: r.deaths ?? 0 }));
-  const top = scored.reduce((acc, r) => Math.max(acc, r.diff), Number.NEGATIVE_INFINITY);
-  for (const s of scored) {
-    if (s.diff !== top) continue;
-    const uid = teamUserId(s.teamId);
+  const winners = pickGarchompWinners(rows.map(r => ({
+    teamId: r.teamId, pokemon: r.pokemon, kills: r.kills ?? 0,
+  })));
+  for (const r of winners) {
+    const uid = teamUserId(r.teamId);
     if (!uid) continue;
     tryInsert(
-      PIN.mvp, uid, seasonId, awardedBy,
-      { teamId: s.teamId, kills: s.kills, deaths: s.deaths, diff: s.diff },
+      PIN.garchomp, uid, seasonId, awardedBy,
+      { teamId: r.teamId, pokemon: r.pokemon, kills: r.kills },
       summary,
     );
   }
 }
 
-// ─── Iron Man (zero missed weeks = no forfeits charged to this team) ──────
+// ─── Cannoli (best regular-season record) ─────────────────────────────────
+// Most wins; tiebreak on point differential. Ties on both columns split the
+// pin (each tied user gets a copy).
 
-function awardIronMan(
+function awardCannoli(
   leagueId: string,
   seasonId: number,
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  for (const t of teams) {
+  if (teams.length === 0) return;
+
+  const records = teams.map(t => {
     const matches = db.select().from(schema.matches).where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.phase, 'regular'),
+      eq(schema.matches.status, 'completed'),
       sql`(${schema.matches.homeTeamId} = ${t.id} OR ${schema.matches.awayTeamId} = ${t.id})`,
     )).all();
-    if (matches.length === 0) continue;
-    // A team is "iron" if every regular-season match they were in is
-    // completed AND none of the forfeits (single-side or both) name them.
-    let iron = true;
+    let wins = 0, losses = 0, diff = 0;
     for (const m of matches) {
-      if (m.status !== 'completed') { iron = false; break; }
-      if (m.forfeitedBy === 'both') { iron = false; break; }
-      if (m.forfeitedBy === 'home' && m.homeTeamId === t.id) { iron = false; break; }
-      if (m.forfeitedBy === 'away' && m.awayTeamId === t.id) { iron = false; break; }
+      if (m.homeScore == null || m.awayScore == null) continue;
+      const isHome = m.homeTeamId === t.id;
+      const my = isHome ? m.homeScore : m.awayScore;
+      const opp = isHome ? m.awayScore : m.homeScore;
+      diff += my - opp;
+      if (my > opp) wins++; else if (opp > my) losses++;
     }
-    if (!iron) continue;
-    const uid = t.userId;
-    if (!uid) continue;
+    return { teamId: t.id, userId: t.userId, wins, losses, diff, played: matches.length };
+  }).filter(r => r.played > 0);
+
+  const finalists = pickCannoliWinners(records);
+  for (const w of finalists) {
+    if (!w.userId) continue;
     tryInsert(
-      PIN.ironMan, uid, seasonId, awardedBy,
-      { teamId: t.id, matchesPlayed: matches.length },
+      PIN.cannoli, w.userId, seasonId, awardedBy,
+      { teamId: w.teamId, wins: w.wins, losses: w.losses, diff: w.diff },
       summary,
     );
   }
 }
 
-// ─── Trade Machine (5+ accepted trades in this season) ────────────────────
+// ─── Cynthia (longest consecutive-win streak in the regular season) ──────
+// Streak is broken by losses *and* ties; we order matches by week then a
+// stable id fallback.
 
-function awardTradeMachine(
+function awardCynthia(
   leagueId: string,
   seasonId: number,
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  for (const t of teams) {
-    const row = db.select({ count: sql<number>`COUNT(*)` })
-      .from(schema.trades)
-      .where(and(
-        eq(schema.trades.leagueId, leagueId),
-        eq(schema.trades.status, 'accepted'),
-        sql`(${schema.trades.proposerId} = ${t.id} OR ${schema.trades.recipientId} = ${t.id})`,
-      ))
-      .get();
-    const count = row?.count ?? 0;
-    if (count < 5) continue;
-    const uid = t.userId;
-    if (!uid) continue;
+  if (teams.length === 0) return;
+
+  const streaks = teams.map(t => {
+    const matches = db.select().from(schema.matches).where(and(
+      eq(schema.matches.leagueId, leagueId),
+      eq(schema.matches.phase, 'regular'),
+      eq(schema.matches.status, 'completed'),
+      sql`(${schema.matches.homeTeamId} = ${t.id} OR ${schema.matches.awayTeamId} = ${t.id})`,
+    )).orderBy(schema.matches.week, schema.matches.id).all();
+
+    const best = computeStreak(matches, t.id);
+    return { teamId: t.id, userId: t.userId, best };
+  });
+
+  const winners = pickCynthiaWinners(streaks, 2);
+  for (const s of winners) {
+    if (!s.userId) continue;
     tryInsert(
-      PIN.tradeMachine, uid, seasonId, awardedBy,
-      { teamId: t.id, tradeCount: count },
+      PIN.cynthia, s.userId, seasonId, awardedBy,
+      { teamId: s.teamId, streak: s.best },
       summary,
     );
   }
 }
 
 // ─── Kingslayer (post-match: bottom-half team beat a top-3 team) ─────────
-// "Bottom-half" / "top-3" computed from the standings *as of right now* —
-// snapshotted at the moment the result is recorded. We pre-compute team
-// records from completed regular-season matches in this league.
+// Snapshot the standings as of the match being recorded.
 
 function awardKingslayer(
   leagueId: string,
@@ -301,7 +345,7 @@ function awardKingslayer(
   if (!match) return;
   if (match.phase !== 'regular' || match.status !== 'completed') return;
   if (match.homeScore == null || match.awayScore == null) return;
-  if (match.homeScore === match.awayScore) return; // ties skipped
+  if (match.homeScore === match.awayScore) return;
 
   const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
   const loserId = match.homeScore > match.awayScore ? match.awayTeamId : match.homeTeamId;
@@ -309,7 +353,6 @@ function awardKingslayer(
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
   if (teams.length === 0) return;
 
-  // Build records (wins, losses, diff) at this point in the season.
   const recordByTeam = new Map<string, { wins: number; losses: number; diff: number }>();
   for (const t of teams) recordByTeam.set(t.id, { wins: 0, losses: 0, diff: 0 });
 
@@ -335,9 +378,6 @@ function awardKingslayer(
     }
   }
 
-  // Sort by wins desc, diff desc to derive standings rank (good enough for
-  // a Kingslayer trigger; the full tiebreaker hierarchy lives in
-  // lib/standings.ts and is not worth duplicating here).
   const ranked = [...teams].map(t => ({ id: t.id, ...recordByTeam.get(t.id)! }))
     .sort((a, b) => (b.wins - a.wins) || (b.diff - a.diff) || a.id.localeCompare(b.id));
 
@@ -379,7 +419,6 @@ function awardFlawless(
 
   const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
 
-  // Sum deaths on the winning team's Pokemon for this match. 0 deaths = flawless.
   const row = db.select({
     deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
     rowCount: sql<number>`COUNT(*)`,
@@ -390,8 +429,6 @@ function awardFlawless(
       eq(schema.matchPokemon.teamId, winnerId),
     ))
     .get();
-  // If we have no per-pokemon rows for this match, we can't verify "no deaths"
-  // — skip rather than false-positive.
   if (!row || (row.rowCount ?? 0) === 0) return;
   if ((row.deaths ?? 0) > 0) return;
 
@@ -403,7 +440,3 @@ function awardFlawless(
     summary,
   );
 }
-
-// Re-export for tests / scripts that want to silence the "unused" linter
-// noise — `desc` is no longer referenced after the rewrite.
-export const __internals = { desc };

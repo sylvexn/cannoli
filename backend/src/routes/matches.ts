@@ -286,21 +286,29 @@ export const matchRoutes = new Elysia()
     // promote a half-recorded result into the standings. Mirrors the
     // homeScore/awayScore guard the result handler enforces on the way in.
     const hasFullScore = match.homeScore !== null && match.awayScore !== null;
-    db.update(schema.matches).set({
-      warnings: null,
-      status: hasFullScore ? 'completed' : match.status,
-    }).where(eq(schema.matches.id, params.matchId)).run();
+    const flippedToCompleted = hasFullScore && match.status === 'disputed';
 
-    db.insert(schema.activityLog).values({
-      type: 'warnings_dismissed',
-      category: 'match',
-      actor: user.username,
-      leagueId: match.leagueId,
-      description: `Dismissed warnings for ${match.homeTeamId} vs ${match.awayTeamId}`,
-      metadata: JSON.stringify({ matchId: params.matchId }),
-    }).run();
+    return tx(() => {
+      db.update(schema.matches).set({
+        warnings: null,
+        status: hasFullScore ? 'completed' : match.status,
+      }).where(eq(schema.matches.id, params.matchId)).run();
 
-    return { success: true };
+      db.insert(schema.activityLog).values({
+        type: 'warnings_dismissed',
+        category: 'match',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Dismissed warnings for ${match.homeTeamId} vs ${match.awayTeamId}`,
+        metadata: JSON.stringify({ matchId: params.matchId }),
+      }).run();
+
+      if (flippedToCompleted) {
+        runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
+      }
+
+      return { success: true };
+    });
   })
 
   // ─── Void match result (clear scores + per-pokemon, back to scheduled) ────

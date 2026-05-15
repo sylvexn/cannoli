@@ -1,5 +1,4 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { cn } from '@/lib/utils';
 import { Settings, LogOut, User, LogIn, Search } from 'lucide-react';
 import {
   DropdownMenu,
@@ -11,6 +10,7 @@ import {
 import { FeedbackDialog } from '../feedback-dialog';
 import { UserAccentScope } from '../user-accent-scope';
 import { BotStatusChip } from '../bot-status-chip';
+import { CoachAvatar } from '../coach-avatar';
 import type { useAuth } from '@/lib/auth-context';
 
 type AuthUser = NonNullable<ReturnType<typeof useAuth>['user']>;
@@ -72,19 +72,14 @@ export function SidebarFooter({
         <UserAccentScope user={user}>
           <DropdownMenu>
             <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-1 py-1 -mx-1 hover:bg-surface-overlay transition-colors cursor-pointer outline-none">
-              <div
-                className={cn(
-                  'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0',
-                  !user.primaryColor && (isAdmin ? 'bg-neon/20 text-neon' : 'bg-surface-overlay text-text-secondary'),
-                )}
-                style={user.primaryColor ? {
-                  backgroundColor: 'color-mix(in oklab, var(--user-primary) 30%, transparent)',
-                  color: 'var(--user-primary)',
-                  boxShadow: '0 0 0 1.5px var(--user-secondary)',
-                } : undefined}
-              >
-                {user.username.charAt(0).toUpperCase()}
-              </div>
+              <CoachAvatar
+                username={user.username}
+                displayName={user.displayName ?? null}
+                avatarPath={user.avatarPath ?? null}
+                primaryColor={user.primaryColor ?? null}
+                secondaryColor={user.secondaryColor ?? null}
+                size="md"
+              />
               <div className="text-xs text-left min-w-0">
                 <div className="text-text-primary font-medium truncate">{user.username}</div>
                 <div className="text-text-muted">{user.role}</div>

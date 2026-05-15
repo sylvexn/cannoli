@@ -109,10 +109,19 @@ export function DraftChat({ ws, username }: DraftChatProps) {
               <p className="text-xs text-text-muted italic py-2 text-center">No messages yet</p>
             )}
             {messages.map((msg, i) => (
-              <div key={i} className="text-xs leading-snug">
-                <CoachLink coach={{ username: msg.username }} size="xs" />
-                <span className="text-text-muted mx-1">:</span>
-                <span className="text-text-primary break-words">{msg.message}</span>
+              <div key={i} className="flex items-start gap-1.5 text-xs leading-snug py-0.5">
+                <CoachLink
+                  coach={{ username: msg.username }}
+                  showAvatar
+                  avatarOnly
+                  avatarSize="sm"
+                  className="mt-0.5"
+                />
+                <div className="flex-1 min-w-0">
+                  <CoachLink coach={{ username: msg.username }} size="xs" />
+                  <span className="text-text-muted mx-1">:</span>
+                  <span className="text-text-primary break-words">{msg.message}</span>
+                </div>
               </div>
             ))}
             <div ref={messagesEndRef} />

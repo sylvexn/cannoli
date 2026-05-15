@@ -8,6 +8,7 @@ import type { AuthUser } from './middleware/auth';
 
 import { authRoutes } from './routes/auth';
 import { userRoutes } from './routes/users';
+import { onlineRoutes, touchHeartbeat } from './routes/online';
 import { leagueRoutes } from './routes/leagues';
 import { adminRoutes } from './routes/admin';
 import { draftRoutes } from './routes/draft';
@@ -73,11 +74,16 @@ const app = new Elysia()
     }
   })
 
-  // Auth context — derived once, available to all routes
+  // Auth context — derived once, available to all routes.
+  // We also fire a debounced heartbeat (touches users.last_seen_at) any time an
+  // authenticated request lands on /api/*, so the who's-online widget has fresh
+  // signal without needing a dedicated client-side ping. The debounce lives in
+  // routes/online.ts to keep this file uncluttered.
   .derive(({ request }) => {
     const cookieHeader = request.headers.get('cookie') ?? undefined;
     const token = parseSessionToken(cookieHeader);
     const user = token ? validateSession(token) : null;
+    if (user) touchHeartbeat(parseInt(user.id));
     return { user: user as AuthUser | null, sessionToken: token };
   })
 
@@ -154,6 +160,7 @@ const app = new Elysia()
   // Pin routes must register before userRoutes so /api/users/:username/pins
   // is matched before the more general /api/users/:username profile route.
   .use(pinRoutes)
+  .use(onlineRoutes)
   .use(userRoutes)
   .use(leagueRoutes)
   .use(adminRoutes)
