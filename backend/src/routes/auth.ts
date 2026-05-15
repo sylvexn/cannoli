@@ -209,6 +209,55 @@ export const authRoutes = new Elysia()
     return { success: true };
   })
 
+  // ── Demo session (mock-only) ────────────────────────────────────────────────
+  // Creates a session for the `demo` user without a password check.
+  // Hard-gated on CANNOLI_MODE=mock — returns 404 in live mode so this
+  // endpoint does not exist from an attacker's perspective on the real site.
+  .post('/api/auth/demo-session', ({ request, set }) => {
+    // Live-mode gate: must be the very first thing checked.
+    if (process.env.CANNOLI_MODE !== 'mock') {
+      set.status = 404;
+      return { error: 'Not found' };
+    }
+
+    const demoUser = db.select().from(schema.users)
+      .where(eq(schema.users.username, 'demo'))
+      .get();
+
+    if (!demoUser || !demoUser.active) {
+      set.status = 404;
+      return { error: 'Demo user not found. Run seed-sim.ts to create it.' };
+    }
+
+    const ip = clientIp(request);
+    const token = createSession(demoUser.id);
+    const csrfToken = csrfTokenForSession(token);
+    const { sidCookie } = createPsSession(demoUser.username, ip);
+
+    const headers = new Headers();
+    headers.append('Content-Type', 'application/json');
+    headers.append('Set-Cookie', sessionCookieString(token));
+    headers.append('Set-Cookie', csrfCookieString(csrfToken));
+    headers.append('Set-Cookie', psSidCookieString(sidCookie));
+
+    return new Response(JSON.stringify({
+      user: {
+        id: String(demoUser.id),
+        username: demoUser.username,
+        role: demoUser.role,
+        mustChangePassword: demoUser.mustChangePassword,
+        active: demoUser.active,
+        createdAt: demoUser.createdAt,
+        primaryColor: demoUser.primaryColor,
+        secondaryColor: demoUser.secondaryColor,
+        tertiaryColor: demoUser.tertiaryColor,
+        displayName: demoUser.displayName,
+        bio: demoUser.bio,
+        avatarPath: demoUser.avatarPath,
+      },
+    }), { headers });
+  })
+
   .post('/api/auth/change-password', ({ body, user, set }) => {
     const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
 

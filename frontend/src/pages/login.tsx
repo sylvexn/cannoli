@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { api, type ApiLeague } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { FlaskConical, ChevronRight } from 'lucide-react';
 
 // Compact phase labels for the public active-leagues strip. We deliberately
 // use lowercase here — pre-auth ornament, reads like a status line, not a UI
@@ -27,13 +28,16 @@ const DOT_GRID_STYLE: React.CSSProperties = {
 };
 
 export function LoginPage() {
-  const { login, isAuthenticated, user } = useAuth();
+  const { login, isAuthenticated, user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [leagues, setLeagues] = useState<ApiLeague[] | null>(null);
+  const [isMockMode, setIsMockMode] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [demoError, setDemoError] = useState('');
 
   // Fetch public league list for the ambient strip below the form. /api/leagues
   // is unauthenticated (GETs bypass the auth guard), so this works pre-login.
@@ -45,6 +49,27 @@ export function LoginPage() {
       .catch(() => { if (!cancelled) setLeagues([]); });
     return () => { cancelled = true; };
   }, []);
+
+  // Probe /api/health to determine if this is the mock (demo) deployment.
+  // Used to conditionally show the "Enter demo as admin" card.
+  useEffect(() => {
+    api.getHealth()
+      .then(h => setIsMockMode(h.mode === 'mock'))
+      .catch(() => setIsMockMode(false));
+  }, []);
+
+  async function handleDemoLogin() {
+    setDemoLoading(true);
+    setDemoError('');
+    try {
+      await api.demoLogin();
+      await refreshUser();
+      navigate('/');
+    } catch (err: any) {
+      setDemoError(err.message || 'Demo login failed');
+      setDemoLoading(false);
+    }
+  }
 
   // __COMMIT_HASH__ is injected by vite.config.ts (git rev-parse --short HEAD,
   // 'unknown' fallback). Map 'unknown' to 'dev' for the user-facing chip.
@@ -119,6 +144,40 @@ export function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
+
+        {/* Demo access card — only rendered on mock.cannoli.live (CANNOLI_MODE=mock).
+            Probed via /api/health; never shown on the live deployment. */}
+        {isMockMode && (
+          <div className="rounded-lg border border-neon/25 bg-neon/5 px-4 py-3.5 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <FlaskConical className="w-3.5 h-3.5 text-neon shrink-0" />
+              <span className="text-[11px] font-mono uppercase tracking-widest text-neon">
+                Season simulator demo
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              This is a public preview running simulated season data. Sign in below with your own credentials, or jump straight into an admin-capable demo session.
+            </p>
+            {demoError && (
+              <p className="text-xs text-loss">{demoError}</p>
+            )}
+            <Button
+              type="button"
+              onClick={handleDemoLogin}
+              disabled={demoLoading}
+              className="w-full flex items-center justify-center gap-1.5 bg-neon/10 border border-neon/40 text-neon hover:bg-neon/20 hover:border-neon/70 hover:shadow-[0_0_12px_rgba(var(--color-neon-rgb,74,222,128),0.25)] transition-all duration-200 text-sm font-medium"
+            >
+              {demoLoading ? (
+                'Entering demo...'
+              ) : (
+                <>
+                  Enter demo as admin
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         <div className="flex items-center justify-center gap-2">
           <span className="inline-flex items-center rounded border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
