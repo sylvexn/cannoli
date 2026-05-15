@@ -31,7 +31,7 @@ import type { DraftPresenceData } from './use-draft-websocket';
 interface DraftControlBarProps {
   state: DraftState;
   dispatch: (action: DraftAction) => void;
-  isDemoComplete: boolean;
+  isDraftComplete: boolean;
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
   presence?: DraftPresenceData;
   wsConnected?: boolean;
@@ -49,12 +49,14 @@ interface DraftControlBarProps {
 export function DraftControlBar({
   state,
   dispatch,
-  isDemoComplete,
+  isDraftComplete,
   draftOrder,
   presence,
   wsConnected: _wsConnected,
   timerEnabled = true,
 }: DraftControlBarProps) {
+  const isServer = state.source === 'server';
+  const isConfiguring = state.status === 'configuring' || state.status === 'idle';
   const { isAdmin } = useAuth();
   const league = useLeague();
   const [shiftHeld, setShiftHeld] = useState(false);
@@ -86,8 +88,8 @@ export function DraftControlBar({
     setStarting(true);
     try {
       // Backend persists state and we let the WS broadcast bring everyone (including us)
-      // back into 'in_progress' via LIVE_SYNC. Do NOT dispatch DEMO_START here — that
-      // would silently flip the local mode to 'demo' and run client-side AI for the
+      // back into 'running' via LIVE_SYNC. Do NOT dispatch DRAFT_START here — that
+      // would silently flip source to 'simulator' and run client-side AI for the
       // other teams (the "single sided on mock" bug).
       await api.startDraft(league.id, state.timerDuration || 120);
     } catch (err) {
@@ -97,12 +99,12 @@ export function DraftControlBar({
     }
   }, [starting, league.id, state.timerDuration]);
 
-  const startDemoDraft = useCallback(() => {
+  const startSimulatorDraft = useCallback(() => {
     if (!state.userTeamId) return;
     const teamIds = draftOrder.map(p => p.id);
     const snakeOrder = generateSnakeSlots(teamIds, 10);
     dispatch({
-      type: 'DEMO_START',
+      type: 'DRAFT_START',
       snakeOrder,
       userTeamId: state.userTeamId,
       timerDuration: state.timerDuration || 30,
@@ -111,7 +113,7 @@ export function DraftControlBar({
   }, [state.userTeamId, state.timerDuration, draftOrder, dispatch]);
 
   const handleStartClick = useCallback((e: React.MouseEvent) => {
-    if (state.mode === 'live') {
+    if (isServer) {
       // Admin-only on the backend; show the connection panel before forcing.
       if (!isAdmin) {
         toast.error('Only admins can start a live draft');
@@ -124,26 +126,26 @@ export function DraftControlBar({
       void startLiveDraft();
       return;
     }
-    // Demo mode (or any other client-side path)
+    // Simulator path
     if (!state.userTeamId) return;
     if (e.shiftKey && !allConnected) {
       setForceStartOpen(true);
       return;
     }
-    startDemoDraft();
-  }, [state.mode, state.userTeamId, isAdmin, allConnected, startLiveDraft, startDemoDraft]);
+    startSimulatorDraft();
+  }, [isServer, state.userTeamId, isAdmin, allConnected, startLiveDraft, startSimulatorDraft]);
 
   const handleForceStart = useCallback(() => {
-    if (state.mode === 'live') {
+    if (isServer) {
       void startLiveDraft();
     } else {
-      startDemoDraft();
+      startSimulatorDraft();
     }
     setForceStartOpen(false);
-  }, [state.mode, startLiveDraft, startDemoDraft]);
+  }, [isServer, startLiveDraft, startSimulatorDraft]);
 
   // ─── Pre-start configuration ──────────────────────────────────────────────
-  if (!state.demoStarted) {
+  if (isConfiguring) {
     return (
       <>
         <div className="px-4 py-2.5">
@@ -194,7 +196,7 @@ export function DraftControlBar({
               </div>
             )}
 
-            {state.mode === 'live' && presence && (
+            {isServer && presence && (
               <>
                 <div className="w-px h-6 bg-border-subtle" />
                 <Badge
@@ -225,7 +227,7 @@ export function DraftControlBar({
                 onClick={handleStartClick}
                 disabled={
                   starting
-                  || (state.mode === 'live' ? !isAdmin : !state.userTeamId)
+                  || (isServer ? !isAdmin : !state.userTeamId)
                 }
                 className={cn(
                   'h-8 px-4 text-xs font-bold gap-1.5 transition-all',
@@ -235,7 +237,7 @@ export function DraftControlBar({
                   'disabled:opacity-30',
                 )}
                 title={
-                  state.mode === 'live' && !isAdmin
+                  isServer && !isAdmin
                     ? 'Only admins can start a live draft'
                     : undefined
                 }
@@ -253,7 +255,7 @@ export function DraftControlBar({
                 )}
               </Button>
 
-              {hoverOpen && state.mode === 'live' && presence && (
+              {hoverOpen && isServer && presence && (
                 <div className="absolute right-0 bottom-full mb-2 w-[220px] z-50 rounded-lg border border-border-default bg-surface-raised shadow-lg overflow-hidden">
                   <div className="px-3 py-1.5 border-b border-border-subtle bg-surface-overlay/30">
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted">
@@ -362,12 +364,12 @@ export function DraftControlBar({
       <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted flex-wrap">
         <span>
           <span className="text-text-primary">
-            {Math.min(state.currentPickIndex + (isDemoComplete ? 0 : 1), state.snakeOrder.length)}
+            {Math.min(state.currentPickIndex + (isDraftComplete ? 0 : 1), state.snakeOrder.length)}
           </span>
           <span className="text-text-muted/40">/{state.snakeOrder.length}</span> picks
         </span>
 
-        {isDemoComplete && (
+        {isDraftComplete && (
           <>
             <div className="w-px h-3 bg-border-subtle" />
             <span className="flex items-center gap-1 text-win">
@@ -377,7 +379,7 @@ export function DraftControlBar({
           </>
         )}
 
-        {state.mode === 'live' && presence && !isDemoComplete && (
+        {isServer && presence && !isDraftComplete && (
           <>
             <div className="w-px h-3 bg-border-subtle" />
             <span className="flex items-center gap-1">
@@ -396,7 +398,7 @@ export function DraftControlBar({
         <div className="flex-1" />
 
         {/* Admin timer chrome (hidden when timer disabled or draft complete) */}
-        {isAdmin && !isDemoComplete && timerEnabled && (
+        {isAdmin && !isDraftComplete && timerEnabled && (
           <>
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
@@ -429,8 +431,8 @@ export function DraftControlBar({
           </>
         )}
 
-        {/* Staff overrides — live only, while draft is active */}
-        {isAdmin && state.mode === 'live' && !isDemoComplete && (
+        {/* Staff overrides — server source only, while draft is active */}
+        {isAdmin && isServer && !isDraftComplete && (
           <DraftAdminOverrides
             draftOrder={draftOrder}
             draftedNames={new Set(state.allPicks.map(p => p.pokemonName))}
@@ -439,7 +441,7 @@ export function DraftControlBar({
         )}
 
         <button
-          onClick={() => dispatch({ type: 'DEMO_RESET' })}
+          onClick={() => dispatch({ type: 'DRAFT_RESET' })}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-neon transition-colors"
         >
           <RotateCcw size={10} />

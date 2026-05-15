@@ -21,23 +21,25 @@ export function useDraftTeams(
   standings: Player[],
   ownershipMap: Map<string, PoolOwnership>,
 ) {
-  // Compute team points from current picks (for demo validation)
+  // Compute team points from current picks (for active-view validation).
+  // Was scoped to demo only because live mode used to derive points from
+  // ownershipMap exclusively; now both client paths share the same source.
   const demoTeamPoints = useMemo(() => {
-    if (state.mode !== 'demo') return new Map<string, number>();
+    if (state.view !== 'active') return new Map<string, number>();
     const pts = new Map<string, number>();
     for (const pick of state.allPicks) {
       pts.set(pick.playerId, (pts.get(pick.playerId) ?? 0) + pick.tier);
     }
     return pts;
-  }, [state.mode, state.allPicks]);
+  }, [state.view, state.allPicks]);
 
   const draftedSet = useMemo(() => {
     return new Set(state.allPicks.map(p => p.pokemonName));
   }, [state.allPicks]);
 
-  // For demo/live: per-team roster names (used for same-species + mega cap checks)
+  // Active view: per-team roster names (used for same-species + mega cap checks)
   const demoTeamRosterNames = useMemo(() => {
-    if (state.mode === 'season') return new Map<string, string[]>();
+    if (state.view === 'history') return new Map<string, string[]>();
     const map = new Map<string, string[]>();
     for (const pick of state.allPicks) {
       const arr = map.get(pick.playerId) ?? [];
@@ -45,19 +47,21 @@ export function useDraftTeams(
       map.set(pick.playerId, arr);
     }
     return map;
-  }, [state.mode, state.allPicks]);
+  }, [state.view, state.allPicks]);
 
-  // Per-team picks-left during draft: count of remaining snake slots assigned to that team
-  // (including the slot currently on the clock if it's theirs).
+  // Per-team picks-left during an active draft: count of remaining snake slots
+  // assigned to that team (including the slot currently on the clock if it's theirs).
   const picksLeftByTeam = useMemo(() => {
     const map = new Map<string, number>();
-    if (state.mode === 'season' || !state.demoStarted) return map;
+    const draftActive = state.view === 'active'
+      && (state.status === 'running' || state.status === 'complete');
+    if (!draftActive) return map;
     for (let i = state.currentPickIndex; i < state.snakeOrder.length; i++) {
       const slot = state.snakeOrder[i];
       map.set(slot.teamId, (map.get(slot.teamId) ?? 0) + 1);
     }
     return map;
-  }, [state.mode, state.demoStarted, state.snakeOrder, state.currentPickIndex]);
+  }, [state.view, state.status, state.snakeOrder, state.currentPickIndex]);
 
   // Team rosters from ownership
   const teamRosters = useMemo(() => {

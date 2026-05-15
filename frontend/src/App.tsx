@@ -31,6 +31,7 @@ import { CoachProfilePage } from '@/pages/coach-profile';
 
 // Lazy-loaded heavy routes
 const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
+const DraftPracticePage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
 const MatchupCenterPage = lazy(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazy(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
 
@@ -64,6 +65,7 @@ export default function App() {
                 {/* Protected league routes */}
                 <Route element={<ProtectedRoute />}>
                   <Route path="draft" element={<Suspense fallback={<PageLoadingSpinner />}><DraftBoardPage /></Suspense>} />
+                  <Route path="draft/practice" element={<Suspense fallback={<PageLoadingSpinner />}><DraftPracticePage /></Suspense>} />
                   <Route path="trades" element={<TradeBlockPage />} />
                   <Route path="free-agents" element={<FreeAgentsPage />} />
                 </Route>
