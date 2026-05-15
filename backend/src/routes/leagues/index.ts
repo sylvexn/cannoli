@@ -5,6 +5,7 @@ import { standingsRoutes } from './standings';
 import { teamRoutes } from './teams';
 import { pokemonRoutes } from './pokemon';
 import { archiveRoutes } from './archive';
+import { speedTierRoutes } from './speed-tiers';
 
 export const leagueRoutes = new Elysia()
 
@@ -80,4 +81,5 @@ export const leagueRoutes = new Elysia()
   .use(standingsRoutes)
   .use(teamRoutes)
   .use(pokemonRoutes)
-  .use(archiveRoutes);
+  .use(archiveRoutes)
+  .use(speedTierRoutes);

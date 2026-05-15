@@ -385,6 +385,28 @@ export interface ApiTierListEntry {
   status: 'available' | 'tera-banned' | 'banned';
 }
 
+// ─── Speed Tiers ─────────────────────────────────────────────────────────
+
+export interface ApiSpeedTierRow {
+  /** Stable composite id `<teamId>:<pokemonName>` (rosters.id can churn) */
+  id: string;
+  name: string;
+  dex: number | null;
+  baseSpeed: number;
+  type1: string | null;
+  type2: string | null;
+  tier: number;
+  isTeraCaptain: boolean;
+  abilities: string[];
+  owner: {
+    teamId: string;
+    teamAbbrev: string;
+    teamName: string;
+    teamColor: string;
+    logoPath: string | null;
+  } | null;
+}
+
 // ─── Pins ────────────────────────────────────────────────────────────────
 
 export type PinCategory = 'career' | 'season' | 'week' | 'draft' | 'community' | 'custom';
@@ -848,6 +870,10 @@ export const api = {
 
   freeAgentPickup: (leagueId: string, data: { teamId: string; pokemonName: string; dropPokemonName?: string }) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/free-agents/pickup`, data),
+
+  // Speed tiers (rostered pokemon + base speed + ability list, league-wide)
+  getSpeedTiers: (leagueId: string) =>
+    fetchJson<ApiSpeedTierRow[]>(`/api/leagues/${leagueId}/speed-tiers`),
 
   // Player availability
   getAvailability: (leagueId: string) =>
