@@ -773,6 +773,18 @@ if (PRIMARY_CONFIG.seasonNumber === 10) {
       leagueId,
     );
   }
+
+  // S10 is fully played out — champions crowned, finish positions stamped.
+  // On the live deployment it becomes read-only archived history (same as
+  // S9); S11 launches separately on launch day. Mock keeps S10 unarchived so
+  // the deliberate Sapphire mid-season rewind (mock-data step) stays a
+  // coherent "current" season for the demo.
+  if (MODE === 'live') {
+    sqlite.prepare(
+      `UPDATE seasons SET archived = 1 WHERE season_number = 10`,
+    ).run();
+    console.log('  S10 marked archived (live mode)');
+  }
 }
 
 // ─── S9: complete the bracket (importS9 only produces QF rows) ──────────

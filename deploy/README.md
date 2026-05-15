@@ -164,14 +164,67 @@ hand-promoted staff above this baseline keep their rank.
 ## Initial seeding
 
 Backend containers start with an empty SQLite DB on first deploy.
-Seed once via Coolify terminal (or the API exec):
+`backend/entrypoint.sh` runs `scripts/seed.ts` automatically when the DB file
+is missing (or when `RUN_SEED=1`), and skips it once a DB exists.
 
-```
-# Inside the backend-mock container:
-bun run scripts/seed.ts
+- **mock** — `CANNOLI_MODE=mock`. Seeds the demo dataset. (Will be replaced by
+  the `seed-sim.ts` synthetic-season simulator — see `plan/simulator.md`.)
+- **live** — does **not** self-seed in place. The live DB is built locally and
+  shipped onto the volume — see the migration runbook below.
+
+## Live data migration (S9 + S10 → live DB)
+
+The live database is built locally and copied onto the `cannoli-live-data`
+volume, rather than seeded inside the container. This keeps the heavy XLSX
+import + replay scrape off the vps and lets the artifact be verified before it
+goes live.
+
+```bash
+# 1. Build the live DB locally (S9 archived + S10 finalized & archived, no
+#    mock data; S11 is NOT created — it launches separately on launch day).
+cd backend
+cp data/cannoli.db /tmp/dev-db.bak                  # preserve dev DB
+CANNOLI_MODE=live bun run seed:fresh
+bun -e 'new (require("bun:sqlite").Database)("data/cannoli.db").exec("PRAGMA wal_checkpoint(TRUNCATE)")'
+cp data/cannoli.db /tmp/cannoli-live-built.db        # the artifact to ship
+cp /tmp/dev-db.bak data/cannoli.db                   # restore dev DB
+
+# 2. Verify the artifact: seasons = {9 archived, 10 archived} only; 6 leagues
+#    (3 s9-* + 3 S10) all offseason; 6 finals completed+scored; champions
+#    emerald-abs / ruby-vgk / sapphire-dwg; trades = 0.
+
+# 3. Ship it. The live volume is root-owned on the host, so work through the
+#    container ($C = <live-backend-uuid>-<deployment-id>, see `docker ps`).
+C=$(ssh vps "docker ps --format '{{.Names}}' | grep '^akbbnhszn7nvyyvjo641w6k5-'")
+ssh vps "docker exec $C sh -c 'cd /app/backend/data && cp cannoli.db cannoli.db.pre-migration.\$(date +%Y%m%d-%H%M%S)'"
+ssh vps "docker stop $C"
+scp /tmp/cannoli-live-built.db vps:/tmp/ && touch /tmp/empty && scp /tmp/empty vps:/tmp/empty
+ssh vps "docker cp /tmp/cannoli-live-built.db $C:/app/backend/data/cannoli.db && \
+         docker cp /tmp/empty $C:/app/backend/data/cannoli.db-wal && \
+         docker cp /tmp/empty $C:/app/backend/data/cannoli.db-shm"   # clear stale WAL sidecars
+ssh vps "docker start $C"
+
+# 4. Verify the running container logs '[entrypoint] db exists ... skipping
+#    seed' and /api/health reports {"mode":"live","db":"connected"}, and
+#    /api/seasons returns S9 + S10 both archived.
 ```
 
-`backend/entrypoint.sh` guards against re-seeding when the DB already exists.
+**Rollback:** stop the container, `docker cp` the `cannoli.db.pre-migration.<ts>`
+backup (kept in the volume) back over `cannoli.db`, clear the WAL sidecars, start.
+`RUN_SEED` must **not** be `1` on `cannoli-backend-live`, or the entrypoint will
+wipe the shipped DB on next boot.
+
+## VPS access
+
+- SSH host alias `vps` (Tailscale `100.97.127.36`) is configured in
+  `~/.ssh/config`; key `~/.ssh/id_ed25519`. Docker is usable as the `syl` user
+  without sudo (sudo itself needs a password — file ops on root-owned volume
+  dirs must go through `docker exec` / `docker cp`).
+- Coolify containers are named `<app-uuid>-<deployment-id>`; resolve the current
+  name with `docker ps --format '{{.Names}}' | grep '^<app-uuid>-'`.
+- Live DB volume: `akbbnhszn7nvyyvjo641w6k5-cannoli-live-data`, host path
+  `/var/lib/docker/volumes/akbbnhszn7nvyyvjo641w6k5-cannoli-live-data/_data`
+  (root-owned), mounted at `/app/backend/data` in `cannoli-backend-live`.
 
 ## App UUIDs (current)
 
