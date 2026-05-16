@@ -1,6 +1,5 @@
 import { ArrowLeft, Crown, GripVertical, Play, Radio } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
-import { TeamCoachStack } from '@/components/team-coach-stack';
 import { cn } from '@/lib/utils';
 import { PREROLL_DELAY_OPTIONS, type QueueEntry } from './stream-types';
 
@@ -108,7 +107,7 @@ export function StreamLobby({
                 </span>
 
                 <span
-                  className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                  className="relative z-10 text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0"
                   style={{
                     color: entry.league.color,
                     backgroundColor: `${entry.league.color}15`,
@@ -117,23 +116,14 @@ export function StreamLobby({
                   {entry.league.name.replace(' League', '')}
                 </span>
 
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {entry.homeTeam ? (
-                    <TeamCoachStack
-                      team={{
-                        leagueId: entry.league.id,
-                        teamId: entry.homeTeam.id,
-                        teamAbbrev: entry.homeTeam.teamAbbrev,
-                        teamColor: entry.homeTeam.teamColor,
-                        logoPath: entry.homeTeam.logoPath,
-                        owner: entry.homeTeam.owner,
-                      }}
-                      side="right"
-                      size="sm"
-                    />
-                  ) : (
-                    <TeamLogo abbrev="???" color="#6b7280" size="sm" />
-                  )}
+                <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <TeamLogo
+                    abbrev={entry.homeTeam?.teamAbbrev ?? '???'}
+                    color={entry.homeTeam?.teamColor ?? '#6b7280'}
+                    logoPath={entry.homeTeam?.logoPath}
+                    size="sm"
+                    className="shrink-0"
+                  />
                   <span className="text-sm font-medium text-text-primary truncate">
                     {entry.homeTeam?.teamName ?? entry.match.homePlayer}
                   </span>
@@ -142,25 +132,16 @@ export function StreamLobby({
                     {entry.match.homeScore ?? '-'}-{entry.match.awayScore ?? '-'}
                   </span>
 
-                  <span className="text-sm font-medium text-text-primary truncate">
+                  <span className="text-sm font-medium text-text-primary truncate text-right">
                     {entry.awayTeam?.teamName ?? entry.match.awayPlayer}
                   </span>
-                  {entry.awayTeam ? (
-                    <TeamCoachStack
-                      team={{
-                        leagueId: entry.league.id,
-                        teamId: entry.awayTeam.id,
-                        teamAbbrev: entry.awayTeam.teamAbbrev,
-                        teamColor: entry.awayTeam.teamColor,
-                        logoPath: entry.awayTeam.logoPath,
-                        owner: entry.awayTeam.owner,
-                      }}
-                      side="left"
-                      size="sm"
-                    />
-                  ) : (
-                    <TeamLogo abbrev="???" color="#6b7280" size="sm" />
-                  )}
+                  <TeamLogo
+                    abbrev={entry.awayTeam?.teamAbbrev ?? '???'}
+                    color={entry.awayTeam?.teamColor ?? '#6b7280'}
+                    logoPath={entry.awayTeam?.logoPath}
+                    size="sm"
+                    className="shrink-0"
+                  />
                 </div>
 
                 <button

@@ -41,6 +41,7 @@ import {
 import { importPokemonOnly, assignFinishPositions } from '../../../scripts/import-xlsx';
 import { runAutoAwards } from '../pins/auto-award';
 import { mintArchivePins } from '../pins/archive-mint';
+import { seedLeagueTrades } from './seed-trades';
 
 // ── Tunables ────────────────────────────────────────────────────────────────
 
@@ -379,6 +380,13 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
       runAutoAwards(leagueId, { trigger: 'season-end' });
       mintArchivePins(leagueId);
 
+      // Historical trade activity — a finished season has only accepted
+      // (completed) trades + trade-block listings, no open proposals.
+      const trades = seedLeagueTrades(leagueId, leagueRng, true, TEAMS_PER_LEAGUE - 1);
+      console.log(
+        `    ${leagueId}: ${trades.accepted} accepted trades, ${trades.listings} block listings`,
+      );
+
       const counts = sqlite.prepare(
         `SELECT phase, COUNT(*) c FROM matches WHERE league_id = ? GROUP BY phase`,
       ).all(leagueId) as { phase: string; c: number }[];
@@ -394,6 +402,17 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
         regularMatches: reg, playoffMatches: po, championId: playoffs.championId,
       });
     }
+
+    // Archive the finished season. Done LAST — after every per-league write
+    // (finish positions, pin minting, trade seeding) has completed — so the
+    // route-level archive-write guards never fire mid-build. archived=1 makes
+    // S1 a read-only history surface: it powers the /archive pages and gates
+    // coach "past seasons" history (users.ts pastTeams on seasonArchived).
+    db.update(schema.seasons)
+      .set({ archived: true })
+      .where(eq(schema.seasons.id, seasonId))
+      .run();
+    console.log(`  Season ${seasonNumber} archived (read-only history).`);
 
     seasons.push({ seasonId, seasonNumber, status: 'finished', leagues: leagueSummaries });
   }
@@ -432,6 +451,14 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
 
       // Leave the league mid-season: phase='regular', pointer at week 4.
       seedAvailability(leagueId, LIVE_THROUGH_WEEK, weekDates, leagueRng);
+
+      // Live trade activity — accepted (history) + open pending proposals +
+      // trade-block listings. Trades stamp weeks within the played range.
+      const trades = seedLeagueTrades(leagueId, leagueRng, false, LIVE_THROUGH_WEEK);
+      console.log(
+        `    ${leagueId}: ${trades.accepted} accepted, ${trades.pending} pending, ` +
+        `${trades.listings} block listings`,
+      );
 
       const reg = (sqlite.prepare(
         `SELECT COUNT(*) c FROM matches WHERE league_id = ? AND phase = 'regular'`,

@@ -27,7 +27,6 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema, sqlite } from '../../db';
 import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
-import { runOnce } from '../../lib/scheduler';
 import { assertMockMode, isMock } from '../../lib/sim/sim-guard';
 import { MockRng } from '../../lib/sim/mock-rng';
 import { simulateDraft } from '../../lib/sim/simulate-draft';
@@ -147,7 +146,7 @@ export const simRoutes = new Elysia()
   })
 
   // ─── POST /advance-week — sim current week, then advance the pointer ──
-  .post('/api/admin/sim/advance-week', async ({ body, user, set }) => {
+  .post('/api/admin/sim/advance-week', ({ body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
 
@@ -166,18 +165,38 @@ export const simRoutes = new Elysia()
     });
     if (!sim.success) { set.status = 400; return { error: sim.error }; }
 
-    // Reuse the real advance-week job to bump the week pointer (respects
-    // unfinished-match / pause / schedule-date guards across all leagues).
-    await runOnce('advance-week');
-    const after = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, leagueId)).get();
+    // Schedule-INDEPENDENT advance: the production advance-week cron only bumps
+    // the pointer when weekDates[nextWeek] is a *past* date, so a live sim
+    // season (future week dates) would never advance. The simulator's headline
+    // control must always move, so we bump the pointer directly — guarded only
+    // by phase and the total-weeks ceiling.
+    const weekBefore = league.currentWeek;
+    const nextWeek = weekBefore + 1;
+    let weekAfter = weekBefore;
+    if (league.phase === 'regular' && nextWeek <= league.totalWeeks) {
+      tx(() => {
+        db.update(schema.leagues)
+          .set({ currentWeek: nextWeek })
+          .where(eq(schema.leagues.id, leagueId))
+          .run();
+        db.insert(schema.activityLog).values({
+          type: 'sim_week_advanced',
+          category: 'admin',
+          actor: user!.username,
+          leagueId,
+          description: `Sim: advanced ${league.name} week ${weekBefore} → ${nextWeek}`,
+          metadata: JSON.stringify({ leagueId, from: weekBefore, to: nextWeek }),
+        }).run();
+      });
+      weekAfter = nextWeek;
+    }
 
     return {
       ok: true,
       leagueId,
       matchesPlayed: sim.matchesPlayed,
-      weekBefore: league.currentWeek,
-      weekAfter: after?.currentWeek ?? league.currentWeek,
+      weekBefore,
+      weekAfter,
     };
   })
 

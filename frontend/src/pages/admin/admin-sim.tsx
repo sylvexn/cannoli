@@ -8,11 +8,11 @@
  * The route element guards on mode !== 'mock' (redirect to /admin); this
  * component additionally renders a friendly notice if it ever loads on live.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FlaskConical, RefreshCw, GaugeCircle, SlidersHorizontal, RotateCcw, Cog, AlertTriangle,
 } from 'lucide-react';
-import { api, type ApiSimState } from '@/lib/api';
+import { api, type ApiSimState, type ApiSimSeason, type ApiSimLeague } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { SeasonProgressCard } from './sim/season-progress-card';
 import { SimControlsCard } from './sim/sim-controls-card';
@@ -40,6 +40,46 @@ function CardShell({
   );
 }
 
+/** Summarises a season's status from its leagues' phases/weeks. */
+function seasonStatusLabel(leagues: ApiSimLeague[]): string {
+  if (leagues.length === 0) return 'no leagues';
+  const allFinished = leagues.every(l => l.phase === 'offseason');
+  if (allFinished) return 'finished';
+  const allPredraft = leagues.every(l => l.phase === 'predraft' || l.phase === 'draft');
+  if (allPredraft) return 'pre-season';
+  const inPlayoffs = leagues.some(l => l.phase === 'playoffs');
+  const weeks = leagues.filter(l => l.phase === 'regular').map(l => l.currentWeek);
+  if (weeks.length > 0) {
+    const minW = Math.min(...weeks);
+    const maxW = Math.max(...weeks);
+    return inPlayoffs
+      ? `week ${minW === maxW ? minW : `${minW}–${maxW}`} · playoffs`
+      : `week ${minW === maxW ? minW : `${minW}–${maxW}`}`;
+  }
+  return inPlayoffs ? 'playoffs' : 'in progress';
+}
+
+function SeasonGroupHeader({ season, leagues }: { season: ApiSimSeason; leagues: ApiSimLeague[] }) {
+  const status = seasonStatusLabel(leagues);
+  const finished = status === 'finished';
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={
+          'inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wide ' +
+          (finished
+            ? 'border border-text-muted/40 bg-surface-overlay/40 text-text-muted'
+            : 'border border-neon/40 bg-neon/10 text-neon')
+        }
+      >
+        Season {season.seasonNumber}
+      </span>
+      <span className="text-[11px] text-text-muted">{status}</span>
+      <span className="flex-1 h-px bg-border-subtle" />
+    </div>
+  );
+}
+
 export function AdminSim() {
   const [state, setState] = useState<ApiSimState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +93,21 @@ export function AdminSim() {
   }, []);
 
   useEffect(() => { refetch(); }, [refetch]);
+
+  // Group leagues under their season (sorted by season number ascending).
+  const sortedSeasons = useMemo(
+    () => [...(state?.seasons ?? [])].sort((a, b) => a.seasonNumber - b.seasonNumber),
+    [state],
+  );
+  const leaguesBySeason = useMemo(() => {
+    const m = new Map<number, ApiSimLeague[]>();
+    for (const l of state?.leagues ?? []) {
+      const arr = m.get(l.seasonId) ?? [];
+      arr.push(l);
+      m.set(l.seasonId, arr);
+    }
+    return m;
+  }, [state]);
 
   if (loading) {
     return <div className="py-12 text-center text-sm text-text-muted font-mono">Loading simulator…</div>;
@@ -109,20 +164,34 @@ export function AdminSim() {
         </div>
       ) : (
         <>
-          {/* Season progress */}
+          {/* Season progress — grouped per season */}
           <CardShell icon={GaugeCircle} title="Season Progress" accent="text-neon">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {leagues.map(l => (
-                <SeasonProgressCard key={l.id} league={l} />
+            <div className="space-y-4">
+              {sortedSeasons.map(season => (
+                <div key={season.id} className="space-y-2">
+                  <SeasonGroupHeader season={season} leagues={leaguesBySeason.get(season.id) ?? []} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(leaguesBySeason.get(season.id) ?? []).map(l => (
+                      <SeasonProgressCard key={l.id} league={l} seasonNumber={season.seasonNumber} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </CardShell>
 
-          {/* Sim controls */}
+          {/* Sim controls — grouped per season */}
           <CardShell icon={SlidersHorizontal} title="Simulator Controls" accent="text-draw">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {leagues.map(l => (
-                <SimControlsCard key={l.id} league={l} onChanged={refetch} />
+            <div className="space-y-4">
+              {sortedSeasons.map(season => (
+                <div key={season.id} className="space-y-2">
+                  <SeasonGroupHeader season={season} leagues={leaguesBySeason.get(season.id) ?? []} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(leaguesBySeason.get(season.id) ?? []).map(l => (
+                      <SimControlsCard key={l.id} league={l} seasonNumber={season.seasonNumber} onChanged={refetch} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </CardShell>

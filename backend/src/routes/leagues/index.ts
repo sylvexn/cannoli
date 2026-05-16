@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { standingsRoutes } from './standings';
 import { teamRoutes } from './teams';
 import { pokemonRoutes } from './pokemon';
@@ -19,6 +19,19 @@ export const leagueRoutes = new Elysia()
     const leagues = db.select().from(schema.leagues)
       .where(eq(schema.leagues.seasonId, season.id))
       .all();
+    // Per-league registered-team count. A coach == a team (teams.userId), so
+    // the team count is the player count. The admin Leagues tab reads this;
+    // previously it had no count source and rendered "0 players".
+    const teamCounts = new Map(
+      db.select({
+        leagueId: schema.teams.leagueId,
+        count: sql<number>`COUNT(*)`,
+      })
+        .from(schema.teams)
+        .groupBy(schema.teams.leagueId)
+        .all()
+        .map(r => [r.leagueId, r.count]),
+    );
     return leagues.map(l => ({
       id: l.id,
       name: l.name,
@@ -27,6 +40,7 @@ export const leagueRoutes = new Elysia()
       draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
       playoffTeamCount: l.playoffTeamCount,
       format: l.format,
+      playerCount: teamCounts.get(l.id) ?? 0,
       // Lifecycle fields are per-league (3 leagues run independently per
       // season). Surfaced under `season` for backwards-compat with all
       // existing frontend readers; the underlying source of truth is the

@@ -40,7 +40,7 @@ function MatchBar({ label, completed, total }: { label: string; completed: numbe
   );
 }
 
-export function SeasonProgressCard({ league }: { league: ApiSimLeague }) {
+export function SeasonProgressCard({ league, seasonNumber }: { league: ApiSimLeague; seasonNumber: number }) {
   const activeIdx = PHASES.indexOf(league.phase as Phase);
   const weekPct = league.totalWeeks > 0
     ? Math.round((league.currentWeek / league.totalWeeks) * 100)
@@ -50,6 +50,9 @@ export function SeasonProgressCard({ league }: { league: ApiSimLeague }) {
     <div className="rounded-lg border border-border-default bg-surface-base/60 p-3 space-y-3">
       {/* Header */}
       <div className="flex items-center gap-2">
+        <span className="inline-flex shrink-0 items-center rounded border border-neon/30 bg-neon/5 px-1 py-0 text-[9px] font-mono font-bold uppercase tracking-wide text-neon">
+          S{seasonNumber}
+        </span>
         <h3 className="text-sm font-mono font-bold uppercase tracking-tight text-text-primary truncate">
           {league.name}
         </h3>

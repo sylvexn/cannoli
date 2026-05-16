@@ -148,6 +148,30 @@ export function AppShell() {
     [activeLeagueId, leagues],
   );
 
+  // Backend mode (mock = season simulator) — drives the sidebar season badge.
+  const [mode, setMode] = useState<'live' | 'mock' | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.getHealth()
+      .then(h => { if (!cancelled) setMode(h.mode); })
+      .catch(() => { if (!cancelled) setMode(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sidebar season badge: prefer the active league's season; else, if every
+  // league shares one season number, show that; else fall back to a SIM chip
+  // in mock mode (or nothing on live).
+  const seasonBadge = useMemo(() => {
+    const activeNum = activeLeague?.season?.seasonNumber;
+    if (activeNum) return { label: `S${activeNum}`, sim: false };
+    const nums = new Set(
+      leagues.map(l => l.season?.seasonNumber).filter((n): n is number => !!n),
+    );
+    if (nums.size === 1) return { label: `S${[...nums][0]}`, sim: false };
+    if (mode === 'mock') return { label: 'SIM', sim: true };
+    return null;
+  }, [activeLeague, leagues, mode]);
+
   // Track which league accordion is open — only one at a time
   const [openLeagueId, setOpenLeagueId] = useState<string | null>(activeLeagueId);
 
@@ -173,10 +197,14 @@ export function AppShell() {
         <div className="px-3 pt-3 pb-3 border-b border-border-default">
           <NeonLogo className="w-full h-auto" />
           <div className="flex items-center justify-center gap-2 mt-1">
-            <span className="inline-flex items-center rounded-full border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
-              S10
-            </span>
-            <span className="w-px h-3 bg-border-default" />
+            {seasonBadge && (
+              <>
+                <span className="inline-flex items-center rounded-full border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
+                  {seasonBadge.label}
+                </span>
+                <span className="w-px h-3 bg-border-default" />
+              </>
+            )}
             <Tooltip>
               <TooltipTrigger
                 render={(props) => (

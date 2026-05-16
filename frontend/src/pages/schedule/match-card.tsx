@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Match, Player, MatchPokemonEntry } from '@/lib/types';
+import { useLeagueData } from '@/lib/league-data-context';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
 import { TeamCoachVs } from '@/components/team-coach-vs';
@@ -9,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, Zap, Swords } from 'lucide-react';
+import { ChevronDown, ExternalLink, Zap, Swords, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { useLeague } from '@/lib/league-context';
@@ -23,25 +24,50 @@ interface MatchCardProps {
   awayPlayer: Player;
 }
 
+type KDDetail = { home: MatchPokemonEntry[]; away: MatchPokemonEntry[] };
+
 export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
+  const { getMatchDetail } = useLeagueData();
   const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState<KDDetail | null>(match.pokemonKD ?? null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
   const isCompleted = match.homeScore !== undefined;
   const homeWon = isCompleted && (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = isCompleted && (match.awayScore ?? 0) > (match.homeScore ?? 0);
-  const hasDetail = isCompleted && match.pokemonKD;
+  // Completed matches always offer the expand affordance; the K/D detail is
+  // fetched lazily on first expand.
+  const canExpand = isCompleted;
+
+  const handleToggle = () => {
+    if (!canExpand) return;
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !detail && !detailLoading) {
+      setDetailLoading(true);
+      setDetailError(false);
+      getMatchDetail(match.id)
+        .then(d => {
+          if (d) setDetail(d);
+          else setDetailError(true);
+        })
+        .catch(() => setDetailError(true))
+        .finally(() => setDetailLoading(false));
+    }
+  };
 
   return (
     <Card className="bg-surface-raised border-border-default overflow-hidden">
       {/* Score row */}
       <button
-        onClick={() => hasDetail && setExpanded(!expanded)}
-        disabled={!hasDetail}
+        onClick={handleToggle}
+        disabled={!canExpand}
         className={cn(
           'w-full flex items-center gap-3 px-4 py-3 transition-all duration-200',
-          hasDetail && 'hover:bg-surface-overlay/40 cursor-pointer',
-          !hasDetail && 'cursor-default',
+          canExpand && 'hover:bg-surface-overlay/40 cursor-pointer',
+          !canExpand && 'cursor-default',
         )}
       >
         {/* Home team */}
@@ -144,7 +170,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
-          {hasDetail && (
+          {canExpand && (
             <ChevronDown className={cn(
               'w-4 h-4 text-text-muted transition-transform duration-200',
               expanded && 'rotate-180',
@@ -159,7 +185,18 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
         expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
       )}>
         <div className="overflow-hidden">
-          {match.pokemonKD && (
+          {detailLoading && (
+            <div className="border-t border-border-subtle/50 px-4 py-6 flex items-center justify-center gap-2 text-xs text-text-muted">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading match detail…
+            </div>
+          )}
+          {detailError && !detailLoading && (
+            <div className="border-t border-border-subtle/50 px-4 py-6 text-center text-xs text-text-muted">
+              No per-Pokemon detail available for this match.
+            </div>
+          )}
+          {detail && !detailLoading && (
             <div className="border-t border-border-subtle/50">
               {/* Team column headers */}
               <div className="grid grid-cols-2">
@@ -184,22 +221,22 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               {/* Pokemon rows side by side */}
               <div className="grid grid-cols-2">
                 <PokemonKDColumn
-                  entries={match.pokemonKD.home}
+                  entries={detail.home}
                   teamColor={homePlayer.teamColor}
                   won={homeWon}
                   maxKills={Math.max(
-                    ...match.pokemonKD.home.map(e => e.kills),
-                    ...match.pokemonKD.away.map(e => e.kills),
+                    ...detail.home.map(e => e.kills),
+                    ...detail.away.map(e => e.kills),
                     1,
                   )}
                 />
                 <PokemonKDColumn
-                  entries={match.pokemonKD.away}
+                  entries={detail.away}
                   teamColor={awayPlayer.teamColor}
                   won={awayWon}
                   maxKills={Math.max(
-                    ...match.pokemonKD.home.map(e => e.kills),
-                    ...match.pokemonKD.away.map(e => e.kills),
+                    ...detail.home.map(e => e.kills),
+                    ...detail.away.map(e => e.kills),
                     1,
                   )}
                   alignRight
@@ -208,8 +245,8 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
 
               {/* Summary footer */}
               <div className="grid grid-cols-2 border-t border-border-subtle/30">
-                <TeamKDSummary entries={match.pokemonKD.home} teamColor={homePlayer.teamColor} />
-                <TeamKDSummary entries={match.pokemonKD.away} teamColor={awayPlayer.teamColor} alignRight />
+                <TeamKDSummary entries={detail.home} teamColor={homePlayer.teamColor} />
+                <TeamKDSummary entries={detail.away} teamColor={awayPlayer.teamColor} alignRight />
               </div>
             </div>
           )}

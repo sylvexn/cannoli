@@ -1,7 +1,17 @@
-import { Play, X, Maximize2, Minimize2, Link2 } from 'lucide-react';
+import { Play, X, Maximize2, Minimize2, Link2, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReplayEntry } from './replay-types';
 import { replayEmbedUrl } from './replay-types';
+
+/**
+ * Simulated matches (mock.cannoli.live season simulator) carry a synthetic
+ * `replayUrl` under a `/sim/` path but have no real battle log on disk, so
+ * the embed page would 404. Detect that here and render a friendly notice
+ * instead of an iframe that resolves to a raw HTTP-error box.
+ */
+function isSyntheticReplay(replayUrl: string | null | undefined): boolean {
+  return !!replayUrl && replayUrl.includes('/sim/');
+}
 
 interface ReplayViewerPanelProps {
   entry: ReplayEntry;
@@ -24,6 +34,7 @@ export function ReplayViewerPanel({
 }: ReplayViewerPanelProps) {
   const { match, league, homeTeam, awayTeam } = entry;
   const embedUrl = replayEmbedUrl(match.id);
+  const synthetic = isSyntheticReplay(match.replayUrl);
 
   return (
     <div className={cn(
@@ -70,13 +81,35 @@ export function ReplayViewerPanel({
           </button>
         </div>
       </div>
-      <iframe
-        src={embedUrl}
-        className={cn('w-full border-0 bg-[#0e0e10]', theater ? 'flex-1' : '')}
-        style={!theater ? { height: '600px' } : undefined}
-        title="Replay viewer"
-        sandbox="allow-scripts allow-same-origin"
-      />
+      {synthetic ? (
+        <div
+          className={cn(
+            'w-full flex flex-col items-center justify-center gap-3 bg-[#0e0e10] px-6 text-center',
+            theater ? 'flex-1' : '',
+          )}
+          style={!theater ? { height: '600px' } : undefined}
+        >
+          <FlaskConical size={32} className="text-draw" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-text-secondary">
+              This match was simulated — no battle replay available.
+            </p>
+            <p className="text-xs text-text-muted max-w-sm">
+              Simulator results are generated without a Pokemon Showdown battle,
+              so there's no log to play back. Per-Pokemon K/D is still on the
+              match card.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <iframe
+          src={embedUrl}
+          className={cn('w-full border-0 bg-[#0e0e10]', theater ? 'flex-1' : '')}
+          style={!theater ? { height: '600px' } : undefined}
+          title="Replay viewer"
+          sandbox="allow-scripts allow-same-origin"
+        />
+      )}
     </div>
   );
 }

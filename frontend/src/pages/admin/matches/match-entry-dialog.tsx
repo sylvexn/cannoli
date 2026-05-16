@@ -16,6 +16,7 @@ import { POKEMON_TYPES } from '@/lib/pokemon';
 import {
   ChevronDown, ChevronUp, Plus, Trash2, Swords, Gavel,
 } from 'lucide-react';
+import type { TeamNameResolver } from '@/lib/use-team-names';
 
 export type ResultMode = 'enter' | 'force';
 
@@ -29,13 +30,16 @@ interface PokemonEntry {
 
 const emptyEntry = (): PokemonEntry => ({ name: '', kills: 0, deaths: 0, teraUsed: false, teraType: '' });
 
-export function MatchEntryDialog({ match, mode, open, onOpenChange, onSaved }: {
+export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, onSaved }: {
   match: ApiAdminMatch | null;
   mode: ResultMode;
+  teamNames: TeamNameResolver;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
+  const homeName = match ? teamNames.name(match.homeTeamId) : '';
+  const awayName = match ? teamNames.name(match.awayTeamId) : '';
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [replayUrl, setReplayUrl] = useState('');
@@ -129,7 +133,7 @@ export function MatchEntryDialog({ match, mode, open, onOpenChange, onSaved }: {
             )}
           </DialogTitle>
           <DialogDescription>
-            {match && `${match.homeTeamId} vs ${match.awayTeamId} (Week ${match.week})`}
+            {match && `${homeName} vs ${awayName} (Week ${match.week})`}
             {mode === 'force' && match?.status === 'completed' && (
               <span className="block mt-1 text-loss text-[10px]">
                 Overwriting an already-completed match. Prior K/D snapshot is preserved in the activity log.
@@ -142,13 +146,13 @@ export function MatchEntryDialog({ match, mode, open, onOpenChange, onSaved }: {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                {match?.homeTeamId} (Home)
+                {homeName} (Home)
               </label>
               <NumberInput value={homeScore} onChange={setHomeScore} min={0} max={6} />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                {match?.awayTeamId} (Away)
+                {awayName} (Away)
               </label>
               <NumberInput value={awayScore} onChange={setAwayScore} min={0} max={6} />
             </div>
@@ -157,7 +161,7 @@ export function MatchEntryDialog({ match, mode, open, onOpenChange, onSaved }: {
           <div className="text-[10px] text-text-muted">
             Winner: <span className="text-text-primary font-medium">
               {homeScore === awayScore ? 'Tie' :
-                homeScore > awayScore ? match?.homeTeamId : match?.awayTeamId}
+                homeScore > awayScore ? homeName : awayName}
             </span>
           </div>
 

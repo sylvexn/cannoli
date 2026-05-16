@@ -44,6 +44,7 @@ function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): Lea
       playoffTeamCount: a.playoffTeamCount ?? 6,
       season,
       players: [],
+      playerCount: a.playerCount ?? 0,
       hasData: true,
     };
   });

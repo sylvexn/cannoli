@@ -1,8 +1,8 @@
-import { useParams, Navigate, Outlet, Link, useLocation } from 'react-router-dom';
+import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
 import { LeagueProvider } from '@/lib/league-context';
 import { LeagueDataProvider } from '@/lib/league-data-context';
 import { useAppData } from '@/lib/app-data-context';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Home, Archive, SearchX } from 'lucide-react';
 
 const routeLabels: Record<string, string> = {
   '': 'Standings',
@@ -28,7 +28,38 @@ export function LeagueLayout() {
     );
   }
 
-  if (!league) return <Navigate to="/" replace />;
+  if (!league) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-center px-6">
+        <SearchX size={40} className="text-text-muted" />
+        <div className="space-y-1">
+          <h1 className="text-lg font-mono font-bold uppercase tracking-tight text-text-primary">
+            League not found
+          </h1>
+          <p className="text-sm text-text-muted max-w-md">
+            <span className="font-mono text-text-secondary">{leagueId}</span> isn't an
+            active league. Archived seasons live in the Season Archive.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-surface-raised px-3 py-1.5 text-xs text-text-secondary transition-colors hover:text-text-primary hover:border-neon/40"
+          >
+            <Home size={13} />
+            League Overview
+          </Link>
+          <Link
+            to="/archive"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-surface-raised px-3 py-1.5 text-xs text-text-secondary transition-colors hover:text-text-primary hover:border-neon/40"
+          >
+            <Archive size={13} />
+            Season Archive
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   // Derive current page label from URL
   const segments = pathname.split('/').filter(Boolean);
