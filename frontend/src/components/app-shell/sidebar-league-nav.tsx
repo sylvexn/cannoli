@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, BarChart3, Calendar, ArrowLeftRight,
-  LayoutDashboard, ChevronDown, UserPlus,
+  LayoutDashboard, ChevronDown, UserPlus, Gauge,
 } from 'lucide-react';
 import { PHASE_COLORS } from '@/lib/constants';
 import type { useAppData } from '@/lib/app-data-context';
@@ -14,6 +14,7 @@ export const leaguePages = [
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
+  { path: '/speed', label: 'Speed Tiers', icon: Gauge },
   { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
   { path: '/free-agents', label: 'Free Agents', icon: UserPlus },
 ];

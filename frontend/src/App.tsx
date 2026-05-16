@@ -34,6 +34,7 @@ const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ def
 const DraftPracticePage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
 const MatchupCenterPage = lazy(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazy(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
+const SpeedTiersPage = lazy(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
 
 export default function App() {
   return (
@@ -60,6 +61,7 @@ export default function App() {
                 <Route index element={<StandingsPage />} />
                 <Route path="schedule" element={<SchedulePage />} />
                 <Route path="stats" element={<Suspense fallback={<PageLoadingSpinner />}><StatsPage /></Suspense>} />
+                <Route path="speed" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
                 <Route path="teams/:id" element={<TeamProfilePage />} />
 
                 {/* Protected league routes */}
