@@ -58,7 +58,7 @@ export const teamAdminRoutes = new Elysia()
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
     const staff = isStaff(user);
 
-    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername, bio } = body as Record<string, unknown>;
+    const { coachName, teamName, teamAbbrev, teamColor, userId, showdownUsername, bio, motto, captainNote } = body as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
     // Owner-allowed fields:
@@ -67,6 +67,19 @@ export const teamAdminRoutes = new Elysia()
       if (bio === null || bio === '') updates.bio = null;
       else if (typeof bio === 'string' && bio.length <= 280) updates.bio = bio;
       else { set.status = 400; return { error: 'bio must be a string ≤ 280 chars' }; }
+    }
+    // Personality fields — short owner-authored strings rendered on the team
+    // detail page. Caps mirror users.statusMessage / users.bio so the UI can
+    // share the same character-counter component.
+    if (motto !== undefined) {
+      if (motto === null || motto === '') updates.motto = null;
+      else if (typeof motto === 'string' && motto.length <= 80) updates.motto = motto.trim();
+      else { set.status = 400; return { error: 'motto must be a string ≤ 80 chars' }; }
+    }
+    if (captainNote !== undefined) {
+      if (captainNote === null || captainNote === '') updates.captainNote = null;
+      else if (typeof captainNote === 'string' && captainNote.length <= 280) updates.captainNote = captainNote;
+      else { set.status = 400; return { error: 'captainNote must be a string ≤ 280 chars' }; }
     }
     // Staff-only fields:
     if (staff) {
@@ -226,7 +239,7 @@ export const teamAdminRoutes = new Elysia()
 
   .get('/uploads/:dir/:file', async ({ params, set }) => {
     // Whitelist directories — only the ones we write to
-    const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars'];
+    const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars', 'user-banners'];
     if (!ALLOWED_DIRS.includes(params.dir)) { set.status = 404; return 'Not found'; }
     if (!/^[a-zA-Z0-9_.-]+$/.test(params.file)) { set.status = 400; return 'Invalid filename'; }
     const path = `${process.cwd()}/uploads/${params.dir}/${params.file}`;
