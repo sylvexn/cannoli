@@ -51,6 +51,14 @@ export interface Player {
   owner?: CoachOwner | null;
   /** Set after the team locks its tera captains during the post-draft gate. */
   captainsLocked?: boolean;
+  /** Public path to uploaded team banner; null for color-block fallback. */
+  bannerPath?: string | null;
+  /** Long-form team description (≤ 280, owner-editable). */
+  bio?: string | null;
+  /** Short team motto (≤ 80, owner-editable). */
+  motto?: string | null;
+  /** Owner-authored captain note (≤ 280) shown on the team page. */
+  captainNote?: string | null;
   record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
   /** Set when this player is in a tied wins-bucket — describes which rule resolved their order. */
   tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;

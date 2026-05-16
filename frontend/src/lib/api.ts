@@ -106,6 +106,12 @@ export interface ApiTeam {
   rank: number;
   showdownUsername: string | null;
   logoPath?: string | null;
+  bannerPath?: string | null;
+  bio?: string | null;
+  /** Short team motto, ≤ 80 chars (owner-editable). */
+  motto?: string | null;
+  /** Owner-authored captain note, ≤ 280 chars. */
+  captainNote?: string | null;
   userId: number | null;
   /** Coach identity joined from the users table — for <CoachLink> rendering. */
   owner?: ApiCoachOwner | null;
@@ -283,6 +289,13 @@ export interface ApiPublicProfile {
   username: string;
   displayName: string | null;
   bio: string | null;
+  /** Short status one-liner (≤ 80 chars), e.g. "looking for water-types". */
+  statusMessage?: string | null;
+  /** Public path to uploaded banner image (`/uploads/user-banners/<id>.<ext>`)
+   *  or null. When null, the profile page falls back to the gemstone gradient. */
+  bannerUrl?: string | null;
+  /** ISO timestamp of last authenticated request — feeds the online dot. */
+  lastSeenAt?: string | null;
   avatarPath: string | null;
   primaryColor: string | null;
   secondaryColor: string | null;
@@ -668,9 +681,49 @@ export const api = {
   updateMyColors: (colors: { primaryColor?: string | null; secondaryColor?: string | null; tertiaryColor?: string | null }) =>
     mutateJson<{ success: boolean }>('PATCH', '/api/users/me/colors', colors),
 
-  // Profile (displayName, bio)
-  updateMe: (data: { displayName?: string | null; bio?: string | null }) =>
-    mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
+  // Profile (displayName, bio, statusMessage, bannerUrl). bannerUrl is for
+  // clearing the banner or pasting a remote URL — multipart uploads should
+  // go through `uploadUserBanner` below.
+  updateMe: (data: {
+    displayName?: string | null;
+    bio?: string | null;
+    statusMessage?: string | null;
+    bannerUrl?: string | null;
+  }) => mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
+
+  // User banner upload — image, ≤ 1MB. Resolves to a stable
+  // `/uploads/user-banners/<id>.<ext>` path stored on users.banner_url.
+  uploadUserBanner: async (file: File) => {
+    const fd = new FormData();
+    fd.append('banner', file);
+    const csrf = readCsrfToken();
+    const res = await fetch(`${API_BASE}/api/users/me/banner`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Upload failed: ${res.status}`);
+    }
+    return res.json() as Promise<{ success: boolean; path: string }>;
+  },
+
+  // Who's online — used by the sidebar widget. 30s poll cadence on the
+  // frontend; no caching here since it's already cheap (single SELECT).
+  getOnlineUsers: () => fetchJson<{ users: Array<{
+    id: number;
+    username: string;
+    displayName: string | null;
+    avatarPath: string | null;
+    primaryColor: string | null;
+    secondaryColor: string | null;
+    tertiaryColor: string | null;
+    role: 'dev' | 'admin' | 'user';
+    statusMessage: string | null;
+    lastSeenAt: string | null;
+  }> }>('/api/online'),
 
   // User avatar upload
   uploadAvatar: async (file: File) => {
@@ -807,6 +860,8 @@ export const api = {
     userId?: number | null;
     showdownUsername?: string | null;
     bio?: string | null;
+    motto?: string | null;
+    captainNote?: string | null;
   }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
 
   deleteTeam: (teamId: string, opts?: { force?: boolean }) =>

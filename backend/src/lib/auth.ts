@@ -55,6 +55,12 @@ export function validateSession(token: string) {
     displayName: user.displayName,
     bio: user.bio,
     avatarPath: user.avatarPath,
+    // Coach flair (signaturePokemonId + title + signatureType). Surface
+    // pass fields (statusMessage, bannerUrl, lastSeenAt) flow through the
+    // same shape but are populated by their own pipeline.
+    signaturePokemonId: user.signaturePokemonId,
+    title: user.title,
+    signatureType: user.signatureType,
   };
 }
 
