@@ -170,7 +170,7 @@ export function AppShell() {
         <div className="px-3 pt-3 pb-3 border-b border-border-default">
           <NeonLogo color={activeLeagueColor} className="w-full h-auto" />
           <div className="flex items-center justify-center gap-2 mt-1">
-            <span className="inline-flex items-center rounded border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
+            <span className="inline-flex items-center rounded-full border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
               S10
             </span>
             <span className="w-px h-3 bg-border-default" />
@@ -178,7 +178,7 @@ export function AppShell() {
               href="https://github.com/sylvexn/cannoli"
               target="_blank"
               rel="noopener noreferrer"
-              className="group/alpha inline-flex items-center rounded border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-pointer"
+              className="group/alpha inline-flex items-center rounded-full border border-pink/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-pink leading-tight transition-all duration-200 hover:bg-pink/10 hover:border-pink/70 hover:shadow-[0_0_8px_rgba(232,121,249,0.3)] cursor-pointer"
             >
               <span className="group-hover/alpha:hidden">alpha</span>
               <span className="hidden group-hover/alpha:inline">{__COMMIT_HASH__}</span>
@@ -197,7 +197,7 @@ export function AppShell() {
                       navigate(`/league/${liveMatches[0].leagueId}/schedule`);
                     }
                   }}
-                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 rounded-md bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
                 >
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
@@ -395,7 +395,7 @@ export function AppShell() {
               <span className="text-text-muted">Last visited:</span>
               <NavLink
                 to={`/league/${activeLeague.id}`}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border hover:bg-surface-overlay/40 transition-colors"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border hover:bg-surface-overlay/40 transition-colors"
                 style={{
                   borderColor: `${activeLeague.color}40`,
                   color: activeLeague.color,

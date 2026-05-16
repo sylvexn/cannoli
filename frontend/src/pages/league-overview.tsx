@@ -177,11 +177,15 @@ export function LeagueOverviewPage() {
             return (
               <Card
                 key={league.id}
-                className="stagger-item card-interactive bg-surface-raised border-border-default overflow-hidden"
+                className="stagger-item card-interactive border-border-default overflow-hidden"
                 style={{
                   ['--i' as never]: Math.min(leagueIdx, 20),
                   ['--card-accent' as never]: league.color,
                   ['--card-glow' as never]: `${league.color}30`,
+                  // Ambient league-color bleed across the card surface.
+                  background:
+                    `linear-gradient(160deg, ${league.color}10 0%, ${league.color}05 40%, transparent 100%),` +
+                    `var(--color-surface-raised)`,
                 }}
               >
                 <div className="h-1" style={{ backgroundColor: league.color }} />

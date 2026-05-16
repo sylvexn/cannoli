@@ -804,6 +804,29 @@ aside {
   }
 }
 
+/* ─── Identity glow ───────────────────────────────────────────────────────
+   Ambient neon glow for surfaces that *belong* to a person/team — profile
+   banners, team detail headers, the user's own row in standings. Set
+   `--user-primary` (or `--card-accent`) on the surface for a per-identity
+   tint; falls back to neon. The glow is always-on (subtle), unlike the
+   reactive `card-interactive` glow which is hover-only. */
+.identity-glow {
+  --identity-color: var(--user-primary, var(--card-accent, #22d3ee));
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--identity-color) 25%, transparent),
+    0 4px 24px -8px color-mix(in oklab, var(--identity-color) 35%, transparent),
+    0 12px 48px -16px color-mix(in oklab, var(--identity-color) 25%, transparent);
+}
+
+/* Soft variant — just the bloom, no border ring. For headers that already
+   have their own border treatment. */
+.identity-glow-soft {
+  --identity-color: var(--user-primary, var(--card-accent, #22d3ee));
+  box-shadow:
+    0 4px 32px -10px color-mix(in oklab, var(--identity-color) 35%, transparent),
+    0 16px 64px -20px color-mix(in oklab, var(--identity-color) 20%, transparent);
+}
+
 /* ─── Slice 7C — On-the-clock pulse glow ──────────────────────────────────
    Breathing 4px inset shadow in the user's accent color. Scoped to the
    draft-board root via `.pulse-glow` when it's the user's turn. */

@@ -129,7 +129,7 @@ export function MePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* My Teams (2 cols) */}
         <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-xs font-mono uppercase tracking-widest text-text-muted">
+          <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
             My Teams
           </h2>
           {myTeams.map((entry, i) => (

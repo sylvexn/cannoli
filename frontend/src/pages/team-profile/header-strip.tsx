@@ -23,7 +23,13 @@ export function HeaderStrip({
   teamDeaths,
 }: HeaderStripProps) {
   return (
-    <div className="relative rounded-lg overflow-hidden" style={{ background: `linear-gradient(135deg, ${player.teamColor}08, ${player.teamColor}03 40%, transparent)` }}>
+    <div
+      className="identity-glow-soft relative rounded-lg overflow-hidden"
+      style={{
+        background: `linear-gradient(135deg, ${player.teamColor}10, ${player.teamColor}05 40%, transparent)`,
+        ['--identity-color' as never]: player.teamColor,
+      }}
+    >
       {/* Accent bar */}
       <div className="h-[3px]" style={{ background: `linear-gradient(90deg, ${player.teamColor}cc, ${player.teamColor}30 60%, transparent)` }} />
 
