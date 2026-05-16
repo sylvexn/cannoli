@@ -286,6 +286,10 @@ function StandingsRow({
       style={{
         ['--i' as never]: Math.min(index, 20),
         ['--card-accent' as never]: player.teamColor,
+        // Ambient team-color bleed — left-side gradient that fades to nothing
+        // by ~40% across. Each row visibly belongs to its team without breaking
+        // the dark base.
+        background: `linear-gradient(90deg, ${player.teamColor}12 0%, ${player.teamColor}06 18%, transparent 45%)`,
       }}
     >
       <button
@@ -341,7 +345,7 @@ function StandingsRow({
         {narrativeChip && (
           <span
             className={cn(
-              'shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',
+              'shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',
               narrativeChip.bgClass,
               narrativeChip.textClass,
             )}
@@ -454,7 +458,7 @@ function TiebreakerBadge({ tiebreaker }: { tiebreaker: Player['tiebreaker'] }) {
       <TooltipTrigger asChild>
         <span
           onClick={e => e.stopPropagation()}
-          className="hidden md:inline-flex items-center gap-0.5 shrink-0 px-1.5 py-0.5 rounded border border-border-subtle bg-surface-overlay/40 text-[9px] font-mono text-text-muted cursor-help"
+          className="hidden md:inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-overlay/40 text-[9px] font-mono text-text-muted cursor-help"
         >
           <span className="font-semibold text-text-secondary">{label}</span>
           <span className="tabular-nums">{valueStr}</span>

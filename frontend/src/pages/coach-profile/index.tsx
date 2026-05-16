@@ -94,7 +94,10 @@ export function CoachProfilePage() {
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-8">
       {/* Banner + identity strip */}
-      <div className="relative rounded-xl overflow-hidden border border-border-default bg-surface-raised">
+      <div
+        className="identity-glow relative rounded-xl overflow-hidden border border-border-default bg-surface-raised"
+        style={{ ['--identity-color' as never]: primary }}
+      >
         <div className="h-32 w-full" style={bannerStyle} />
 
         {/* Identity overlay */}
@@ -106,7 +109,7 @@ export function CoachProfilePage() {
               avatarPath={profile.avatarPath}
               primaryColor={primary}
               secondaryColor={secondary}
-              size={88}
+              size="2xl"
               className="ring-4 ring-surface-raised"
             />
           </div>
@@ -158,7 +161,7 @@ export function CoachProfilePage() {
 function TrophyCase({ pins }: { pins: ApiPin[] }) {
   return (
     <div className="lg:col-span-2 rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-3 flex items-center gap-1.5">
+      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3 flex items-center gap-1.5">
         <Trophy size={12} className="text-amber-400" />
         Trophy case
       </h2>
@@ -190,7 +193,7 @@ function CareerSummary({ profile }: { profile: ApiPublicProfile }) {
   const c = profile.careerSummary;
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-3">
+      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
         Career
       </h2>
       <dl className="space-y-2">
@@ -237,7 +240,7 @@ function Stat({
 function CurrentTeams({ teams }: { teams: ApiPublicProfile['currentTeams'] }) {
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-3">
+      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
         Current teams
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -268,7 +271,7 @@ function CurrentTeams({ teams }: { teams: ApiPublicProfile['currentTeams'] }) {
 function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-xs font-mono uppercase tracking-wider text-text-muted mb-3">
+      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
         Recent moments
       </h2>
       {activity.length > 0 ? (
