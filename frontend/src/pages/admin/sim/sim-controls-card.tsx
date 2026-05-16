@@ -24,10 +24,11 @@ const PHASES = ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] as cons
 
 interface Props {
   league: ApiSimLeague;
+  seasonNumber: number;
   onChanged: () => void;
 }
 
-export function SimControlsCard({ league, onChanged }: Props) {
+export function SimControlsCard({ league, seasonNumber, onChanged }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [weekPick, setWeekPick] = useState(Math.max(1, league.currentWeek || 1));
   const [phasePick, setPhasePick] = useState<string>(league.phase);
@@ -102,8 +103,11 @@ export function SimControlsCard({ league, onChanged }: Props) {
 
   return (
     <div className="rounded-lg border border-border-default bg-surface-base/60 p-3 space-y-3">
-      <h3 className="text-sm font-mono font-bold uppercase tracking-tight text-text-primary truncate">
-        {league.name}
+      <h3 className="flex items-center gap-2 text-sm font-mono font-bold uppercase tracking-tight text-text-primary">
+        <span className="inline-flex shrink-0 items-center rounded border border-draw/30 bg-draw/5 px-1 py-0 text-[9px] font-bold tracking-wide text-draw">
+          S{seasonNumber}
+        </span>
+        <span className="truncate">{league.name}</span>
       </h3>
 
       {/* Primary sim actions */}

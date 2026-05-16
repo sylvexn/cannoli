@@ -9,6 +9,8 @@ import {
 import { api } from '@/lib/api';
 import type { ApiAdminMatch } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
+import { useTeamNames } from '@/lib/use-team-names';
+import { TeamLink } from '@/components/team-link';
 import { useFormatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -25,6 +27,7 @@ import { MatchActionsDropdown } from './matches/match-actions-dropdown';
 
 export function AdminMatches() {
   const { leagues } = useAppData();
+  const teamNames = useTeamNames();
   const fmtDateTime = useFormatDateTime();
   const [matches, setMatches] = useState<ApiAdminMatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,10 +187,13 @@ export function AdminMatches() {
                           )}
 
                           {/* Teams */}
-                          <div className="flex items-center gap-1.5 min-w-[140px]">
-                            <span className="text-xs font-mono text-text-primary">{match.homeTeamId}</span>
+                          <div
+                            className="flex items-center gap-1.5 min-w-[220px]"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <AdminTeamChip teamId={match.homeTeamId} resolver={teamNames} />
                             <span className="text-[10px] text-text-muted">vs</span>
-                            <span className="text-xs font-mono text-text-primary">{match.awayTeamId}</span>
+                            <AdminTeamChip teamId={match.awayTeamId} resolver={teamNames} />
                           </div>
 
                           {/* Score */}
@@ -236,6 +242,7 @@ export function AdminMatches() {
                             )}
                             <MatchActionsDropdown
                               match={match}
+                              teamNames={teamNames}
                               onChanged={fetchMatches}
                               onForceResult={(m) => openResultEntry(m, 'force')}
                             />
@@ -312,10 +319,41 @@ export function AdminMatches() {
       <MatchEntryDialog
         match={resultMatch}
         mode={resultMode}
+        teamNames={teamNames}
         open={resultOpen}
         onOpenChange={setResultOpen}
         onSaved={fetchMatches}
       />
     </div>
+  );
+}
+
+/** Renders a clickable team chip for an admin match row, resolving the raw
+ *  team ID to a name. Falls back to the raw ID while teams are still loading. */
+function AdminTeamChip({
+  teamId,
+  resolver,
+}: {
+  teamId: string;
+  resolver: ReturnType<typeof useTeamNames>;
+}) {
+  const team = resolver.get(teamId);
+  if (!team) {
+    return <span className="text-xs font-mono text-text-secondary truncate">{teamId}</span>;
+  }
+  return (
+    <TeamLink
+      team={{
+        leagueId: team.leagueId,
+        teamId: team.id,
+        teamName: team.name,
+        teamAbbrev: team.abbrev,
+        teamColor: team.color,
+      }}
+      showLogo={false}
+      size="xs"
+    >
+      <span className="text-xs truncate" style={{ color: team.color }}>{team.name}</span>
+    </TeamLink>
   );
 }

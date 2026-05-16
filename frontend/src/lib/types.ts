@@ -182,6 +182,9 @@ export interface League {
   format?: import('@/data/pokemon-learnsets').DraftFormat;
   season: LeagueSeason;
   players: Player[];
+  /** Registered-team (== coach) count, from `/api/leagues`. The `players`
+   *  array above is not populated by the list endpoint — use this for counts. */
+  playerCount: number;
   hasData: boolean;
 }
 

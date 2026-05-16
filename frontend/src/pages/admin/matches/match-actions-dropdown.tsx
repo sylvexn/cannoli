@@ -17,12 +17,16 @@ import {
   AlertTriangle, Trash2, MoreVertical,
   Eraser, ArrowRightLeft, Gavel,
 } from 'lucide-react';
+import type { TeamNameResolver } from '@/lib/use-team-names';
 
-export function MatchActionsDropdown({ match, onChanged, onForceResult }: {
+export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResult }: {
   match: ApiAdminMatch;
+  teamNames: TeamNameResolver;
   onChanged: () => void;
   onForceResult: (match: ApiAdminMatch) => void;
 }) {
+  const homeName = teamNames.name(match.homeTeamId);
+  const awayName = teamNames.name(match.awayTeamId);
   const [voidOpen, setVoidOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -149,7 +153,7 @@ export function MatchActionsDropdown({ match, onChanged, onForceResult }: {
               Void Match Result
             </DialogTitle>
             <DialogDescription>
-              {`Clear scores and per-Pokemon data for ${match.homeTeamId} vs ${match.awayTeamId} (W${match.week}). Status returns to scheduled. Activity log will record the change.`}
+              {`Clear scores and per-Pokemon data for ${homeName} vs ${awayName} (W${match.week}). Status returns to scheduled. Activity log will record the change.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -175,7 +179,7 @@ export function MatchActionsDropdown({ match, onChanged, onForceResult }: {
             </DialogTitle>
             <DialogDescription>
               <>
-                Permanently delete <strong>{match.homeTeamId} vs {match.awayTeamId}</strong> (W{match.week})?
+                Permanently delete <strong>{homeName} vs {awayName}</strong> (W{match.week})?
                 Per-Pokemon data is removed. This cannot be undone.
               </>
             </DialogDescription>
@@ -202,7 +206,7 @@ export function MatchActionsDropdown({ match, onChanged, onForceResult }: {
               Move Match
             </DialogTitle>
             <DialogDescription>
-              {`${match.homeTeamId} vs ${match.awayTeamId} — currently W${match.week}`}
+              {`${homeName} vs ${awayName} — currently W${match.week}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

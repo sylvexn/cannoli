@@ -115,6 +115,7 @@ function toLeague(a: ApiLeague): League {
     hasData: true,
     // WIP: ApiLeague does not yet expose playoffTeamCount; default to 0 to satisfy League type
     playoffTeamCount: 0,
+    playerCount: a.playerCount ?? 0,
   };
 }
 

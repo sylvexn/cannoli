@@ -70,6 +70,8 @@ export interface ApiLeague {
   draftDate?: string | null;
   draftOrder?: string[] | null;
   playoffTeamCount?: number;
+  /** Registered-team (== coach) count for this league. */
+  playerCount?: number;
   season: {
     id: string;
     seasonNumber: number;

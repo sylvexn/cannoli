@@ -139,7 +139,8 @@ export function StatsPage() {
           <span className="text-text-primary">Stats</span>
         </h1>
         <p className="text-sm text-text-muted">
-          League-wide performance &middot; Season 10
+          League-wide performance
+          {league.season?.seasonNumber ? ` · Season ${league.season.seasonNumber}` : ''}
         </p>
       </div>
 

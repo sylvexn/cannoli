@@ -170,7 +170,7 @@ export function AdminLeagues() {
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Total Players:</span>
           <span className="text-text-primary font-medium">
-            {leagues.reduce((sum, l) => sum + l.players.length, 0)}
+            {leagues.reduce((sum, l) => sum + l.playerCount, 0)}
           </span>
         </div>
       </div>
@@ -335,7 +335,7 @@ export function AdminLeagues() {
 
                 <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
                   <div className="text-xs text-text-muted">
-                    {league.players.length} players registered
+                    {league.playerCount} players registered
                     {!league.hasData && ' · No data yet'}
                     {league.season.archived && ' · ARCHIVED'}
                   </div>
