@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import type { ApiTeam, ApiActivityEvent, ApiSiteSettings } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
 import { CoachLink } from '@/components/coach-link';
@@ -209,10 +209,12 @@ export function LeagueOverviewPage() {
                   ) : standings.length > 0 ? (
                     <div className="space-y-1">
                       {standings.slice(0, 6).map((team, i) => (
-                        <Link
+                        <div
                           key={team.id}
-                          to={`/league/${league.id}/teams/${team.id}`} viewTransition
                           className="flex items-center gap-2 py-1 px-2 rounded-md hover:bg-surface-overlay/60 transition-colors group"
+                          style={{
+                            background: `linear-gradient(90deg, ${team.teamColor}10 0%, transparent 65%)`,
+                          }}
                         >
                           <span className={cn(
                             'text-[10px] font-bold tabular-nums w-4 text-center',
@@ -220,17 +222,27 @@ export function LeagueOverviewPage() {
                           )}>
                             {i + 1}
                           </span>
-                          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
-                          <span className="text-xs text-text-primary group-hover:text-neon transition-colors truncate flex-1">
-                            {team.teamAbbrev}
-                          </span>
+                          <TeamLink
+                            team={{
+                              leagueId: league.id,
+                              teamId: team.id,
+                              teamName: team.teamName,
+                              teamAbbrev: team.teamAbbrev,
+                              teamColor: team.teamColor,
+                              logoPath: team.logoPath ?? null,
+                              record: team.record,
+                            }}
+                            logoSize="sm"
+                            size="xs"
+                            className="flex-1 min-w-0"
+                          />
                           <RecordDisplay
                             wins={team.record.wins}
                             losses={team.record.losses}
                             differential={team.record.differential}
                             className="text-[10px]"
                           />
-                        </Link>
+                        </div>
                       ))}
                       <Link
                         to={`/league/${league.id}`}

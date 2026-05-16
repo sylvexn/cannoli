@@ -1,10 +1,9 @@
 import { Link } from 'react-router-dom';
 import type { ApiActivityEvent, ApiTeam } from '@/lib/api';
 import { CoachLink } from '@/components/coach-link';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { asTypedMetadata, isTypedEventName } from '@/lib/activity-events';
-import { cn } from '@/lib/utils';
 
 interface EventDescriptionProps {
   event: ApiActivityEvent;
@@ -207,16 +206,18 @@ function TeamRef({
     );
   }
   return (
-    <Link
-      to={`/league/${leagueId}/teams/${teamId}`}
-      viewTransition
-      className={cn(
-        'inline-flex items-center gap-1 align-middle',
-        'font-medium text-text-primary hover:text-neon transition-colors',
-      )}
-    >
-      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" className="!w-3.5 !h-3.5 inline-block" />
-      <span className="hover:underline">{team.teamAbbrev}</span>
-    </Link>
+    <TeamLink
+      team={{
+        leagueId,
+        teamId,
+        teamName: team.teamName,
+        teamAbbrev: team.teamAbbrev,
+        teamColor: team.teamColor,
+        logoPath: team.logoPath ?? null,
+        record: team.record,
+      }}
+      logoSize="sm"
+      size="xs"
+    />
   );
 }

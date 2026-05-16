@@ -107,6 +107,10 @@ export const standingsRoutes = new Elysia()
         rank: team.rank,
         showdownUsername: team.showdownUsername,
         logoPath: team.logoPath,
+        bannerPath: team.bannerPath,
+        bio: team.bio,
+        motto: team.motto,
+        captainNote: team.captainNote,
         userId: team.userId,
         // Coach identity (joined from users table) — used by <CoachLink>
         // to render accent gradients, avatars, and link to /coach/:username.
