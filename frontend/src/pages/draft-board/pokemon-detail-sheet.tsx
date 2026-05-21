@@ -6,7 +6,8 @@ import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ export function PokemonDetailSheet({
   onDraft,
 }: PokemonDetailSheetProps) {
   const leagueUrl = useLeagueUrl();
+  const league = useLeague();
   const isOpen = !!name;
 
   // Close on Escape
@@ -216,7 +218,18 @@ export function PokemonDetailSheet({
                     Ownership
                   </h3>
                   <div className="flex items-center gap-2.5 p-2.5 rounded-md bg-surface-overlay/30 border border-border-subtle">
-                    <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
+                    <TeamLink
+                      team={{
+                        leagueId: league.id,
+                        teamId: owner.id,
+                        teamName: owner.teamName,
+                        teamAbbrev: owner.teamAbbrev,
+                        teamColor: owner.teamColor,
+                        record: owner.record,
+                      }}
+                      logoOnly
+                      logoSize="md"
+                    />
                     <div>
                       <Link
                         to={leagueUrl(`/teams/${owner.id}`)}

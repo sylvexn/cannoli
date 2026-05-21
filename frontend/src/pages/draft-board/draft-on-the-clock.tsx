@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
 import { Timer, Pause, ListOrdered, Sparkles, ArrowRight, AlertTriangle } from 'lucide-react';
@@ -44,6 +45,7 @@ export function DraftOnTheClock({
   onDraftFromQueue,
   autoDraftQueueEnabled,
 }: DraftOnTheClockProps) {
+  const league = useLeague();
   const urgency = timerSeconds > timerDuration * 0.6 ? 'calm'
     : timerSeconds > timerDuration * 0.3 ? 'warning'
     : 'critical';
@@ -85,7 +87,18 @@ export function DraftOnTheClock({
       <div className="px-3 py-2 flex items-center gap-3 flex-wrap">
         {/* Drafter identity */}
         <div className="flex items-center gap-2 min-w-0">
-          <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="md" />
+          <TeamLink
+            team={{
+              leagueId: league.id,
+              teamId: player.id,
+              teamName: player.teamName,
+              teamAbbrev: player.teamAbbrev,
+              teamColor: player.teamColor,
+              record: player.record,
+            }}
+            logoOnly
+            logoSize="md"
+          />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className={cn(
