@@ -35,7 +35,13 @@ export const standingsRoutes = new Elysia()
           secondaryColor: schema.users.secondaryColor,
           tertiaryColor: schema.users.tertiaryColor,
           role: schema.users.role,
+          // Coach flair — surfaced inline in CoachLink everywhere.
+          signaturePokemonId: schema.users.signaturePokemonId,
+          signaturePokemonName: schema.pokemon.name,
+          title: schema.users.title,
+          signatureType: schema.users.signatureType,
         }).from(schema.users)
+          .leftJoin(schema.pokemon, eq(schema.pokemon.id, schema.users.signaturePokemonId))
           .where(sql`${schema.users.id} IN (${sql.join(userIds.map(id => sql`${id}`), sql`, `)})`)
           .all()
       : [];
@@ -122,6 +128,10 @@ export const standingsRoutes = new Elysia()
           secondaryColor: owner.secondaryColor,
           tertiaryColor: owner.tertiaryColor,
           role: owner.role,
+          signaturePokemonId: owner.signaturePokemonId,
+          signaturePokemonName: owner.signaturePokemonName,
+          title: owner.title,
+          signatureType: owner.signatureType,
         } : null,
         captainsLocked: !!team.captainsLocked,
         record: {
