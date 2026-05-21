@@ -3,7 +3,8 @@ import type { Player, Trade } from '@/lib/types';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
@@ -31,17 +32,16 @@ const statusConfig: Record<Trade['status'], { label: string; className: string }
 /** Compact horizontal trade card for proposals */
 export function CompactTradeCard({
   trade,
-  leagueUrl,
   onResponded,
   onCounter,
 }: {
   trade: Trade;
-  leagueUrl: (path: string) => string;
   onResponded?: () => void;
   /** Open the propose dialog pre-filled with the counter-proposal payload. */
   onCounter?: (trade: Trade) => void;
 }) {
   const { players } = useLeagueData();
+  const league = useLeague();
   const { user } = useAuth();
   const { openSideCard } = usePokemonSideCard();
   const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
@@ -181,10 +181,21 @@ export function CompactTradeCard({
         <div className="flex-1 min-w-0">
           {proposer && (
             <div className="flex items-center gap-1.5 mb-1.5">
-              <TeamLogo abbrev={proposer.teamAbbrev} color={proposer.teamColor} size="sm" />
-              <Link to={leagueUrl(`/teams/${proposer.id}`)} viewTransition className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
-                {proposer.teamName}
-              </Link>
+              <TeamLink
+                team={{
+                  leagueId: league.id,
+                  teamId: proposer.id,
+                  teamName: proposer.teamName,
+                  teamAbbrev: proposer.teamAbbrev,
+                  teamColor: proposer.teamColor,
+                  record: proposer.record,
+                }}
+                logoSize="sm"
+              >
+                <span className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
+                  {proposer.teamName}
+                </span>
+              </TeamLink>
             </div>
           )}
           <div className="space-y-0.5">
@@ -212,10 +223,21 @@ export function CompactTradeCard({
             </div>
           ) : recipient ? (
             <div className="flex items-center gap-1.5 mb-1.5">
-              <TeamLogo abbrev={recipient.teamAbbrev} color={recipient.teamColor} size="sm" />
-              <Link to={leagueUrl(`/teams/${recipient.id}`)} viewTransition className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
-                {recipient.teamName}
-              </Link>
+              <TeamLink
+                team={{
+                  leagueId: league.id,
+                  teamId: recipient.id,
+                  teamName: recipient.teamName,
+                  teamAbbrev: recipient.teamAbbrev,
+                  teamColor: recipient.teamColor,
+                  record: recipient.record,
+                }}
+                logoSize="sm"
+              >
+                <span className="text-[11px] font-medium text-text-primary hover:text-neon transition-colors truncate">
+                  {recipient.teamName}
+                </span>
+              </TeamLink>
             </div>
           ) : null}
           <div className="space-y-0.5">
