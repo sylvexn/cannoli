@@ -41,6 +41,12 @@ export function TeamCoach({
           tertiaryColor: player.owner.tertiaryColor,
           avatarPath: player.owner.avatarPath,
           role: player.owner.role,
+          // Forward coach flair so the signature sprite + type chip render
+          // inline / in popover without requiring a public-profile fetch.
+          signaturePokemonId: player.owner.signaturePokemonId,
+          signaturePokemonName: player.owner.signaturePokemonName,
+          title: player.owner.title,
+          signatureType: player.owner.signatureType,
         }}
         showAvatar={showAvatar}
         avatarSize={avatarSize}
