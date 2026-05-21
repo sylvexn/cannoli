@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Trophy } from 'lucide-react';
+import { ArrowLeft, Trophy, Pencil } from 'lucide-react';
 import { api, type ApiPublicProfile, type ApiPin, type ApiActivityEvent } from '@/lib/api';
 import { CoachAvatar } from '@/components/coach-avatar';
 import { Pin } from '@/components/pin';
@@ -9,6 +9,8 @@ import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { formatRelativeTime, formatRecord, formatTenure } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
+import { ProfileSettingsPanel } from './settings-panel';
 
 const FALLBACK_PRIMARY = '#7dd3fc';
 const FALLBACK_SECONDARY = '#a78bfa';
@@ -16,11 +18,21 @@ const FALLBACK_TERTIARY = '#fb7185';
 
 export function CoachProfilePage() {
   const { username = '' } = useParams<{ username: string }>();
+  const { user: viewer } = useAuth();
   const [profile, setProfile] = useState<ApiPublicProfile | null>(null);
   const [pins, setPins] = useState<ApiPin[]>([]);
   const [activity, setActivity] = useState<ApiActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Self-only settings: viewer is the same person as the profile being viewed.
+  const isSelf = !!viewer && viewer.username.toLowerCase() === username.toLowerCase();
+
+  async function refetch() {
+    const prof = await api.getPublicProfile(username).catch(() => null);
+    if (prof) setProfile(prof);
+  }
 
   useEffect(() => {
     if (!username) return;
@@ -75,14 +87,21 @@ export function CoachProfilePage() {
   const display = profile.displayName?.trim() || profile.username;
   const seasonNumber = seasonFromCreatedAt(profile.createdAt);
 
-  // Banner uses the user's three accent colors as a faceted gradient — mirrors
-  // the gemstone treatment used elsewhere but personalized to the coach.
-  const bannerStyle = {
-    background:
-      `linear-gradient(135deg, ${primary}55 0%, ${secondary}40 45%, ${tertiary}35 100%),` +
-      `radial-gradient(ellipse 60% 70% at 30% 30%, ${primary}30 0%, transparent 60%),` +
-      `radial-gradient(ellipse 60% 70% at 70% 80%, ${tertiary}25 0%, transparent 60%)`,
-  };
+  // Banner — when the user has uploaded a custom banner_url, layer it on top
+  // of the gemstone gradient (the gradient peeks through transparent edges
+  // and acts as a graceful fallback if the image 404s). Default falls back
+  // to the pure gradient.
+  const bannerGradient =
+    `linear-gradient(135deg, ${primary}55 0%, ${secondary}40 45%, ${tertiary}35 100%),` +
+    `radial-gradient(ellipse 60% 70% at 30% 30%, ${primary}30 0%, transparent 60%),` +
+    `radial-gradient(ellipse 60% 70% at 70% 80%, ${tertiary}25 0%, transparent 60%)`;
+  const bannerStyle = profile.bannerUrl
+    ? {
+        backgroundImage: `linear-gradient(180deg, transparent 30%, rgba(0,0,0,0.35) 100%), url(${profile.bannerUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
+    : { background: bannerGradient };
 
   const nameStyle = {
     backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
@@ -115,7 +134,7 @@ export function CoachProfilePage() {
           </div>
           <div className="flex-1 min-w-0 pt-1">
             <h1
-              className="text-2xl font-bold leading-tight truncate"
+              className="text-2xl font-bold leading-tight truncate font-heading"
               style={nameStyle}
             >
               {display}
@@ -123,21 +142,54 @@ export function CoachProfilePage() {
             {profile.displayName && profile.displayName !== profile.username && (
               <div className="text-xs font-mono text-text-muted mt-0.5">@{profile.username}</div>
             )}
+            {profile.statusMessage && (
+              // Status one-liner — Space Grotesk for the warmer, more
+              // conversational read; sits visually above the longer bio.
+              <p
+                className="mt-2 text-sm font-heading italic text-text-primary/90 leading-snug max-w-prose"
+                style={{ color: secondary }}
+              >
+                {profile.statusMessage}
+              </p>
+            )}
             {profile.bio && (
-              <p className="text-sm text-text-secondary mt-2 leading-snug max-w-prose">
+              <p className="text-sm text-text-secondary mt-2 leading-snug max-w-prose whitespace-pre-line">
                 {profile.bio}
               </p>
             )}
           </div>
-          {seasonNumber != null && (
-            <div className="shrink-0 text-right">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-                {formatTenure(seasonNumber)}
+          <div className="shrink-0 flex flex-col items-end gap-2">
+            {isSelf && (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-neon/40 hover:text-neon text-[10px] font-mono uppercase tracking-wider text-text-muted transition-colors"
+                title="Edit your profile"
+              >
+                <Pencil size={10} />
+                Edit
+              </button>
+            )}
+            {seasonNumber != null && (
+              <div className="text-right">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                  {formatTenure(seasonNumber)}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Settings panel — modal overlay, only rendered for the profile owner. */}
+      {isSelf && (
+        <ProfileSettingsPanel
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          profile={profile}
+          onSaved={refetch}
+        />
+      )}
 
       {/* Trophy case + Career stats — side by side on lg */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -271,18 +323,31 @@ function CurrentTeams({ teams }: { teams: ApiPublicProfile['currentTeams'] }) {
 function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
-      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
-        Recent moments
-      </h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
+          Wall
+        </h2>
+        {activity.length > 0 && (
+          <span className="text-[9px] font-mono text-text-muted/70 tabular-nums">
+            {activity.length} moment{activity.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
       {activity.length > 0 ? (
-        <ul className="space-y-1.5">
-          {activity.slice(0, 10).map(e => (
+        // Tighter, scrollable feed look — narrative one-liners with a small
+        // bullet, hover highlight, and a fixed max-height so long histories
+        // don't push the rest of the profile off-screen.
+        <ul className="space-y-0 max-h-[360px] overflow-y-auto pr-1 -mr-1">
+          {activity.map(e => (
             <li
               key={e.id}
-              className="flex items-baseline gap-2 text-[12px] text-text-secondary border-b border-border-subtle/40 last:border-b-0 pb-1.5 last:pb-0"
+              className="flex items-start gap-3 py-2 px-2 -mx-2 rounded-md hover:bg-surface-overlay/40 transition-colors border-b border-border-subtle/30 last:border-b-0"
             >
-              <span className="flex-1 leading-snug">{e.description}</span>
-              <span className="shrink-0 text-[10px] font-mono text-text-muted">
+              <span className="mt-1 w-1 h-1 rounded-full shrink-0 bg-text-muted/40" aria-hidden />
+              <span className="flex-1 leading-snug text-[12px] font-heading text-text-secondary">
+                {e.description}
+              </span>
+              <span className="shrink-0 text-[10px] font-mono text-text-muted tabular-nums">
                 {formatRelativeTime(e.timestamp)}
               </span>
             </li>
