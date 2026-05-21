@@ -7,6 +7,7 @@ import type { ApiTradeBlockListing, ApiTrade } from '@/lib/api';
 import { api } from '@/lib/api';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
@@ -291,7 +292,6 @@ export function TradeBlockPage() {
                 >
                   <CompactTradeCard
                     trade={trade}
-                    leagueUrl={leagueUrl}
                     onResponded={loadTrades}
                     onCounter={t => setProposeOpen({ teamId: t.proposer, counterTo: t })}
                   />
@@ -372,7 +372,20 @@ export function TradeBlockPage() {
                           )}
 
                           <div className="flex items-center gap-1 shrink-0">
-                            {proposer && <TeamLogo abbrev={proposer.teamAbbrev} color={proposer.teamColor} size="sm" />}
+                            {proposer && (
+                              <TeamLink
+                                team={{
+                                  leagueId: league.id,
+                                  teamId: proposer.id,
+                                  teamName: proposer.teamName,
+                                  teamAbbrev: proposer.teamAbbrev,
+                                  teamColor: proposer.teamColor,
+                                  record: proposer.record,
+                                }}
+                                logoOnly
+                                logoSize="sm"
+                              />
+                            )}
                             <span className="text-text-muted text-[8px]">{isFreeAgent ? '→' : '↔'}</span>
                             {isFreeAgent ? (
                               <span
@@ -382,7 +395,18 @@ export function TradeBlockPage() {
                                 <UserPlus size={9} />
                               </span>
                             ) : recipient && (
-                              <TeamLogo abbrev={recipient.teamAbbrev} color={recipient.teamColor} size="sm" />
+                              <TeamLink
+                                team={{
+                                  leagueId: league.id,
+                                  teamId: recipient.id,
+                                  teamName: recipient.teamName,
+                                  teamAbbrev: recipient.teamAbbrev,
+                                  teamColor: recipient.teamColor,
+                                  record: recipient.record,
+                                }}
+                                logoOnly
+                                logoSize="sm"
+                              />
                             )}
                           </div>
 

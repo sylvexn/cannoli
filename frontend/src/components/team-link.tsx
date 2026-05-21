@@ -148,8 +148,8 @@ function TeamLinkPopover({ team, linkPath, children }: TeamLinkPopoverProps) {
       <PopoverTrigger
         nativeButton={false}
         openOnHover
-        delay={250}
-        closeDelay={150}
+        delay={200}
+        closeDelay={120}
         render={
           <Link
             to={linkPath}
