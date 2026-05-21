@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { Player } from '@/lib/types';
@@ -26,6 +27,7 @@ function pickTypeVar(name: string): string {
 }
 
 export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPickLogProps) {
+  const league = useLeague();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Track which pick numbers were added since this component mounted, so we
@@ -120,7 +122,18 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
 
               {/* Team pip */}
               {player && (
-                <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
+                <TeamLink
+                  team={{
+                    leagueId: league.id,
+                    teamId: player.id,
+                    teamName: player.teamName,
+                    teamAbbrev: player.teamAbbrev,
+                    teamColor: player.teamColor,
+                    record: player.record,
+                  }}
+                  logoOnly
+                  logoSize="sm"
+                />
               )}
 
               {/* Pokemon sprite — celebration on fresh entries only */}

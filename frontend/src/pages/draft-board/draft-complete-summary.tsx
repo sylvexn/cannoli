@@ -18,7 +18,7 @@
 
 import { useMemo } from 'react';
 import { ArrowLeft, Crown, Sparkles, Trophy } from 'lucide-react';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { TierBadge } from '@/components/tier-badge';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
@@ -169,7 +169,20 @@ export function DraftCompleteSummary({
                           {pick.pokemonName}
                         </Link>
                         <div className="flex items-center gap-1 mt-0.5 text-[10px] font-mono text-text-muted">
-                          {player && <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />}
+                          {player && (
+                            <TeamLink
+                              team={{
+                                leagueId,
+                                teamId: player.id,
+                                teamName: player.teamName,
+                                teamAbbrev: player.teamAbbrev,
+                                teamColor: player.teamColor,
+                                record: player.record,
+                              }}
+                              logoOnly
+                              logoSize="sm"
+                            />
+                          )}
                           <span>R{pick.round}·P{pick.pick}</span>
                         </div>
                       </div>
@@ -193,6 +206,7 @@ export function DraftCompleteSummary({
                   round={round}
                   picks={roundPicks}
                   playerById={playerById}
+                  leagueId={leagueId}
                 />
               ))}
             </div>
@@ -212,6 +226,7 @@ export function DraftCompleteSummary({
                   points={teamPoints.get(player.id) ?? 0}
                   pointCap={pointCap}
                   teraCaptainSlots={teraCaptainSlots}
+                  leagueId={leagueId}
                 />
               ))}
             </div>
@@ -228,9 +243,10 @@ interface RoundRowProps {
   round: number;
   picks: DraftPickEntry[];
   playerById: Map<string, Player>;
+  leagueId: string;
 }
 
-function RoundRow({ round, picks, playerById }: RoundRowProps) {
+function RoundRow({ round, picks, playerById, leagueId }: RoundRowProps) {
   return (
     <div className="flex items-start gap-3">
       <div className="w-12 shrink-0 pt-0.5">
@@ -250,7 +266,20 @@ function RoundRow({ round, picks, playerById }: RoundRowProps) {
               className="flex items-center gap-1.5 rounded-md border border-border-subtle bg-surface-overlay/30 px-1.5 py-1"
               title={`${player?.teamAbbrev ?? '?'} · ${pick.pokemonName} · R${pick.round}P${pick.pick}`}
             >
-              {player && <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />}
+              {player && (
+                <TeamLink
+                  team={{
+                    leagueId,
+                    teamId: player.id,
+                    teamName: player.teamName,
+                    teamAbbrev: player.teamAbbrev,
+                    teamColor: player.teamColor,
+                    record: player.record,
+                  }}
+                  logoOnly
+                  logoSize="sm"
+                />
+              )}
               <PokemonSprite name={pick.pokemonName} size="xs" />
               <Link
                 to={pokemonRoute(pick.pokemonName)}
@@ -273,10 +302,11 @@ interface TeamSummaryCardProps {
   points: number;
   pointCap: number;
   teraCaptainSlots: number;
+  leagueId: string;
 }
 
 function TeamSummaryCard({
-  player, roster, points, pointCap, teraCaptainSlots,
+  player, roster, points, pointCap, teraCaptainSlots, leagueId,
 }: TeamSummaryCardProps) {
   const remaining = pointCap - points;
   const captainsLocked = !!player.captainsLocked;
@@ -285,7 +315,18 @@ function TeamSummaryCard({
     <div className="rounded-lg border border-border-default bg-surface-raised p-2">
       {/* Header */}
       <div className="flex items-center gap-2 pb-1.5 border-b border-border-subtle">
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="md" />
+        <TeamLink
+          team={{
+            leagueId,
+            teamId: player.id,
+            teamName: player.teamName,
+            teamAbbrev: player.teamAbbrev,
+            teamColor: player.teamColor,
+            record: player.record,
+          }}
+          logoOnly
+          logoSize="md"
+        />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-heading font-bold text-text-primary truncate">
             {player.teamAbbrev}
