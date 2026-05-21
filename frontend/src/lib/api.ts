@@ -960,7 +960,7 @@ export const api = {
 
   // Pokemon lookup
   getPokemonByName: (name: string) =>
-    fetchJson<{ name: string; type1: string; type2: string | null; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null; tier: number } | null>(
+    fetchJson<{ id: number; name: string; type1: string; type2: string | null; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null; tier: number } | null>(
       `/api/pokemon/${encodeURIComponent(name)}`
     ),
 
@@ -970,7 +970,7 @@ export const api = {
     if (params?.search) q.set('search', params.search);
     if (params?.limit) q.set('limit', String(params.limit));
     if (params?.offset) q.set('offset', String(params.offset));
-    return fetchJson<{ name: string; type1: string; type2: string | null; tier: number; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null }[]>(
+    return fetchJson<{ id: number; name: string; type1: string; type2: string | null; tier: number; hp: number; atk: number; def: number; spa: number; spd: number; spe: number; ability1: string | null; ability2: string | null; hiddenAbility: string | null }[]>(
       `/api/pokemon?${q}`
     );
   },
