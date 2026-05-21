@@ -29,6 +29,17 @@ interface CoachAvatarProps {
    * the accent ring. Purely a styling slot; no backend wiring yet.
    */
   presence?: 'online' | 'away' | 'in-draft';
+  /**
+   * Optional Pokemon-type accent color. When set, renders a 2px outer ring
+   * tinted with TYPE_COLORS — surfaces the coach's `signature_type` flair
+   * at a glance. Coexistence rules:
+   *   * presence is rendered ahead of typeAccent (presence is more
+   *     time-sensitive — "online" beats "is a fire main").
+   *   * If both are set, presence wins and typeAccent is suppressed.
+   *   * If only typeAccent is set, it occupies the outer ring slot the same
+   *     way presence would.
+   */
+  typeAccent?: string | null;
   className?: string;
   style?: CSSProperties;
 }
@@ -72,6 +83,7 @@ export function CoachAvatar({
   size = 'md',
   ring = true,
   presence,
+  typeAccent,
   className,
   style,
 }: CoachAvatarProps) {
@@ -80,12 +92,17 @@ export function CoachAvatar({
   const initial = (displayName?.trim() || username || '?').charAt(0).toUpperCase();
   const px = resolveSize(size);
 
-  // Ring stack: optional presence dot lives on the outside (2px), the accent
-  // ring sits inside (1.5px). Both share the same box-shadow chain so we can
-  // compose without an extra DOM node.
+  // Ring stack: outer slot is presence > typeAccent (mutually exclusive —
+  // presence is more time-sensitive than identity flair). Inner slot is the
+  // accent ring derived from the user's secondary color. All share one
+  // box-shadow chain so we don't need an extra DOM node.
   const shadows: string[] = [];
   if (ring) shadows.push(`0 0 0 1.5px ${secondary}`);
-  if (presence) shadows.push(`0 0 0 ${ring ? 3.5 : 2}px ${PRESENCE_COLORS[presence]}`);
+  if (presence) {
+    shadows.push(`0 0 0 ${ring ? 3.5 : 2}px ${PRESENCE_COLORS[presence]}`);
+  } else if (typeAccent) {
+    shadows.push(`0 0 0 ${ring ? 3 : 1.5}px ${typeAccent}`);
+  }
   const ringStyle: CSSProperties = shadows.length
     ? { boxShadow: shadows.join(', ') }
     : {};
