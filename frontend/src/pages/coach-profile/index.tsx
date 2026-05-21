@@ -8,6 +8,8 @@ import { TeamLogo } from '@/components/team-logo';
 import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { formatRelativeTime, formatRecord, formatTenure } from '@/lib/format';
+import { spriteUrl, type PokemonType } from '@/lib/pokemon';
+import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { ProfileSettingsPanel } from './settings-panel';
@@ -130,17 +132,45 @@ export function CoachProfilePage() {
               secondaryColor={secondary}
               size="2xl"
               className="ring-4 ring-surface-raised"
+              typeAccent={
+                profile.signatureType
+                  ? TYPE_COLORS[profile.signatureType as PokemonType]
+                  : null
+              }
             />
           </div>
           <div className="flex-1 min-w-0 pt-1">
-            <h1
-              className="text-2xl font-bold leading-tight truncate font-heading"
-              style={nameStyle}
-            >
-              {display}
-            </h1>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1
+                className="text-2xl font-bold leading-tight truncate font-heading"
+                style={nameStyle}
+              >
+                {display}
+              </h1>
+              {profile.signaturePokemonName && (
+                <img
+                  src={spriteUrl(profile.signaturePokemonName)}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  title={profile.signaturePokemonName}
+                  className="shrink-0"
+                  style={{ width: 36, height: 36, imageRendering: 'pixelated', marginTop: -6, marginBottom: -6 }}
+                />
+              )}
+              {profile.signatureType && (
+                <ProfileTypeChip type={profile.signatureType as PokemonType} />
+              )}
+            </div>
             {profile.displayName && profile.displayName !== profile.username && (
               <div className="text-xs font-mono text-text-muted mt-0.5">@{profile.username}</div>
+            )}
+            {/* Coach title — small mono line under display_name; stays
+                quiet so it doesn't compete with the status message below. */}
+            {profile.title && (
+              <div className="text-[11px] font-mono text-text-secondary mt-1 leading-tight">
+                {profile.title}
+              </div>
             )}
             {profile.statusMessage && (
               // Status one-liner — Space Grotesk for the warmer, more
@@ -363,6 +393,27 @@ function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
         />
       )}
     </div>
+  );
+}
+
+/** Larger version of the popover TypeChip for the profile header — same
+ *  TYPE_COLORS palette, bigger touch target. */
+function ProfileTypeChip({ type }: { type: PokemonType }) {
+  const color = TYPE_COLORS[type];
+  const label = TYPE_LABELS[type];
+  if (!color || !label) return null;
+  return (
+    <span
+      className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider shrink-0"
+      style={{
+        backgroundColor: `${color}22`,
+        color,
+        boxShadow: `inset 0 0 0 1px ${color}80`,
+      }}
+      title={`Signature type: ${type}`}
+    >
+      {label}
+    </span>
   );
 }
 
