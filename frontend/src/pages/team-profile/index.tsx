@@ -13,7 +13,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Shield, Calendar, Zap } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Shield, Calendar, Zap, Sword } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
@@ -24,6 +24,12 @@ import { TypeCoverageGridInner } from './type-coverage-grid';
 import { RosterActions } from './roster-actions';
 import { HeaderStrip } from './header-strip';
 import { SpriteShowcase } from './sprite-showcase';
+import { NextMatchBanner } from './next-match-banner';
+import { TheorycraftSummary } from './theorycraft-summary';
+import { CoverageTab } from './coverage-tab';
+import { Personality } from './personality';
+import { RecentEvents } from './recent-events';
+import { Rivals } from './rivals';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -59,7 +65,7 @@ export function TeamProfilePage() {
 
 function TeamProfileContent({ player, rank }: { player: Player; rank: number }) {
   const leagueUrl = useLeagueUrl();
-  const { players, getTeamMatches, getTeamByes } = useLeagueData();
+  const { players, getTeamMatches, getTeamByes, refresh } = useLeagueData();
   const league = useLeague();
   const { user, isAdmin } = useAuth();
   const season = league.season;
@@ -72,9 +78,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
 
   // Allow deep-link from My Hub: /league/.../teams/...?theorycraft=1
   const [searchParams, setSearchParams] = useSearchParams();
-  const isOwner = !!(user && player.userId != null && String(player.userId) === user.id);
-  const initialTheorycraft = searchParams.get('theorycraft') === '1' && (isOwner || isAdmin);
-  const [theorycraftMode, setTheorycraftMode] = useState(initialTheorycraft);
+  const [theorycraftMode, setTheorycraftMode] = useState(
+    searchParams.get('theorycraft') === '1',
+  );
   // Strip the param after consumption so refresh doesn't re-enter mode unintentionally
   useEffect(() => {
     if (searchParams.get('theorycraft') === '1') {
@@ -369,6 +375,29 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         teamDeaths={teamDeaths}
       />
 
+      {/* ═══ NEXT-MATCH BANNER (regular/playoffs) ═══ */}
+      {season && (
+        <NextMatchBanner
+          player={player}
+          matches={matches}
+          byeWeeks={byeWeeks}
+          opponents={players}
+          season={season}
+          leagueId={league.id}
+        />
+      )}
+
+      {/* ═══ TEAM PERSONALITY (motto + captain note, owner-editable) ═══ */}
+      {!theorycraftMode && <Personality player={player} onSaved={refresh} />}
+
+      {/* ═══ RECENT MOVES + RIVALS (community surfaces) ═══ */}
+      {!theorycraftMode && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <RecentEvents player={player} />
+          <Rivals player={player} />
+        </div>
+      )}
+
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
       <SpriteShowcase
         player={player}
@@ -435,6 +464,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                 <TabsTrigger value="defense" className="text-[11px] gap-1 px-2">
                   <Shield size={12} /> Defense
                 </TabsTrigger>
+                <TabsTrigger value="coverage" className="text-[11px] gap-1 px-2">
+                  <Sword size={12} /> Coverage
+                </TabsTrigger>
                 <TabsTrigger value="schedule" className="text-[11px] gap-1 px-2">
                   <Calendar size={12} /> Schedule
                 </TabsTrigger>
@@ -446,6 +478,10 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
 
             <TabsContent value="defense" className="p-0 flex-1 overflow-y-auto flex flex-col">
               <TypeCoverageGridInner profile={typeProfile} pokemonTypesMap={pokemonTypesMap} />
+            </TabsContent>
+
+            <TabsContent value="coverage" className="p-0 flex-1 overflow-y-auto flex flex-col">
+              <CoverageTab roster={activeRoster} />
             </TabsContent>
 
             <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
@@ -529,6 +565,19 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           </Tabs>
         </Card>
       </div>
+
+      {/* ═══ THEORYCRAFT FLOATING DIFF SUMMARY ═══ */}
+      {theorycraftMode && (
+        <TheorycraftSummary
+          originalRoster={player.roster}
+          swaps={swaps}
+          removedIndices={removedIndices}
+          additions={additions}
+          teraEdits={teraEdits}
+          pointsDelta={pointsDelta}
+          onReset={handleResetAll}
+        />
+      )}
     </div>
   );
 }
