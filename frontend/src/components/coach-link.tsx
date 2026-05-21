@@ -5,6 +5,9 @@ import { CoachAvatar } from '@/components/coach-avatar';
 import { TeamLogo } from '@/components/team-logo';
 import { api, type ApiPublicProfile } from '@/lib/api';
 import { formatRecord, formatTenure } from '@/lib/format';
+import { spriteUrl } from '@/lib/pokemon';
+import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
+import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
 import { ChevronRight, Shield, Code2 } from 'lucide-react';
 
@@ -24,6 +27,16 @@ export interface CoachRef {
   tertiaryColor?: string | null;
   avatarPath?: string | null;
   role?: 'dev' | 'admin' | 'user' | null;
+  // ─── Coach flair ────────────────────────────────────────────────────────
+  /** pokemon.id of chosen signature mon — paired with `signaturePokemonName`
+   *  to render a 14px mini sprite next to the coach name. Either field is
+   *  enough to render (we use name → sprite URL), id is informational. */
+  signaturePokemonId?: number | null;
+  signaturePokemonName?: string | null;
+  /** Short user-set flair string (≤ 40) — shown in the hover popover. */
+  title?: string | null;
+  /** Canonical type name — drives popover chip + (optionally) avatar tint. */
+  signatureType?: string | null;
 }
 
 interface CoachLinkProps {
@@ -99,8 +112,31 @@ export function CoachLink({
     </span>
   );
 
+  // Signature pokemon mini-sprite: rendered as an inline-block image so it
+  // flows with text wrapping but keeps a tight non-breaking bond with the
+  // name (the surrounding inline-flex container handles that). 14px sits
+  // comfortably next to body text without stealing the eye.
+  const typeAccent = coach.signatureType
+    ? TYPE_COLORS[coach.signatureType as PokemonType]
+    : null;
+  // Render at 24x24 to give the sprite enough room without crowding the
+  // adjacent name. Negative vertical margins keep the inline pill from
+  // ballooning row height in dense tables (standings, draft order).
+  const signatureSprite = coach.signaturePokemonName ? (
+    <img
+      src={spriteUrl(coach.signaturePokemonName)}
+      alt=""
+      aria-hidden="true"
+      loading="lazy"
+      draggable={false}
+      title={coach.signaturePokemonName}
+      className="inline-block shrink-0 select-none align-middle"
+      style={{ width: 24, height: 24, marginTop: -6, marginBottom: -6 }}
+    />
+  ) : null;
+
   const inner = (
-    <span className={cn('inline-flex items-center gap-1.5 align-middle', className)}>
+    <span className={cn('inline-flex items-center gap-1.5 align-middle whitespace-nowrap', className)}>
       {showAvatar && (
         <CoachAvatar
           username={coach.username}
@@ -110,8 +146,12 @@ export function CoachLink({
           secondaryColor={secondary}
           size={avatarSize}
           presence={presence}
+          // typeAccent only fires when no presence is set — the avatar
+          // component arbitrates between the two.
+          typeAccent={typeAccent}
         />
       )}
+      {signatureSprite}
       {nameNode}
       {coach.role === 'dev' && (
         <span
@@ -181,6 +221,8 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
   }, [coach.username]);
 
   // Merge: local props are authoritative for color/role; fetched profile fills bio/teams/career.
+  // Flair fields (title, signatureType, signaturePokemon*) merge the same
+  // way — caller's inline data wins, fetched profile fills any gaps.
   const merged = {
     username: coach.username,
     displayName: coach.displayName ?? profile?.displayName ?? null,
@@ -189,6 +231,9 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
     secondaryColor: coach.secondaryColor ?? profile?.secondaryColor ?? null,
     tertiaryColor: coach.tertiaryColor ?? profile?.tertiaryColor ?? null,
     bio: profile?.bio ?? null,
+    title: coach.title ?? profile?.title ?? null,
+    signatureType: coach.signatureType ?? profile?.signatureType ?? null,
+    signaturePokemonName: coach.signaturePokemonName ?? profile?.signaturePokemonName ?? null,
     currentTeams: profile?.currentTeams ?? [],
     careerSummary: profile?.careerSummary ?? null,
     createdAt: profile?.createdAt ?? null,
@@ -272,6 +317,23 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
           {merged.displayName && merged.displayName !== merged.username && (
             <div className="text-[10px] text-text-muted mt-0.5 font-mono">@{merged.username}</div>
           )}
+          {/* Flair: title + signature type chip. Sits between username and
+              bio so it reads as identity, not free-form prose. */}
+          {(merged.title || merged.signatureType) && (
+            <div className="flex items-center gap-1.5 mt-1 min-w-0">
+              {merged.title && (
+                <span
+                  className="text-[10px] font-mono text-text-secondary leading-tight truncate"
+                  title={merged.title}
+                >
+                  {merged.title}
+                </span>
+              )}
+              {merged.signatureType && (
+                <TypeChip type={merged.signatureType as PokemonType} />
+              )}
+            </div>
+          )}
           {merged.bio && (
             <p className="text-xs text-text-secondary mt-1.5 leading-snug line-clamp-2">
               {merged.bio}
@@ -339,6 +401,28 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Small type chip used in the popover identity block. Mirrors the inline
+ *  type accents used elsewhere in the app (TYPE_COLORS hex + TYPE_LABELS
+ *  three-letter abbreviation). Compact enough to sit next to a title line. */
+function TypeChip({ type }: { type: PokemonType }) {
+  const color = TYPE_COLORS[type];
+  const label = TYPE_LABELS[type];
+  if (!color || !label) return null;
+  return (
+    <span
+      className="inline-flex items-center justify-center px-1.5 py-px rounded text-[8px] font-mono font-bold uppercase tracking-wider shrink-0"
+      style={{
+        backgroundColor: `${color}26`, // ~15% alpha
+        color,
+        boxShadow: `inset 0 0 0 1px ${color}60`,
+      }}
+      title={`Signature type: ${type}`}
+    >
+      {label}
+    </span>
   );
 }
 
