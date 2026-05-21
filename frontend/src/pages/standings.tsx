@@ -19,6 +19,7 @@ import { TeraIndicator } from '@/components/tera-indicator';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { ChevronDown, ArrowLeftRight, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/lib/auth-context';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
@@ -259,6 +260,8 @@ function StandingsRow({
   const [expanded, setExpanded] = useState(false);
   const { getTeamTrades, getTeamMatches } = useLeagueData();
   const { openSideCard } = usePokemonSideCard();
+  const { user } = useAuth();
+  const isMe = user?.id != null && player.userId != null && String(player.userId) === user.id;
   const isPlayoff = rank <= playoffCount;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
@@ -282,14 +285,18 @@ function StandingsRow({
       className={cn(
         'stagger-item row-interactive border-b border-border-subtle/50 last:border-b-0',
         isQualifyLine && 'border-b-neon/40 border-b-2',
+        isMe && 'identity-glow-soft',
       )}
       style={{
         ['--i' as never]: Math.min(index, 20),
         ['--card-accent' as never]: player.teamColor,
+        ['--identity-color' as never]: player.teamColor,
         // Ambient team-color bleed — left-side gradient that fades to nothing
         // by ~40% across. Each row visibly belongs to its team without breaking
-        // the dark base.
-        background: `linear-gradient(90deg, ${player.teamColor}12 0%, ${player.teamColor}06 18%, transparent 45%)`,
+        // the dark base. The user's own row gets a stronger bleed.
+        background: isMe
+          ? `linear-gradient(90deg, ${player.teamColor}24 0%, ${player.teamColor}12 25%, ${player.teamColor}04 60%, transparent 100%)`
+          : `linear-gradient(90deg, ${player.teamColor}12 0%, ${player.teamColor}06 18%, transparent 45%)`,
       }}
     >
       <button
