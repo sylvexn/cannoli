@@ -6,6 +6,8 @@ import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { TypeChip } from '@/components/type-chip';
 import { TierBadge } from '@/components/tier-badge';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
+import { useLeague } from '@/lib/league-context';
 import { RecordDisplay } from '@/components/record-display';
 import { KDDisplay } from '@/components/kd-display';
 import { Card, CardContent } from '@/components/ui/card';
@@ -76,6 +78,7 @@ export function StatsPage() {
   const sorted = useMemo(() => sortStats(filtered, sort), [filtered, sort]);
 
   const leagueUrl = useLeagueUrl();
+  const league = useLeague();
 
   // Top 6 always by kills desc, unfiltered
   const top6 = useMemo(() =>
@@ -175,12 +178,19 @@ export function StatsPage() {
                 </Link>
                 {/* Team */}
                 {team && (
-                  <Link to={leagueUrl(`/teams/${team.id}`)} viewTransition className="flex items-center gap-1 group/team">
-                    <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" />
-                    <span className="text-[10px] text-text-muted group-hover/team:text-neon transition-colors">
-                      {team.teamAbbrev}
-                    </span>
-                  </Link>
+                  <TeamLink
+                    team={{
+                      leagueId: league.id,
+                      teamId: team.id,
+                      teamName: team.teamName,
+                      teamAbbrev: team.teamAbbrev,
+                      teamColor: team.teamColor,
+                      record: team.record,
+                    }}
+                    logoSize="sm"
+                    size="xs"
+                    className="gap-1"
+                  />
                 )}
                 {/* KD */}
                 <KDDisplay kills={stat.kills} deaths={stat.deaths} className="text-xs" />

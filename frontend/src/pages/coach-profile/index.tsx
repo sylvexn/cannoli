@@ -5,6 +5,7 @@ import { api, type ApiPublicProfile, type ApiPin, type ApiActivityEvent } from '
 import { CoachAvatar } from '@/components/coach-avatar';
 import { Pin } from '@/components/pin';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { EmptyState } from '@/components/empty-state';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { formatRelativeTime, formatRecord, formatTenure } from '@/lib/format';
@@ -327,23 +328,34 @@ function CurrentTeams({ teams }: { teams: ApiPublicProfile['currentTeams'] }) {
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {teams.map(t => (
-          <Link
+          <div
             key={t.teamId}
-            to={`/league/${t.leagueId}/teams/${t.teamId}`}
-            className={cn(
-              'card-interactive flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5',
-            )}
             style={{
               ['--card-accent' as never]: t.teamColor,
               ['--card-glow' as never]: `${t.teamColor}30`,
             }}
           >
-            <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="md" />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-text-primary truncate">{t.teamName}</div>
-              <div className="text-[10px] font-mono text-text-muted">{t.teamAbbrev}</div>
-            </div>
-          </Link>
+            <TeamLink
+              team={{
+                leagueId: t.leagueId,
+                teamId: t.teamId,
+                teamName: t.teamName,
+                teamAbbrev: t.teamAbbrev,
+                teamColor: t.teamColor,
+                logoPath: t.logoPath,
+              }}
+              asCard
+              className={cn(
+                'card-interactive flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5',
+              )}
+            >
+              <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} logoPath={t.logoPath} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-text-primary truncate">{t.teamName}</div>
+                <div className="text-[10px] font-mono text-text-muted">{t.teamAbbrev}</div>
+              </div>
+            </TeamLink>
+          </div>
         ))}
       </div>
     </div>

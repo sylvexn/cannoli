@@ -37,6 +37,9 @@ interface TeamLinkProps {
   /** Custom child instead of the default abbrev label. */
   children?: ReactNode;
   className?: string;
+  /** Replace the default `inline-flex items-center gap-1.5 align-middle` inner classes
+   *  AND the link's `inline-flex` — useful when wrapping card-shaped triggers. */
+  asCard?: boolean;
   /** Text size override for the abbrev label. */
   size?: 'xs' | 'sm' | 'md';
 }
@@ -55,6 +58,7 @@ export function TeamLink({
   static: staticRender = false,
   children,
   className,
+  asCard = false,
   size,
 }: TeamLinkProps) {
   const sizeClass =
@@ -75,7 +79,9 @@ export function TeamLink({
     </span>
   );
 
-  const inner = (
+  const inner = asCard ? (
+    <>{children}</>
+  ) : (
     <span className={cn('inline-flex items-center gap-1.5 align-middle', className)}>
       {showLogo && (
         <TeamLogo
@@ -94,11 +100,11 @@ export function TeamLink({
   const linkPath = `/league/${team.leagueId}/teams/${team.teamId}`;
 
   if (noHoverCard) {
-    return <Link to={linkPath} className="inline-flex">{inner}</Link>;
+    return <Link to={linkPath} className={cn(asCard ? className : 'inline-flex')}>{inner}</Link>;
   }
 
   return (
-    <TeamLinkPopover team={team} linkPath={linkPath}>
+    <TeamLinkPopover team={team} linkPath={linkPath} asCard={asCard} cardClassName={className}>
       {inner}
     </TeamLinkPopover>
   );
@@ -110,9 +116,11 @@ interface TeamLinkPopoverProps {
   team: TeamRef;
   linkPath: string;
   children: ReactNode;
+  asCard?: boolean;
+  cardClassName?: string;
 }
 
-function TeamLinkPopover({ team, linkPath, children }: TeamLinkPopoverProps) {
+function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: TeamLinkPopoverProps) {
   const [fullTeam, setFullTeam] = useState<ApiTeam | null>(null);
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef(false);
@@ -155,7 +163,7 @@ function TeamLinkPopover({ team, linkPath, children }: TeamLinkPopoverProps) {
             to={linkPath}
             onMouseEnter={() => void fetchTeam()}
             onFocus={() => void fetchTeam()}
-            className="inline-flex"
+            className={asCard ? cardClassName : 'inline-flex'}
           />
         }
       >
