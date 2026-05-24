@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { useAppData } from '@/lib/app-data-context';
-import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { TeamCoach } from '@/components/team-coach';
 import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
@@ -76,15 +75,21 @@ export function LeagueHistory({ pokemonName }: LeagueHistoryProps) {
               >
                 {league.name.replace(' League', '')}
               </Badge>
-              <Link
-                to={`/league/${league.id}/teams/${player.id}`}
-                className="flex items-center gap-2 group"
+              <TeamLink
+                team={{
+                  leagueId: league.id,
+                  teamId: player.id,
+                  teamName: player.teamName,
+                  teamAbbrev: player.teamAbbrev,
+                  teamColor: player.teamColor,
+                  record: player.record,
+                }}
+                logoSize="sm"
               >
-                <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-                <span className="text-sm font-medium text-text-primary group-hover:text-neon transition-colors">
+                <span className="text-sm font-medium text-text-primary hover:text-neon transition-colors">
                   {player.teamName}
                 </span>
-              </Link>
+              </TeamLink>
               <TeamCoach player={player} size="xs" className="text-[11px] text-text-muted" />
             </div>
 

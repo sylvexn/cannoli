@@ -7,6 +7,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { KDDisplay } from '@/components/kd-display';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -199,7 +200,22 @@ export function PokemonSideCard({
                     Owner
                   </h3>
                   <div className="flex items-center gap-2.5 p-2.5 rounded-md bg-surface-overlay/30 border border-border-subtle">
-                    <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
+                    {league ? (
+                      <TeamLink
+                        team={{
+                          leagueId: league.id,
+                          teamId: owner.id,
+                          teamName: owner.teamName,
+                          teamAbbrev: owner.teamAbbrev,
+                          teamColor: owner.teamColor,
+                          record: owner.record,
+                        }}
+                        logoOnly
+                        logoSize="md"
+                      />
+                    ) : (
+                      <TeamLogo abbrev={owner.teamAbbrev} color={owner.teamColor} size="md" />
+                    )}
                     <div>
                       <Link
                         to={leagueUrl(`/teams/${owner.id}`)}
