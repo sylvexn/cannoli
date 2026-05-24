@@ -107,7 +107,10 @@ export function PokemonDetailSheet({
               )}
 
               <div className="relative flex items-start gap-4">
-                <div className="flex-shrink-0 rounded-lg bg-surface-overlay/50 p-2">
+                <div
+                  className="flex-shrink-0 rounded-lg bg-surface-overlay/50 p-2"
+                  style={{ viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}` }}
+                >
                   <PokemonSprite name={name} size="xl" />
                 </div>
                 <div className="flex-1 min-w-0 pt-1">
