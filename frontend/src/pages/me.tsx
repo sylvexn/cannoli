@@ -8,6 +8,7 @@ import type { League } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
+import { TeamLink } from '@/components/team-link';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
@@ -249,7 +250,18 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
       <CardContent className="p-4 space-y-3">
         {/* Header row */}
         <div className="flex items-center gap-3">
-          <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" />
+          <TeamLink
+            team={{
+              leagueId: league.id,
+              teamId: team.id,
+              teamName: team.teamName,
+              teamAbbrev: team.teamAbbrev,
+              teamColor: team.teamColor,
+              record: team.record,
+            }}
+            logoOnly
+            logoSize="md"
+          />
           <div className="min-w-0 flex-1">
             <Link
               to={`/league/${league.id}/teams/${team.id}`}
@@ -532,18 +544,27 @@ function OpponentMatchupCard({
       </span>
       <span className="text-text-muted text-[11px]">vs</span>
       {opponent ? (
-        <Link
-          to={`/league/${league.id}/teams/${opponent.id}`}
-          className="flex items-center gap-1.5 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+        <TeamLink
+          team={{
+            leagueId: league.id,
+            teamId: opponent.id,
+            teamName: opponent.teamName,
+            teamAbbrev: opponent.teamAbbrev,
+            teamColor: opponent.teamColor,
+            record: opponent.record,
+          }}
+          logoSize="sm"
+          className="min-w-0 flex-1"
         >
-          <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" />
-          <span className="text-xs font-medium text-text-primary truncate">
-            {opponent.teamName}
+          <span className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="text-xs font-medium text-text-primary truncate">
+              {opponent.teamName}
+            </span>
+            <span className="text-[10px] text-text-muted font-mono shrink-0">
+              ({opponent.record.wins}-{opponent.record.losses})
+            </span>
           </span>
-          <span className="text-[10px] text-text-muted font-mono shrink-0">
-            ({opponent.record.wins}-{opponent.record.losses})
-          </span>
-        </Link>
+        </TeamLink>
       ) : (
         <span className="flex-1 text-text-muted text-xs">Loading opponent...</span>
       )}
