@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TeamLogo } from '@/components/team-logo';
@@ -15,6 +16,14 @@ import type { Acquisition } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
 import { getTierEntry } from '@/data/tier-list';
 import { captainHeadroomNeeded } from '@/lib/draft-rules';
+import { ViewTransitionShim } from './use-pick-animation-queue';
+
+/** Matches the unified Phase 2 VT name pattern. The same name is stamped on
+ *  the pool card while it's animating so the browser pairs old/new snapshots
+ *  and morphs the sprite from the grid into the roster slot. */
+function pickViewTransitionName(name: string): string {
+  return `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
 
 interface DraftTeamSidebarProps {
   /** Players in display order (draft order during draft, standings after) */
@@ -47,6 +56,10 @@ interface DraftTeamSidebarProps {
   isUserTurn?: boolean;
   /** Live presence data from WebSocket */
   presence?: DraftPresenceData;
+  /** Pokemon name currently being celebrated by the pick animation queue.
+   *  The matching roster row wraps in <ViewTransition name="..."> so React
+   *  can morph the sprite from the pool card into this slot. */
+  animatingPokemonName?: string | null;
 }
 
 const DEFAULT_ROSTER_SIZE = 10;
@@ -57,7 +70,7 @@ export function DraftTeamSidebar(props: DraftTeamSidebarProps) {
     collapsed, onToggleCollapse, currentDrafterId, isLiveMode, userTeamId,
     pointCap = 110, teraCaptainSlots = 2, rosterSize = DEFAULT_ROSTER_SIZE,
     draftQueue = [], onQueueRemove, autoDraftQueue, onToggleAutoDraft,
-    onDraftFromQueue, isUserTurn, presence,
+    onDraftFromQueue, isUserTurn, presence, animatingPokemonName,
   } = props;
 
   const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
@@ -191,6 +204,7 @@ export function DraftTeamSidebar(props: DraftTeamSidebarProps) {
                 showOnline={showOnline}
                 expanded={isUser /* user's row stays expanded */ || isSelected}
                 forceExpand={isUser}
+                animatingPokemonName={animatingPokemonName}
               />
 
               {/* Live-only sections inline under the user's row */}
@@ -330,11 +344,14 @@ interface UnifiedTeamRowProps {
   expanded?: boolean;
   /** When true the click toggles only inspection elsewhere — row never collapses */
   forceExpand?: boolean;
+  /** Pokemon name currently animating — wraps the matching roster row in
+   *  ViewTransition so the sprite morphs into the slot. */
+  animatingPokemonName?: string | null;
 }
 
 function UnifiedTeamRow({
   player, points, roster, pointCap, isUser, isDrafter, isSelected,
-  onSelect, isOnline, showOnline, expanded, forceExpand,
+  onSelect, isOnline, showOnline, expanded, forceExpand, animatingPokemonName,
 }: UnifiedTeamRowProps) {
   const remaining = pointCap - points;
   const showRoster = !!expanded;
@@ -406,20 +423,34 @@ function UnifiedTeamRow({
       {/* Roster expansion */}
       {showRoster && (
         <div className="px-3 pb-2 space-y-0.5">
-          {roster.length > 0 ? roster.map((mon, i) => (
-            <div
-              key={mon.name}
-              className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40"
-            >
-              <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">{i + 1}</span>
-              <PokemonSprite name={mon.name} size="xs" />
-              <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
-              {mon.acquisition.method === 'traded' && (
-                <ArrowRightLeft size={10} className="text-pink shrink-0" />
-              )}
-              <TierBadge points={mon.tier} />
-            </div>
-          )) : (
+          {roster.length > 0 ? roster.map((mon, i) => {
+            const row = (
+              <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40">
+                <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">{i + 1}</span>
+                <PokemonSprite name={mon.name} size="xs" />
+                <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
+                {mon.acquisition.method === 'traded' && (
+                  <ArrowRightLeft size={10} className="text-pink shrink-0" />
+                )}
+                <TierBadge points={mon.tier} />
+              </div>
+            );
+            // Wrap only the row matching the currently-animating pick. The
+            // pool card with the same view-transition-name is unmounting in
+            // the same commit; React pairs them and morphs the sprite.
+            if (animatingPokemonName === mon.name) {
+              return (
+                <ViewTransitionShim
+                  key={mon.name}
+                  name={pickViewTransitionName(mon.name)}
+                  className="pokemon-card-vt"
+                >
+                  {row}
+                </ViewTransitionShim>
+              );
+            }
+            return <Fragment key={mon.name}>{row}</Fragment>;
+          }) : (
             <div className="text-[10px] text-text-muted py-1 text-center">No picks yet</div>
           )}
         </div>
