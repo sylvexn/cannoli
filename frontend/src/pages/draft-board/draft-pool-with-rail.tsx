@@ -6,6 +6,7 @@ import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import type { ConflictInputRoster } from '@/lib/draft-rules';
 import { DraftPoolGrid } from './draft-pool-grid';
+import type { CardDensity } from './pokemon-compact-card';
 
 interface DraftPoolWithRailProps {
   poolByTier: [number, TierEntry[]][];
@@ -20,6 +21,10 @@ interface DraftPoolWithRailProps {
   userConflictRoster?: ConflictInputRoster;
   pointCap?: number;
   draftQueue?: string[];
+  /** Card layout density — threaded through to DraftPoolGrid */
+  density?: CardDensity;
+  /** Pokemon currently mid-flight in the pick animation queue — threaded through */
+  animatingPokemonName?: string | null;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;

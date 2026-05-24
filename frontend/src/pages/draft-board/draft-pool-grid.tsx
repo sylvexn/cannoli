@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
-import { PokemonCompactCard } from './pokemon-compact-card';
+import { PokemonCompactCard, type CardDensity } from './pokemon-compact-card';
 import type { TierEntry } from '@/data/tier-list';
 import { TERA_BANNED } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
@@ -30,6 +30,14 @@ interface DraftPoolGridProps {
   pointCap?: number;
   /** Draft queue for showing queue indicators on cards */
   draftQueue?: string[];
+  /** Layout density — threaded into each card */
+  density?: CardDensity;
+  /** Pokemon name currently mid-flight in the pick animation queue. The
+   *  matching card stamps its `pokemon-card-${name}` view-transition-name so
+   *  the browser can pair the unmounting card with the mounting roster slot
+   *  in the sidebar and morph the sprite. Only the matching card gets the
+   *  name — duplicate VT names on the page would confuse the snapshotting. */
+  animatingPokemonName?: string | null;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -47,6 +55,8 @@ export function DraftPoolGrid({
   userConflictRoster,
   pointCap = 110,
   draftQueue = [],
+  density = 'comfortable',
+  animatingPokemonName,
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
@@ -101,8 +111,13 @@ export function DraftPoolGrid({
               </div>
             </div>
 
-            {/* Cards grid */}
-            <div className="flex flex-wrap gap-1 pl-5 pr-1 py-1.5">
+            {/* Cards grid — fluid columns driven by --card-size for density toggling */}
+            <div
+              className="grid gap-1 pl-5 pr-1 py-1.5"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size, 88px), 1fr))',
+              }}
+            >
               {entries.map(entry => {
                 const ownership = ownershipMap.get(entry.name);
                 const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
@@ -128,6 +143,7 @@ export function DraftPoolGrid({
                 const isMega = isMegaForm(entry.name);
                 const isTeraBanned = TERA_BANNED.includes(entry.name);
                 const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9;
+                const isAnimating = animatingPokemonName === entry.name;
 
                 return (
                   <PokemonCompactCard
@@ -147,6 +163,8 @@ export function DraftPoolGrid({
                     isMega={isMega}
                     isTeraBanned={isTeraBanned}
                     isCaptainEligible={isCaptainEligible}
+                    density={density}
+                    viewTransitionActive={isAnimating}
                     onClick={onCardClick}
                     onHoverStart={onCardHoverStart}
                     onHoverEnd={onCardHoverEnd}

@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { Badge } from '@/components/ui/badge';
 import {
   LayoutGrid, Table, History, Radio, Wifi, Loader2, Monitor, ScrollText,
-  Volume2, VolumeX, FlaskConical, Zap,
+  Volume2, VolumeX, FlaskConical, Zap, Rows3, Rows2, StretchHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
@@ -16,19 +16,45 @@ import { DraftFilterBar } from './draft-board/draft-filter-bar';
 import { DraftPoolWithRail } from './draft-board/draft-pool-with-rail';
 import { DraftTeamSidebar } from './draft-board/draft-team-sidebar';
 import { DraftPoolTable } from './draft-board/draft-pool-table';
-import { PokemonHoverCard } from './draft-board/pokemon-hover-card';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
 import { DraftControlBar } from './draft-board/draft-control-bar';
 import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
 import { DraftPickLog } from './draft-board/draft-pick-log';
-import { DraftConfirmPopover } from './draft-board/draft-confirm-popover';
+import { DraftPokemonPopover, type PokemonPopoverMode } from './draft-board/draft-pokemon-popover';
 import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
 import { SegmentedToggle } from './draft-board/segmented-toggle';
+import type { CardDensity } from './draft-board/pokemon-compact-card';
 import { TIER_LIST } from '@/data/tier-list';
 import { getTierEntry } from '@/data/tier-list';
-import { playCry } from '@/lib/pokemon';
 import type { DraftSource, DraftView } from './draft-board/types';
+
+const DENSITY_STORAGE_KEY = 'draft.density';
+const DENSITY_SIZES: Record<CardDensity, string> = {
+  compact: '64px',
+  comfortable: '88px',
+  detailed: '108px',
+};
+
+function readStoredDensity(): CardDensity {
+  if (typeof window === 'undefined') return 'comfortable';
+  const raw = window.localStorage.getItem(DENSITY_STORAGE_KEY);
+  return raw === 'compact' || raw === 'detailed' ? raw : 'comfortable';
+}
+
+/**
+ * Wrap a state update in `document.startViewTransition` when the API exists,
+ * so popover→sheet handoffs share the sprite morph. Falls back to plain
+ * invocation on browsers without the API.
+ */
+function withViewTransition(update: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (typeof doc.startViewTransition === 'function') {
+    doc.startViewTransition(() => update());
+  } else {
+    update();
+  }
+}
 
 interface DraftBoardPageProps {
   /**
@@ -52,6 +78,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     userMaxAffordableCost, userConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
+    pickQueue, pickAnnouncement,
   } = useDraftState({ source });
 
   const isPractice = source === 'simulator';
@@ -80,11 +107,27 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   }, []);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [hoverInfo, setHoverInfo] = useState<{ name: string; rect: DOMRect } | null>(null);
   const [pickLogExpanded, setPickLogExpanded] = useState(false);
 
-  // Quick-draft confirmation popover state
-  const [confirmPopover, setConfirmPopover] = useState<{ name: string; rect: DOMRect } | null>(null);
+  // Card density toggle — controls --card-size CSS var on the page root.
+  const [density, setDensity] = useState<CardDensity>(() => readStoredDensity());
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DENSITY_STORAGE_KEY, density);
+    } catch {
+      // localStorage may be unavailable (private mode) — silently skip persistence.
+    }
+  }, [density]);
+
+  // Unified pokemon popover state — replaces the old hover-card + confirm-popover
+  // pair. `mode` decides what content to render (preview vs quick-draft vs
+  // detail-summary); the same anchor + name flow through all variants so the
+  // sprite morphs cleanly as the mode changes.
+  const [popover, setPopover] = useState<{
+    name: string;
+    rect: DOMRect;
+    mode: PokemonPopoverMode;
+  } | null>(null);
 
   // Track card rects for popover positioning
   const cardRectsRef = useRef<Map<string, DOMRect>>(new Map());
@@ -100,36 +143,43 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   const isDraftRunning = state.view === 'active' && state.status === 'running';
 
   const handleCardClick = useCallback((name: string) => {
-    // During an active draft, show popover for free agents (for drafting or queueing).
-    // Open the popover even if the pick has a conflict so the user can read why.
+    // During an active draft, upgrade the popover into 'quick-draft' mode for
+    // free agents (so the user can draft, queue, or read the conflict reason
+    // inline). Open even if there's a conflict so the reason is readable.
     if (isDraftRunning && !ownershipMap.has(name)) {
       const tierEntry = getTierEntry(name);
       const fitsRawBudget = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
       if (fitsRawBudget || !isUserTurn) {
-        const rect = cardRectsRef.current.get(name);
+        const rect = cardRectsRef.current.get(name) ?? popover?.rect;
         if (rect) {
-          setConfirmPopover({ name, rect });
-          setHoverInfo(null);
+          withViewTransition(() => setPopover({ name, rect, mode: 'quick-draft' }));
           return;
         }
       }
     }
-    // Otherwise open the detail sheet
-    dispatch({ type: 'SET_DETAIL', name });
-  }, [dispatch, isDraftRunning, isUserTurn, ownershipMap, userBudgetRemaining]);
+    // Outside of an active draft (or for owned mons in any view) jump straight
+    // to the detail sheet.
+    withViewTransition(() => dispatch({ type: 'SET_DETAIL', name }));
+  }, [dispatch, isDraftRunning, isUserTurn, ownershipMap, userBudgetRemaining, popover]);
 
   const handleCardHoverStart = useCallback((name: string, rect: DOMRect) => {
     cardRectsRef.current.set(name, rect);
-    if (!confirmPopover) {
-      setHoverInfo({ name, rect });
-    }
-  }, [confirmPopover]);
+    setPopover(prev => {
+      // Don't downgrade an active interactive popover (quick-draft / detail-summary)
+      // back to a hover preview when the cursor drifts to a sibling card.
+      if (prev && prev.mode !== 'preview') return prev;
+      return { name, rect, mode: 'preview' };
+    });
+  }, []);
 
   const handleCardHoverEnd = useCallback(() => {
-    setHoverInfo(null);
+    setPopover(prev => (prev && prev.mode === 'preview' ? null : prev));
   }, []);
 
   const handleQueueAdd = useCallback((name: string) => {
+    // Block queueing Pokemon that wouldn't fit even ignoring conflicts.
+    // We compare to userMaxAffordableCost so a t10 mon with 8pt headroom (because
+    // 2pt is reserved for the remaining slot) is also blocked.
     const cap = userMaxAffordableCost ?? userBudgetRemaining;
     if (cap != null) {
       const entry = TIER_LIST.find(e => e.name === name);
@@ -155,23 +205,22 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     }
   }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
 
-  // Play Pokemon cry on EVERY broadcast pick (server or simulator). All
-  // connected clients hear the cry on every pick. Per-user mute toggle
-  // controls audibility. Also auto-expands the pick log so the celebration
-  // sequence is always seen.
+  // Auto-expand the pick log on every pick + show the one-time mute hint.
+  // Cry playback used to live here — it's now owned by usePickAnimationQueue,
+  // which fires the cry on the landing-phase boundary so batched picks get
+  // spaced cries instead of overlapping.
   const prevPickCountRef = useRef(state.allPicks.length);
   useEffect(() => {
     const prev = prevPickCountRef.current;
     prevPickCountRef.current = state.allPicks.length;
     if (isDraftRunning && state.allPicks.length > prev && state.allPicks.length > 0) {
-      const lastPick = state.allPicks[state.allPicks.length - 1];
       setPickLogExpanded(true);
-      if (lastPick.pokemonName && !muted) {
-        playCry(lastPick.pokemonName, 0.15);
-        if (!hintShown) {
-          setHintVisible(true);
-          markHintShown();
-        }
+      // Show the mute hint the first time a cry is about to play (the queue
+      // will play it shortly when the pick lands). Hint is independent of the
+      // actual cry firing — it only nudges users toward the mute control.
+      if (!muted && !hintShown) {
+        setHintVisible(true);
+        markHintShown();
       }
     }
   }, [state.allPicks.length, isDraftRunning, muted, hintShown, markHintShown]);
@@ -202,21 +251,36 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
 
   const handleConfirmDraft = useCallback((name: string) => {
     handleUserPick(name);
-    setConfirmPopover(null);
+    setPopover(null);
   }, [handleUserPick]);
 
   const handleViewDetails = useCallback((name: string) => {
-    setConfirmPopover(null);
-    dispatch({ type: 'SET_DETAIL', name });
+    // Closing the popover and opening the sheet within a single view
+    // transition lets the sprite morph from popover → sheet hero.
+    withViewTransition(() => {
+      setPopover(null);
+      dispatch({ type: 'SET_DETAIL', name });
+    });
   }, [dispatch]);
 
-  const popoverBudgetAfter = confirmPopover
-    ? (() => {
-        const tierEntry = getTierEntry(confirmPopover.name);
-        if (tierEntry && userBudgetRemaining != null) return userBudgetRemaining - tierEntry.tier;
-        return undefined;
-      })()
-    : undefined;
+  const handlePopoverModeChange = useCallback((mode: PokemonPopoverMode) => {
+    setPopover(prev => (prev ? { ...prev, mode } : prev));
+  }, []);
+
+  const handlePopoverClose = useCallback(() => setPopover(null), []);
+
+  // Compute budget after pick for the popover when it's actionable.
+  const popoverBudgetAfter = useMemo(() => {
+    if (!popover || popover.mode === 'preview') return undefined;
+    const tierEntry = getTierEntry(popover.name);
+    if (tierEntry && userBudgetRemaining != null) return userBudgetRemaining - tierEntry.tier;
+    return undefined;
+  }, [popover, userBudgetRemaining]);
+
+  // The Pokemon currently being celebrated by the animation queue. Threaded
+  // into the pool grid (so the matching card stamps its VT name) and the
+  // sidebar (so the matching roster slot does too).
+  const animatingPokemonName = pickQueue.current?.pokemonName ?? null;
 
   // Mobile warning for active draft participants
   if (isMobile && isDraftRunning && state.userTeamId && !isDraftComplete) {
@@ -266,10 +330,18 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
 
   return (
     <UserAccentScope user={user} className="contents">
-    <div className={cn(
-      'flex flex-col h-full overflow-hidden',
-      showOnTheClockGlow && 'pulse-glow',
-    )}>
+    <div
+      className={cn(
+        'flex flex-col h-full overflow-hidden',
+        showOnTheClockGlow && 'pulse-glow',
+      )}
+      style={{ ['--card-size' as never]: DENSITY_SIZES[density] }}
+    >
+      {/* Aria-live region — fires once per pick on the queue's landing phase
+          so screen-reader users hear one event per pick (not on every state
+          churn). Empty most of the time. */}
+      <span className="sr-only" aria-live="polite">{pickAnnouncement}</span>
+
       {/* Top bar: title + view + connection — always compact */}
       <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0">
         <div className="flex items-center gap-3">
@@ -397,6 +469,18 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               )}
             </div>
           )}
+          {state.viewMode === 'grid' && (
+            <SegmentedToggle
+              value={density}
+              onChange={setDensity}
+              size="sm"
+              options={[
+                { value: 'compact', label: '', icon: <Rows3 size={13} />, title: 'Compact (sprites only)' },
+                { value: 'comfortable', label: '', icon: <Rows2 size={13} />, title: 'Comfortable (default)' },
+                { value: 'detailed', label: '', icon: <StretchHorizontal size={13} />, title: 'Detailed (larger sprite + types)' },
+              ]}
+            />
+          )}
           <SegmentedToggle
             value={state.viewMode}
             onChange={mode => dispatch({ type: 'SET_VIEW_MODE', mode })}
@@ -480,6 +564,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
               pointCap={state.pointCap}
               draftQueue={isDraftRunning ? state.draftQueue : undefined}
+              density={density}
+              animatingPokemonName={animatingPokemonName}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -535,37 +621,31 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
           onDraftFromQueue={handleDraftFromQueue}
           isUserTurn={isUserTurn}
           presence={presence}
+          animatingPokemonName={animatingPokemonName}
         />
       </div>
 
-      {/* Hover card (hide when confirm popover is showing) */}
-      {hoverInfo && !confirmPopover && (
-        <PokemonHoverCard
-          name={hoverInfo.name}
-          rect={hoverInfo.rect}
-          rosterLookup={rosterLookup}
-          ownershipMap={ownershipMap}
-          playerLookup={playerLookup}
-          onMouseEnter={() => {}}
-          onMouseLeave={handleCardHoverEnd}
-        />
-      )}
-
-      {/* Quick-draft confirmation popover */}
-      <DraftConfirmPopover
-        name={confirmPopover?.name ?? null}
-        anchorRect={confirmPopover?.rect ?? null}
-        budgetAfter={popoverBudgetAfter}
-        onConfirm={handleConfirmDraft}
-        onViewDetails={handleViewDetails}
-        onQueue={handleQueueAdd}
-        onClose={() => setConfirmPopover(null)}
+      {/* Unified pokemon popover — preview / quick-draft / detail-summary.
+          The mode is driven by hover vs click; sprite morphs across mode
+          changes via the shared `pokemon-card-${name}` view-transition-name. */}
+      <DraftPokemonPopover
+        name={popover?.name ?? null}
+        anchorRect={popover?.rect ?? null}
+        mode={popover?.mode ?? 'preview'}
         rosterLookup={rosterLookup}
-        isQueued={confirmPopover ? state.draftQueue.includes(confirmPopover.name) : false}
-        queueFull={state.draftQueue.length >= 3}
+        ownershipMap={ownershipMap}
+        playerLookup={playerLookup}
         isUserTurn={isUserTurn}
+        budgetAfter={popoverBudgetAfter}
+        isQueued={popover ? state.draftQueue.includes(popover.name) : false}
+        queueFull={state.draftQueue.length >= 3}
         userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
         pointCap={state.pointCap}
+        onClose={handlePopoverClose}
+        onModeChange={handlePopoverModeChange}
+        onConfirmDraft={handleConfirmDraft}
+        onQueueAdd={handleQueueAdd}
+        onOpenDetailSheet={handleViewDetails}
       />
 
       {/* Detail sheet */}
