@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -9,15 +9,20 @@ import { pokemonRoute } from '@/lib/pokemon-route';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { Player } from '@/lib/types';
 import type { DraftPickEntry } from './types';
+import type { PickEvent, AnimationPhase } from './use-pick-animation-queue';
 
 interface DraftPickLogProps {
   picks: DraftPickEntry[];
   playerLookup: Map<string, Player>;
   /** How many recent picks to show */
   maxVisible?: number;
+  /** The pick currently being celebrated by the animation queue (drives the
+   *  sprite/glow/border-pulse animations on the matching log entry). */
+  currentPickEvent?: PickEvent | null;
+  /** Phase of the currently-celebrated pick. Animations apply only while
+   *  it's in the 'landing' phase. */
+  currentPhase?: AnimationPhase;
 }
-
-const CELEBRATION_MS = 1200;
 
 /** Resolve the picked Pokemon's first type → CSS var for type-tinted glow. */
 function pickTypeVar(name: string): string {
@@ -26,49 +31,12 @@ function pickTypeVar(name: string): string {
   return `var(--color-type-${t})`;
 }
 
-export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPickLogProps) {
+export function DraftPickLog({
+  picks, playerLookup, maxVisible = 10,
+  currentPickEvent, currentPhase,
+}: DraftPickLogProps) {
   const league = useLeague();
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Track which pick numbers were added since this component mounted, so we
-  // only run the celebration sequence on truly fresh picks (not on initial
-  // hydration from existing state). Each entry is removed after 1.2s.
-  const [freshPicks, setFreshPicks] = useState<Set<number>>(() => new Set());
-  const seenRef = useRef<Set<number>>(new Set());
-  // Mark all picks present at mount as "already seen" — they pre-date the
-  // user opening the pick log and should not animate.
-  const mountedRef = useRef(false);
-  useEffect(() => {
-    if (mountedRef.current) return;
-    mountedRef.current = true;
-    for (const p of picks) seenRef.current.add(p.overallPick);
-  }, [picks]);
-
-  useEffect(() => {
-    if (!mountedRef.current) return;
-    const newOnes: number[] = [];
-    for (const p of picks) {
-      if (!seenRef.current.has(p.overallPick)) {
-        seenRef.current.add(p.overallPick);
-        newOnes.push(p.overallPick);
-      }
-    }
-    if (newOnes.length === 0) return;
-    setFreshPicks(prev => {
-      const next = new Set(prev);
-      for (const n of newOnes) next.add(n);
-      return next;
-    });
-    const timers = newOnes.map(n => setTimeout(() => {
-      setFreshPicks(prev => {
-        if (!prev.has(n)) return prev;
-        const next = new Set(prev);
-        next.delete(n);
-        return next;
-      });
-    }, CELEBRATION_MS));
-    return () => { for (const t of timers) clearTimeout(t); };
-  }, [picks]);
 
   // Auto-scroll to latest pick
   useEffect(() => {
@@ -80,6 +48,11 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
   if (picks.length === 0) return null;
 
   const visible = picks.slice(-maxVisible);
+  // Animations fire only while the queue's current event is in the landing
+  // (or post-landing cooldown) phase. During 'flying' the sprite is mid-morph;
+  // the celebration on the log entry is paired with the morph "arrival".
+  const celebrate = currentPhase === 'landing' || currentPhase === 'cooldown';
+  const freshOverallPick = celebrate ? currentPickEvent?.overallPick ?? null : null;
 
   return (
     <div className="mb-2">
@@ -99,7 +72,7 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
         {visible.map((pick, i) => {
           const player = playerLookup.get(pick.playerId);
           const isLatest = i === visible.length - 1;
-          const isFresh = freshPicks.has(pick.overallPick);
+          const isFresh = pick.overallPick === freshOverallPick;
           const typeVar = pickTypeVar(pick.pokemonName);
 
           return (
@@ -136,7 +109,7 @@ export function DraftPickLog({ picks, playerLookup, maxVisible = 10 }: DraftPick
                 />
               )}
 
-              {/* Pokemon sprite — celebration on fresh entries only */}
+              {/* Pokemon sprite — celebration on the queue's current entry only */}
               <span className={cn('inline-flex shrink-0', isFresh && 'pick-celebration')}>
                 <PokemonSprite name={pick.pokemonName} size="xs" />
               </span>

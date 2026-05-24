@@ -32,6 +32,14 @@ interface PokemonCompactCardProps {
   isCaptainEligible?: boolean;
   /** Layout density — controls size, name visibility, type-row visibility. */
   density?: CardDensity;
+  /**
+   * When true, this card stamps its `pokemon-card-${name}` view-transition-name
+   * so the browser pairs old/new snapshots with the popover/sheet/sidebar slot.
+   * Off by default — only the actively-animating card (or the click-to-popover
+   * source) gets the name to avoid duplicate-name confusion when many cards
+   * are mounted at once.
+   */
+  viewTransitionActive?: boolean;
   onClick: (name: string) => void;
   onHoverStart: (name: string, rect: DOMRect) => void;
   onHoverEnd: () => void;
@@ -75,6 +83,7 @@ export function PokemonCompactCard({
   isTeraBanned,
   isCaptainEligible,
   density = 'comfortable',
+  viewTransitionActive = false,
   onClick,
   onHoverStart,
   onHoverEnd,
@@ -129,9 +138,12 @@ export function PokemonCompactCard({
     '--owner': ownerColor,
     '--type-edge': typeEdge,
     '--tw-ring-color': isHighlighted ? ownerColor : undefined,
-    // Per-instance view-transition name so the popover/detail-sheet can morph
-    // the same sprite. Phase 2a may wrap from outside; this remains stable.
-    viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+    // Per-instance view-transition name so the popover/detail-sheet/sidebar
+    // slot can morph the same sprite. Only stamped on the actively-animating
+    // card to avoid duplicate-name conflicts across the grid.
+    viewTransitionName: viewTransitionActive
+      ? `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+      : undefined,
   };
 
   return (
