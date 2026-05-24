@@ -1,4 +1,4 @@
-import { useReducer, useMemo, useEffect, useCallback, useState } from 'react';
+import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { TIER_LIST, BANNED } from '@/data/tier-list';
 import {
@@ -21,6 +21,8 @@ import { useDraftTimer } from './use-draft-timer';
 import { useDraftPool } from './use-draft-pool';
 import { useDraftTeams } from './use-draft-teams';
 import { useDraftAutoPickers } from './use-draft-auto-pickers';
+import { useDraftMute } from './use-draft-mute';
+import { usePickAnimationQueue } from './use-pick-animation-queue';
 import { draftReducer, generateSnakeSlots } from './draft-reducer';
 
 const DEFAULT_TIMER = 30;
@@ -117,12 +119,55 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
   const teraCaptainSlots = league.season.teraCaptainSlots ?? 0;
 
+  // ─── Pick animation queue (presentational) ────────────────────────
+  // Serializes pick celebrations so batched picks (reconnect catch-up, fast
+  // auto-picks) play one at a time. Owns cry playback on the landing-phase
+  // boundary — draft-board.tsx no longer plays cries eagerly.
+  // Mute is read here; both useDraftMute call-sites share the same key.
+  const { muted } = useDraftMute();
+  const pickQueue = usePickAnimationQueue({ mute: muted });
+  const { enqueue: enqueuePickAnimation, queueIdle } = pickQueue;
+
   // ─── Auto-pickers (simulator AI + queue auto-draft + your-turn toast) ──
+  // Gated on queueIdle so picks land one at a time without overlapping.
   const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
     state, dispatch, draftedSet,
     demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
-    teraCaptainSlots,
+    teraCaptainSlots, queueIdle,
   });
+
+  // ─── Enqueue new picks into the animation queue ──────────────────
+  // Watches state.allPicks length and pushes any new tail entries. Works for
+  // both sources (simulator dispatches PICK_LANDED; server applies LIVE_SYNC
+  // which also grows allPicks) without double-counting.
+  const lastEnqueuedCountRef = useRef(0);
+  useEffect(() => {
+    // Only animate during an active draft. Season-mode hydration / view swaps
+    // shouldn't replay every historical pick.
+    const draftActive = state.view === 'active' && state.status === 'running';
+    if (!draftActive) {
+      lastEnqueuedCountRef.current = state.allPicks.length;
+      return;
+    }
+    const prev = lastEnqueuedCountRef.current;
+    const cur = state.allPicks.length;
+    if (cur <= prev) {
+      // Sync down (state reset / shrink) — re-baseline.
+      lastEnqueuedCountRef.current = cur;
+      return;
+    }
+    for (let i = prev; i < cur; i++) {
+      const p = state.allPicks[i];
+      if (!p?.pokemonName) continue;
+      enqueuePickAnimation({
+        pokemonName: p.pokemonName,
+        tier: p.tier,
+        playerId: p.playerId,
+        overallPick: p.overallPick,
+      });
+    }
+    lastEnqueuedCountRef.current = cur;
+  }, [state.allPicks, state.view, state.status, enqueuePickAnimation]);
 
   const isDraftComplete = state.view === 'active' && state.status === 'complete';
 
@@ -274,6 +319,17 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     return state.pointCap - spent;
   }, [state.userTeamId, teamPoints, state.pointCap]);
 
+  // Aria-live string: announces each pick once on the landing phase. Empty
+  // most of the time — screen readers see one event per pick rather than on
+  // every state churn.
+  const pickAnnouncement = useMemo(() => {
+    const cur = pickQueue.current;
+    if (!cur || pickQueue.phase !== 'landing') return '';
+    const player = playerLookup.get(cur.playerId);
+    const abbrev = player?.teamAbbrev ?? cur.playerId;
+    return `Pick ${cur.overallPick}: ${abbrev} drafted ${cur.pokemonName} (tier ${cur.tier})`;
+  }, [pickQueue.current, pickQueue.phase, playerLookup]);
+
   return {
     state,
     dispatch,
@@ -305,5 +361,16 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
      * the reducer decrements state.timerSeconds directly.
      */
     displayTimerSeconds,
+    /**
+     * Serialized animation queue for pick celebrations. Consumers (sprite
+     * morph, pick-log highlight, aria-live) render off pickQueue.current /
+     * pickQueue.phase. Auto-pickers internally gate on pickQueue.queueIdle.
+     */
+    pickQueue,
+    /**
+     * Aria-live announcement string. Empty except briefly on the landing
+     * phase of each pick. Render via <span className="sr-only" aria-live="polite">.
+     */
+    pickAnnouncement,
   };
 }

@@ -846,3 +846,52 @@ aside {
     box-shadow: inset 0 0 0 4px color-mix(in oklab, var(--user-primary, #22d3ee) 45%, transparent);
   }
 }
+
+/* ─── Draft pokemon popover — entry pop ───────────────────────────────────
+   Used by `DraftPokemonPopover` (preview / quick-draft / detail-summary).
+   The view-transition for the sprite handoff uses the pokemon-card-* rule
+   below; this only animates the popover container's own framing. */
+@keyframes popover-fade-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.popover-fade-in {
+  animation: popover-fade-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center top;
+}
+
+@media (prefers-reduced-motion) {
+  .popover-fade-in {
+    animation: none;
+  }
+}
+
+/* ─── Unified pokemon-card view-transition ────────────────────────────────
+   One name pattern (`pokemon-card-${name}`) is stamped on:
+     • the actively-animating pool card (DraftPoolGrid + PokemonCompactCard)
+     • the corresponding sidebar roster slot during pick-land (DraftTeamSidebar)
+     • the popover sprite container (DraftPokemonPopover)
+     • the detail-sheet hero sprite (PokemonDetailSheet)
+   The browser pairs old/new snapshots by name and morphs between them.
+   450ms timing is tuned for the pool→roster flight; the same animation also
+   reads well on the shorter card→popover→sheet hop. */
+::view-transition-old([class*="pokemon-card-"]),
+::view-transition-new([class*="pokemon-card-"]) {
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+::view-transition-new([class*="pokemon-card-"]) {
+  animation-name: pokemon-card-pop;
+}
+@keyframes pokemon-card-pop {
+  from { transform: scale(0.85); }
+  60%  { transform: scale(1.10); }
+  to   { transform: scale(1); }
+}
+@media (prefers-reduced-motion) {
+  ::view-transition-old([class*="pokemon-card-"]),
+  ::view-transition-new([class*="pokemon-card-"]) {
+    animation: none;
+  }
+}

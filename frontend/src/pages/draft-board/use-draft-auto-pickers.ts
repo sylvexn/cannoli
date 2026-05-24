@@ -42,6 +42,13 @@ interface UseDraftAutoPickersOptions {
   demoTeamRosterNames: Map<string, string[]>;
   picksLeftByTeam: Map<string, number>;
   teraCaptainSlots: number;
+  /**
+   * Pick-animation queue idle flag from `usePickAnimationQueue`. All auto-pick
+   * effects gate on this so a queued celebration finishes (sprite morph, cry,
+   * pick-log highlight) before the next pick lands. The effects re-fire when
+   * the queue drains because `queueIdle` is in their deps.
+   */
+  queueIdle: boolean;
 }
 
 /**
@@ -59,7 +66,7 @@ interface UseDraftAutoPickersOptions {
 export function useDraftAutoPickers({
   state, dispatch, draftedSet,
   demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
-  teraCaptainSlots,
+  teraCaptainSlots, queueIdle,
 }: UseDraftAutoPickersOptions) {
   const isActive = state.view === 'active';
   const isRunning = isActive && state.status === 'running';
@@ -98,9 +105,11 @@ export function useDraftAutoPickers({
 
   // Simulator-only: AI picks for non-user teams after a short delay.
   // (For server source the backend drives auto-picks.)
+  // Gated on queueIdle so the previous pick's celebration finishes first.
   useEffect(() => {
     if (state.source !== 'simulator' || !isRunning || isComplete) return;
     if (!currentSlot || isUserTurn) return;
+    if (!queueIdle) return;
 
     const delay = setTimeout(() => {
       const ctx = buildConflictRoster(currentSlot.teamId);
@@ -112,13 +121,15 @@ export function useDraftAutoPickers({
     }, 300 + Math.random() * 700);
 
     return () => clearTimeout(delay);
-  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, buildConflictRoster, draftedSet, state.pointCap, dispatch]);
+  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, queueIdle, buildConflictRoster, draftedSet, state.pointCap, dispatch]);
 
   // Simulator-only: auto-pick for the user on timer expiry. Live mode pauses
   // on expiry server-side; admin resolves explicitly.
+  // Gated on queueIdle so the previous celebration completes first.
   useEffect(() => {
     if (state.source !== 'simulator' || !isRunning || !isUserTurn) return;
     if (state.timerSeconds > 0) return;
+    if (!queueIdle) return;
 
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
     if (!ctx) return;
@@ -126,18 +137,20 @@ export function useDraftAutoPickers({
     if (pick) {
       dispatch({ type: 'PICK_LANDED', pokemonName: pick.name, tier: pick.tier });
     }
-  }, [state.source, isRunning, isUserTurn, state.timerSeconds, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
+  }, [state.source, isRunning, isUserTurn, state.timerSeconds, queueIdle, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
 
   // Auto-draft from queue when it's user's turn and autoDraftQueue is enabled.
-  // Works in both sources: simulator dispatches PICK_LANDED directly; server
-  // path dispatches PICK_LANDED here too — but for server source the actual
-  // pick must go through the WS, so this effect is gated to simulator only.
-  // In server source, the parent hook's handleUserPick is called via UI buttons;
-  // queue auto-draft for server source is left to a separate parent-side effect.
+  // Simulator-only: server source runs picks through the WS (handleUserPick).
+  //
+  // Gated on queueIdle: when the previous celebration finishes, the queue
+  // becomes idle and this effect re-fires (queueIdle is in deps), at which
+  // point we fire the next pick. No setTimeout needed — the queue itself
+  // provides the natural cadence.
   useEffect(() => {
     if (state.source !== 'simulator') return;
     if (!isUserTurn || !state.autoDraftQueue || state.draftQueue.length === 0) return;
     if (!isRunning || isComplete) return;
+    if (!queueIdle) return;
 
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
     if (!ctx) return;
@@ -153,13 +166,8 @@ export function useDraftAutoPickers({
     }
     if (!chosen) return;
 
-    const picked = chosen;
-    const delay = setTimeout(() => {
-      dispatch({ type: 'PICK_LANDED', pokemonName: picked.name, tier: picked.tier });
-    }, 500);
-
-    return () => clearTimeout(delay);
-  }, [state.source, isUserTurn, state.autoDraftQueue, state.draftQueue, isRunning, isComplete, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
+    dispatch({ type: 'PICK_LANDED', pokemonName: chosen.name, tier: chosen.tier });
+  }, [state.source, isUserTurn, state.autoDraftQueue, state.draftQueue, isRunning, isComplete, queueIdle, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
 
   return {
     currentSlot,
