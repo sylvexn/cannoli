@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import {
   getDraftSnapshot, startDraft, executePick, executeAutoPick, skipPick,
   undoLastPick, generateSnakeOrder, handleTimerExpiry,
+  getDraftQueue, setDraftQueue,
 } from '../lib/draft-engine';
 import type { PickErrorCode } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
@@ -187,6 +188,35 @@ export const draftRoutes = new Elysia()
     const snapshot = getDraftSnapshot(params.leagueId);
     if (!snapshot) return { status: 'not_started' as const, leagueId: params.leagueId };
     return snapshot;
+  })
+
+  // ─── Per-team draft queue (auto-pick preference list) ───────────────
+  // A coach pre-sets an ordered list; on timer-expiry auto-pick the engine
+  // walks it top-down for the first eligible mon (see getAutoPick).
+  .get('/api/leagues/:leagueId/draft/queue', ({ params, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const team = db.select({ id: schema.teams.id }).from(schema.teams)
+      .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
+      .get();
+    const teamId = (isStaff(user) && (params as any).teamId) || team?.id;
+    if (!teamId) { set.status = 403; return { error: "You don't have a team in this league" }; }
+    return { queue: getDraftQueue(params.leagueId, teamId) };
+  })
+
+  .put('/api/leagues/:leagueId/draft/queue', ({ params, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const { names, teamId: bodyTeamId } = (body as { names?: string[]; teamId?: string }) ?? {};
+    if (!Array.isArray(names)) { set.status = 400; return { error: 'names[] required' }; }
+
+    const team = db.select({ id: schema.teams.id }).from(schema.teams)
+      .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
+      .get();
+    // Staff may set any team's queue (admin tooling); a coach only their own.
+    const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
+    if (!teamId) { set.status = 403; return { error: "You don't have a team in this league" }; }
+
+    const saved = setDraftQueue(params.leagueId, teamId, names);
+    return { queue: saved };
   })
 
   .post('/api/leagues/:leagueId/draft/start', ({ params, query, body, user, set }) => {

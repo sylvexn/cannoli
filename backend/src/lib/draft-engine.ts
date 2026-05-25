@@ -271,10 +271,10 @@ export function validatePick(
  * Currently picks the highest-tier Pokemon that fits within the remaining
  * budget (with deterministic alphabetical tiebreaker for replay safety).
  *
- * TODO(post-v1): consult a per-team draft queue (see frontend
- * use-draft-state.draftQueue) so auto-pick respects user intent — fall back
- * to highest-tier only if the queue is empty or every queued mon is already
- * drafted/over-budget. Requires persisting the queue server-side.
+ * Queue-aware: if the coach has a persisted draft queue (see `setDraftQueue` /
+ * the WS `queue` message), auto-pick walks it top-down and selects the first
+ * still-eligible/affordable entry. Falls back to highest-tier affordable when
+ * the queue is empty or every queued mon is drafted/banned/over-budget/conflicting.
  *
  * Returns null if no valid pick exists (shouldn't happen in practice).
  */
@@ -342,26 +342,83 @@ export function getAutoPick(
     if (m.nationalDexNumber != null) teamDex.add(m.nationalDexNumber);
   }
 
-  // Find available pokemon sorted by tier descending
+  // Eligibility predicate shared by the queue walk and the highest-affordable
+  // fallback. A mon is pickable if it's available, affordable within the
+  // reserve-adjusted budget, and doesn't violate species/natdex/mega rules.
+  const isEligible = (p: typeof schema.pokemon.$inferSelect): boolean => {
+    if (p.banned) return false;
+    if (drafted.has(p.name)) return false;
+    if (p.tier <= 0 || p.tier > maxAffordable) return false;
+    if (teamSpecies.has(getBaseFormName(p.name))) return false;
+    if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
+    if (teamHasMega && p.formCategory === 'mega') return false;
+    return true;
+  };
+
+  // 1. Queue-aware: honor the coach's pre-set order. Walk it top-down and take
+  // the first still-eligible entry. Hydrate the queued mons in one IN(...).
+  const queued = getDraftQueue(leagueId, teamId);
+  if (queued.length > 0) {
+    const queuedMons = db.select().from(schema.pokemon)
+      .where(inArray(schema.pokemon.name, queued)).all();
+    const byName = new Map(queuedMons.map(m => [m.name, m]));
+    for (const name of queued) {
+      const mon = byName.get(name);
+      if (mon && isEligible(mon)) return { name: mon.name, tier: mon.tier };
+    }
+    // Queue exhausted / all invalid → fall through to highest-affordable.
+  }
+
+  // 2. Fallback: highest-tier affordable, alphabetical tiebreaker (deterministic
+  // — important for pick idempotency / replay).
   const available = db.select()
     .from(schema.pokemon)
     .where(eq(schema.pokemon.banned, false))
     .all()
-    .filter(p => {
-      if (drafted.has(p.name)) return false;
-      if (p.tier <= 0 || p.tier > maxAffordable) return false;
-      if (teamSpecies.has(getBaseFormName(p.name))) return false;
-      if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
-      if (teamHasMega && p.formCategory === 'mega') return false;
-      return true;
-    });
+    .filter(isEligible);
 
   if (available.length === 0) return null;
 
-  // Highest-tier affordable, alphabetical tiebreaker (deterministic — important
-  // for pick idempotency / replay).
   available.sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
   return { name: available[0].name, tier: available[0].tier };
+}
+
+// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+
+/** Max queued mons per team. Mirrors the frontend reducer cap (draftQueue ≤ 3). */
+export const DRAFT_QUEUE_LIMIT = 3;
+
+/** Read a team's persisted draft queue, ordered by position. */
+export function getDraftQueue(leagueId: string, teamId: string): string[] {
+  return db.select({ name: schema.draftQueue.pokemonName })
+    .from(schema.draftQueue)
+    .where(and(
+      eq(schema.draftQueue.leagueId, leagueId),
+      eq(schema.draftQueue.teamId, teamId),
+    ))
+    .orderBy(asc(schema.draftQueue.position))
+    .all()
+    .map(r => r.name);
+}
+
+/**
+ * Replace a team's draft queue wholesale with `names` (deduped, capped at
+ * DRAFT_QUEUE_LIMIT, order preserved). Atomic — delete + re-insert in one tx.
+ */
+export function setDraftQueue(leagueId: string, teamId: string, names: string[]): string[] {
+  const seen = new Set<string>();
+  const clean = names.filter(n => typeof n === 'string' && n.trim() && !seen.has(n) && seen.add(n))
+    .slice(0, DRAFT_QUEUE_LIMIT);
+  return tx(() => {
+    db.delete(schema.draftQueue).where(and(
+      eq(schema.draftQueue.leagueId, leagueId),
+      eq(schema.draftQueue.teamId, teamId),
+    )).run();
+    clean.forEach((name, i) => {
+      db.insert(schema.draftQueue).values({ leagueId, teamId, position: i, pokemonName: name }).run();
+    });
+    return clean;
+  });
 }
 
 // ─── Draft State Operations ─────────────────────────────────────────────────

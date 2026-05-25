@@ -112,6 +112,7 @@ export function buildDraftFixture(opts?: {
   }).run();
 
   const cleanup = () => {
+    db.delete(schema.draftQueue).where(eq(schema.draftQueue.leagueId, leagueId)).run();
     db.delete(schema.draftPicks).where(eq(schema.draftPicks.leagueId, leagueId)).run();
     for (const t of teamIds) {
       db.delete(schema.rosters).where(eq(schema.rosters.teamId, t)).run();

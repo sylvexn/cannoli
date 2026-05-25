@@ -267,6 +267,13 @@
       "when": 1780900000000,
       "tag": "0037_drop_notify_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1781000000000,
+      "tag": "0038_add_draft_queue",
+      "breakpoints": true
     }
   ]
 }

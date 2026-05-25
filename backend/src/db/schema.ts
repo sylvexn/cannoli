@@ -412,6 +412,20 @@ export const draftState = sqliteTable('draft_state', {
   timerExpiredForTeam: text('timer_expired_for_team'),
 });
 
+// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+// A coach can pre-set an ordered list of Pokemon. When their pick timer expires
+// and an auto-pick fires, the engine walks this queue top-down and picks the
+// first still-eligible/affordable entry, falling back to highest-affordable
+// when the queue is empty or every entry is invalid. One row per queued mon;
+// `position` is the 0-based order. Replaced wholesale when a coach re-sets it.
+export const draftQueue = sqliteTable('draft_queue', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  leagueId: text('league_id').notNull().references(() => leagues.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  position: integer('position').notNull(),
+  pokemonName: text('pokemon_name').notNull(),
+});
+
 // ─── Activity Log ───────────────────────────────────────────────────────────
 
 export const activityLog = sqliteTable('activity_log', {

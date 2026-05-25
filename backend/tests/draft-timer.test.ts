@@ -25,6 +25,9 @@ import {
   skipPick,
   getDraftSnapshot,
   generateSnakeOrder,
+  getAutoPick,
+  setDraftQueue,
+  getDraftQueue,
 } from '../src/lib/draft-engine';
 import { buildDraftFixture, pickByTier, secondsAgo, type DraftFixture } from './draft-fixture';
 
@@ -173,6 +176,65 @@ describe('auto-pick after expiry', () => {
       // pointCap 110, empty roster, rosterSize 10 → reserve 9pt → can afford <=12 tier mon.
       // Highest seeded tier is 12; pick must be tier 12 (or whatever the max <= maxAffordable is).
       expect(r.pick.tier).toBeGreaterThanOrEqual(9);
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 3b. Queue-aware auto-pick (AUTOPICK-QUEUE)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('queue-aware auto-pick', () => {
+  test('setDraftQueue persists, dedupes, caps at 3, preserves order', () => {
+    const f = fx({ teams: 4 });
+    const a = pickByTier(5), b = pickByTier(5, [a]), c = pickByTier(5, [a, b]), d = pickByTier(5, [a, b, c]);
+    const saved = setDraftQueue(f.leagueId, f.teamIds[0], [a, a, b, c, d]); // dup a, 4 distinct
+    expect(saved).toEqual([a, b, c]); // deduped + capped at 3, order kept
+    expect(getDraftQueue(f.leagueId, f.teamIds[0])).toEqual([a, b, c]);
+  });
+
+  test('auto-pick takes the top eligible queue entry, not the highest tier', () => {
+    const f = fx({ teams: 4, timerDuration: 60, timerStartedAt: secondsAgo(120) });
+    // Queue a LOW-tier mon first; without queue-awareness auto-pick would grab
+    // the highest affordable tier instead.
+    const low = pickByTier(3);
+    setDraftQueue(f.leagueId, f.teamIds[0], [low]);
+    handleTimerExpiry(f.leagueId);
+
+    const r = executeAutoPick(f.leagueId, 'admin')!;
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.pick.pokemonName).toBe(low);
+      expect(r.pick.teamId).toBe(f.teamIds[0]);
+    }
+  });
+
+  test('auto-pick walks past an ineligible (already-drafted) queue head to the next valid entry', () => {
+    const f = fx({ teams: 4 });
+    const first = pickByTier(4);
+    const second = pickByTier(4, [first]);
+    // team[1] drafts `first` so it's no longer available to team[0].
+    // (skipTurnCheck so we don't have to march the snake order.)
+    executePick(f.leagueId, first, f.teamIds[1], 'seed', { skipTurnCheck: true });
+    setDraftQueue(f.leagueId, f.teamIds[0], [first, second]);
+
+    const pick = getAutoPick(f.teamIds[0], f.leagueId, f.pointCap);
+    expect(pick?.name).toBe(second); // skipped the drafted `first`
+  });
+
+  test('empty / fully-invalid queue falls back to highest affordable', () => {
+    const f = fx({ teams: 4, timerDuration: 60, timerStartedAt: secondsAgo(120) });
+    // Queue a single mon, then have another team draft it → queue all invalid.
+    const only = pickByTier(6);
+    executePick(f.leagueId, only, f.teamIds[1], 'seed', { skipTurnCheck: true });
+    setDraftQueue(f.leagueId, f.teamIds[0], [only]);
+    handleTimerExpiry(f.leagueId);
+
+    const r = executeAutoPick(f.leagueId, 'admin')!;
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.pick.pokemonName).not.toBe(only);
+      expect(r.pick.tier).toBeGreaterThanOrEqual(9); // highest-affordable fallback
     }
   });
 });
