@@ -26,8 +26,8 @@ const leaguePresence = new Map<string, Map</* ws id */ object, DraftPresence>>()
 // Per-league ring buffer of recent (clientRequestId → result) pairs. Lets a
 // flaky client safely re-send a pick after a disconnect without double-picking.
 // Bounded so a misbehaving client can't OOM us.
-const IDEMPOTENCY_LIMIT = 64;
-type IdempotentResult = {
+export const IDEMPOTENCY_LIMIT = 64;
+export type IdempotentResult = {
   ok: true;
   pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number };
 } | {
@@ -37,7 +37,7 @@ type IdempotentResult = {
 };
 const idempotencyByLeague = new Map<string, Map<string, IdempotentResult>>();
 
-function recordIdempotent(leagueId: string, requestId: string, result: IdempotentResult) {
+export function recordIdempotent(leagueId: string, requestId: string, result: IdempotentResult) {
   let map = idempotencyByLeague.get(leagueId);
   if (!map) { map = new Map(); idempotencyByLeague.set(leagueId, map); }
   map.set(requestId, result);
@@ -49,7 +49,7 @@ function recordIdempotent(leagueId: string, requestId: string, result: Idempoten
   }
 }
 
-function lookupIdempotent(leagueId: string, requestId: string): IdempotentResult | undefined {
+export function lookupIdempotent(leagueId: string, requestId: string): IdempotentResult | undefined {
   return idempotencyByLeague.get(leagueId)?.get(requestId);
 }
 
