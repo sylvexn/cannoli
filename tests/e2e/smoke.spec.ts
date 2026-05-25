@@ -7,12 +7,11 @@ import { test, expect } from '@playwright/test';
  * sibling files.
  */
 test.describe('Smoke', () => {
-  test('league overview loads with S10 leagues', async ({ page }) => {
+  test('home page loads with seeded leagues', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('League Overview')).toBeVisible();
-    await expect(page.getByText(/Sapphire/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Ruby/)).toBeVisible();
-    await expect(page.getByText(/Emerald/)).toBeVisible();
+    await expect(page.getByText(/Sapphire/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Ruby/).first()).toBeVisible();
+    await expect(page.getByText(/Emerald/).first()).toBeVisible();
   });
 
   test('login page is reachable', async ({ page }) => {

@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 test.describe('User settings — preferences', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('toggles persist and the colorblind palette actually swaps', async ({ page, request }) => {
+  test('toggles persist and the colorblind palette actually swaps', async ({ page }) => {
     // ── Login (mock seed user `syl` with admin password — same pattern as
     //    profile-colors.spec.ts).
     await page.goto('/login');
@@ -27,8 +27,11 @@ test.describe('User settings — preferences', () => {
     // Preferences so we don't depend on tab-click DOM.
     await page.goto('/settings?tab=preferences');
 
-    // The Theme Select trigger shows the current value; assert "Dark" is shown.
-    await expect(page.getByText(/^Dark$/).first()).toBeVisible();
+    // The Theme Select trigger renders the raw stored value ("dark"), not the
+    // option label. Assert the Appearance card is up and the trigger reads dark.
+    await expect(page.getByText(/^Appearance$/)).toBeVisible({ timeout: 10_000 });
+    const themeTrigger = page.locator('label:has-text("Theme")').locator('..').getByRole('combobox');
+    await expect(themeTrigger).toHaveText(/dark/i);
 
     // ── Density: flip comfortable → compact and back so the persistence
     //    code path runs end-to-end without leaving the user's account in a
@@ -95,7 +98,7 @@ test.describe('User settings — preferences', () => {
 
     // ── Round-trip via the API: the saved values from the second save
     //    should match what the server echoes back.
-    const me = await request.get('http://localhost:3001/api/users/me/preferences');
+    const me = await page.request.get('/api/users/me/preferences');
     expect(me.ok()).toBeTruthy();
     const prefs = await me.json();
     expect(prefs.density).toBe('compact');
