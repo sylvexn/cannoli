@@ -89,12 +89,24 @@ export const miscRoutes = new Elysia()
           .all()
       : [];
 
+    // Winner: a forfeit names the survivor (the non-forfeiting side) regardless
+    // of the KO score — a 2-2 forfeit still records a clean win. Double-forfeit
+    // and a plain tie record no winner. Otherwise fall back to the score.
+    const hs = homeScore ?? 0;
+    const as = awayScore ?? 0;
+    let forceWinnerTeamId: string | null;
+    if (forfeitedBy === 'home') forceWinnerTeamId = match.awayTeamId;
+    else if (forfeitedBy === 'away') forceWinnerTeamId = match.homeTeamId;
+    else if (forfeitedBy === 'both') forceWinnerTeamId = null;
+    else forceWinnerTeamId = hs > as ? match.homeTeamId : as > hs ? match.awayTeamId : null;
+
     tx(() => {
       db.update(schema.matches).set({
         status: 'completed',
-        homeScore: homeScore ?? 0,
-        awayScore: awayScore ?? 0,
+        homeScore: hs,
+        awayScore: as,
         forfeitedBy: forfeitedBy ?? null,
+        winnerTeamId: forceWinnerTeamId,
         completedAt: new Date().toISOString(),
         warnings: null,
       }).where(eq(schema.matches.id, params.matchId)).run();

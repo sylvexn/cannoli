@@ -119,11 +119,21 @@ export function recordMatchResult(
   const newStatus: 'completed' | 'disputed' =
     mergedWarnings.length > 0 ? 'disputed' : 'completed';
 
+  // Winner from the entered KO score (the manual recorder enters real scores).
+  // Equal → null (tie / no-contest). Stored explicitly so standings never
+  // re-derive W/L from the differential.
+  const recordWinnerTeamId = homeScore > awayScore
+    ? match.homeTeamId
+    : awayScore > homeScore
+      ? match.awayTeamId
+      : null;
+
   return tx(() => {
     // Update match
     db.update(schema.matches).set({
       homeScore,
       awayScore,
+      winnerTeamId: recordWinnerTeamId,
       replayUrl: replayUrl || match.replayUrl,
       status: newStatus,
       completedAt: new Date().toISOString(),

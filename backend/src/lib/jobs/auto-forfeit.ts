@@ -168,6 +168,8 @@ export function runAutoForfeit() {
           homeScore,
           awayScore,
           forfeitedBy: forfeiter,
+          // The survivor wins by the forfeit flag, not the 1-0 score.
+          winnerTeamId: winnerId,
           completedAt: now,
           readyHome: false,
           readyAway: false,
