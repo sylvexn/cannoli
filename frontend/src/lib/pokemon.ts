@@ -98,7 +98,7 @@ const SPRITE_OVERRIDES: Record<string, string> = {
  *   "Kommo-o"        → "kommoo"
  */
 export function toSpriteId(name: string): string {
-  let n = name.trim();
+  const n = name.trim();
 
   // Check overrides first (case-insensitive)
   const lower = n.toLowerCase();

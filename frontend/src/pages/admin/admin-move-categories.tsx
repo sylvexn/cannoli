@@ -47,7 +47,7 @@ export function AdminMoveCategories() {
     try {
       const data = await api.getMoveCategories();
       setCategories(data);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load move categories');
     } finally {
       setLoading(false);
