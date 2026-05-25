@@ -31,6 +31,13 @@ const MIGRATIONS_DIR = resolve(BACKEND_DIR, 'drizzle');
 
 let tmpDir: string;
 let sqlite: Database;
+// The REAL db-module exports, captured before we mock the singleton. We
+// restore them in afterAll so later test files (which import `../src/db`) see
+// the live dev-DB singleton again — NOT our closed temp handle. Without this,
+// `mock.module` leaves a global override pointing at a DB we then close,
+// poisoning every alphabetically-later test with "Cannot use a closed
+// database" (TEST-ISOLATION).
+let realDbModule: typeof import('../src/db');
 
 // IDs for an ARCHIVED season (9) and an ACTIVE season (11).
 const ARCH_SEASON = 9;
@@ -49,6 +56,9 @@ let checkMatchArchived: typeof import('../src/lib/archive-guard').checkMatchArch
 let checkTeamArchived: typeof import('../src/lib/archive-guard').checkTeamArchived;
 
 beforeAll(async () => {
+  // Capture the live singleton BEFORE mocking so afterAll can restore it.
+  realDbModule = await import('../src/db');
+
   tmpDir = mkdtempSync(join(tmpdir(), 'cannoli-arch-'));
   const dbPath = join(tmpDir, 'arch.db');
   sqlite = new Database(dbPath, { create: true });
@@ -87,7 +97,19 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  try { sqlite?.close(); } catch {}
+  // Restore the REAL db singleton so later test files that import `../src/db`
+  // get the live dev-DB handle again, not our temp one.
+  mock.module(resolve(BACKEND_DIR, 'src/db/index.ts'), () => ({
+    db: realDbModule.db,
+    sqlite: realDbModule.sqlite,
+    schema: realDbModule.schema,
+  }));
+  // TEST-ISOLATION: do NOT close the temp handle. Bun's `mock.module` override
+  // is process-global and a later-loaded test file may have already bound its
+  // `import { db } from '../src/db'` to our temp DB *before* the restore above
+  // ran (module bindings resolve at load time). Closing the temp handle would
+  // then poison that file with "Cannot use a closed database". The temp file is
+  // unlinked below; the OS reclaims the handle when the process exits.
   try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 });
 
