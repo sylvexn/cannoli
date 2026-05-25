@@ -277,6 +277,14 @@ export const matches = sqliteTable('matches', {
   deadline: text('deadline'),
   /** Marks a forfeited match: 'home', 'away', or 'both' (double-forfeit) */
   forfeitedBy: text('forfeited_by', { enum: ['home', 'away', 'both'] }),
+  /**
+   * Explicit winner team id, set from the Showdown `|win|` flag (or the
+   * adjudicated forfeit survivor). Decouples W/L from the KO score: a forfeit
+   * at full health emits equal KO scores (e.g. 2-2) but a real winner. When
+   * present, standings/playoff advancement use this; when null (legacy rows,
+   * sim matches), they fall back to score comparison. Null for ties/draws.
+   */
+  winnerTeamId: text('winner_team_id').references(() => teams.id),
 });
 
 // ─── Bye Weeks (one row per team-week sit-out for odd-team leagues) ─────────

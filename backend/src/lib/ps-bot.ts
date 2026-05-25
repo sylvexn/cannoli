@@ -787,6 +787,11 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // (team rosters with no PS username, etc.).
       let homeScore = 0;
       let awayScore = 0;
+      // Winner is decided by the Showdown |win| flag, NOT the KO differential.
+      // A forfeit/timeout at full health emits equal KO scores (e.g. 2-2) but a
+      // real winner — winnerTeamId captures it so standings credit the W/L
+      // correctly even when home_score == away_score.
+      let winnerTeamId: string | null = null;
       if (winnerUsername) {
         const winnerUserid = toUserid(winnerUsername);
         const homeSide = battle.homeSide;
@@ -798,9 +803,11 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         if (homeWon) {
           homeScore = result.winnerScore;
           awayScore = result.loserScore;
+          winnerTeamId = match.homeTeamId;
         } else {
           homeScore = result.loserScore;
           awayScore = result.winnerScore;
+          winnerTeamId = match.awayTeamId;
         }
       }
 
@@ -820,6 +827,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           status: 'completed',
           homeScore,
           awayScore,
+          winnerTeamId,
           completedAt: new Date().toISOString(),
           replayLog: truncatedLog,
           // Build an absolute URL that resolves to the public sim host's
