@@ -8,6 +8,7 @@ import { runAutoAwards } from '../../lib/pins/auto-award';
 import { mintArchivePins } from '../../lib/pins/archive-mint';
 import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
+import { isLeaguePhase } from '../../lib/queries';
 
 export const leagueAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -199,6 +200,10 @@ export const leagueAdminRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/phase', ({ params, query, body, user, set }) => {
     const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
+    if (!isLeaguePhase(phase)) {
+      set.status = 400;
+      return { error: `Unknown phase ${phase}`, code: 'unknown_phase' };
+    }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -278,7 +283,7 @@ export const leagueAdminRoutes = new Elysia()
     let scheduleGenerated = false;
     let pinsAwarded = 0;
     tx(() => {
-      const leagueUpdates: Record<string, unknown> = { phase: phase as any };
+      const leagueUpdates: Record<string, unknown> = { phase };
       if (phase === 'regular' && previousPhase !== 'regular') {
         leagueUpdates.currentWeek = 1;
       }
