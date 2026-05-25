@@ -8,8 +8,8 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { User as UserIcon, Palette, Camera } from 'lucide-react';
 import { UserAccentScope } from '@/components/user-accent-scope';
-import {
 import { getErrorMessage } from '@/lib/errors';
+import {
   PROFILE_COLOR_SWATCHES,
   MAX_DISPLAY_NAME,
   MAX_BIO,
