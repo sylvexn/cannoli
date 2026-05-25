@@ -9,6 +9,19 @@ import type { PickErrorCode } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
 import { getLeague } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
+import { registerBroadcastServer, publishWs } from '../lib/ws-broadcast';
+
+/**
+ * Stable identity for an Elysia WS handler arg. Elysia 1.4 builds a NEW
+ * `ElysiaWS` wrapper around the underlying Bun ServerWebSocket on every handler
+ * invocation (open / message / close), so keying maps on the wrapper produces a
+ * fresh key each call — `.get(ws)` in `message` misses the entry `open` set.
+ * `ws.raw` (the underlying ServerWebSocket) is stable for the connection's
+ * lifetime; fall back to the wrapper itself for test mocks lacking `.raw`.
+ */
+function wsKey(ws: any): object {
+  return ws && ws.raw ? ws.raw : ws;
+}
 
 // ─── Presence tracking per league ──────────────────────────────────────────
 
@@ -20,7 +33,7 @@ interface DraftPresence {
   userId: number | null;
 }
 
-const leaguePresence = new Map<string, Map</* ws id */ object, DraftPresence>>();
+const leaguePresence = new Map<string, Map</* wsKey */ object, DraftPresence>>();
 
 // ─── Idempotency cache ─────────────────────────────────────────────────────
 // Per-league ring buffer of recent (clientRequestId → result) pairs. Lets a
@@ -53,17 +66,13 @@ export function lookupIdempotent(leagueId: string, requestId: string): Idempoten
   return idempotencyByLeague.get(leagueId)?.get(requestId);
 }
 
-// Store a reference to a ws instance for server-side broadcasting from HTTP endpoints
-let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
-
 /**
  * Push the current draft snapshot to every subscriber on this league's WS topic.
  */
 function broadcastDraftState(leagueId: string) {
-  if (!broadcastWs) return;
   const snapshot = getDraftSnapshot(leagueId);
   if (!snapshot) return;
-  broadcastWs.publish(`draft:${leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
+  publishWs(`draft:${leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
 }
 
 // ─── Server-side timer scheduler ───────────────────────────────────────────
@@ -106,7 +115,7 @@ function tickTimers() {
     const result = handleTimerExpiry(s.leagueId);
     if (result?.paused) {
       broadcastDraftState(s.leagueId);
-      broadcastWs?.publish(`draft:${s.leagueId}`, JSON.stringify({
+      publishWs(`draft:${s.leagueId}`, JSON.stringify({
         type: 'timer_expired',
         data: { teamId: result.teamId },
       }));
@@ -119,8 +128,10 @@ function ensureTimerInterval() {
   timerInterval = setInterval(tickTimers, 1000);
 }
 
-// Chat rate limiting: track last 3 message timestamps per ws
-const chatRateLimit = new WeakMap<object, number[]>();
+// Chat rate limiting: track last 3 message timestamps per connection. Keyed on
+// the stable wsKey (ws.raw) — a WeakMap keyed on the per-call wrapper would miss
+// across handler invocations under Elysia 1.4.
+const chatRateLimit = new Map<object, number[]>();
 
 function getPresenceList(leagueId: string) {
   const presence = leaguePresence.get(leagueId);
@@ -163,7 +174,7 @@ function canSubscribeToLeague(
 }
 
 export const draftRoutes = new Elysia()
-  .onStart(() => { ensureTimerInterval(); })
+  .onStart((app) => { ensureTimerInterval(); registerBroadcastServer((app as any).server); })
 
   // HTTP mirror of the WS `presence` broadcast. Useful for staff tooling +
   // tests that need a synchronous "is everyone connected" check before
@@ -245,7 +256,7 @@ export const draftRoutes = new Elysia()
     }
 
     broadcastDraftState(params.leagueId);
-    broadcastWs?.publish(`draft:${params.leagueId}`, JSON.stringify({
+    publishWs(`draft:${params.leagueId}`, JSON.stringify({
       type: 'pick_made',
       data: { pick: { ...result.pick, playerId: result.pick.teamId }, snapshot: getDraftSnapshot(params.leagueId) },
     }));
@@ -352,7 +363,7 @@ export const draftRoutes = new Elysia()
       // Include the post-pick snapshot so clients can apply it via LIVE_SYNC
       // without waiting for the separately-broadcast draft_state. Reason
       // distinguishes admin-triggered auto-pick from a future automatic flow.
-      broadcastWs?.publish(`draft:${params.leagueId}`, JSON.stringify({
+      publishWs(`draft:${params.leagueId}`, JSON.stringify({
         type: 'auto_pick',
         data: {
           pick: { ...result.pick, playerId: result.pick.teamId },
@@ -389,7 +400,6 @@ export const draftRoutes = new Elysia()
 
   .ws('/ws/draft/:leagueId', {
     open(ws) {
-      broadcastWs = ws; // Keep a ws ref for HTTP endpoint broadcasting
       const leagueId = (ws.data as any).params.leagueId;
       const user = (ws.data as any).user as { id: string; role: string } | null;
 
@@ -434,7 +444,7 @@ export const draftRoutes = new Elysia()
           const presenceTeamId = teamId || auth?.teamId || null;
 
           if (!leaguePresence.has(leagueId)) leaguePresence.set(leagueId, new Map());
-          leaguePresence.get(leagueId)!.set(ws, {
+          leaguePresence.get(leagueId)!.set(wsKey(ws), {
             teamId: presenceTeamId,
             username,
             role: role || 'spectator',
@@ -506,8 +516,9 @@ export const draftRoutes = new Elysia()
 
           // Server-side rate limit: max 3 messages per second
           const now = Date.now();
-          if (!chatRateLimit.has(ws)) chatRateLimit.set(ws, []);
-          const timestamps = chatRateLimit.get(ws)!;
+          const rlKey = wsKey(ws);
+          if (!chatRateLimit.has(rlKey)) chatRateLimit.set(rlKey, []);
+          const timestamps = chatRateLimit.get(rlKey)!;
           while (timestamps.length > 0 && now - timestamps[0] > 1000) timestamps.shift();
           if (timestamps.length >= 3) {
             ws.send(JSON.stringify({ type: 'error', error: 'Rate limited — max 3 messages per second' }));
@@ -532,10 +543,11 @@ export const draftRoutes = new Elysia()
     close(ws) {
       const leagueId = (ws.data as any).params.leagueId;
       ws.unsubscribe(`draft:${leagueId}`);
+      chatRateLimit.delete(wsKey(ws));
 
       const presence = leaguePresence.get(leagueId);
       if (presence) {
-        presence.delete(ws);
+        presence.delete(wsKey(ws));
         const presenceMsg = JSON.stringify({ type: 'presence', data: getPresenceList(leagueId) });
         ws.publish(`draft:${leagueId}`, presenceMsg);
         if (presence.size === 0) leaguePresence.delete(leagueId);

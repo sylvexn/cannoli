@@ -179,7 +179,7 @@ describe('arena connect + identify', () => {
 // 2. Ready-up race: both ready ~simultaneously → exactly one 2/2 transition
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skip('ready-up race', () => { // LAUNCH-BUG: arena-ws-client-identity
+describe('ready-up race', () => {
   test('both teams readying simultaneously flips status to ready exactly once', async () => {
     resetMatch();
     const home = await connect(cookie(homeSession));
@@ -235,7 +235,7 @@ describe.skip('ready-up race', () => { // LAUNCH-BUG: arena-ws-client-identity
 // 3. Spectator count sync across clients
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skip('spectator count sync', () => { // LAUNCH-BUG: arena-ws-client-identity
+describe('spectator count sync', () => {
   test('count increments as spectators subscribe and decrements on unsubscribe', async () => {
     resetMatch();
     // spec1 and spec2 are non-team users; they subscribe explicitly.
@@ -275,7 +275,7 @@ describe.skip('spectator count sync', () => { // LAUNCH-BUG: arena-ws-client-ide
 // 4. Scrim lobby create / join / leave churn
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skip('scrim lobby churn', () => { // LAUNCH-BUG: arena-ws-client-identity
+describe('scrim lobby churn', () => {
   test('create → join → leave keeps the player list + lobby lifecycle consistent', async () => {
     const a = await connect(cookie(homeSession));
     const b = await connect(cookie(awaySession));
@@ -356,7 +356,7 @@ describe.skip('scrim lobby churn', () => { // LAUNCH-BUG: arena-ws-client-identi
 // 5. Topic isolation: scrim messages don't leak to match-only subscribers
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skip('topic isolation', () => { // LAUNCH-BUG: arena-ws-client-identity
+describe('topic isolation', () => {
   test('scrim_state is delivered on arena:scrim, not arena:match', async () => {
     // A pure spectator subscribed ONLY to a match topic must not receive
     // another lobby's scrim_state broadcast (which goes to arena:scrim:{id}).
