@@ -1,17 +1,17 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, sql, desc } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
+import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { runAutoAwards } from '../../lib/pins/auto-award';
 import { mintArchivePins, type ArchiveMintSummary } from '../../lib/pins/archive-mint';
 
 export const seasonRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── Seasons CRUD ───────────────────────────────────────────────────
 
   .post('/api/seasons', async ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const {
       seasonNumber,
       totalWeeks = 11,
@@ -200,7 +200,6 @@ export const seasonRoutes = new Elysia()
   // ─── Season archive toggle ──────────────────────────────────────────
 
   .put('/api/seasons/:seasonId/archived', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
     const { archived } = body as { archived?: boolean };
@@ -240,7 +239,6 @@ export const seasonRoutes = new Elysia()
   // pin minters (which themselves are INSERT OR IGNORE + scoped DELETE),
   // useful when stats are corrected post-archive and you want to recompute.
   .post('/api/admin/seasons/:seasonId/archive', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();

@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, desc } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
+import { requireStaff } from '../../lib/auth-guards';
 
 const ALLOWED_FORMATS = [
   'gen9natdex', 'gen9ou', 'gen9uu', 'gen9ru', 'gen9nu', 'gen9pu', 'gen9lc', 'gen9ubers',
@@ -47,10 +47,10 @@ function safeParse<T>(s: string | null, fallback: T): T {
 }
 
 export const templateAdminRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── List templates ─────────────────────────────────────────────────
   .get('/api/draft-templates', ({ user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const rows = db.select().from(schema.draftTemplates)
       .orderBy(desc(schema.draftTemplates.createdAt))
       .all();
@@ -59,7 +59,6 @@ export const templateAdminRoutes = new Elysia()
 
   // ─── Get single ─────────────────────────────────────────────────────
   .get('/api/draft-templates/:id', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }
     const row = db.select().from(schema.draftTemplates).where(eq(schema.draftTemplates.id, id)).get();
@@ -69,7 +68,6 @@ export const templateAdminRoutes = new Elysia()
 
   // ─── Create ─────────────────────────────────────────────────────────
   .post('/api/draft-templates', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const b = body as TemplateBody;
     const name = b.name?.trim();
     if (!name) { set.status = 400; return { error: 'name required' }; }
@@ -105,7 +103,6 @@ export const templateAdminRoutes = new Elysia()
 
   // ─── Update ─────────────────────────────────────────────────────────
   .put('/api/draft-templates/:id', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }
     const existing = db.select().from(schema.draftTemplates).where(eq(schema.draftTemplates.id, id)).get();
@@ -143,7 +140,6 @@ export const templateAdminRoutes = new Elysia()
 
   // ─── Delete ─────────────────────────────────────────────────────────
   .delete('/api/draft-templates/:id', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }
     const existing = db.select().from(schema.draftTemplates).where(eq(schema.draftTemplates.id, id)).get();

@@ -1,18 +1,16 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, asc } from 'drizzle-orm';
-import { hashPassword, isStaff } from '../../lib/auth';
+import { hashPassword } from '../../lib/auth';
 import { tx } from '../../lib/tx';
+import { requireStaff } from '../../lib/auth-guards';
 
 export const userRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── Users (admin read) ──────────────────────────────────────────────
 
-  .get('/api/users', ({ user, set }) => {
-    if (!isStaff(user)) {
-      set.status = 403;
-      return { error: 'Forbidden' };
-    }
+  .get('/api/users', () => {
     return db.select({
       id: schema.users.id,
       username: schema.users.username,
@@ -32,7 +30,6 @@ export const userRoutes = new Elysia()
   // ─── Users CRUD ─────────────────────────────────────────────────────
 
   .post('/api/users', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { username, role } = body as { username: string; role?: string };
     if (!username?.trim()) { set.status = 400; return { error: 'Username required' }; }
 
@@ -68,7 +65,6 @@ export const userRoutes = new Elysia()
   })
 
   .put('/api/users/:id', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const userId = parseInt(params.id);
     const { role, active } = body as { role?: string; active?: boolean };
 
@@ -131,7 +127,6 @@ export const userRoutes = new Elysia()
   })
 
   .post('/api/users/:id/reset-password', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const userId = parseInt(params.id);
     const settings = db.select().from(schema.siteSettings).get();
     const password = settings?.defaultUserPassword || 'password';

@@ -1,18 +1,18 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
+import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { runAutoAwards } from '../../lib/pins/auto-award';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 
 export const leagueAdminRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── Leagues CRUD ───────────────────────────────────────────────────
 
   .post('/api/leagues', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color } = body as { name: string; color: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -25,7 +25,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const {
       name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
       weekDates, weekDatesAutoFilled, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
@@ -128,7 +127,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .delete('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -198,7 +196,6 @@ export const leagueAdminRoutes = new Elysia()
   // ─── Season Management ──────────────────────────────────────────────
 
   .post('/api/leagues/:leagueId/phase', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -321,7 +318,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, query, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -344,7 +340,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
