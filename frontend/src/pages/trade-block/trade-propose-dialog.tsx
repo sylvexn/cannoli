@@ -19,8 +19,9 @@ import { useAuth } from '@/lib/auth-context';
 import { isTeamOwner } from '@/lib/permissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
-import type { Player, RosterPokemon, Trade } from '@/lib/types';
+import { isMegaForm } from '@/lib/draft-rules';
+import { validateTrade } from './wizard/validation';
+import type { Trade } from '@/lib/types';
 
 interface TradeProposeDialogProps {
   open: boolean;
@@ -38,72 +39,7 @@ interface TradeProposeDialogProps {
   counterTo?: Trade | null;
 }
 
-interface ValidationIssue {
-  side: 'offering' | 'requesting';
-  message: string;
-}
-
-/**
- * Validate post-trade rosters against:
- *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft)
- *   - max 1 mega per team
- *   - no duplicate species (proxy for national-dex check; backend re-verifies)
- *
- * Returns one issue per failed rule per side. Empty array = legal.
- */
-function validateTrade(opts: {
-  proposer: Player;
-  recipient: Player;
-  offering: Set<string>;
-  requesting: Set<string>;
-  pointCap: number;
-}): ValidationIssue[] {
-  const { proposer, recipient, offering, requesting, pointCap } = opts;
-  const issues: ValidationIssue[] = [];
-
-  if (offering.size === 0 || requesting.size === 0) return issues;
-
-  const offered = proposer.roster.filter(m => offering.has(m.name));
-  const requested = recipient.roster.filter(m => requesting.has(m.name));
-
-  // Build post-trade rosters
-  const postProposer: RosterPokemon[] = [
-    ...proposer.roster.filter(m => !offering.has(m.name)),
-    ...requested,
-  ];
-  const postRecipient: RosterPokemon[] = [
-    ...recipient.roster.filter(m => !requesting.has(m.name)),
-    ...offered,
-  ];
-
-  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[]) {
-    const total = roster.reduce((s, m) => s + (m.tier || 0), 0);
-    if (total > pointCap) {
-      issues.push({ side, message: `${label} would exceed point cap (${total} > ${pointCap})` });
-    }
-
-    const megas = roster.filter(m => isMegaForm(m.name));
-    if (megas.length > 1) {
-      issues.push({ side, message: `${label} would have ${megas.length} megas (${megas.map(m => m.name).join(', ')}) — max 1` });
-    }
-
-    const baseSeen = new Map<string, string>();
-    for (const m of roster) {
-      const base = getBaseFormName(m.name);
-      const prev = baseSeen.get(base);
-      if (prev && prev !== m.name) {
-        issues.push({ side, message: `${label} would have duplicate species: ${prev} + ${m.name}` });
-        break;
-      }
-      baseSeen.set(base, m.name);
-    }
-  }
-
-  check('offering', 'Your team', postProposer);
-  check('requesting', recipient.teamAbbrev, postRecipient);
-
-  return issues;
-}
+import type { Player } from '@/lib/types';
 
 export function TradeProposeDialog({ open, onClose, recipientTeamId, counterTo }: TradeProposeDialogProps) {
   const league = useLeague();

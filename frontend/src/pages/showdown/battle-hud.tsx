@@ -5,7 +5,7 @@
  * Right panel: opponent roster + compact type coverage (scouting cheat sheet).
  * Bottom bar: back to lobby, toggle panels, spectator count.
  */
-import { ChevronLeft, ChevronRight, PanelLeftClose, PanelRightClose, ArrowLeft, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelLeftClose, PanelRightClose, ArrowLeft, Eye, Skull, Circle } from 'lucide-react';
 import type { LiveMatchStats } from './use-arena-websocket';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
 
@@ -205,9 +205,9 @@ function TeamStatsBlock({ label, pokemon, teraRemaining }: {
           >
             <div className="flex items-center gap-1.5 min-w-0">
               {mon.fainted ? (
-                <span className="text-red-400 text-[10px]">\u2620</span>
+                <Skull size={10} className="text-red-400 shrink-0" data-testid="hud-fainted-icon" />
               ) : (
-                <span className="text-green-400 text-[10px]">\u25cf</span>
+                <Circle size={10} className="text-green-400 shrink-0 fill-green-400" data-testid="hud-alive-icon" />
               )}
               <span className="text-text-primary truncate">{mon.species}</span>
               {mon.teraUsed && mon.teraType && (
