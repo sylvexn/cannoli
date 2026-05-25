@@ -26,6 +26,7 @@ import { resolve } from 'path';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db, schema, sqlite } from '../../db';
 import { isStaff } from '../../lib/auth';
+import { isLeaguePhase } from '../../lib/queries';
 import { tx } from '../../lib/tx';
 import { assertMockMode, isMock } from '../../lib/sim/sim-guard';
 import { MockRng } from '../../lib/sim/mock-rng';
@@ -345,7 +346,7 @@ export const simRoutes = new Elysia()
     const phaseRank: Record<string, number> = {
       predraft: 0, draft: 1, regular: 2, playoffs: 3, offseason: 4,
     };
-    if (phaseRank[phase] === undefined) {
+    if (!isLeaguePhase(phase)) {
       set.status = 400; return { error: `Unknown phase ${phase}` };
     }
     const previousPhase = league.phase;
@@ -392,7 +393,7 @@ export const simRoutes = new Elysia()
     }
 
     tx(() => {
-      const updates: Record<string, unknown> = { phase: phase as any };
+      const updates: Record<string, unknown> = { phase };
       if (phase === 'regular' && previousPhase !== 'regular') {
         updates.currentWeek = 1;
       }

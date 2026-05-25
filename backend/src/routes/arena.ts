@@ -245,29 +245,6 @@ function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) 
   senderWs?.send(msg);
 }
 
-function broadcastLiveMatches() {
-  // Get all in-progress matches
-  const liveMatches = db.select().from(schema.matches)
-    .where(eq(schema.matches.status, 'in_progress'))
-    .all()
-    .map(m => {
-      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId ?? '')).get();
-      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId ?? '')).get();
-      return {
-        matchId: m.id,
-        leagueId: m.leagueId,
-        week: m.week,
-        homeTeam: homeTeam ? { name: homeTeam.teamName, abbrev: homeTeam.teamAbbrev } : null,
-        awayTeam: awayTeam ? { name: awayTeam.teamName, abbrev: awayTeam.teamAbbrev } : null,
-        psRoomId: m.psRoomId,
-      };
-    });
-
-  publishWs('arena:global', JSON.stringify({
-    type: 'live_matches',
-    matches: liveMatches,
-  }));
-}
 
 function getScrimListPayload() {
   return JSON.stringify({
@@ -366,8 +343,9 @@ export const arenaRoutes = new Elysia()
     open(ws) {
       ws.subscribe('arena:global');
 
-      // Auto-authenticate from cookie on the upgrade request
-      const request = (ws.data as any)?.request;
+      // Auto-authenticate from cookie on the upgrade request.
+      // ws.data carries the upgrade Request; only `request.headers` is needed.
+      const request = (ws.data as { request?: Request } | undefined)?.request;
       const cookieHeader = request?.headers?.get?.('cookie') ?? undefined;
       const token = parseSessionToken(cookieHeader);
       const user = token ? validateSession(token) : null;
@@ -627,6 +605,10 @@ export const arenaRoutes = new Elysia()
 
             const lobby = scrimLobbies.get(msg.lobbyId);
             if (!lobby) return;
+            // Re-entry guard: once a lobby leaves 'waiting' (already firing a
+            // battle), ignore further ready toggles so we never double-create
+            // the scrim battle on a duplicate/late message.
+            if (lobby.status !== 'waiting') return;
 
             const idx = lobby.players.indexOf(client.username);
             if (idx === -1) return;
@@ -674,8 +656,10 @@ export const arenaRoutes = new Elysia()
             break;
           }
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        // Malformed message — don't crash the socket, but log at debug so the
+        // failure isn't silently swallowed (this once hid the WS-IDENTITY bug).
+        console.debug('[arena] failed to handle WS message:', err);
       }
     },
 
@@ -718,19 +702,26 @@ export const arenaRoutes = new Elysia()
           broadcastMatchState(match.id);
         }, UNREADY_GRACE_MS);
         pendingUnready.set(key, handle);
+      }
 
-        // Clean up scrim lobbies the player was in
+      // Scrim-lobby cleanup runs for EVERY disconnecting client, not just
+      // team owners — a teamless spectator who joined a scrim lobby would
+      // otherwise leak their slot (the cleanup used to live inside the
+      // `if (client?.teamId)` branch above).
+      if (client) {
+        let scrimChanged = false;
         for (const [lobbyId, lobby] of scrimLobbies) {
           const idx = lobby.players.indexOf(client.username);
           if (idx !== -1) {
             lobby.players.splice(idx, 1);
             lobby.ready.splice(idx, 1);
+            scrimChanged = true;
             if (lobby.players.length === 0) {
               scrimLobbies.delete(lobbyId);
             }
           }
         }
-        broadcastScrimList(ws);
+        if (scrimChanged) broadcastScrimList(ws);
       }
 
       arenaClients.delete(wsKey(ws));

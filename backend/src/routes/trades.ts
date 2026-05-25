@@ -444,10 +444,11 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const teamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : team?.id;
+    const { pokemonName, note, teamId: bodyTeamId } =
+      body as { pokemonName: string; note?: string; teamId?: string };
+    const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
-    const { pokemonName, note } = body as { pokemonName: string; note?: string };
     if (!pokemonName?.trim()) { set.status = 400; return { error: 'Pokemon name required' }; }
 
     const result = db.insert(schema.tradeBlockListings).values({
@@ -493,12 +494,11 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const proposerId = (isStaff(user) && (body as any).proposerId) ? (body as any).proposerId : team?.id;
-    if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
-
-    const { recipientId, offering, requesting } = body as {
-      recipientId: string; offering: string[]; requesting: string[];
+    const { recipientId, offering, requesting, proposerId: bodyProposerId } = body as {
+      recipientId: string; offering: string[]; requesting: string[]; proposerId?: string;
     };
+    const proposerId = (isStaff(user) && bodyProposerId) ? bodyProposerId : team?.id;
+    if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
     if (!recipientId) { set.status = 400; return { error: 'Recipient required' }; }
     if (!offering?.length) { set.status = 400; return { error: 'Must offer at least one Pokemon' }; }

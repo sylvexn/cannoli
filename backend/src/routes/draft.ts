@@ -34,6 +34,17 @@ interface DraftPresence {
   userId: number | null;
 }
 
+/**
+ * Shape of `ws.data` for the draft WebSocket. Elysia derives `params` + `user`
+ * from the route/auth context; `draftAuth` is stamped on `open` after the
+ * league-isolation check. Typed here so handlers stop reaching through `any`.
+ */
+interface DraftSocketData {
+  params: { leagueId: string };
+  user: { id: string; role: string; username?: string } | null;
+  draftAuth?: { teamId: string | null; userId: number | null };
+}
+
 const leaguePresence = new Map<string, Map</* wsKey */ object, DraftPresence>>();
 
 // ─── Idempotency cache ─────────────────────────────────────────────────────
@@ -241,7 +252,8 @@ export const draftRoutes = new Elysia()
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const archived = checkLeagueArchived(params.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
-    const { pokemonName, clientRequestId } = body as { pokemonName: string; clientRequestId?: string };
+    const { pokemonName, clientRequestId, teamId: bodyTeamId } =
+      body as { pokemonName: string; clientRequestId?: string; teamId?: string };
     if (!pokemonName) { set.status = 400; return { error: 'pokemonName required' }; }
 
     // Idempotency replay — return cached result without re-executing.
@@ -257,7 +269,7 @@ export const draftRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const overrideTeamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : null;
+    const overrideTeamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : null;
     const teamId = overrideTeamId ?? team?.id;
     if (!teamId) { set.status = 403; return { error: "You don't have a team in this league" }; }
 
@@ -430,8 +442,9 @@ export const draftRoutes = new Elysia()
 
   .ws('/ws/draft/:leagueId', {
     open(ws) {
-      const leagueId = (ws.data as any).params.leagueId;
-      const user = (ws.data as any).user as { id: string; role: string } | null;
+      const data = ws.data as unknown as DraftSocketData;
+      const leagueId = data.params.leagueId;
+      const user = data.user;
 
       // League isolation: must be staff or have a team in this league.
       // Anonymous connections are rejected outright.
@@ -441,7 +454,7 @@ export const draftRoutes = new Elysia()
         ws.close();
         return;
       }
-      (ws.data as any).draftAuth = { teamId: auth.teamId, userId: user ? parseInt(user.id) : null };
+      data.draftAuth = { teamId: auth.teamId, userId: user ? parseInt(user.id) : null };
 
       ws.subscribe(`draft:${leagueId}`);
       const snapshot = getDraftSnapshot(leagueId);
@@ -451,9 +464,10 @@ export const draftRoutes = new Elysia()
     message(ws, message) {
       try {
         const msg = typeof message === 'string' ? JSON.parse(message) : message;
-        const leagueId = (ws.data as any).params.leagueId;
-        const sessionUser = (ws.data as any).user as { id: string; role: string; username?: string } | null;
-        const auth = (ws.data as any).draftAuth as { teamId: string | null; userId: number | null } | undefined;
+        const data = ws.data as unknown as DraftSocketData;
+        const leagueId = data.params.leagueId;
+        const sessionUser = data.user;
+        const auth = data.draftAuth;
 
         if (msg.type === 'identify') {
           const { teamId, username, role } = msg;
@@ -566,12 +580,15 @@ export const draftRoutes = new Elysia()
           ws.publish(`draft:${leagueId}`, chatMsg);
           ws.send(chatMsg);
         }
-      } catch {
+      } catch (err) {
+        // Surface at debug so a parse/handler failure isn't fully silent
+        // (this swallow once hid the WS-IDENTITY bug).
+        console.debug('[draft] failed to handle WS message:', err);
         ws.send(JSON.stringify({ type: 'error', error: 'Invalid message' }));
       }
     },
     close(ws) {
-      const leagueId = (ws.data as any).params.leagueId;
+      const leagueId = (ws.data as unknown as DraftSocketData).params.leagueId;
       ws.unsubscribe(`draft:${leagueId}`);
       chatRateLimit.delete(wsKey(ws));
 

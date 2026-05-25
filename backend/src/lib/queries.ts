@@ -18,6 +18,15 @@ export type LeagueRow = typeof schema.leagues.$inferSelect;
 export type TeamRow = typeof schema.teams.$inferSelect;
 export type RosterRow = typeof schema.rosters.$inferSelect;
 
+/** The league lifecycle phases (mirrors the `leagues.phase` enum in schema.ts). */
+export type LeaguePhase = NonNullable<LeagueRow['phase']>;
+export const LEAGUE_PHASES = ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] as const;
+/** Narrowing guard so handlers can validate a string body field into the union
+ *  and drop the `phase as any` casts when writing it back to the DB. */
+export function isLeaguePhase(v: unknown): v is LeaguePhase {
+  return typeof v === 'string' && (LEAGUE_PHASES as readonly string[]).includes(v);
+}
+
 /** Fetch a single league by id, or undefined if not found. */
 export function getLeague(leagueId: string): LeagueRow | undefined {
   return db.select().from(schema.leagues)
