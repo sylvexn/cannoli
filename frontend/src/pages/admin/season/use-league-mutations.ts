@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { PRESET_COLORS, type EditableLeague, type Phase } from './phase-config';
+import { getErrorMessage } from '@/lib/errors';
 
 interface UseLeagueMutationsArgs {
   leagueList: EditableLeague[];
@@ -59,8 +60,8 @@ export function useLeagueMutations({ leagueList, leagueStates, refreshLeagues }:
         toast.success(`Created "${name}"`);
       }
       refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
     setLeagueEditOpen(false);
   }, [editName, editColor, editingLeague, refreshLeagues]);
@@ -91,8 +92,8 @@ export function useLeagueMutations({ leagueList, leagueStates, refreshLeagues }:
       setDeleteOpen(false);
       setDeleteTarget(null);
       setDeleteConfirmText('');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setDeleteSubmitting(false);
     }
@@ -116,8 +117,8 @@ export function useLeagueMutations({ leagueList, leagueStates, refreshLeagues }:
       const result = await api.generateSchedule(league.id);
       toast.success(`Generated ${result.matchCount} matches`);
       refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   }, [leagueStates, refreshLeagues]);
 
@@ -135,8 +136,8 @@ export function useLeagueMutations({ leagueList, leagueStates, refreshLeagues }:
       setRegenOpen(false);
       setRegenTarget(null);
       setRegenConfirmText('');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setRegenSubmitting(false);
     }

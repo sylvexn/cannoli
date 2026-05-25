@@ -13,6 +13,7 @@ import {
   Save, Calendar, Trophy, Swords, Lock, Pause, AlertTriangle, Trophy as TrophyIcon, Gamepad2,
 } from 'lucide-react';
 import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
+import { getErrorMessage } from '@/lib/errors';
 
 interface LeagueSettings {
   pointCap: number;
@@ -146,8 +147,8 @@ export function AdminLeagues() {
       });
       toast.success(`Saved settings for ${leagues.find(l => l.id === leagueId)?.name}`);
       refreshLeagues();
-    } catch (err: any) {
-      toast.error(err.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(prev => ({ ...prev, [leagueId]: false }));
     }

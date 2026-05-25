@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { EmptyState } from '@/components/empty-state';
+import { getErrorMessage } from '@/lib/errors';
 
 const HEALTH_COLORS: Record<ApiBotStatus['health'], string> = {
   green: 'bg-win',
@@ -73,8 +74,8 @@ export function AdminBot() {
       // Bot needs a moment to drop+rejoin; re-poll a couple of times.
       setTimeout(refresh, 1000);
       setTimeout(refresh, 3000);
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Reconnect failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Reconnect failed');
     } finally {
       setReconnecting(false);
     }

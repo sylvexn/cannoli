@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 export interface SeasonArchiveRow {
   id: number;
@@ -40,8 +41,8 @@ export function useSeasonArchive(refreshLeagues?: () => void) {
       await api.archiveSeason(seasonId, archived);
       toast.success(archived ? 'Season archived' : 'Season un-archived');
       refreshSeasons();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   }, [refreshSeasons]);
 
@@ -62,8 +63,8 @@ export function useSeasonArchive(refreshLeagues?: () => void) {
       // the new archived flag (read-only badge, write-blocked banners).
       refreshLeagues?.();
       return result;
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
       throw err;
     }
   }, [refreshSeasons, refreshLeagues]);

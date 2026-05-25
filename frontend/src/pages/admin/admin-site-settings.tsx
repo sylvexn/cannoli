@@ -8,6 +8,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
+import { getErrorMessage } from '@/lib/errors';
   Save, Megaphone, Settings,
   Zap, Loader2,
 } from 'lucide-react';
@@ -66,8 +67,8 @@ export function AdminSiteSettings() {
     try {
       await api.saveSiteSettings(settings as unknown as Record<string, unknown>);
       toast.success('Settings saved');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
     }

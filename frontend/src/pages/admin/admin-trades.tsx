@@ -13,6 +13,7 @@ import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
 import { formatTimestamp } from '@/lib/format';
+import { getErrorMessage } from '@/lib/errors';
 
 interface AdminTrade {
   id: string;
@@ -71,7 +72,7 @@ export function AdminTrades() {
         t.id === id ? { ...t, status: 'accepted' as const } : t
       ));
       toast.success('Trade approved');
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   async function confirmReject() {
@@ -86,7 +87,7 @@ export function AdminTrades() {
       toast.success('Trade rejected');
       setRejectTarget(null);
       setRejectReason('');
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   if (loading) {

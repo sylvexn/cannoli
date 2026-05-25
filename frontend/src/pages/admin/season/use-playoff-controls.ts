@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api, type ApiLeague } from '@/lib/api';
 import { toast } from 'sonner';
 import type { EditableLeague } from './phase-config';
+import { getErrorMessage } from '@/lib/errors';
 
 export interface PlayoffInfo { hasBracket: boolean; matchCount: number }
 
@@ -77,8 +78,8 @@ export function usePlayoffControls(defaultLeagues: ApiLeague[], refreshLeagues?:
       refreshLeagues?.();
       setPlayoffOpen(false);
       setPlayoffTarget(null);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setPlayoffSubmitting(false);
     }

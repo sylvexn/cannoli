@@ -12,6 +12,7 @@ import {
   Search, X, ChevronDown, Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage, isApiError } from '@/lib/errors';
 
 type BanStatus = 'available' | 'tera-banned' | 'banned';
 
@@ -80,10 +81,12 @@ export function AdminTierList() {
   ) => {
     try {
       await api.updateTierListEntry(name, data);
-    } catch (err: any) {
-      const code = err?.body?.code ?? err?.code;
+    } catch (err: unknown) {
+      const apiErr = isApiError(err) ? err : undefined;
+      const code = apiErr?.body?.code ?? apiErr?.code;
       if (code === 'tier_list_locked' || code === 'tier_list_confirm_required') {
-        const names = (err.body?.activeLeagues ?? activeLeagues).map((l: ActiveLeague) => l.name).join(' / ');
+        const bodyLeagues = apiErr?.body?.activeLeagues as ActiveLeague[] | undefined;
+        const names = (bodyLeagues ?? activeLeagues).map((l: ActiveLeague) => l.name).join(' / ');
         const confirmLeague = window.prompt(
           `Tier list edits affect leagues currently in regular/playoffs (${names}).\n\nType the league name to force this edit:`,
         );
@@ -94,7 +97,7 @@ export function AdminTierList() {
         await api.updateTierListEntry(name, { ...data, force: true, confirmLeague });
         toast.warning(`Forced tier-list edit during active league (${confirmLeague})`);
       } else {
-        toast.error(err.message || 'Failed to update tier list');
+        toast.error(getErrorMessage(err, 'Failed to update tier list'));
         throw err;
       }
     }

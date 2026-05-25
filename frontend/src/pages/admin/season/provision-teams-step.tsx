@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Copy, Trash2, Plus, AlertTriangle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 export interface TeamRow {
   teamName: string;
@@ -87,8 +88,8 @@ export function ProvisionTeamsStep({
       try {
         cached = await api.getSeasonLeagues(seasonId);
         setSeasonLeagueCache(prev => ({ ...prev, [seasonId]: cached! }));
-      } catch (err: any) {
-        toast.error(err.message || 'Failed to load prior season teams');
+      } catch (err: unknown) {
+        toast.error(getErrorMessage(err, 'Failed to load prior season teams'));
         return;
       }
     }

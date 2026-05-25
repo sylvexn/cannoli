@@ -18,6 +18,7 @@ import { BrowseRostersStep } from './step-browse-rosters';
 import { SelectStep } from './step-select';
 import { ReviewStep } from './step-review';
 import { validateTrade } from './validation';
+import { getErrorMessage } from '@/lib/errors';
 
 type WizardStep = 'teams' | 'browse' | 'select' | 'review';
 
@@ -152,8 +153,8 @@ export function TradeWizard({ open, onClose }: TradeWizardProps) {
       });
       toast.success('Trade proposal sent!');
       onClose();
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to send proposal';
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, 'Failed to send proposal');
       setSubmitError(msg);
       toast.error(msg);
     } finally {
