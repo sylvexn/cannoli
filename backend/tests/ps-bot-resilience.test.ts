@@ -1,0 +1,199 @@
+/**
+ * PS Monitor Bot resilience tests (Showdown area #1/#2).
+ *
+ * These exercise the bot's *exported* surface and the protocol-parsing
+ * contract it depends on, using a REAL battle log captured from the Cannoli
+ * PS server fork (`test/fixtures/replays/live-ps-server-natdexdraft-forfeit.log`,
+ * a genuine `[Gen 9] NatDex Draft` forfeit). The DB-writing handlers
+ * (`handleMatchEnd`, `checkForOfficialMatch`, `replayFromDisk`) are module-
+ * private, so the end-to-end DB write is covered by the live bring-up
+ * documented in the findings; here we lock the parts that are unit-testable
+ * without booting the in-process bot socket.
+ *
+ * Covered:
+ *   - disk-replay fallback file resolution across date dirs, newest-first
+ *   - disk-replay JSON whose `log` is missing / malformed → null (no throw)
+ *   - the bot's room-prefix stripping + |win| detection against a REAL log
+ *   - homeSide orientation math (the documented "half of matches swapped" bug)
+ *     reproduced as a pure function, both p1-home and p2-home
+ *   - unmatched-battle detection: a battle between userids not in the team map
+ */
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
+import { join, resolve } from 'path';
+import { tmpdir } from 'os';
+import { formatFromRoomId, readReplayLogFromDisk } from '../src/lib/ps-bot';
+import { ReplayParser } from '../src/lib/replay-parser';
+import { toUserid } from '../src/lib/ps-login';
+
+const REAL_LOG = readFileSync(
+  resolve(import.meta.dir, '../test/fixtures/replays/live-ps-server-natdexdraft-forfeit.log'),
+  'utf-8',
+).split('\n');
+
+// ─── Disk-replay fallback: cases not in disk-replay-fallback.test.ts ─────────
+
+describe('readReplayLogFromDisk — additional edge cases', () => {
+  let root: string;
+  const ROOM = 'battle-gen9natdexdraft-555';
+
+  beforeAll(() => {
+    root = mkdtempSync(join(tmpdir(), 'cannoli-bot-resilience-'));
+    // Two date dirs, both containing the SAME room id with different contents.
+    // The scanner sorts dates reverse (newest first) and must pick the newest.
+    const older = join(root, 'gen9natdexdraft', '2026-01-01');
+    const newer = join(root, 'gen9natdexdraft', '2026-12-31');
+    mkdirSync(older, { recursive: true });
+    mkdirSync(newer, { recursive: true });
+    writeFileSync(join(older, `${ROOM}.log.json`), JSON.stringify({ log: ['|win|olderversion'] }));
+    writeFileSync(join(newer, `${ROOM}.log.json`), JSON.stringify({ log: ['|win|newerversion'] }));
+  });
+
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  test('picks the newest date dir when the room exists in several', () => {
+    const lines = readReplayLogFromDisk(ROOM, root);
+    expect(lines).toEqual(['|win|newerversion']);
+  });
+
+  test('returns null (no throw) when JSON has no `log` array', () => {
+    const bad = mkdtempSync(join(tmpdir(), 'cannoli-bad-json-'));
+    const dir = join(bad, 'gen9natdexdraft', '2026-05-01');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'battle-gen9natdexdraft-1.log.json'), JSON.stringify({ players: ['a', 'b'] }));
+    expect(readReplayLogFromDisk('battle-gen9natdexdraft-1', bad)).toBeNull();
+    rmSync(bad, { recursive: true, force: true });
+  });
+
+  test('returns null (no throw) on unparseable JSON', () => {
+    const bad = mkdtempSync(join(tmpdir(), 'cannoli-broken-json-'));
+    const dir = join(bad, 'gen9natdexdraft', '2026-05-01');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'battle-gen9natdexdraft-2.log.json'), '{not valid json');
+    expect(readReplayLogFromDisk('battle-gen9natdexdraft-2', bad)).toBeNull();
+    rmSync(bad, { recursive: true, force: true });
+  });
+});
+
+describe('formatFromRoomId — drives the disk-replay format-dir lookup', () => {
+  test('real captured room id resolves to gen9natdexdraft', () => {
+    // The fixture battle ran in battle-gen9natdexdraft-1.
+    expect(formatFromRoomId('battle-gen9natdexdraft-1')).toBe('gen9natdexdraft');
+  });
+});
+
+// ─── Real-log: the bot's handleMessage room-prefix + |win| contract ──────────
+
+describe('bot message framing against a REAL PS server log', () => {
+  // Mirror handleMessage: a chunk begins with ">battle-..." then the room's
+  // lines follow until the next ">" prefix. The bot strips the prefix and
+  // routes the remainder to handleBattleLine. We assert the parser — fed the
+  // same lines the bot feeds — recovers the result from genuine protocol.
+  test('parser recovers winner/format/score from the captured forfeit', () => {
+    const parser = new ReplayParser();
+    let sawWin = false;
+    for (const raw of REAL_LOG) {
+      // handleMessage strips a leading ">room" line entirely; feedLine also
+      // ignores lines starting with ">". Either way the parser never sees it.
+      parser.feedLine(raw);
+      if (raw.startsWith('|win|')) sawWin = true;
+    }
+    expect(sawWin).toBe(true);
+    const r = parser.getResult();
+    expect(r.format).toBe('[Gen 9] NatDex Draft');
+    expect(r.players.p1).toBe('TestAlice');
+    expect(r.players.p2).toBe('TestBob');
+    expect(r.winner).toBe('TestAlice');
+  });
+
+  test('forfeit with full teams yields a non-sweep score (LAUNCH NOTE)', () => {
+    // Both players had 2 mons alive at forfeit, so the score is 2-2. This is
+    // the parser's "brought - deaths" model; a forfeit/disconnect does NOT
+    // count as a 6-0. The bot writes this verbatim. Flagged as a launch
+    // semantics concern (see findings: forfeit scoring).
+    const r = ReplayParser.parse(REAL_LOG.join('\n'));
+    expect(r.winnerScore).toBe(2);
+    expect(r.loserScore).toBe(2);
+  });
+
+  test('|win| arrives AFTER a |-message| forfeit line (ordering the bot must tolerate)', () => {
+    const msgIdx = REAL_LOG.findIndex(l => l.startsWith('|-message|') && l.includes('forfeited'));
+    const winIdx = REAL_LOG.findIndex(l => l.startsWith('|win|'));
+    expect(msgIdx).toBeGreaterThan(-1);
+    expect(winIdx).toBeGreaterThan(msgIdx);
+  });
+});
+
+// ─── homeSide orientation math (the "half of matches swapped" bug) ───────────
+
+describe('home/away orientation resolution (pure model of the bot path)', () => {
+  // Mirrors checkForOfficialMatch / handleMatchEnd orientation logic:
+  //   battle.homeSide = team(p1)==home ? 'p1' : team(p2)==home ? 'p2' : null
+  // and the score swap that follows. Pure here so it is testable without the
+  // private handlers.
+  function resolveHomeSide(
+    p1Userid: string, p2Userid: string,
+    map: Map<string, string>, homeTeamId: string,
+  ): 'p1' | 'p2' | null {
+    if (map.get(p1Userid) === homeTeamId) return 'p1';
+    if (map.get(p2Userid) === homeTeamId) return 'p2';
+    return null;
+  }
+
+  function homeWon(homeSide: 'p1' | 'p2', winnerUserid: string, p1: string, p2: string): boolean {
+    return homeSide === 'p1' ? winnerUserid === p1 : winnerUserid === p2;
+  }
+
+  const map = new Map<string, string>([
+    [toUserid('Alice'), 'team-home'],
+    [toUserid('Bob'), 'team-away'],
+  ]);
+
+  test('home challenged → home is p1', () => {
+    const side = resolveHomeSide(toUserid('Alice'), toUserid('Bob'), map, 'team-home');
+    expect(side).toBe('p1');
+    expect(homeWon(side!, toUserid('Alice'), toUserid('Alice'), toUserid('Bob'))).toBe(true);
+  });
+
+  test('away challenged → home lands on p2 (the swap case)', () => {
+    // PS put Alice (home) on p2 because Bob challenged. Without orientation
+    // resolution the bot would treat p1=home and invert the score.
+    const side = resolveHomeSide(toUserid('Bob'), toUserid('Alice'), map, 'team-home');
+    expect(side).toBe('p2');
+    // Alice (home) won as p2 → homeWon must be true.
+    expect(homeWon(side!, toUserid('Alice'), toUserid('Bob'), toUserid('Alice'))).toBe(true);
+    // And if Bob (away, p1) won, homeWon is false.
+    expect(homeWon(side!, toUserid('Bob'), toUserid('Bob'), toUserid('Alice'))).toBe(false);
+  });
+
+  test('neither player maps to home team → null (bot defers / logs unmatched)', () => {
+    const side = resolveHomeSide(toUserid('Stranger1'), toUserid('Stranger2'), map, 'team-home');
+    expect(side).toBeNull();
+  });
+});
+
+// ─── Unmatched-battle detection ──────────────────────────────────────────────
+
+describe('unmatched-battle classification (checkForOfficialMatch gate)', () => {
+  // The bot logs an activity_log `bot_unmatched_battle` only when BOTH players
+  // are unknown AND the format looks like a Cannoli draft format (contains
+  // 'draft') OR is empty. Pure replication of that gate to pin the contract.
+  function shouldLogUnmatched(format: string, p1Known: boolean, p2Known: boolean): boolean {
+    if (p1Known && p2Known) return false; // matched — not unmatched
+    const fmt = (format || '').toLowerCase();
+    const looksLikeCannoli = fmt.includes('draft') || fmt === '';
+    return looksLikeCannoli;
+  }
+
+  test('draft-format battle between unknown users IS logged', () => {
+    expect(shouldLogUnmatched('gen9natdexdraft', false, false)).toBe(true);
+  });
+
+  test('random OU scrim between unknown users is NOT logged (noise filter)', () => {
+    expect(shouldLogUnmatched('gen9ou', false, false)).toBe(false);
+  });
+
+  test('empty/unknown format between unknown users IS logged', () => {
+    expect(shouldLogUnmatched('', false, false)).toBe(true);
+  });
+});
