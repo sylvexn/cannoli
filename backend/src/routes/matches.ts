@@ -4,7 +4,7 @@ import { eq, and, sql, asc, desc } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
-import { advancePlayoffWinner } from '../lib/playoff-advance';
+import { advancePlayoffWinner, buildPlayoffMatchups } from '../lib/playoff-advance';
 import { computeStandings } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
@@ -732,37 +732,8 @@ export const matchRoutes = new Elysia()
       .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'regular')))
       .get()?.max || 0;
 
-    // Generate bracket per configured size:
-    //   2 → F only
-    //   4 → SF (1v4, 2v3) + F
-    //   6 → QF (3v6, 4v5) + SF (1 + 2 with QF winners) + F  [top 2 bye]
-    //   8 → QF (1v8, 2v7, 3v6, 4v5) + SF + F
-    const matchups: { round: string; homeSeed: number; awaySeed: number; week: number }[] = [];
-
-    if (seedCount === 8) {
-      matchups.push({ round: 'qf', homeSeed: 1, awaySeed: 8, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 2, awaySeed: 7, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
-      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
-    } else if (seedCount === 6) {
-      // Quarterfinals: #3 vs #6, #4 vs #5; #1 and #2 receive byes into SF
-      matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
-      // Semifinals: #1 vs winner(3v6), #2 vs winner(4v5)
-      matchups.push({ round: 'sf', homeSeed: 1, awaySeed: 0, week: maxWeek + 2 }); // awaySeed TBD
-      matchups.push({ round: 'sf', homeSeed: 2, awaySeed: 0, week: maxWeek + 2 });
-      // Finals
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
-    } else if (seedCount === 4) {
-      matchups.push({ round: 'sf', homeSeed: 1, awaySeed: 4, week: maxWeek + 1 });
-      matchups.push({ round: 'sf', homeSeed: 2, awaySeed: 3, week: maxWeek + 1 });
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-    } else if (seedCount === 2) {
-      matchups.push({ round: 'f', homeSeed: 1, awaySeed: 2, week: maxWeek + 1 });
-    }
+    // Bracket layout is shared with the simulator via buildPlayoffMatchups.
+    const matchups = buildPlayoffMatchups(seedCount, maxWeek);
 
     let matchNum = 0;
     for (const m of matchups) {

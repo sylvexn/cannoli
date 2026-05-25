@@ -3,7 +3,7 @@ import { db, schema } from '../db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
-import { getLeague, getTeamRoster } from '../lib/queries';
+import { getLeague, getTeamRoster, isTradeDeadlinePassed as deadlinePassed } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
 import { effectiveCost } from '../lib/tera-cost';
 
@@ -141,13 +141,6 @@ function loadTradeContext(tradeId: number) {
   const league = getLeague(trade.leagueId);
   const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
   return { trade, league, season, proposerTeam, recipientTeam };
-}
-
-/** Deadline check now scopes to the league's own currentWeek + tradeDeadlineWeek. */
-function deadlinePassed(league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined): boolean {
-  if (!league) return false;
-  if (league.tradeDeadlineWeek <= 0) return false;
-  return league.currentWeek >= league.tradeDeadlineWeek;
 }
 
 /** Move pokemon between two team rosters atomically. Caller must already be inside tx(). */
