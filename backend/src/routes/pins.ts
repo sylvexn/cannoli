@@ -19,6 +19,7 @@ import { Elysia } from 'elysia';
 import { db, schema, sqlite } from '../db';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
+import { tx } from '../lib/tx';
 import { checkSeasonArchived } from '../lib/archive-guard';
 import {
   S9_AWARDS, S10_AWARDS, mintManualPins, type ManualAward,
@@ -206,46 +207,54 @@ export const pinRoutes = new Elysia()
     const metadata = b.metadata ? JSON.stringify(b.metadata) : null;
     const awardedById = user.id ? parseInt(user.id) : null;
 
-    const res = db.run(sql`
-      INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
-      VALUES (${b.userId}, ${b.pinDefId}, ${seasonId}, ${awardedById}, ${metadata})
-    `);
-    const changes = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
-    if (changes === 0) {
+    // Insert + activity-log atomically (DEDUP-MISC): the unique indexes
+    // (composite for season-scoped, partial `pins_user_def_lifetime_idx` for
+    // NULL-season — migration 0041) make INSERT OR IGNORE a no-op on a dupe,
+    // so changes=0 → 409 for BOTH season and lifetime pins.
+    const out = tx(() => {
+      const res = db.run(sql`
+        INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
+        VALUES (${b.userId}, ${b.pinDefId}, ${seasonId}, ${awardedById}, ${metadata})
+      `);
+      const changes = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
+      if (changes === 0) return { duplicate: true as const };
+
+      const inserted = db.select().from(schema.pins)
+        .where(and(
+          eq(schema.pins.userId, b.userId),
+          eq(schema.pins.pinDefId, b.pinDefId),
+          seasonId == null
+            ? sql`${schema.pins.seasonId} IS NULL`
+            : eq(schema.pins.seasonId, seasonId),
+        ))
+        .orderBy(desc(schema.pins.id))
+        .get();
+
+      db.insert(schema.activityLog).values({
+        type: 'pin_awarded',
+        category: 'admin',
+        actor: user.username,
+        leagueId: null,
+        description: `Awarded '${def.name}' to ${targetUser.username}`,
+        metadata: JSON.stringify({
+          userId: b.userId,
+          username: targetUser.username,
+          pinDefId: b.pinDefId,
+          pinName: def.name,
+          seasonId,
+          awardedById,
+        }),
+      }).run();
+
+      return { duplicate: false as const, id: inserted?.id ?? null };
+    });
+
+    if (out.duplicate) {
       set.status = 409;
       return { error: 'User already has this pin for the given season' };
     }
 
-    // Fetch the inserted row to return the id (lastInsertRowid is on the
-    // statement result; bun:sqlite's `db.run` exposes it as `lastInsertRowid`).
-    const inserted = db.select().from(schema.pins)
-      .where(and(
-        eq(schema.pins.userId, b.userId),
-        eq(schema.pins.pinDefId, b.pinDefId),
-        seasonId == null
-          ? sql`${schema.pins.seasonId} IS NULL`
-          : eq(schema.pins.seasonId, seasonId),
-      ))
-      .orderBy(desc(schema.pins.id))
-      .get();
-
-    db.insert(schema.activityLog).values({
-      type: 'pin_awarded',
-      category: 'admin',
-      actor: user.username,
-      leagueId: null,
-      description: `Awarded '${def.name}' to ${targetUser.username}`,
-      metadata: JSON.stringify({
-        userId: b.userId,
-        username: targetUser.username,
-        pinDefId: b.pinDefId,
-        pinName: def.name,
-        seasonId,
-        awardedById,
-      }),
-    }).run();
-
-    return { success: true, id: inserted?.id ?? null };
+    return { success: true, id: out.id };
   })
 
   // ─── PATCH /api/admin/pins/:id ─────────────────────────────────────────
