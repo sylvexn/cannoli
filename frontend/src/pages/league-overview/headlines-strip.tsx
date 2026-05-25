@@ -6,6 +6,7 @@
 
 import { Link } from 'react-router-dom';
 import { Flame, ArrowLeftRight, Zap } from 'lucide-react';
+import { TeamLink } from '@/components/team-link';
 import type { Headline } from './headlines';
 
 interface HeadlinesStripProps {
@@ -29,25 +30,32 @@ export function HeadlinesStrip({ headlines }: HeadlinesStripProps) {
 function HeadlineCard({ headline }: { headline: Headline }) {
   if (headline.kind === 'streak') {
     return (
-      <Link
-        to={`/league/${headline.leagueId}/teams/${headline.teamId}`}
-        viewTransition
-        className="shrink-0 group flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-orange-400/40 transition-colors"
-        style={{ ['--card-accent' as never]: headline.teamColor }}
-      >
-        <Flame size={14} className="shrink-0 text-orange-400" />
-        <div className="leading-tight">
-          <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-            On a roll
+      <div style={{ ['--card-accent' as never]: headline.teamColor }}>
+        <TeamLink
+          team={{
+            leagueId: headline.leagueId,
+            teamId: headline.teamId,
+            teamName: headline.teamName,
+            teamAbbrev: headline.teamAbbrev,
+            teamColor: headline.teamColor,
+          }}
+          asCard
+          className="shrink-0 group flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-orange-400/40 transition-colors"
+        >
+          <Flame size={14} className="shrink-0 text-orange-400" />
+          <div className="leading-tight">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+              On a roll
+            </div>
+            <div className="text-[12px] font-heading text-text-primary group-hover:text-neon transition-colors">
+              <span style={{ color: headline.teamColor }}>{headline.teamAbbrev}</span>{' '}
+              <span className="font-mono tabular-nums text-text-muted">
+                {headline.streak} W
+              </span>
+            </div>
           </div>
-          <div className="text-[12px] font-heading text-text-primary group-hover:text-neon transition-colors">
-            <span style={{ color: headline.teamColor }}>{headline.teamAbbrev}</span>{' '}
-            <span className="font-mono tabular-nums text-text-muted">
-              {headline.streak} W
-            </span>
-          </div>
-        </div>
-      </Link>
+        </TeamLink>
+      </div>
     );
   }
 
