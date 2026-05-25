@@ -1,26 +1,25 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, desc } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 import { checkMatchArchived } from '../../lib/archive-guard';
+import { requireStaff } from '../../lib/auth-guards';
 
 export const miscRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── PS Bot Status ──────────────────────────────────────────────────
 
-  .get('/api/admin/bot-status', ({ user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+  .get('/api/admin/bot-status', () => {
     return getBotStatus();
   })
 
   // Force-reconnect the PS Monitor Bot. Closes the current WS and immediately
   // reopens — used when the bot is wedged or after credential rotations.
   .post('/api/admin/bot/reconnect', ({ user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     restartBot();
     db.insert(schema.activityLog).values({
       type: 'bot_reconnect',
@@ -36,7 +35,6 @@ export const miscRoutes = new Elysia()
   // Backfill pin_awarded activity-log entries for pins missing them.
   // Idempotent — safe to re-run; returns how many rows were emitted.
   .post('/api/admin/pins/backfill-audit', ({ user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const result = backfillPinAuditLog();
     db.insert(schema.activityLog).values({
       type: 'pin_audit_backfilled',
@@ -52,7 +50,6 @@ export const miscRoutes = new Elysia()
   // ─── Manual job trigger (admin tool) ────────────────────────────────
 
   .post('/api/admin/jobs/:name/run', async ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const ok = await runOnce(params.name);
     if (!ok) { set.status = 404; return { error: `Unknown job: ${params.name}` }; }
     db.insert(schema.activityLog).values({
@@ -69,7 +66,6 @@ export const miscRoutes = new Elysia()
   // ─── Force match result (admin override for forfeits / disputes) ────
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
     const { homeScore, awayScore, forfeitedBy, note, pokemonData } = body as {
@@ -154,12 +150,7 @@ export const miscRoutes = new Elysia()
 
   // ─── Activity Log ───────────────────────────────────────────────────
 
-  .get('/api/activity-log', ({ user, set, query }) => {
-    if (!isStaff(user)) {
-      set.status = 403;
-      return { error: 'Forbidden' };
-    }
-
+  .get('/api/activity-log', ({ query }) => {
     let rows = db.select().from(schema.activityLog)
       .orderBy(desc(schema.activityLog.timestamp))
       .all();

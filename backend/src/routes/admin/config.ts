@@ -1,15 +1,18 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, sql } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
+import { requireStaff } from '../../lib/auth-guards';
 
+// Group-level staff guard: every route below is staff-only. The guard runs
+// before each handler and short-circuits non-staff with 401/403, so the check
+// is structural rather than hand-copied per handler.
 export const configRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── Site Settings ──────────────────────────────────────────────────
 
-  .put('/api/site-settings', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+  .put('/api/site-settings', ({ body, set }) => {
     const s = body as Record<string, unknown>;
 
     db.update(schema.siteSettings).set({
@@ -29,7 +32,6 @@ export const configRoutes = new Elysia()
   // ─── Tier List ──────────────────────────────────────────────────────
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { tier, status, force, confirmLeague } = body as {
       tier?: number;
       status?: string;
@@ -119,7 +121,6 @@ export const configRoutes = new Elysia()
   // ─── Move Categories CRUD ──────────────────────────────────────────
 
   .post('/api/move-categories', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name } = body as { name: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -141,7 +142,6 @@ export const configRoutes = new Elysia()
   })
 
   .put('/api/move-categories/:id', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name } = body as { name: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
     const existing = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
@@ -162,7 +162,6 @@ export const configRoutes = new Elysia()
   })
 
   .delete('/api/move-categories/:id', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const existing = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
     if (!existing) { set.status = 404; return { error: 'Category not found' }; }
     const entryCount = db.select({ c: sql<number>`COUNT(*)` })
@@ -186,7 +185,6 @@ export const configRoutes = new Elysia()
   })
 
   .post('/api/move-categories/:id/entries', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, isAbility } = body as { name: string; isAbility?: boolean };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
     const cat = db.select().from(schema.moveCategories).where(eq(schema.moveCategories.id, params.id)).get();
@@ -214,7 +212,6 @@ export const configRoutes = new Elysia()
   })
 
   .put('/api/move-category-entries/:id', ({ params, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = parseInt(params.id);
     const { name, isAbility } = body as { name?: string; isAbility?: boolean };
     const existing = db.select().from(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, id)).get();
@@ -251,7 +248,6 @@ export const configRoutes = new Elysia()
   })
 
   .delete('/api/move-category-entries/:id', ({ params, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = parseInt(params.id);
     const existing = db.select().from(schema.moveCategoryEntries).where(eq(schema.moveCategoryEntries.id, id)).get();
     if (!existing) { set.status = 404; return { error: 'Entry not found' }; }
