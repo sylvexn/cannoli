@@ -55,7 +55,7 @@ test.describe('User settings — preferences', () => {
 
     // Save — sticky bottom button.
     await page.getByRole('button', { name: /save preferences/i }).click();
-    await expect(page.getByText(/preferences saved/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/preferences saved/i).first()).toBeVisible({ timeout: 5_000 });
 
     // ── data-colorblind attribute should be stamped.
     await expect.poll(async () =>
@@ -78,7 +78,7 @@ test.describe('User settings — preferences', () => {
     // ── Toggle colorblind back OFF and save; assert it reverts.
     await cbSwitch.click();
     await page.getByRole('button', { name: /save preferences/i }).click();
-    await expect(page.getByText(/preferences saved/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/preferences saved/i).first()).toBeVisible({ timeout: 5_000 });
 
     await expect.poll(async () =>
       page.evaluate(() => document.documentElement.getAttribute('data-colorblind')),
