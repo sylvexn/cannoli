@@ -7,7 +7,7 @@
  * data, manual inserts) silently slip past the forfeit policy.
  */
 import { describe, expect, test } from 'bun:test';
-import { effectiveMatchDeadline } from '../src/lib/jobs/auto-forfeit';
+import { effectiveMatchDeadline, endOfDayInZone } from '../src/lib/jobs/auto-forfeit';
 
 describe('effectiveMatchDeadline', () => {
   test('uses match.deadline when set (round-trips ISO)', () => {
@@ -16,13 +16,28 @@ describe('effectiveMatchDeadline', () => {
       .toBe(iso);
   });
 
-  test('falls back to weekDates entry when match.deadline is null', () => {
-    // weekDates is a YYYY-MM-DD per week; the helper appends 23:59:59 UTC.
+  test('falls back to weekDates entry as end-of-day in the league TZ (TZ-DEADLINE)', () => {
+    // weekDates is a YYYY-MM-DD per week; the helper resolves 23:59:59 IN the
+    // league's timezone. Default is America/New_York; 2026-04-21 is EDT (UTC-4),
+    // so local 23:59:59 == 03:59:59 UTC the NEXT day.
     const out = effectiveMatchDeadline(
       { deadline: null, week: 3 },
       '{"3":"2026-04-21"}',
     );
-    expect(out).toBe('2026-04-21T23:59:59.000Z');
+    expect(out).toBe('2026-04-22T03:59:59.000Z');
+  });
+
+  test('honors an explicit league timezone for the cutoff', () => {
+    // Los Angeles is PDT (UTC-7) on this date → local 23:59:59 == 06:59:59 UTC next day.
+    const la = effectiveMatchDeadline(
+      { deadline: null, week: 3 },
+      '{"3":"2026-04-21"}',
+      'America/Los_Angeles',
+    );
+    expect(la).toBe('2026-04-22T06:59:59.000Z');
+    // UTC zone is a no-op offset.
+    const utc = effectiveMatchDeadline({ deadline: null, week: 3 }, '{"3":"2026-04-21"}', 'UTC');
+    expect(utc).toBe('2026-04-21T23:59:59.000Z');
   });
 
   test('returns null when deadline is null AND week not in weekDates', () => {
@@ -46,5 +61,22 @@ describe('effectiveMatchDeadline', () => {
       '{"3":"2026-12-31"}',
     );
     expect(out).toBe(explicit);
+  });
+});
+
+describe('endOfDayInZone (TZ-DEADLINE cutoff anchor)', () => {
+  test('EST (winter, UTC-5) end-of-day', () => {
+    // 2026-01-15 is EST → local 23:59:59 == 04:59:59 UTC next day.
+    expect(endOfDayInZone('2026-01-15', 'America/New_York'))
+      .toBe('2026-01-16T04:59:59.000Z');
+  });
+
+  test('EDT (summer, UTC-4) end-of-day', () => {
+    expect(endOfDayInZone('2026-07-15', 'America/New_York'))
+      .toBe('2026-07-16T03:59:59.000Z');
+  });
+
+  test('UTC zone is the identity offset', () => {
+    expect(endOfDayInZone('2026-04-21', 'UTC')).toBe('2026-04-21T23:59:59.000Z');
   });
 });
