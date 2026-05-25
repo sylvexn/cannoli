@@ -107,20 +107,14 @@ describe('pin award — season-scoped uniqueness', () => {
 });
 
 describe('pin award — lifetime (NULL season) uniqueness', () => {
-  // LAUNCH-BUG: PIN-NULL-SEASON-DUP
-  // Both the schema comment (db/schema.ts ~531) and the route comment claim
-  // "NULL participates in the unique check in SQLite, so season-less pins can
-  // only be awarded once per user." That is FALSE: SQLite treats each NULL as
-  // distinct in a UNIQUE index, so `(user, def, NULL)` never collides with
-  // another `(user, def, NULL)`. The `INSERT OR IGNORE` therefore inserts a
-  // SECOND lifetime pin row instead of being a no-op — breaking idempotency
-  // for lifetime/season-agnostic pins (and for the auto-award job's NULL-season
-  // pins). The award handler's follow-up 409 path is never reached because the
-  // insert reports changes=1. Repro: award the same lifetime pin twice → two
-  // rows, both 200. Fix: enforce uniqueness for NULL season explicitly, e.g. a
-  // partial unique index `WHERE season_id IS NULL` or a sentinel season value,
-  // and/or a pre-insert existence check in the award handler.
-  test.skip('lifetime pin awarded once; second award is 409 no-op', async () => {
+  // PIN-NULL-SEASON-DUP (FIXED): a partial unique index
+  // `pins_user_def_lifetime_idx` ON (user_id, pin_def_id) WHERE season_id IS
+  // NULL (migration 0041) now dedupes lifetime pins — SQLite's default
+  // "every NULL is distinct" behavior in the full composite index meant
+  // (user, def, NULL) rows never collided, so a second lifetime award used to
+  // insert a duplicate. With the partial index, INSERT OR IGNORE no-ops the
+  // dup → the award handler returns 409.
+  test('lifetime pin awarded once; second award is 409 no-op', async () => {
     db.delete(schema.pins).where(and(eq(schema.pins.userId, userId), eq(schema.pins.pinDefId, TEST_DEF), sql`${schema.pins.seasonId} IS NULL`)).run();
     const first = await award({ userId, pinDefId: TEST_DEF }); // no seasonId → NULL
     expect(first.status).toBe(200);
