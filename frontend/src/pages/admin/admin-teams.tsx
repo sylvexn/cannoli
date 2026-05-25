@@ -16,6 +16,7 @@ import type { ApiTeam, ApiAuthUser } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { toast } from 'sonner';
 import {
+import { getErrorMessage } from '@/lib/errors';
   Upload, ImageIcon, Plus, Pencil, Trash2,
   UserCog, Palette, X,
 } from 'lucide-react';
@@ -134,8 +135,8 @@ export function AdminTeams() {
       }
       setFormOpen(false);
       loadTeams();
-    } catch (err: any) {
-      toast.error(err.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSubmitting(false);
     }
@@ -150,8 +151,8 @@ export function AdminTeams() {
       setDeletingTeam(null);
       setDeleteForce(false);
       loadTeams();
-    } catch (err: any) {
-      toast.error(err.message || 'Delete failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Delete failed'));
     } finally {
       setDeleting(false);
     }
@@ -184,8 +185,8 @@ export function AdminTeams() {
         setForm(f => ({ ...f, logoPath: newPath }));
       }
       toast.success(`Logo uploaded for ${teamId.split('-').pop()?.toUpperCase()}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Upload failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Upload failed'));
     }
   }
 
@@ -205,8 +206,8 @@ export function AdminTeams() {
         setForm(f => ({ ...f, logoPath: null }));
       }
       toast.success('Logo removed');
-    } catch (err: any) {
-      toast.error(err.message || 'Remove failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Remove failed'));
     }
   }
 

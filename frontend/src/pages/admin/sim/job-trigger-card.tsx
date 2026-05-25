@@ -11,6 +11,7 @@ import { Gavel, CalendarClock, AlarmClock, Hourglass, Play } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import { getErrorMessage } from '@/lib/errors';
 
 interface JobDef {
   name: string;
@@ -34,8 +35,8 @@ export function JobTriggerCard() {
     try {
       await api.runJob(job.name);
       toast.success(`Job "${job.label}" ran`);
-    } catch (err: any) {
-      toast.error(err?.message ?? `Job "${job.label}" failed`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? `Job "${job.label}" failed`);
     } finally {
       setBusy(null);
     }

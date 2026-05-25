@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { phaseConfig, getNextPhase, type EditableLeague, type Phase } from './phase-config';
+import { getErrorMessage } from '@/lib/errors';
 
 interface PhaseControlsArgs {
   leagueList: EditableLeague[];
@@ -50,14 +51,14 @@ export function usePhaseControls({ leagueList, leagueStates, refreshLeagues }: P
         try {
           const result = await api.generateSchedule(leagueId);
           toast.success(`Generated ${result.matchCount} matches for ${name}`);
-        } catch (schedErr: any) {
+        } catch (schedErr: unknown) {
           toast.error(`Phase advanced but schedule generation failed: ${schedErr.message}`);
         }
       }
 
       refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
     setAdvanceOpen(false);
     setAdvanceTarget(null);
@@ -75,8 +76,8 @@ export function usePhaseControls({ leagueList, leagueStates, refreshLeagues }: P
       const name = leagueList.find(l => l.id === weekTarget)?.name;
       toast.success(`${name} advanced to Week ${result.week}`);
       refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
     setWeekOpen(false);
     setWeekTarget(null);
@@ -104,8 +105,8 @@ export function usePhaseControls({ leagueList, leagueStates, refreshLeagues }: P
       });
       toast.success(`Reverted to ${backwardTarget.to}`);
       refreshLeagues?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
     setBackwardOpen(false);
     setBackwardTarget(null);

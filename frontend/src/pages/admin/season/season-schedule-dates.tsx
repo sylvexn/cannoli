@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { ApiLeague } from '@/lib/api';
 import type { EditableLeague } from './phase-config';
+import { getErrorMessage } from '@/lib/errors';
 
 interface Props {
   leagueList: EditableLeague[];
@@ -69,7 +70,7 @@ export function SeasonScheduleDates({ leagueList, leagueStates, defaultLeagues, 
                       await api.updateLeague(league.id, { draftDate: val ? new Date(val).toISOString() : null });
                       toast.success('Draft date saved');
                       refreshLeagues?.();
-                    } catch (err: any) { toast.error(err.message); }
+                    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
                   }}
                   className="flex-1 h-7 px-2 rounded border border-border-default bg-surface-overlay text-text-primary text-xs font-mono"
                 />
@@ -135,7 +136,7 @@ export function SeasonScheduleDates({ leagueList, leagueStates, defaultLeagues, 
                               : '';
                             toast.success(`Week ${week} date saved${autoMsg}`);
                             refreshLeagues?.();
-                          } catch (err: any) { toast.error(err.message); }
+                          } catch (err: unknown) { toast.error(getErrorMessage(err)); }
                         }}
                         className="flex-1 h-6 px-1.5 rounded border border-border-default bg-surface-overlay text-text-primary text-[10px] font-mono"
                       />

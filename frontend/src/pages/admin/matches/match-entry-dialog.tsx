@@ -17,6 +17,7 @@ import {
   ChevronDown, ChevronUp, Plus, Trash2, Swords, Gavel,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
+import { getErrorMessage } from '@/lib/errors';
 
 export type ResultMode = 'enter' | 'force';
 
@@ -108,8 +109,8 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
       }
       onOpenChange(false);
       onSaved();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

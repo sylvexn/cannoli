@@ -17,6 +17,7 @@ import { ProvisionTeamsStep, type LeagueTeamsState, type TeamRow } from './provi
 import { OverlapConfirmDialog } from './overlap-confirm-dialog';
 import { ScheduleDatesStep } from './schedule-dates-step';
 import { ConfirmStep } from './confirm-step';
+import { getErrorMessage } from '@/lib/errors';
 
 type WizardStep = 'source' | 'leagues' | 'settings' | 'teams' | 'schedule' | 'confirm';
 
@@ -201,10 +202,10 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       }
       refreshLeagues();
       handleClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Detect overlap error and pop confirmation. Backend returns either:
       //   message text "prior_season_active" (current postJson behavior — only `error` is surfaced)
-      const msg = err?.message || '';
+      const msg = getErrorMessage(err, '');
       if (msg === 'prior_season_active') {
         // Look up active season number client-side since postJson swallowed extra fields.
         try {

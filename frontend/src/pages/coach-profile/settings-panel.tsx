@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { MAX_DISPLAY_NAME } from '@/lib/constants';
+import { getErrorMessage } from '@/lib/errors';
 
 const MAX_BIO = 280;
 const MAX_STATUS = 80;
@@ -89,8 +90,8 @@ export function ProfileSettingsPanel({
       await onSaved();
       toast.success(asStaff ? `Updated ${profile.username}` : 'Profile saved');
       onClose();
-    } catch (err: any) {
-      toast.error(err?.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }

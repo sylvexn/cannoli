@@ -22,6 +22,7 @@ import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { useFormatDate } from '@/lib/format';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
@@ -103,8 +104,8 @@ export function CompactTradeCard({
       setLocalStatus('awaiting_admin');
       toast.success('Sent for admin approval');
       onResponded?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(null);
     }
@@ -120,8 +121,8 @@ export function CompactTradeCard({
       setRejectOpen(false);
       setRejectReason('');
       onResponded?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(null);
     }
@@ -134,8 +135,8 @@ export function CompactTradeCard({
       setLocalStatus('rejected');
       toast.success('Trade withdrawn');
       onResponded?.();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(null);
     }

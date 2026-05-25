@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Sliders, Eye, Globe, ChevronsUpDown } from 'lucide-react';
 import { DEFAULT_LANDING_OPTIONS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 
 const DEFAULTS: ApiUserPreferences = {
   theme: 'dark',
@@ -43,7 +44,7 @@ export function PreferencesTab() {
   useEffect(() => {
     api.getMyPreferences()
       .then(p => { setServer(p); setDraft(p); })
-      .catch(err => toast.error(err.message || 'Failed to load preferences'))
+      .catch(err => toast.error(getErrorMessage(err, 'Failed to load preferences')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -73,8 +74,8 @@ export function PreferencesTab() {
       // Always refresh — picks up timezone + colorblind in one round-trip and
       // re-stamps <html data-colorblind> via AuthProvider's effect.
       await refreshPreferences();
-    } catch (err: any) {
-      toast.error(err.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }

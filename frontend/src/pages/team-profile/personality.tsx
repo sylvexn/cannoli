@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth-context';
 import { canManageTeam } from '@/lib/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 
 interface PersonalityProps {
   player: Player;
@@ -48,8 +49,8 @@ export function Personality({ player, onSaved }: PersonalityProps) {
       await onSaved?.();
       setEditing(false);
       toast.success('Team profile saved');
-    } catch (err: any) {
-      toast.error(err?.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }

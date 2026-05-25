@@ -24,6 +24,7 @@ import {
 } from './matches/match-status-badges';
 import { MatchEntryDialog, type ResultMode } from './matches/match-entry-dialog';
 import { MatchActionsDropdown } from './matches/match-actions-dropdown';
+import { getErrorMessage } from '@/lib/errors';
 
 export function AdminMatches() {
   const { leagues } = useAppData();
@@ -80,8 +81,8 @@ export function AdminMatches() {
       await api.dismissMatchWarnings(matchId);
       toast.success('Warnings dismissed');
       fetchMatches();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   }
 

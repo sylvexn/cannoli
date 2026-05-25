@@ -8,6 +8,7 @@ import type { ApiTeam } from '@/lib/api';
 import { Shuffle, ListOrdered, GripVertical, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 
 interface DraftOrderEditorProps {
   leagueId: string;
@@ -72,7 +73,7 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
     try {
       await api.saveDraftOrder(leagueId, order);
       toast.success(`Draft order saved for ${leagueName}`);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   if (loading) return <div className="text-text-muted text-xs py-2">Loading teams...</div>;

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { api, type ApiLeague } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { FlaskConical, ChevronRight } from 'lucide-react';
+import { getErrorMessage } from '@/lib/errors';
 
 // Compact phase labels for the public active-leagues strip. We deliberately
 // use lowercase here — pre-auth ornament, reads like a status line, not a UI
@@ -65,8 +66,8 @@ export function LoginPage() {
       await api.demoLogin();
       await refreshUser();
       navigate('/');
-    } catch (err: any) {
-      setDemoError(err.message || 'Demo login failed');
+    } catch (err: unknown) {
+      setDemoError(getErrorMessage(err, 'Demo login failed'));
       setDemoLoading(false);
     }
   }

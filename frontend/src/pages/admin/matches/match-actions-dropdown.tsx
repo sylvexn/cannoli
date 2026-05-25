@@ -18,6 +18,7 @@ import {
   Eraser, ArrowRightLeft, Gavel,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
+import { getErrorMessage } from '@/lib/errors';
 
 export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResult }: {
   match: ApiAdminMatch;
@@ -47,8 +48,8 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
       toast.success('Match result voided');
       setVoidOpen(false);
       onChanged();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -61,8 +62,8 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
       toast.success('Match deleted');
       setDeleteOpen(false);
       onChanged();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -93,8 +94,8 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
       toast.success('Match updated');
       setMoveOpen(false);
       onChanged();
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

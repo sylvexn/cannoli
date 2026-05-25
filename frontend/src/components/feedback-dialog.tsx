@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { MessageSquarePlus, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 export function FeedbackDialog() {
   const [open, setOpen] = useState(false);
@@ -28,8 +29,8 @@ export function FeedbackDialog() {
       setOpen(false);
       setTitle('');
       setDescription('');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit feedback');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to submit feedback'));
     } finally {
       setSubmitting(false);
     }

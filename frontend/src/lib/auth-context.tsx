@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useMemo } 
 import type { User } from './types';
 import { isStaff } from './permissions';
 import { api } from './api';
+import { getErrorMessage } from '@/lib/errors';
 
 interface AuthContextValue {
   user: User | null;
@@ -79,8 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u as User);
       await loadPreferences();
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Login failed' };
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'Login failed') };
     }
   }, [loadPreferences]);
 
@@ -96,8 +97,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await api.changePassword(current, next);
       setUser(prev => prev ? { ...prev, mustChangePassword: false } : null);
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Password change failed' };
+    } catch (err: unknown) {
+      return { success: false, error: getErrorMessage(err, 'Password change failed') };
     }
   }, []);
 

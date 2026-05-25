@@ -9,6 +9,7 @@ import { Save, X, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 
 interface TeraCaptainStripProps {
   activeRoster: RosterPokemon[];
@@ -97,8 +98,8 @@ export function TeraCaptainStrip({
         toast.success('Tera captains saved');
       }
       onTeraEditsClear();
-    } catch (e: any) {
-      toast.error(e.message || 'Failed to save');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Failed to save'));
     }
   }
 

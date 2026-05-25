@@ -21,7 +21,8 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { isMegaForm } from '@/lib/draft-rules';
 import { validateTrade } from './wizard/validation';
-import type { Trade } from '@/lib/types';
+import { getErrorMessage } from '@/lib/errors';
+import type { Trade, Player } from '@/lib/types';
 
 interface TradeProposeDialogProps {
   open: boolean;
@@ -38,8 +39,6 @@ interface TradeProposeDialogProps {
    */
   counterTo?: Trade | null;
 }
-
-import type { Player } from '@/lib/types';
 
 export function TradeProposeDialog({ open, onClose, recipientTeamId, counterTo }: TradeProposeDialogProps) {
   const league = useLeague();
@@ -139,8 +138,8 @@ export function TradeProposeDialog({ open, onClose, recipientTeamId, counterTo }
         toast.success('Trade proposal sent!');
       }
       onClose();
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to send proposal';
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, 'Failed to send proposal');
       setSubmitError(msg);
       toast.error(msg);
     } finally {
