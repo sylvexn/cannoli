@@ -502,7 +502,7 @@ export function FreeAgentsPage() {
                         .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                         .map(r => (
                           <option key={r.name} value={r.name}>
-                            {r.isTeraCaptain ? '★ ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain)})
+                            {r.isTeraCaptain ? '[C] ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain)})
                           </option>
                         ))}
                     </select>

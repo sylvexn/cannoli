@@ -45,23 +45,34 @@ test.describe('Showdown / Arena', () => {
   });
 
   /**
-   * LAUNCH-BUG: hud-glyph — battle-hud.tsx lines 208/210 render the literal
-   * strings "☠" and "●" as JSX text children instead of the skull /
-   * status-dot glyphs they were meant to be (a `\u` escape only decodes inside
-   * a JS string literal, not as raw JSX text). The fainted/alive indicator in
-   * the Live Stats panel therefore shows the seven characters "☠" rather
-   * than a skull. Also violates the no-emoji/use-lucide-icons convention.
+   * hud-glyph (FIXED) — battle-hud.tsx used to render literal "☠"/"●" glyphs
+   * as JSX text children (violating the no-emoji / use-lucide rule). They are
+   * now lucide-react Skull / Circle icons.
    *
-   * Skipped because reaching the Battle HUD requires a live PS battle stream
-   * (PS fork + |win| capture) that this suite doesn't stand up. Re-enable once
-   * the arena fixture can inject a viewingBattle + liveStats, or cover via a
-   * component render test (see component-harness note in findings). Proposed
-   * fix: replace the two <span>\uXXXX</span> children with the actual glyph in
-   * a JS expression ({'☠'}) or, preferably, a lucide-react Skull / Circle
-   * icon to honour the no-emoji rule.
+   * Reaching the live Battle HUD in e2e requires a real PS battle stream
+   * (PS fork + |win| capture) that this suite intentionally does NOT stand up,
+   * and there's no component-render harness in the e2e project. So rather than
+   * deleting the coverage, we assert at the source level that the HUD imports
+   * and renders the lucide icons (and no longer contains the raw glyphs) — a
+   * regression guard for the no-emoji convention. Promote to a live-HUD
+   * assertion if/when the arena fixture can inject viewingBattle + liveStats.
    */
-  test.fixme('battle HUD renders the fainted glyph, not the literal escape', async () => {
-    // Intentionally empty — see LAUNCH-BUG: hud-glyph above.
+  test('battle HUD uses lucide Skull/Circle icons, not literal glyphs', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const src = fs.readFileSync(
+      path.resolve(__dirname, '../../frontend/src/pages/showdown/battle-hud.tsx'),
+      'utf8',
+    );
+    // No raw skull/dot glyphs left in the source.
+    expect(src.includes('☠'), 'no literal skull glyph in battle-hud').toBe(false);
+    expect(src.includes('●'), 'no literal status-dot glyph in battle-hud').toBe(false);
+    // lucide icons imported and rendered for the fainted/alive indicator.
+    expect(/import\s+\{[^}]*\bSkull\b[^}]*\bCircle\b[^}]*\}\s+from\s+['"]lucide-react['"]/.test(src)
+      || (/\bSkull\b/.test(src) && /\bCircle\b/.test(src) && src.includes("from 'lucide-react'")))
+      .toBe(true);
+    expect(/<Skull\b/.test(src), 'renders <Skull> for fainted').toBe(true);
+    expect(/<Circle\b/.test(src), 'renders <Circle> for alive').toBe(true);
   });
 });
 

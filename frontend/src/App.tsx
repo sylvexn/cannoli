@@ -7,6 +7,7 @@ import { PokemonSideCardProvider } from '@/components/pokemon-side-card-context'
 import { Toaster } from '@/components/ui/sonner';
 import { ProtectedRoute } from '@/components/protected-route';
 import { AppShell } from '@/components/app-shell';
+import { PageErrorBoundary } from '@/components/page-error-boundary';
 import { LeagueLayout } from '@/components/league-layout';
 import { PageLoadingSpinner } from '@/components/skeletons';
 import { LoginPage } from '@/pages/login';
@@ -56,13 +57,15 @@ export default function App() {
         <TooltipProvider>
           <PokemonSideCardProvider>
           <Routes>
-            {/* Public routes — no sidebar */}
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/change-password" element={<ChangePasswordPage />} />
+            {/* Public routes — no sidebar. Wrapped in their own error
+                boundary: they render outside the AppShell <Outlet>, so a crash
+                here would otherwise blank the whole app. */}
+            <Route path="/login" element={<PageErrorBoundary><LoginPage /></PageErrorBoundary>} />
+            <Route path="/change-password" element={<PageErrorBoundary><ChangePasswordPage /></PageErrorBoundary>} />
 
             {/* Theater-mode broadcast cockpit — admin only, outside the AppShell. */}
             <Route element={<ProtectedRoute requireAdmin />}>
-              <Route path="/replays/stream/:week" element={<StreamPage />} />
+              <Route path="/replays/stream/:week" element={<PageErrorBoundary><StreamPage /></PageErrorBoundary>} />
             </Route>
 
             {/* App shell (works for both guests and authenticated users) */}
