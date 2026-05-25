@@ -1,10 +1,12 @@
 import { Elysia } from 'elysia';
-import { db, schema } from '../../db';
+import { db, schema, sqlite } from '../../db';
 import { eq, and, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { runAutoAwards } from '../../lib/pins/auto-award';
+import { mintArchivePins } from '../../lib/pins/archive-mint';
+import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 
 export const leagueAdminRoutes = new Elysia()
@@ -294,11 +296,22 @@ export const leagueAdminRoutes = new Elysia()
       // leagues that skip playoffs. Re-runs from another phase change won't
       // dupe.
       if (phase === 'offseason' && previousPhase !== 'offseason') {
+        // Match the finalize-season CLI ordering (scripts/finalize-season.ts):
+        // stamp finish positions FIRST (champion/runner-up/SF/QF/regular), then
+        // mint the archive pins (champion / high-score / steal-of-the-draft /
+        // sweeper) which depend on those positions, and only then run the
+        // generic season-end auto-awards. Previously the UI route ran ONLY
+        // runAutoAwards, leaving NULL finish positions + missing champion
+        // pins when an admin advanced via the panel instead of the CLI.
+        assignFinishPositions(sqlite, [params.leagueId]);
+        const archive = mintArchivePins(params.leagueId, {
+          awardedBy: user.id ? parseInt(user.id) : null,
+        });
         const summary = runAutoAwards(params.leagueId, {
           trigger: 'season-end',
           awardedBy: user.id ? parseInt(user.id) : null,
         });
-        pinsAwarded = summary.awarded.length;
+        pinsAwarded = summary.awarded.length + archive.awarded.length;
       }
 
       const isBackward = toRank < fromRank;
