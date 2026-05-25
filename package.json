@@ -12,9 +12,10 @@
     "check": "bun run --cwd frontend check",
     "lint": "bun run --cwd frontend lint",
     "test": "bun run --cwd backend test",
+    "test:unit": "bun run --cwd frontend test:unit",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:all": "bun run test && bun run test:e2e"
+    "test:all": "bun run test && bun run test:unit && bun run test:e2e"
   },
   "dependencies": {
     "@fontsource-variable/cinzel": "^5.2.8"
