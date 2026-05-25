@@ -10,25 +10,30 @@ import { test, expect } from '@playwright/test';
 test.describe('Profile colors', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('user can save profile colors and they persist', async ({ page, request }) => {
+  test('user can save profile colors and they persist', async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel(/username/i).fill('syl');
     await page.getByLabel(/password/i).fill('admin');
-    await page.getByRole('button', { name: /log in/i }).click();
-    await expect(page).toHaveURL(/\/$|\/league|\/admin/, { timeout: 10_000 });
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page).not.toHaveURL(/\/login$/, { timeout: 10_000 });
 
     await page.goto('/settings');
     await expect(page.getByText(/profile colors/i)).toBeVisible();
 
-    // Pick the first non-transparent swatch under "Primary"
-    const primaryRegion = page.locator('text=Primary').locator('..').locator('..');
-    const firstSwatch = primaryRegion.locator('button').first();
+    // The Profile Colors card defaults to editing the "Primary" slot. The
+    // swatch grid lives in the "Editing Primary" panel; each swatch is a
+    // button with an aria-label "Set Primary to <hex>". Pick the first one.
+    const firstSwatch = page.getByRole('button', { name: /^Set Primary to #/i }).first();
     await firstSwatch.click();
-    await page.getByRole('button', { name: /save colors/i }).click();
-    await expect(page.getByText(/profile colors saved/i)).toBeVisible({ timeout: 5000 });
 
-    // Verify via API
-    const me = await request.get('http://localhost:3001/api/auth/me');
+    // The Profile card has a single sticky "Save changes" button (covers
+    // identity + colors). Click it and wait for the success toast.
+    await page.getByRole('button', { name: /save changes/i }).click();
+    await expect(page.getByText(/profile saved/i)).toBeVisible({ timeout: 5000 });
+
+    // Verify via API — use page.request so the authenticated session cookie
+    // (and the same-origin Vite proxy) are reused.
+    const me = await page.request.get('/api/auth/me');
     const body = await me.json();
     expect(body.user?.primaryColor).toMatch(/^#[0-9a-fA-F]{6}$/);
   });

@@ -42,33 +42,23 @@ test.describe('League Hub — standings', () => {
     // The qualify-line footer is rendered by the standings table specifically.
     await expect(page.getByText(/qualify for playoffs/i)).toBeVisible({ timeout: 10_000 });
 
-    // Each standings row is a button (the expand toggle). Grab the first one.
-    const firstChevronButton = page
-      .locator('button:has(svg)')
-      .filter({ hasText: /.+/ })
-      .first();
-
-    // More robust: a row contains a record like "10-2" and a chevron. Click the
-    // first row that owns a RecordDisplay. We target the clickable header button
-    // inside the standings card.
-    const standingsCard = page.locator('div').filter({ hasText: /qualify for playoffs/i }).last();
-    const rowButton = standingsCard.locator('button').first();
+    // Each standings row is a <button> (the expand toggle) whose accessible
+    // name begins with the team's rank. Grab the rank-1 row and expand it.
+    const rowButton = page.locator('main').getByRole('button', { name: /^\s*1\b/ }).first();
     await expect(rowButton).toBeVisible();
+
+    // Count sprites before expanding so we can prove the roster detail mounts.
+    const spritesBefore = await page.locator('main img[alt]').count();
     await rowButton.click();
 
-    // After expanding, the roster detail mounts: a TierBadge / K-D line / point
-    // cap bar appears. The point-cap bar carries the word "pts" or a number;
-    // the most stable signal is the "Transactions"-or-roster sprite block. We
-    // assert at least one pokemon sprite img is now visible inside the expanded
-    // region (sprites are <img> with alt text of the species).
+    // After expanding, the roster detail mounts: PokemonSprite renders <img>
+    // elements (alt = species). Assert more sprites are visible than before.
     await expect(async () => {
-      const sprites = await page.locator('img[alt]').count();
-      expect(sprites).toBeGreaterThan(0);
+      const sprites = await page.locator('main img[alt]').count();
+      expect(sprites).toBeGreaterThan(spritesBefore);
     }).toPass({ timeout: 5_000 });
 
     expect(errors, 'no runtime errors on the standings page').toEqual([]);
-    // Reference firstChevronButton to keep lint happy without asserting on it.
-    void firstChevronButton;
   });
 
   test('team names link to the team profile page', async ({ page }) => {
