@@ -2,7 +2,10 @@
 set -e
 
 # Seed the DB only on first boot (no existing file) or when explicitly requested.
-DB_PATH="/app/backend/data/cannoli.db"
+# Honor CANNOLI_DB_PATH (read by the backend at runtime — src/db/index.ts) so
+# the seed gate checks the same file the server will actually open; fall back
+# to the canonical volume path otherwise.
+DB_PATH="${CANNOLI_DB_PATH:-/app/backend/data/cannoli.db}"
 
 # Pick the seed by deployment mode: mock runs the synthetic season simulator
 # (seed-sim.ts), every other mode runs the real XLSX-import seed (seed.ts).
