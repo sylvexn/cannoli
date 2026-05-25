@@ -75,7 +75,6 @@ describe('validateTrade', () => {
   });
 
   test('flags a side that would hold 2 megas', () => {
-    const a = team('a', 'AAA', [mon('Mega Gengar', 20)]);
     const b = team('b', 'BBB', [mon('Mega Lucario', 18)]);
     // a offers nothing of its mega and requests b's mega → a ends with 2 megas.
     const a2 = team('a', 'AAA', [mon('Mega Gengar', 20), mon('Trade Bait', 4)]);
