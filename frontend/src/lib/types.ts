@@ -174,6 +174,10 @@ export interface League {
   name: string;
   color: string;
   draftDate?: string | null;
+  /** IANA timezone that anchors this league's deadline CUTOFFS (auto-forfeit,
+   *  week-end). Deadlines are DISPLAYED in each viewer's own zone but the
+   *  enforced cutoff is 23:59:59 in THIS zone. Defaults to America/New_York. */
+  timezone?: string | null;
   /** Configurable bracket size for this league's playoffs (2/4/6/8). Per-league. */
   playoffTeamCount: number;
   /** Battle format — drives moveset legality on the draft board + matchup
