@@ -84,8 +84,8 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
 // ─── Pure helpers (testable without DB) ───────────────────────────────────
 
 export interface ChampionFinalsRow {
-  homeTeamId: string;
-  awayTeamId: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
   homeScore: number | null;
   awayScore: number | null;
 }
@@ -118,6 +118,8 @@ export function pickChampion(rows: ChampionFinalsRow[]): ChampionWinner | null {
   }
   if (homeSum === awaySum) return null;
   const ref = rows[0];
+  // A scored finals always has both teams resolved (not a NULL bracket slot).
+  if (ref.homeTeamId == null || ref.awayTeamId == null) return null;
   const winnerIsHome = homeSum > awaySum;
   return {
     winnerTeamId: winnerIsHome ? ref.homeTeamId : ref.awayTeamId,
@@ -431,7 +433,7 @@ function awardSweeper(
     if (m.homeScore == null || m.awayScore == null) continue;
     if (m.homeScore === m.awayScore) continue;
     const winnerId = m.homeScore > m.awayScore ? m.homeTeamId : m.awayTeamId;
-    if (!teamIds.has(winnerId)) continue;
+    if (winnerId == null || !teamIds.has(winnerId)) continue;
 
     const row = db.select({
       deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,

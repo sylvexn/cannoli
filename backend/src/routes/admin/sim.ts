@@ -212,7 +212,7 @@ export const simRoutes = new Elysia()
       set.status = 409;
       return { error: 'Match already has a result — void it first', code: 'match_already_played' };
     }
-    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') {
+    if (match.homeTeamId == null || match.awayTeamId == null) {
       set.status = 409;
       return { error: 'Match has an unfilled TBD slot', code: 'match_tbd' };
     }

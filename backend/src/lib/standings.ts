@@ -125,7 +125,7 @@ function resolveBucketPure(
  * a correct W/L. Falls back to score comparison for legacy/sim rows that
  * predate the column. Returns null for ties / no-contests (double-forfeit 0-0).
  */
-function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string; awayTeamId: string; homeScore: number | null; awayScore: number | null }): string | null {
+function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null }): string | null {
   if (m.winnerTeamId) return m.winnerTeamId;
   if (m.homeScore == null || m.awayScore == null) return null;
   if (m.homeScore > m.awayScore) return m.homeTeamId;
@@ -163,6 +163,8 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
   );
 
   for (const m of completed) {
+    // Completed matches always have both teams resolved; guard for the type.
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
     const home = byTeam.get(m.homeTeamId);
     const away = byTeam.get(m.awayTeamId);
     const hs = m.homeScore ?? 0;
@@ -209,14 +211,16 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
       sql`home_score IS NOT NULL`,
     ))
     .all()
-    .filter(m => setIds.has(m.homeTeamId) && setIds.has(m.awayTeamId));
+    .filter(m => m.homeTeamId != null && m.awayTeamId != null
+      && setIds.has(m.homeTeamId) && setIds.has(m.awayTeamId));
 
   for (const m of matches) {
     const winner = matchWinner(m);
+    if (winner == null) continue; // ties / no-contests contribute nothing
     if (winner === m.homeTeamId) {
-      result.set(m.homeTeamId, (result.get(m.homeTeamId) ?? 0) + 1);
+      result.set(winner, (result.get(winner) ?? 0) + 1);
     } else if (winner === m.awayTeamId) {
-      result.set(m.awayTeamId, (result.get(m.awayTeamId) ?? 0) + 1);
+      result.set(winner, (result.get(winner) ?? 0) + 1);
     }
     // ties / no-contests contribute nothing
   }

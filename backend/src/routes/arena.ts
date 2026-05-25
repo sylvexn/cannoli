@@ -123,6 +123,8 @@ function scheduleReadyTimeout(matchId: string) {
     const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
     // Only revert if still ready (bot hasn't picked it up)
     if (!m || m.status !== 'ready') return;
+    // A readied match always has both teams resolved (not a NULL bracket slot).
+    if (m.homeTeamId == null || m.awayTeamId == null) return;
 
     db.update(schema.matches)
       .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
@@ -217,8 +219,8 @@ function getMatchWithTeams(matchId: string) {
   const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
   if (!match) return null;
 
-  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
 
   return { match, homeTeam, awayTeam };
 }
@@ -249,8 +251,8 @@ function broadcastLiveMatches() {
     .where(eq(schema.matches.status, 'in_progress'))
     .all()
     .map(m => {
-      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
-      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
+      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId ?? '')).get();
+      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId ?? '')).get();
       return {
         matchId: m.id,
         leagueId: m.leagueId,
@@ -340,8 +342,8 @@ export const arenaRoutes = new Elysia()
       .where(eq(schema.matches.status, 'in_progress'))
       .all()
       .map(m => {
-        const ht = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
-        const at = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
+        const ht = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId ?? '')).get();
+        const at = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId ?? '')).get();
         return {
           matchId: m.id, leagueId: m.leagueId, week: m.week,
           homeTeam: ht ? { name: ht.teamName, abbrev: ht.teamAbbrev } : null,
@@ -494,8 +496,8 @@ export const arenaRoutes = new Elysia()
 
               // Instruct bot to create the PS battle
               if (isBotConnected()) {
-                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
                 // PS battles are created against the owning user's account
                 // username (that's what they log in as via SSO). Falls back to
                 // coachName / matchId only if the team has no owning user.
@@ -505,8 +507,8 @@ export const arenaRoutes = new Elysia()
                 const awayUser = awayTeam?.userId
                   ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, awayTeam.userId)).get()
                   : null;
-                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId;
-                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId;
+                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId || 'home';
+                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId || 'away';
                 createBattle(p1Name, p2Name);
               } else {
                 // Bot not connected — notify players

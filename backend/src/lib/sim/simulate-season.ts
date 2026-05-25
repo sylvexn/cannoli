@@ -115,7 +115,7 @@ export function simulateSeason(opts: {
     if (match.week > throughWeek) break;
     reachedWeek = Math.max(reachedWeek, match.week);
     if (match.status === 'completed' || match.status === 'disputed') continue;
-    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') continue;
+    if (match.homeTeamId == null || match.awayTeamId == null) continue;
 
     const sim = simulateMatch({
       homeTeamId: match.homeTeamId,
@@ -206,7 +206,7 @@ export function simulatePlayoffs(leagueId: string, rng: MockRng): SimulatePlayof
         .where(eq(schema.matches.id, match.id))
         .get();
       if (!fresh || fresh.status === 'completed' || fresh.status === 'disputed') continue;
-      if (fresh.homeTeamId === 'TBD' || fresh.awayTeamId === 'TBD') {
+      if (fresh.homeTeamId == null || fresh.awayTeamId == null) {
         return {
           success: false,
           error: `Playoff match ${match.id} still has a TBD slot — bracket advance broke`,
@@ -328,8 +328,8 @@ function generatePlayoffBracket(leagueId: string): { success: boolean; error?: s
         id: `${leagueId}-p${m.round}${matchNum}`,
         leagueId,
         week: m.week,
-        homeTeamId: homeTeam || 'TBD',
-        awayTeamId: awayTeam || 'TBD',
+        homeTeamId: homeTeam ?? null,
+        awayTeamId: awayTeam ?? null,
         phase: 'playoffs',
         playoffRound: m.round,
         homeSeed: m.homeSeed || null,
