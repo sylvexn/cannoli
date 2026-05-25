@@ -288,12 +288,11 @@ export function buildSimWorld(opts: { masterSeed?: number } = {}): BuildSimWorld
   const masterSeed = (opts.masterSeed ?? DEFAULT_SIM_SEED) >>> 0;
   console.log(`\nBuilding simulator world (masterSeed=0x${masterSeed.toString(16)})…`);
 
-  // The playoff bracket generator inserts SF/F match rows with a literal
-  // 'TBD' home/away team id before the bracket auto-advance fills them in.
-  // matches.homeTeamId is an FK onto teams.id, so the transient 'TBD' value
-  // trips the constraint. Disable FK enforcement for the bulk build (this is
-  // a trusted, mock-only, full-rebuild operation — the same posture as the
-  // XLSX importer). Re-enabled in the finally block below.
+  // Disable FK enforcement for the bulk build (this is a trusted, mock-only,
+  // full-rebuild operation — the same posture as the XLSX importer). NB: the
+  // playoff bracket now stores not-yet-determined SF/F slots as NULL (FK-safe),
+  // so this is no longer strictly required for the bracket, but we keep it for
+  // the broader bulk insert/delete ordering. Re-enabled in the finally below.
   sqlite.exec('PRAGMA foreign_keys = OFF');
   try {
     return buildSimWorldInner(masterSeed);

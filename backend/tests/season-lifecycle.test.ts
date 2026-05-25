@@ -42,6 +42,8 @@ import { generateLeagueSchedule } from '../src/lib/schedule-generator';
 import { recordMatchResult } from '../src/lib/match-service';
 import { computeStandings } from '../src/lib/standings';
 import { assignFinishPositions } from '../scripts/import-xlsx';
+import { runAutoAwards } from '../src/lib/pins/auto-award';
+import { mintArchivePins } from '../src/lib/pins/archive-mint';
 import {
   checkSeasonArchived,
   checkLeagueArchived,
@@ -123,6 +125,14 @@ function advancePhase(
   if (previousPhase === 'draft' && phase === 'regular') {
     scheduleGenerated = generateLeagueSchedule(leagueId).success;
   }
+  // OFFSEASON-FINALIZE: mirror the production route (admin/leagues.ts) — a
+  // transition INTO offseason now stamps finish positions, mints archive pins,
+  // then runs the generic season-end auto-awards, in that order.
+  if (phase === 'offseason' && previousPhase !== 'offseason') {
+    assignFinishPositions(sqlite, [leagueId]);
+    mintArchivePins(leagueId);
+    runAutoAwards(leagueId, { trigger: 'season-end' });
+  }
   return { success: true, scheduleGenerated };
 }
 
@@ -155,8 +165,8 @@ function generatePlayoffBracket(leagueId: string, seedCount = 6): { success: boo
       id: `${leagueId}-p${m.round}${n}`,
       leagueId,
       week: m.week,
-      homeTeamId: home || 'TBD',
-      awayTeamId: away || 'TBD',
+      homeTeamId: home ?? null,
+      awayTeamId: away ?? null,
       phase: 'playoffs',
       playoffRound: m.round,
       homeSeed: m.homeSeed || null,
@@ -283,13 +293,10 @@ describe('full season lifecycle (production code paths)', () => {
   }
 
   beforeAll(() => {
-    // FK enforcement MUST be toggled OUTSIDE a transaction — `PRAGMA foreign_keys`
-    // is a silent no-op once BEGIN has run (verified: SQLite latches the value at
-    // transaction start). We disable it before the outer BEGIN so the playoff
-    // bracket's transient 'TBD' rows can be inserted — exactly the posture the
-    // simulator's buildSimWorld (build-world.ts:297) adopts. See LAUNCH-BUG
-    // PLAYOFF-TBD-FK: production code does NOT do this and crashes.
-    sqlite.exec('PRAGMA foreign_keys = OFF');
+    // PLAYOFF-TBD-FK fixed: not-yet-determined bracket slots are stored as NULL
+    // (FK-safe) rather than a 'TBD' sentinel, so the bracket inserts cleanly
+    // under the production FK=ON posture. We no longer disable foreign keys —
+    // this test now exercises the SAME constraint environment as live.
     sqlite.exec('BEGIN');
     buildPredraftLeague();
   });
@@ -297,7 +304,6 @@ describe('full season lifecycle (production code paths)', () => {
   afterAll(() => {
     // Discard EVERYTHING — the dev DB is untouched.
     sqlite.exec('ROLLBACK');
-    sqlite.exec('PRAGMA foreign_keys = ON');
   });
 
   let seasonId: number;
@@ -393,53 +399,44 @@ describe('full season lifecycle (production code paths)', () => {
     expect(standings.reduce((s, r) => s + r.wins, 0)).toBe(15);
   });
 
-  // LAUNCH-BUG: PLAYOFF-TBD-FK matches.ts:773 — `/api/leagues/:id/playoffs/generate`
-  // inserts SF/F rows with homeTeamId/awayTeamId = 'TBD', but matches.home_team_id
-  // and matches.away_team_id are FKs onto teams.id and the app opens the DB with
-  // `PRAGMA foreign_keys = ON` (db/index.ts:12). There is no 'TBD' team row, so the
-  // insert throws `FOREIGN KEY constraint failed` for every bracket size > 2 (4/6/8
-  // all create TBD SF/F slots). The season SIMULATOR never hits this because
-  // build-world.ts:297 + sim.ts:432 wrap their bracket build in
-  // `PRAGMA foreign_keys = OFF` — so the bug is invisible in mock mode and ONLY
-  // bites the live deployment. This test documents the failure (skipped to keep
-  // the branch green); see Bugs Found.
-  test.skip('LAUNCH-BUG PLAYOFF-TBD-FK: bracket gen inserts TBD rows under FK=ON (crashes live)', () => {
-    // Standalone reproduction on a private connection (the describe's outer BEGIN
-    // would mask FK enforcement, so we prove it on its own in-tx-free DB). With
-    // foreign_keys=ON — the production default (db/index.ts:12) — inserting a
-    // match row whose home_team_id has no teams.id row throws. This is precisely
-    // what matches.ts:773 does for SF/F slots. Skipped: documents a real bug.
+  // PLAYOFF-TBD-FK (FIXED): not-yet-determined bracket slots are stored as NULL
+  // (a valid FK value) rather than the old 'TBD' sentinel, which violated the
+  // FK onto teams.id under PRAGMA foreign_keys=ON and crashed every 4/6/8-team
+  // bracket in live mode. This test proves a NULL home/away_team_id row inserts
+  // cleanly under FK=ON (the production posture).
+  test('PLAYOFF-TBD-FK: a bracket slot with NULL teams inserts under FK=ON', () => {
     const { Database } = require('bun:sqlite');
     const probe = new Database(':memory:');
     probe.exec('PRAGMA foreign_keys = ON');
     probe.exec('CREATE TABLE teams(id TEXT PRIMARY KEY)');
     probe.exec('CREATE TABLE matches(id TEXT PRIMARY KEY, home_team_id TEXT REFERENCES teams(id))');
+    // NULL satisfies the FK; the old 'TBD' string did not.
     expect(() =>
-      probe.prepare('INSERT INTO matches VALUES (?,?)').run('sf1', 'TBD'),
-    ).not.toThrow(); // FAILS in reality → SQLITE_CONSTRAINT_FOREIGNKEY
+      probe.prepare('INSERT INTO matches VALUES (?,?)').run('sf1', null),
+    ).not.toThrow();
+    expect(() =>
+      probe.prepare('INSERT INTO matches VALUES (?,?)').run('sf2', 'TBD'),
+    ).toThrow(); // the sentinel STILL violates the FK — proving why NULL is required
   });
 
   test('playoffs phase advance succeeds; bracket generated with seeded matchups', () => {
     const adv = advancePhase(LEAGUE_ID, 'playoffs');
     expect(adv.success).toBe(true);
 
-    // The describe's beforeAll disabled FK enforcement before BEGIN (mirroring
-    // buildSimWorld). That lets the bracket's transient 'TBD' SF/F rows insert
-    // here — side-stepping LAUNCH-BUG PLAYOFF-TBD-FK so the REST of the lifecycle
-    // (auto-advance, finalize, archive) can be validated. Production runs FK=ON
-    // and crashes at this exact step (see skipped test above + Bugs Found).
+    // PLAYOFF-TBD-FK fixed: the bracket's not-yet-determined SF/F slots are now
+    // NULL (FK-safe) and insert cleanly under the production FK=ON posture.
     generatePlayoffBracket(LEAGUE_ID, 6);
     const po = db.select().from(schema.matches)
       .where(and(eq(schema.matches.leagueId, LEAGUE_ID), eq(schema.matches.phase, 'playoffs')))
       .all();
     expect(po).toHaveLength(5); // 2 QF + 2 SF + 1 F
 
-    // SF/F start with TBD slots that auto-advance fills.
-    const sfTbd = po.filter(m => m.playoffRound === 'sf' && m.awayTeamId === 'TBD');
+    // SF/F start with NULL (not-yet-determined) slots that auto-advance fills.
+    const sfTbd = po.filter(m => m.playoffRound === 'sf' && m.awayTeamId == null);
     expect(sfTbd).toHaveLength(2);
     const finalsTbd = po.find(m => m.playoffRound === 'f')!;
-    expect(finalsTbd.homeTeamId).toBe('TBD');
-    expect(finalsTbd.awayTeamId).toBe('TBD');
+    expect(finalsTbd.homeTeamId).toBeNull();
+    expect(finalsTbd.awayTeamId).toBeNull();
 
     // Top-2 seeds occupy the SF home slots (byes).
     const seeded = computeStandings(LEAGUE_ID, { phase: 'regular' });
@@ -461,8 +458,8 @@ describe('full season lifecycle (production code paths)', () => {
 
       for (const m of matches) {
         const fresh = db.select().from(schema.matches).where(eq(schema.matches.id, m.id)).get()!;
-        expect(fresh.homeTeamId).not.toBe('TBD');
-        expect(fresh.awayTeamId).not.toBe('TBD');
+        expect(fresh.homeTeamId).not.toBeNull();
+        expect(fresh.awayTeamId).not.toBeNull();
         const out = playMatch(fresh.id, 4, 2); // home wins
         expect(out.ok).toBe(true);
       }
@@ -479,17 +476,22 @@ describe('full season lifecycle (production code paths)', () => {
     expect(finals.awayScore).toBe(2);
   });
 
-  test('offseason finalize: assignFinishPositions stamps champion / runner-up / SF / QF', () => {
-    // The production /phase route advances to offseason and runs auto-awards but
-    // does NOT stamp finish positions — that is done by scripts/finalize-season.ts
-    // (assignFinishPositions). We run the same function the script does.
+  test('offseason finalize: UI transition stamps champion / runner-up / SF / QF + archive pins', () => {
+    // OFFSEASON-FINALIZE: the production /phase route now stamps finish
+    // positions AND mints archive pins on the transition into offseason (it
+    // previously only ran the generic auto-awards, leaving NULL finish
+    // positions when an admin advanced via the UI instead of the CLI). Our
+    // advancePhase() mirror does the same; we assert the positions are stamped
+    // BY the transition — no separate finalize call.
     const adv = advancePhase(LEAGUE_ID, 'offseason');
     expect(adv.success).toBe(true);
     expect(db.select().from(schema.leagues).where(eq(schema.leagues.id, LEAGUE_ID)).get()!.phase)
       .toBe('offseason');
 
-    const { teamsUpdated } = assignFinishPositions(sqlite, [LEAGUE_ID]);
-    expect(teamsUpdated).toBe(TEAM_COUNT);
+    // Finish positions stamped purely by the offseason transition.
+    const stamped = db.select().from(schema.teams)
+      .where(and(eq(schema.teams.leagueId, LEAGUE_ID), sql`finish_position IS NOT NULL`)).all();
+    expect(stamped).toHaveLength(TEAM_COUNT);
 
     const teams = db.select().from(schema.teams)
       .where(eq(schema.teams.leagueId, LEAGUE_ID)).all();

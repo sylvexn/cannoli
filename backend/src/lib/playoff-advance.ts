@@ -167,11 +167,11 @@ export function advancePlayoffWinner(params: {
   if (!targetMatch) return result;
 
   const updateData: Record<string, unknown> = {};
-  if (fillHome && targetMatch.homeTeamId === 'TBD') {
+  if (fillHome && targetMatch.homeTeamId == null) {
     updateData.homeTeamId = winnerId;
     updateData.homeSeed = winnerSeed;
     result.filledSlot = 'home';
-  } else if (!fillHome && targetMatch.awayTeamId === 'TBD') {
+  } else if (!fillHome && targetMatch.awayTeamId == null) {
     updateData.awayTeamId = winnerId;
     updateData.awaySeed = winnerSeed;
     result.filledSlot = 'away';

@@ -136,9 +136,9 @@ export const matchRoutes = new Elysia()
     }
 
     const homeTeam = db.select().from(schema.teams)
-      .where(eq(schema.teams.id, match.homeTeamId)).get();
+      .where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
     const awayTeam = db.select().from(schema.teams)
-      .where(eq(schema.teams.id, match.awayTeamId)).get();
+      .where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
 
     // Format string is parsed back out of the log's `|tier|` line by the
     // viewer if absent. Try to surface it directly anyway so the title
@@ -418,12 +418,12 @@ export const matchRoutes = new Elysia()
         readyAway: false,
       }).where(eq(schema.matches.id, params.matchId)).run();
 
-      // Clear downstream playoff cells back to 'TBD' so a re-record's
-      // advancePlayoffWinner call re-populates them cleanly.
+      // Clear downstream playoff cells back to NULL (not-yet-determined) so a
+      // re-record's advancePlayoffWinner call re-populates them cleanly.
       for (const d of downstreamToClear) {
         const updates: Record<string, unknown> = {};
-        if (d.clearHome) updates.homeTeamId = 'TBD';
-        if (d.clearAway) updates.awayTeamId = 'TBD';
+        if (d.clearHome) updates.homeTeamId = null;
+        if (d.clearAway) updates.awayTeamId = null;
         if (Object.keys(updates).length > 0) {
           db.update(schema.matches)
             .set(updates)
@@ -774,8 +774,8 @@ export const matchRoutes = new Elysia()
         id: `${params.leagueId}-p${m.round}${matchNum}`,
         leagueId: params.leagueId,
         week: m.week,
-        homeTeamId: homeTeam || 'TBD',
-        awayTeamId: awayTeam || 'TBD',
+        homeTeamId: homeTeam ?? null,
+        awayTeamId: awayTeam ?? null,
         phase: 'playoffs',
         playoffRound: m.round,
         homeSeed: m.homeSeed || null,

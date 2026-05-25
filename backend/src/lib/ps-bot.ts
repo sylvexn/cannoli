@@ -430,15 +430,15 @@ export function readReplayLogFromDisk(
  * handleMatchEnd guards on `battle.matchId` and our caller filters on
  * `status='in_progress'`.
  */
-function replayFromDisk(match: { id: string; homeTeamId: string; awayTeamId: string; psRoomId: string | null }): boolean {
+function replayFromDisk(match: { id: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null }): boolean {
   const roomId = match.psRoomId;
   if (!roomId) return false;
 
   const lines = readReplayLogFromDisk(roomId);
   if (!lines || lines.length === 0) return false;
 
-  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
   const p1Userid = teamPsUserid(homeTeam);
   const p2Userid = teamPsUserid(awayTeam);
 
@@ -527,8 +527,8 @@ function rejoinInProgressBattles() {
 
     // Restore state. The replay parser starts blank — we won't recover anything
     // that happened while the bot was offline, but we can still record |win|.
-    const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-    const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+    const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+    const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
     const p1 = teamPsUserid(homeTeam);
     const p2 = teamPsUserid(awayTeam);
 
@@ -777,8 +777,8 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         return;
       }
 
-      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
 
       // Determine scores. Use the resolved orientation (battle.homeSide) when
       // available — this is the single source of truth for which PS side
@@ -850,6 +850,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         const homeSide = battle.homeSide
           ?? (useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1' : 'p2');
         const teamId = side === homeSide ? match.homeTeamId : match.awayTeamId;
+        if (teamId == null) continue; // both teams resolved for a real battle
 
         if (mon.appeared) {
           db.insert(schema.matchPokemon).values({
