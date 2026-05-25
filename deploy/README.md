@@ -53,7 +53,7 @@ production vps only pulls finished images from a registry and runs them.
 | `cannoli-backend-mock` | (internal: `cannoli-backend-mock:3001`) | `backend/**`, `package.json`, `bun.lock` | Active mock backend. SQLite on `cannoli-mock-data` volume. |
 | `cannoli-frontend-mock` | `mock.cannoli.live` | `frontend/**`, `package.json`, `bun.lock` | nginx, proxies `/api` → `cannoli-backend-mock`. |
 | `cannoli-ps-server` | (internal: `cannoli-ps-server:8000`) | `showdown/Dockerfile.server`, `ps/**` | PS game server. Logs + replays on `ps-logs` / `ps-databases` volumes. |
-| `cannoli-ps-client` | `sim.cannoli.live` | `showdown/Dockerfile.client`, `showdown/nginx.conf`, `showdown/ps-*` | PS client. `PS_LOGIN_HOST` env points at the active backend. |
+| `cannoli-ps-client` | `sim.cannoli.live` | `showdown/Dockerfile.client`, `showdown/nginx.conf`, `showdown/ps-client-config.js`, `showdown/ps-testclient-key.js` (explicit files — NOT a `ps-*` glob, so a new `showdown/ps-foo.js` will not trigger a rebuild) | PS client. `PS_LOGIN_HOST` env points at the active backend. |
 | `cannoli-maintenance` | `cannoli.live` | `deploy/maintenance/**` | Under-construction page. Replaced when launching live. |
 | `cannoli-backend-live` | (dormant, internal alias `cannoli-backend-live`) | `backend/**`, `package.json`, `bun.lock` | DORMANT. Auto-builds + runs alongside mock with own DB volume so it stays warm. No FQDN. |
 | `cannoli-frontend-live` | (dormant, no FQDN) | `frontend/**`, `package.json`, `bun.lock` | DORMANT. Auto-builds. Activated by assigning `cannoli.live`. |
@@ -131,6 +131,8 @@ Selected env vars consumed by the backend container (full list in
 
 - `CANNOLI_MODE` - `mock` | `live` (per-deployment).
 - `CANNOLI_DB_PATH` - override SQLite path (defaults to `backend/data/cannoli.db`).
+  Honored by `src/db/index.ts` (the runtime DB singleton) and `entrypoint.sh`
+  (the seed gate); set both to the same path if overriding.
 - `PS_SERVER_WS_URL` - bot connects here. Unset = bot disabled.
 - `PS_RSA_PRIVATE_KEY` - required when `PS_SERVER_WS_URL` is set; signs PS auth assertions.
 - `PS_INTERNAL_SECRET` - shared secret gating `/api/internal/ps/leagues`. Must match
