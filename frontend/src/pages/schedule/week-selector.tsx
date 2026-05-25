@@ -8,9 +8,12 @@ interface WeekSelectorProps {
   weekDates?: Record<string, string> | null;
 }
 
+// The week date is a bare calendar date (no zone). Pin it to noon UTC and
+// render in UTC so a far-west viewer never sees it roll back a day (the
+// `+'T00:00:00'` local-midnight parse that TZ-DEADLINE warned about).
 function formatWeekDate(iso: string): string {
-  const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const d = new Date(iso + 'T12:00:00Z');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
 export function WeekSelector({ totalWeeks, currentWeek, selectedWeek, onSelectWeek, weekDates }: WeekSelectorProps) {
