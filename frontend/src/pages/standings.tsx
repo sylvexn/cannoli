@@ -3,7 +3,7 @@ import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { rosterPointsUsed } from '@/lib/roster';
 import { getStandingsNarrative, type StandingsChip } from '@/lib/standings-narrative';
-import type { Player, Trade, Match, LeagueSeason } from '@/lib/types';
+import type { Player, Match, LeagueSeason } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamLogoSwap } from '@/components/team-logo-swap';
 import { RecordDisplay } from '@/components/record-display';
@@ -14,11 +14,10 @@ import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
-import { ChevronDown, ArrowLeftRight, UserPlus, ListOrdered, Trophy } from 'lucide-react';
+import { ChevronDown, ArrowLeftRight, ListOrdered, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useLeagueUrl } from '@/lib/use-league-url';
@@ -28,6 +27,7 @@ import { EmptyState } from '@/components/empty-state';
 import { TeamCoach } from '@/components/team-coach';
 import { PokemonNickname } from '@/components/pokemon-nickname';
 import { PlayoffBracket } from './schedule/playoff-bracket';
+import { TiebreakerBadge, TradeHistoryRow } from './standings-parts';
 
 type StandingsView = 'standings' | 'playoffs';
 
@@ -550,72 +550,3 @@ function StandingsRow({
   );
 }
 
-function TiebreakerBadge({ tiebreaker }: { tiebreaker: Player['tiebreaker'] }) {
-  if (!tiebreaker) return null;
-  const RULE_LABEL: Record<string, string> = {
-    h2h: 'H2H',
-    diff: 'Diff',
-    kills: 'PF',
-    id: '—',
-  };
-  const RULE_DESC: Record<string, string> = {
-    h2h: 'Head-to-head record vs tied teams',
-    diff: 'Point differential',
-    kills: 'Total kills (points for)',
-    id: 'Stable tiebreak (team id)',
-  };
-  const label = RULE_LABEL[tiebreaker.rule] ?? tiebreaker.rule;
-  const desc = RULE_DESC[tiebreaker.rule] ?? '';
-  // Format value differently per rule
-  let valueStr: string;
-  if (tiebreaker.rule === 'diff') {
-    const v = Number(tiebreaker.value);
-    valueStr = v > 0 ? `+${v}` : String(v);
-  } else if (tiebreaker.rule === 'h2h') {
-    valueStr = String(tiebreaker.value);
-  } else {
-    valueStr = String(tiebreaker.value);
-  }
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          onClick={e => e.stopPropagation()}
-          className="hidden md:inline-flex items-center gap-0.5 shrink-0 px-2 py-0.5 rounded-full border border-border-subtle bg-surface-overlay/40 text-[9px] font-mono text-text-muted cursor-help"
-        >
-          <span className="font-semibold text-text-secondary">{label}</span>
-          <span className="tabular-nums">{valueStr}</span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[220px] text-xs">
-        <div className="font-medium text-text-primary mb-0.5">Tiebreaker: {label}</div>
-        <div className="text-text-muted">{desc}</div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function TradeHistoryRow({ trade, teamId }: { trade: Trade; teamId: string }) {
-  const isFreeAgent = trade.recipient === 'pool';
-  const isProposer = trade.proposer === teamId;
-  const sent = isProposer ? trade.offering : trade.requesting;
-  const received = isProposer ? trade.requesting : trade.offering;
-
-  return (
-    <div className="flex items-center gap-2 text-[10px] text-text-secondary py-0.5">
-      <Badge variant="outline" className="text-[9px] px-1 py-0 border-border-subtle shrink-0">
-        W{trade.week}
-      </Badge>
-      {isFreeAgent ? (
-        <UserPlus size={10} className="text-neon shrink-0" />
-      ) : (
-        <ArrowLeftRight size={10} className="text-text-muted shrink-0" />
-      )}
-      <span className="truncate">
-        <span className="text-win">+{received.join(', ')}</span>
-        <span className="text-text-muted mx-1">/</span>
-        <span className="text-loss">-{sent.join(', ')}</span>
-      </span>
-    </div>
-  );
-}
