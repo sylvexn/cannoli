@@ -210,17 +210,11 @@ describe('trade validation — captain markup point-cap accounting', () => {
     return;
   }
 
-  // LAUNCH-BUG: TRADE-CAP-CAPTAIN
-  // validateProposedTrade sums RAW costAtDraft for the post-trade roster and
-  // never applies effectiveCost() for retained tera-captains. A team that is
-  // legal only because raw cost ignores the +markup can therefore accept an
-  // incoming mon that pushes the *effective* (real) total over the cap. The
-  // route comment claims this is fine "because tera captain status is cleared
-  // on transfer" — but that only zeroes the markup on the TRADED mons, not on
-  // the captains the team KEEPS. This test documents the gap; it asserts the
-  // (currently absent) effective-cost enforcement and is skipped to keep the
-  // branch green.
-  test.skip('rejects trade that fits raw cost but exceeds cap once retained-captain markup is applied', async () => {
+  // TRADE-CAP-CAPTAIN (FIXED): validateProposedTrade now applies effectiveCost()
+  // for RETAINED tera-captains when summing the post-trade roster (only the
+  // TRADED mons lose captain status). A roster that was only "legal" because raw
+  // cost ignored the +markup is correctly rejected.
+  test('rejects trade that fits raw cost but exceeds cap once retained-captain markup is applied', async () => {
     const cap = db.select().from(schema.seasons).where(eq(schema.seasons.id, host.seasonId)).get()?.pointCap ?? 110;
     ensurePokemon(`${PFX}capn1`, { tier: 9, dex: 9601 });
     ensurePokemon(`${PFX}capn2`, { tier: 9, dex: 9602 });
