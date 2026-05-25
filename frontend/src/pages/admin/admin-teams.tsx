@@ -15,8 +15,8 @@ import { api } from '@/lib/api';
 import type { ApiTeam, ApiAuthUser } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { toast } from 'sonner';
-import {
 import { getErrorMessage } from '@/lib/errors';
+import {
   Upload, ImageIcon, Plus, Pencil, Trash2,
   UserCog, Palette, X,
 } from 'lucide-react';

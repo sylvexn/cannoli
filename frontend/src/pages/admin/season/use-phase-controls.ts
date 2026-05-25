@@ -52,7 +52,7 @@ export function usePhaseControls({ leagueList, leagueStates, refreshLeagues }: P
           const result = await api.generateSchedule(leagueId);
           toast.success(`Generated ${result.matchCount} matches for ${name}`);
         } catch (schedErr: unknown) {
-          toast.error(`Phase advanced but schedule generation failed: ${schedErr.message}`);
+          toast.error(`Phase advanced but schedule generation failed: ${getErrorMessage(schedErr)}`);
         }
       }
 
