@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { User as UserIcon, Palette, Camera } from 'lucide-react';
 import { UserAccentScope } from '@/components/user-accent-scope';
+import { getErrorMessage } from '@/lib/errors';
 import {
   PROFILE_COLOR_SWATCHES,
   MAX_DISPLAY_NAME,
@@ -254,8 +255,8 @@ export function ProfileTab() {
       await Promise.all(tasks);
       await refreshUser();
       toast.success('Profile saved');
-    } catch (err: any) {
-      toast.error(err.message || 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -266,8 +267,8 @@ export function ProfileTab() {
       await api.uploadAvatar(file);
       await refreshUser();
       toast.success('Avatar updated');
-    } catch (err: any) {
-      toast.error(err.message || 'Upload failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Upload failed'));
     }
   }
 

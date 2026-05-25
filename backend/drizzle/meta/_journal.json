@@ -267,6 +267,41 @@
       "when": 1780900000000,
       "tag": "0037_drop_notify_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1781000000000,
+      "tag": "0038_add_draft_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1781100000000,
+      "tag": "0039_match_winner",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1781200000000,
+      "tag": "0040_matches_nullable_teams",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1781300000000,
+      "tag": "0041_pins_null_season_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1781400000000,
+      "tag": "0042_league_timezone",
+      "breakpoints": true
     }
   ]
 }

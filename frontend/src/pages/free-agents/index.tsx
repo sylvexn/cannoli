@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { withViewTransition } from '@/lib/view-transition';
 import { BudgetBar, EmptyState } from './budget-bar';
+import { getErrorMessage } from '@/lib/errors';
 
 interface FreeAgent {
   name: string;
@@ -191,8 +192,8 @@ export function FreeAgentsPage() {
       await refresh();
       // Refetch FA list (in case backend has computed new state)
       api.getFreeAgents(league.id).then(setFreeAgents).catch(() => {});
-    } catch (e: any) {
-      toast.error(e?.message || 'Pickup failed');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Pickup failed'));
     } finally {
       setSubmitting(false);
     }
@@ -502,7 +503,7 @@ export function FreeAgentsPage() {
                         .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                         .map(r => (
                           <option key={r.name} value={r.name}>
-                            {r.isTeraCaptain ? '★ ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain)})
+                            {r.isTeraCaptain ? '[C] ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain)})
                           </option>
                         ))}
                     </select>

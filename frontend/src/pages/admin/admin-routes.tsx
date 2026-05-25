@@ -28,6 +28,7 @@ import { AdminFeedback } from './admin-feedback';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
+import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
@@ -136,8 +137,8 @@ function BackfillPinAuditButton() {
       } else {
         toast.info(`Already up to date (${r.skipped} pin events already logged)`);
       }
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Backfill failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Backfill failed');
     } finally {
       setBusy(false);
     }

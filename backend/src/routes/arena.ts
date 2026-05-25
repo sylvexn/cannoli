@@ -12,6 +12,18 @@ import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
 import { createBattle, isBotConnected } from '../lib/ps-bot';
 import { getLeague } from '../lib/queries';
+import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
+
+/**
+ * Stable identity for an Elysia WS handler arg. Elysia 1.4 hands a fresh
+ * `ElysiaWS` wrapper to each lifecycle callback (open/message/close); the
+ * underlying `ws.raw` is stable for the connection's lifetime. Key all
+ * per-connection collections on `wsKey(ws)` so `.get()` in `message`/`close`
+ * finds the entry `open` set. Falls back to the wrapper for test mocks.
+ */
+function wsKey(ws: any): object {
+  return ws && ws.raw ? ws.raw : ws;
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,7 +48,7 @@ interface ScrimLobby {
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
-const arenaClients = new Map</* ws */ object, ArenaClient>();
+const arenaClients = new Map</* wsKey */ object, ArenaClient>();
 const scrimLobbies = new Map<string, ScrimLobby>();
 let nextScrimId = 1;
 
@@ -49,9 +61,8 @@ let nextScrimId = 1;
 const matchSpectators = new Map<string, Set<object>>();
 
 function broadcastSpectatorCount(matchId: string) {
-  if (!broadcastWs) return;
   const count = matchSpectators.get(matchId)?.size ?? 0;
-  broadcastWs.publish(`arena:match:${matchId}`, JSON.stringify({
+  publishWs(`arena:match:${matchId}`, JSON.stringify({
     type: 'spectator_count',
     matchId,
     count,
@@ -59,28 +70,31 @@ function broadcastSpectatorCount(matchId: string) {
 }
 
 function addSpectator(matchId: string, ws: object) {
+  const key = wsKey(ws);
   let set = matchSpectators.get(matchId);
   if (!set) {
     set = new Set();
     matchSpectators.set(matchId, set);
   }
-  if (set.has(ws)) return;
-  set.add(ws);
+  if (set.has(key)) return;
+  set.add(key);
   broadcastSpectatorCount(matchId);
 }
 
 function removeSpectator(matchId: string, ws: object) {
+  const key = wsKey(ws);
   const set = matchSpectators.get(matchId);
-  if (!set?.has(ws)) return;
-  set.delete(ws);
+  if (!set?.has(key)) return;
+  set.delete(key);
   if (set.size === 0) matchSpectators.delete(matchId);
   broadcastSpectatorCount(matchId);
 }
 
 /** Drop a ws from every match's spectator set (called on close). */
 function removeSpectatorFromAll(ws: object) {
+  const key = wsKey(ws);
   for (const [matchId, set] of matchSpectators) {
-    if (set.delete(ws)) {
+    if (set.delete(key)) {
       if (set.size === 0) matchSpectators.delete(matchId);
       broadcastSpectatorCount(matchId);
     }
@@ -109,6 +123,8 @@ function scheduleReadyTimeout(matchId: string) {
     const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
     // Only revert if still ready (bot hasn't picked it up)
     if (!m || m.status !== 'ready') return;
+    // A readied match always has both teams resolved (not a NULL bracket slot).
+    if (m.homeTeamId == null || m.awayTeamId == null) return;
 
     db.update(schema.matches)
       .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
@@ -134,14 +150,12 @@ function scheduleReadyTimeout(matchId: string) {
       metadata: JSON.stringify({ matchId }),
     }).run();
 
-    if (broadcastWs) {
-      broadcastWs.publish(`arena:match:${matchId}`, JSON.stringify({
-        type: 'match_timeout',
-        matchId,
-        message: 'Ready-up timed out — try again',
-      }));
-      broadcastMatchState(matchId);
-    }
+    publishWs(`arena:match:${matchId}`, JSON.stringify({
+      type: 'match_timeout',
+      matchId,
+      message: 'Ready-up timed out — try again',
+    }));
+    broadcastMatchState(matchId);
 
     console.log(`[arena] ready-up timeout: ${matchId}`);
   }, READY_TIMEOUT_MS);
@@ -153,13 +167,15 @@ export function clearReadyTimerForMatch(matchId: string) {
   clearReadyTimer(matchId);
 }
 
-// Reference for broadcasting from external code (e.g., bot result handler).
-// Captured once on the first WS connection — Elysia's `ws` instance is shared
-// across connections, so reassigning per-open would race in flight.
-let broadcastWs: { publish: (topic: string, data: string) => void } | null = null;
-
-export function getArenaBroadcaster() {
-  return broadcastWs;
+/**
+ * Broadcaster handle for external callers (PS bot result writer, auto-forfeit
+ * job). Publishes through the shared server pub/sub — returns null only when no
+ * server is registered yet (boot/test before `.onStart`), so callers keep their
+ * existing `if (broadcaster)` guards.
+ */
+export function getArenaBroadcaster(): { publish: (topic: string, data: string) => void } | null {
+  if (!hasBroadcastServer()) return null;
+  return { publish: (topic, data) => { publishWs(topic, data); } };
 }
 
 /**
@@ -203,15 +219,15 @@ function getMatchWithTeams(matchId: string) {
   const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
   if (!match) return null;
 
-  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+  const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+  const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
 
   return { match, homeTeam, awayTeam };
 }
 
 function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) => void }) {
   const data = getMatchWithTeams(matchId);
-  if (!data || !broadcastWs) return;
+  if (!data) return;
 
   const msg = JSON.stringify({
     type: 'match_state',
@@ -224,36 +240,11 @@ function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) 
     psRoomId: data.match.psRoomId,
   });
 
-  broadcastWs.publish(`arena:match:${matchId}`, msg);
-  broadcastWs.publish('arena:global', msg);
+  publishWs(`arena:match:${matchId}`, msg);
+  publishWs('arena:global', msg);
   senderWs?.send(msg);
 }
 
-function broadcastLiveMatches() {
-  if (!broadcastWs) return;
-
-  // Get all in-progress matches
-  const liveMatches = db.select().from(schema.matches)
-    .where(eq(schema.matches.status, 'in_progress'))
-    .all()
-    .map(m => {
-      const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
-      const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
-      return {
-        matchId: m.id,
-        leagueId: m.leagueId,
-        week: m.week,
-        homeTeam: homeTeam ? { name: homeTeam.teamName, abbrev: homeTeam.teamAbbrev } : null,
-        awayTeam: awayTeam ? { name: awayTeam.teamName, abbrev: awayTeam.teamAbbrev } : null,
-        psRoomId: m.psRoomId,
-      };
-    });
-
-  broadcastWs.publish('arena:global', JSON.stringify({
-    type: 'live_matches',
-    matches: liveMatches,
-  }));
-}
 
 function getScrimListPayload() {
   return JSON.stringify({
@@ -268,7 +259,7 @@ function getScrimListPayload() {
 /** Broadcast scrim list to all arena clients. Also sends directly to `senderWs` since publish excludes sender. */
 function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
   const payload = getScrimListPayload();
-  broadcastWs?.publish('arena:global', payload);
+  publishWs('arena:global', payload);
   // publish() excludes the sender — send directly so their UI updates too
   senderWs?.send(payload);
 }
@@ -276,6 +267,7 @@ function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
 // ─── Route ──────────────────────────────────────────────────────────────────
 
 export const arenaRoutes = new Elysia()
+  .onStart((app) => { registerBroadcastServer((app as any).server); })
 
   // Active players for scrim invite picker (public, lightweight)
   .get('/api/arena/players', () => {
@@ -327,8 +319,8 @@ export const arenaRoutes = new Elysia()
       .where(eq(schema.matches.status, 'in_progress'))
       .all()
       .map(m => {
-        const ht = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId)).get();
-        const at = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId)).get();
+        const ht = db.select().from(schema.teams).where(eq(schema.teams.id, m.homeTeamId ?? '')).get();
+        const at = db.select().from(schema.teams).where(eq(schema.teams.id, m.awayTeamId ?? '')).get();
         return {
           matchId: m.id, leagueId: m.leagueId, week: m.week,
           homeTeam: ht ? { name: ht.teamName, abbrev: ht.teamAbbrev } : null,
@@ -349,15 +341,11 @@ export const arenaRoutes = new Elysia()
 
   .ws('/ws/arena', {
     open(ws) {
-      // Capture the broadcaster once. Elysia's `ws.publish` is bound to the
-      // app's pub/sub instance, not the individual connection — overwriting
-      // it on every open created an unnecessary reassignment race when a
-      // result/timeout fired during a reconnect storm.
-      if (!broadcastWs) broadcastWs = ws;
       ws.subscribe('arena:global');
 
-      // Auto-authenticate from cookie on the upgrade request
-      const request = (ws.data as any)?.request;
+      // Auto-authenticate from cookie on the upgrade request.
+      // ws.data carries the upgrade Request; only `request.headers` is needed.
+      const request = (ws.data as { request?: Request } | undefined)?.request;
       const cookieHeader = request?.headers?.get?.('cookie') ?? undefined;
       const token = parseSessionToken(cookieHeader);
       const user = token ? validateSession(token) : null;
@@ -370,7 +358,7 @@ export const arenaRoutes = new Elysia()
           teamId: team?.teamId ?? null,
           leagueId: team?.leagueId ?? null,
         };
-        arenaClients.set(ws, client);
+        arenaClients.set(wsKey(ws), client);
 
         // Cancel any pending unready (player navigated, didn't drop)
         if (team) {
@@ -417,7 +405,7 @@ export const arenaRoutes = new Elysia()
               teamId: team?.teamId ?? null,
               leagueId: team?.leagueId ?? null,
             };
-            arenaClients.set(ws, client);
+            arenaClients.set(wsKey(ws), client);
 
             if (team) {
               const match = getCurrentMatch(team.teamId, team.leagueId);
@@ -432,7 +420,7 @@ export const arenaRoutes = new Elysia()
           }
 
           case 'match_ready': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client?.teamId || !client.leagueId) {
               ws.send(JSON.stringify({ type: 'error', message: 'No team assigned' }));
               return;
@@ -486,8 +474,8 @@ export const arenaRoutes = new Elysia()
 
               // Instruct bot to create the PS battle
               if (isBotConnected()) {
-                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
-                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
+                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
+                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
                 // PS battles are created against the owning user's account
                 // username (that's what they log in as via SSO). Falls back to
                 // coachName / matchId only if the team has no owning user.
@@ -497,8 +485,8 @@ export const arenaRoutes = new Elysia()
                 const awayUser = awayTeam?.userId
                   ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, awayTeam.userId)).get()
                   : null;
-                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId;
-                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId;
+                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId || 'home';
+                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId || 'away';
                 createBattle(p1Name, p2Name);
               } else {
                 // Bot not connected — notify players
@@ -515,7 +503,7 @@ export const arenaRoutes = new Elysia()
           }
 
           case 'match_unready': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client?.teamId || !client.leagueId) return;
 
             const match = getCurrentMatch(client.teamId, client.leagueId);
@@ -540,7 +528,7 @@ export const arenaRoutes = new Elysia()
           }
 
           case 'scrim_create': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client) return;
 
             const lobbyId = `scrim-${nextScrimId++}`;
@@ -564,7 +552,7 @@ export const arenaRoutes = new Elysia()
           }
 
           case 'scrim_join': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client) return;
 
             const lobby = scrimLobbies.get(msg.lobbyId);
@@ -582,17 +570,15 @@ export const arenaRoutes = new Elysia()
             ws.subscribe(`arena:scrim:${msg.lobbyId}`);
 
             broadcastScrimList(ws);
-            if (broadcastWs) {
-              broadcastWs.publish(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
-                type: 'scrim_state', lobbyId: msg.lobbyId,
-                players: lobby.players, ready: lobby.ready, status: lobby.status,
-              }));
-            }
+            publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
+              type: 'scrim_state', lobbyId: msg.lobbyId,
+              players: lobby.players, ready: lobby.ready, status: lobby.status,
+            }));
             break;
           }
 
           case 'scrim_leave': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client) return;
 
             const lobby = scrimLobbies.get(msg.lobbyId);
@@ -614,11 +600,15 @@ export const arenaRoutes = new Elysia()
           }
 
           case 'scrim_ready': {
-            const client = arenaClients.get(ws);
+            const client = arenaClients.get(wsKey(ws));
             if (!client) return;
 
             const lobby = scrimLobbies.get(msg.lobbyId);
             if (!lobby) return;
+            // Re-entry guard: once a lobby leaves 'waiting' (already firing a
+            // battle), ignore further ready toggles so we never double-create
+            // the scrim battle on a duplicate/late message.
+            if (lobby.status !== 'waiting') return;
 
             const idx = lobby.players.indexOf(client.username);
             if (idx === -1) return;
@@ -634,12 +624,10 @@ export const arenaRoutes = new Elysia()
               }
             }
 
-            if (broadcastWs) {
-              broadcastWs.publish(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
-                type: 'scrim_state', lobbyId: msg.lobbyId,
-                players: lobby.players, ready: lobby.ready, status: lobby.status,
-              }));
-            }
+            publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
+              type: 'scrim_state', lobbyId: msg.lobbyId,
+              players: lobby.players, ready: lobby.ready, status: lobby.status,
+            }));
             broadcastScrimList(ws);
             break;
           }
@@ -668,14 +656,16 @@ export const arenaRoutes = new Elysia()
             break;
           }
         }
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        // Malformed message — don't crash the socket, but log at debug so the
+        // failure isn't silently swallowed (this once hid the WS-IDENTITY bug).
+        console.debug('[arena] failed to handle WS message:', err);
       }
     },
 
     close(ws) {
       removeSpectatorFromAll(ws);
-      const client = arenaClients.get(ws);
+      const client = arenaClients.get(wsKey(ws));
       if (client?.teamId && client.leagueId) {
         // Don't unready immediately — frontend page navigation tears down the
         // WS for a few seconds. Hold the action; cancel it if they reconnect.
@@ -712,21 +702,28 @@ export const arenaRoutes = new Elysia()
           broadcastMatchState(match.id);
         }, UNREADY_GRACE_MS);
         pendingUnready.set(key, handle);
+      }
 
-        // Clean up scrim lobbies the player was in
+      // Scrim-lobby cleanup runs for EVERY disconnecting client, not just
+      // team owners — a teamless spectator who joined a scrim lobby would
+      // otherwise leak their slot (the cleanup used to live inside the
+      // `if (client?.teamId)` branch above).
+      if (client) {
+        let scrimChanged = false;
         for (const [lobbyId, lobby] of scrimLobbies) {
           const idx = lobby.players.indexOf(client.username);
           if (idx !== -1) {
             lobby.players.splice(idx, 1);
             lobby.ready.splice(idx, 1);
+            scrimChanged = true;
             if (lobby.players.length === 0) {
               scrimLobbies.delete(lobbyId);
             }
           }
         }
-        broadcastScrimList(ws);
+        if (scrimChanged) broadcastScrimList(ws);
       }
 
-      arenaClients.delete(ws);
+      arenaClients.delete(wsKey(ws));
     },
   });

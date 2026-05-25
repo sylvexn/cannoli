@@ -14,6 +14,7 @@ import { Search, ArrowDown, UserPlus, X } from 'lucide-react';
 import type { PokemonType } from '@/lib/pokemon';
 import { useDebounced } from '@/lib/use-debounced';
 import { tierName } from '@/lib/constants';
+import { getErrorMessage } from '@/lib/errors';
 
 interface FreeAgent {
   name: string;
@@ -159,8 +160,8 @@ export function AdminFreeAgents() {
       // Refresh
       const fa = await api.getFreeAgents(selectedLeague);
       setFreeAgents(fa);
-    } catch (e: any) {
-      toast.error(e.message || 'Pickup failed');
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Pickup failed'));
     }
   }
 

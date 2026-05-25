@@ -280,7 +280,9 @@ export const speedTierRoutes = new Elysia()
 
     if (rows.length === 0) return [];
 
-    const teamIds = Array.from(new Set(rows.flatMap(r => [r.teamId, r.homeTeamId, r.awayTeamId])));
+    const teamIds = Array.from(new Set(
+      rows.flatMap(r => [r.teamId, r.homeTeamId, r.awayTeamId]).filter((id): id is string => id != null),
+    ));
     const teams = db.select().from(schema.teams)
       .where(inArray(schema.teams.id, teamIds))
       .all();
@@ -292,7 +294,8 @@ export const speedTierRoutes = new Elysia()
       .all();
     const leagueById = new Map(leagues.map(l => [l.id, l]));
 
-    const teamCard = (id: string) => {
+    const teamCard = (id: string | null) => {
+      if (id == null) return null;
       const t = teamById.get(id);
       if (!t) return null;
       return {

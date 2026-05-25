@@ -18,6 +18,51 @@
 import { db, schema } from '../db';
 import { and, eq, asc } from 'drizzle-orm';
 
+/** One slot in a freshly generated playoff bracket. `homeSeed`/`awaySeed` of 0
+ *  mean "to be determined" (filled later via advancePlayoffWinner). */
+export interface PlayoffMatchup {
+  round: string;
+  homeSeed: number;
+  awaySeed: number;
+  week: number;
+}
+
+/**
+ * Build the canonical playoff bracket for a given size, seeding off the regular
+ * season's `maxWeek`. Shared by the live route (matches.ts) and the simulator
+ * (simulate-season.ts) so the two can never drift:
+ *   2 → F only
+ *   4 → SF (1v4, 2v3) + F
+ *   6 → QF (3v6, 4v5) + SF (1, 2 with QF winners; top-2 bye) + F
+ *   8 → QF (1v8, 4v5, 2v7, 3v6) + SF + F
+ * Caller is responsible for validating `seedCount ∈ {2,4,6,8}`.
+ */
+export function buildPlayoffMatchups(seedCount: number, maxWeek: number): PlayoffMatchup[] {
+  const m: PlayoffMatchup[] = [];
+  if (seedCount === 8) {
+    m.push({ round: 'qf', homeSeed: 1, awaySeed: 8, week: maxWeek + 1 });
+    m.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
+    m.push({ round: 'qf', homeSeed: 2, awaySeed: 7, week: maxWeek + 1 });
+    m.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
+    m.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+    m.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+    m.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
+  } else if (seedCount === 6) {
+    m.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
+    m.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
+    m.push({ round: 'sf', homeSeed: 1, awaySeed: 0, week: maxWeek + 2 });
+    m.push({ round: 'sf', homeSeed: 2, awaySeed: 0, week: maxWeek + 2 });
+    m.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
+  } else if (seedCount === 4) {
+    m.push({ round: 'sf', homeSeed: 1, awaySeed: 4, week: maxWeek + 1 });
+    m.push({ round: 'sf', homeSeed: 2, awaySeed: 3, week: maxWeek + 1 });
+    m.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
+  } else {
+    m.push({ round: 'f', homeSeed: 1, awaySeed: 2, week: maxWeek + 1 });
+  }
+  return m;
+}
+
 export interface AdvanceResult {
   advanced: boolean;
   fromRound: 'qf' | 'sf' | 'f' | null;
@@ -167,11 +212,11 @@ export function advancePlayoffWinner(params: {
   if (!targetMatch) return result;
 
   const updateData: Record<string, unknown> = {};
-  if (fillHome && targetMatch.homeTeamId === 'TBD') {
+  if (fillHome && targetMatch.homeTeamId == null) {
     updateData.homeTeamId = winnerId;
     updateData.homeSeed = winnerSeed;
     result.filledSlot = 'home';
-  } else if (!fillHome && targetMatch.awayTeamId === 'TBD') {
+  } else if (!fillHome && targetMatch.awayTeamId == null) {
     updateData.awayTeamId = winnerId;
     updateData.awaySeed = winnerSeed;
     result.filledSlot = 'away';

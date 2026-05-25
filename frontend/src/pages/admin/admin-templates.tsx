@@ -18,6 +18,7 @@ import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
 import { useFormatDate } from '@/lib/format';
 import { toast } from 'sonner';
 import { Plus, Save, Trash2, Pencil, X, Layers } from 'lucide-react';
+import { getErrorMessage } from '@/lib/errors';
 
 const FORMAT_LABELS: Record<DraftFormat, string> = {
   gen9natdex: 'Gen 9 NatDex',
@@ -76,8 +77,8 @@ export function AdminTemplates() {
     setLoading(true);
     try {
       setTemplates(await api.listDraftTemplates());
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Failed to load templates');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Failed to load templates');
     } finally {
       setLoading(false);
     }
@@ -149,8 +150,8 @@ export function AdminTemplates() {
       }
       setEdit(null);
       await load();
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Save failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -162,8 +163,8 @@ export function AdminTemplates() {
       await api.deleteDraftTemplate(t.id);
       toast.success(`Deleted "${t.name}"`);
       await load();
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Delete failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Delete failed');
     }
   }
 

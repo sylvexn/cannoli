@@ -119,9 +119,25 @@ function resolveBucketPure(
 }
 
 /**
+ * Decide the winner of a completed match. Prefers the explicit `winnerTeamId`
+ * (set from the Showdown |win| flag / adjudicated forfeit survivor) so a
+ * forfeit at full health — which emits equal KO scores like 2-2 — still records
+ * a correct W/L. Falls back to score comparison for legacy/sim rows that
+ * predate the column. Returns null for ties / no-contests (double-forfeit 0-0).
+ */
+function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null }): string | null {
+  if (m.winnerTeamId) return m.winnerTeamId;
+  if (m.homeScore == null || m.awayScore == null) return null;
+  if (m.homeScore > m.awayScore) return m.homeTeamId;
+  if (m.awayScore > m.homeScore) return m.awayTeamId;
+  return null;
+}
+
+/**
  * Compute raw W/L/PF/PA for every team in a league, using regular-season completed
- * matches only (forfeits count: a forfeited match has homeScore/awayScore set to
- * 0/whatever by the forfeit policy and a winner already determined by the score).
+ * matches only. The winner is taken from `winnerTeamId` when present (score
+ * comparison fallback) so forfeits scored e.g. 2-2 credit the right side; PF/PA
+ * remain the raw KO totals.
  */
 function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}): RawRecord[] {
   const phase = opts.phase ?? 'regular';
@@ -129,47 +145,45 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
     .where(eq(schema.teams.leagueId, leagueId))
     .all();
 
-  return teams.map(team => {
-    const phaseClause = phase === 'regular'
-      ? eq(schema.matches.phase, 'regular')
-      : undefined;
+  const phaseClause = phase === 'regular'
+    ? eq(schema.matches.phase, 'regular')
+    : undefined;
 
-    const home = db.select({
-      w: sql<number>`COALESCE(SUM(CASE WHEN home_score > away_score THEN 1 ELSE 0 END), 0)`,
-      l: sql<number>`COALESCE(SUM(CASE WHEN home_score < away_score THEN 1 ELSE 0 END), 0)`,
-      pf: sql<number>`COALESCE(SUM(home_score), 0)`,
-      pa: sql<number>`COALESCE(SUM(away_score), 0)`,
-    }).from(schema.matches)
-      .where(and(
-        eq(schema.matches.homeTeamId, team.id),
-        eq(schema.matches.status, 'completed'),
-        sql`home_score IS NOT NULL`,
-        phaseClause,
-      ))
-      .get() ?? { w: 0, l: 0, pf: 0, pa: 0 };
+  const completed = db.select().from(schema.matches)
+    .where(and(
+      eq(schema.matches.leagueId, leagueId),
+      eq(schema.matches.status, 'completed'),
+      sql`home_score IS NOT NULL`,
+      phaseClause,
+    ))
+    .all();
 
-    const away = db.select({
-      w: sql<number>`COALESCE(SUM(CASE WHEN away_score > home_score THEN 1 ELSE 0 END), 0)`,
-      l: sql<number>`COALESCE(SUM(CASE WHEN away_score < home_score THEN 1 ELSE 0 END), 0)`,
-      pf: sql<number>`COALESCE(SUM(away_score), 0)`,
-      pa: sql<number>`COALESCE(SUM(home_score), 0)`,
-    }).from(schema.matches)
-      .where(and(
-        eq(schema.matches.awayTeamId, team.id),
-        eq(schema.matches.status, 'completed'),
-        sql`away_score IS NOT NULL`,
-        phaseClause,
-      ))
-      .get() ?? { w: 0, l: 0, pf: 0, pa: 0 };
+  const byTeam = new Map<string, RawRecord>(
+    teams.map(t => [t.id, { id: t.id, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0 }]),
+  );
 
-    return {
-      id: team.id,
-      wins: (home.w || 0) + (away.w || 0),
-      losses: (home.l || 0) + (away.l || 0),
-      pointsFor: (home.pf || 0) + (away.pf || 0),
-      pointsAgainst: (home.pa || 0) + (away.pa || 0),
-    };
-  });
+  for (const m of completed) {
+    // Completed matches always have both teams resolved; guard for the type.
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
+    const home = byTeam.get(m.homeTeamId);
+    const away = byTeam.get(m.awayTeamId);
+    const hs = m.homeScore ?? 0;
+    const as = m.awayScore ?? 0;
+    if (home) { home.pointsFor += hs; home.pointsAgainst += as; }
+    if (away) { away.pointsFor += as; away.pointsAgainst += hs; }
+
+    const winner = matchWinner(m);
+    if (winner === m.homeTeamId) {
+      if (home) home.wins++;
+      if (away) away.losses++;
+    } else if (winner === m.awayTeamId) {
+      if (away) away.wins++;
+      if (home) home.losses++;
+    }
+    // null winner → tie / no-contest; no W or L credited to either side.
+  }
+
+  return teams.map(t => byTeam.get(t.id)!);
 }
 
 /**
@@ -197,16 +211,18 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
       sql`home_score IS NOT NULL`,
     ))
     .all()
-    .filter(m => setIds.has(m.homeTeamId) && setIds.has(m.awayTeamId));
+    .filter(m => m.homeTeamId != null && m.awayTeamId != null
+      && setIds.has(m.homeTeamId) && setIds.has(m.awayTeamId));
 
   for (const m of matches) {
-    if (m.homeScore == null || m.awayScore == null) continue;
-    if (m.homeScore > m.awayScore) {
-      result.set(m.homeTeamId, (result.get(m.homeTeamId) ?? 0) + 1);
-    } else if (m.awayScore > m.homeScore) {
-      result.set(m.awayTeamId, (result.get(m.awayTeamId) ?? 0) + 1);
+    const winner = matchWinner(m);
+    if (winner == null) continue; // ties / no-contests contribute nothing
+    if (winner === m.homeTeamId) {
+      result.set(winner, (result.get(winner) ?? 0) + 1);
+    } else if (winner === m.awayTeamId) {
+      result.set(winner, (result.get(winner) ?? 0) + 1);
     }
-    // ties (shouldn't happen in pokemon scoring) contribute nothing
+    // ties / no-contests contribute nothing
   }
   // Suppress unused placeholder warning
   void placeholders;

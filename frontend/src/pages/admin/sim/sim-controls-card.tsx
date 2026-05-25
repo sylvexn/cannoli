@@ -19,6 +19,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { api, type ApiSimLeague } from '@/lib/api';
+import { getErrorMessage } from '@/lib/errors';
 
 const PHASES = ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] as const;
 
@@ -40,8 +41,8 @@ export function SimControlsCard({ league, seasonNumber, onChanged }: Props) {
       const msg = await fn();
       toast.success(msg);
       onChanged();
-    } catch (err: any) {
-      toast.error(err?.message ?? 'Simulator action failed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Simulator action failed');
     } finally {
       setBusy(null);
     }

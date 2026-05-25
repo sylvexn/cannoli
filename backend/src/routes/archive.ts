@@ -417,9 +417,10 @@ export const archiveDeepRoutes = new Elysia()
       .filter(r => r.homeScore != null && r.awayScore != null && r.homeScore !== r.awayScore)
       .map(r => {
         const winnerId = (r.homeScore as number) > (r.awayScore as number) ? r.homeTeamId : r.awayTeamId;
-        winnerTeamIds.add(winnerId);
+        if (winnerId != null) winnerTeamIds.add(winnerId);
         return { ...r, winnerTeamId: winnerId };
-      });
+      })
+      .filter((r): r is typeof r & { winnerTeamId: string } => r.winnerTeamId != null);
 
     // Resolve winning team rows in one query.
     const winnerTeams = winnerTeamIds.size > 0

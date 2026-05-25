@@ -21,6 +21,7 @@ import { tx } from '../tx';
 import { generateLeagueSchedule } from '../schedule-generator';
 import { recordMatchResult } from '../match-service';
 import { computeStandings } from '../standings';
+import { buildPlayoffMatchups } from '../playoff-advance';
 import { simulateMatch, type SimRosterMon } from './simulate-match';
 import type { MockRng } from './mock-rng';
 import { assertMockMode } from './sim-guard';
@@ -115,7 +116,7 @@ export function simulateSeason(opts: {
     if (match.week > throughWeek) break;
     reachedWeek = Math.max(reachedWeek, match.week);
     if (match.status === 'completed' || match.status === 'disputed') continue;
-    if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') continue;
+    if (match.homeTeamId == null || match.awayTeamId == null) continue;
 
     const sim = simulateMatch({
       homeTeamId: match.homeTeamId,
@@ -206,7 +207,7 @@ export function simulatePlayoffs(leagueId: string, rng: MockRng): SimulatePlayof
         .where(eq(schema.matches.id, match.id))
         .get();
       if (!fresh || fresh.status === 'completed' || fresh.status === 'disputed') continue;
-      if (fresh.homeTeamId === 'TBD' || fresh.awayTeamId === 'TBD') {
+      if (fresh.homeTeamId == null || fresh.awayTeamId == null) {
         return {
           success: false,
           error: `Playoff match ${match.id} still has a TBD slot — bracket advance broke`,
@@ -296,28 +297,8 @@ function generatePlayoffBracket(leagueId: string): { success: boolean; error?: s
       .all()
       .reduce((m, x) => Math.max(m, x.week), 0);
 
-    const matchups: { round: string; homeSeed: number; awaySeed: number; week: number }[] = [];
-    if (seedCount === 8) {
-      matchups.push({ round: 'qf', homeSeed: 1, awaySeed: 8, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 2, awaySeed: 7, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
-      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'sf', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
-    } else if (seedCount === 6) {
-      matchups.push({ round: 'qf', homeSeed: 3, awaySeed: 6, week: maxWeek + 1 });
-      matchups.push({ round: 'qf', homeSeed: 4, awaySeed: 5, week: maxWeek + 1 });
-      matchups.push({ round: 'sf', homeSeed: 1, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'sf', homeSeed: 2, awaySeed: 0, week: maxWeek + 2 });
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 3 });
-    } else if (seedCount === 4) {
-      matchups.push({ round: 'sf', homeSeed: 1, awaySeed: 4, week: maxWeek + 1 });
-      matchups.push({ round: 'sf', homeSeed: 2, awaySeed: 3, week: maxWeek + 1 });
-      matchups.push({ round: 'f', homeSeed: 0, awaySeed: 0, week: maxWeek + 2 });
-    } else {
-      matchups.push({ round: 'f', homeSeed: 1, awaySeed: 2, week: maxWeek + 1 });
-    }
+    // Bracket layout is shared with the live route via buildPlayoffMatchups.
+    const matchups = buildPlayoffMatchups(seedCount, maxWeek);
 
     let matchNum = 0;
     for (const m of matchups) {
@@ -328,8 +309,8 @@ function generatePlayoffBracket(leagueId: string): { success: boolean; error?: s
         id: `${leagueId}-p${m.round}${matchNum}`,
         leagueId,
         week: m.week,
-        homeTeamId: homeTeam || 'TBD',
-        awayTeamId: awayTeam || 'TBD',
+        homeTeamId: homeTeam ?? null,
+        awayTeamId: awayTeam ?? null,
         phase: 'playoffs',
         playoffRound: m.round,
         homeSeed: m.homeSeed || null,

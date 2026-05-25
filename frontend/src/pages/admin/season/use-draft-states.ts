@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, type ApiDraftState, type ApiLeague } from '@/lib/api';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/errors';
 
 /**
  * Fetches & caches draft state for any league currently in the `draft` phase.
@@ -29,8 +30,8 @@ export function useDraftStates(defaultLeagues: ApiLeague[]) {
       const state = await api.startDraft(leagueId, 120);
       setDraftStates(prev => ({ ...prev, [leagueId]: state }));
       toast.success('Draft started!');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   }, []);
 
@@ -42,7 +43,7 @@ export function useDraftStates(defaultLeagues: ApiLeague[]) {
         [leagueId]: prev[leagueId] ? { ...prev[leagueId]!, status: 'paused' } : null,
       }));
       toast.success('Draft paused');
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }, []);
 
   const handleResumeDraft = useCallback(async (leagueId: string) => {
@@ -50,7 +51,7 @@ export function useDraftStates(defaultLeagues: ApiLeague[]) {
       const state = await api.resumeDraft(leagueId);
       setDraftStates(prev => ({ ...prev, [leagueId]: state }));
       toast.success('Draft resumed');
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }, []);
 
   return { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft };

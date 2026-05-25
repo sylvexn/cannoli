@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
 import { AvailabilityAggregate } from './availability-aggregate';
-import { useUserTimezone, getTimezoneAbbreviation } from '@/lib/format';
+import { useUserTimezone, getTimezoneAbbreviation, endOfDayInZone, formatDeadline } from '@/lib/format';
 
 type ScheduleView = 'regular' | 'playoffs';
 
@@ -99,6 +99,20 @@ export function SchedulePage() {
               <span className="ml-1">&middot; Week of {new Date(season.weekDates[String(selectedWeek)] + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: tz })}</span>
             )}
           </p>
+          {view === 'regular' && season.weekDates?.[String(selectedWeek)] && (() => {
+            // Cutoff is anchored to the league timezone (23:59:59), but we
+            // render it in the viewer's own zone with a TZ label so a
+            // US-Pacific coach sees the true cutoff, not a local-midnight
+            // approximation (TZ-DEADLINE).
+            const leagueTz = league.timezone ?? 'America/New_York';
+            const cutoff = endOfDayInZone(season.weekDates[String(selectedWeek)], leagueTz);
+            return (
+              <p className="text-xs text-text-muted mt-0.5">
+                Deadline: {formatDeadline(cutoff, tz)}
+                <span className="text-text-muted/60"> &middot; cutoff anchored to {getTimezoneAbbreviation(cutoff, leagueTz)}</span>
+              </p>
+            );
+          })()}
           {league.draftDate && season.phase === 'draft' && (
             <p className="text-xs text-pink font-medium mt-0.5">
               Draft: {new Date(league.draftDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz })}

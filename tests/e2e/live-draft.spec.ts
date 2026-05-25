@@ -138,7 +138,13 @@ test.describe('12-coach live draft', () => {
       // view in production too, and it's what every coach does on draft
       // night before picks open.
       await page.goto(`/league/${LEAGUE_ID}/draft`);
-      await page.getByRole('button', { name: /^Live$/ }).click();
+      // Click the SegmentedToggle's "Live" button — the AppShell sidebar
+      // also has a "Live" status pill, so we anchor on the History
+      // sibling that only the SegmentedToggle has.
+      await page
+        .getByRole('button', { name: /^History$/ })
+        .locator('xpath=following-sibling::button[1]')
+        .click();
 
       coaches.push({ username, teamId: myTeam.id, ctx, page, api: page.request });
     }

@@ -18,6 +18,29 @@ export type LeagueRow = typeof schema.leagues.$inferSelect;
 export type TeamRow = typeof schema.teams.$inferSelect;
 export type RosterRow = typeof schema.rosters.$inferSelect;
 
+/** The league lifecycle phases (mirrors the `leagues.phase` enum in schema.ts). */
+export type LeaguePhase = NonNullable<LeagueRow['phase']>;
+export const LEAGUE_PHASES = ['predraft', 'draft', 'regular', 'playoffs', 'offseason'] as const;
+/** Narrowing guard so handlers can validate a string body field into the union
+ *  and drop the `phase as any` casts when writing it back to the DB. */
+export function isLeaguePhase(v: unknown): v is LeaguePhase {
+  return typeof v === 'string' && (LEAGUE_PHASES as readonly string[]).includes(v);
+}
+
+/**
+ * Whether a league's trade deadline has passed. Scoped to the league's own
+ * `currentWeek` vs `tradeDeadlineWeek` (a non-positive deadline means "no
+ * deadline"). Shared by the trade routes and the expire-trades job so the two
+ * never disagree about when trading closes.
+ */
+export function isTradeDeadlinePassed(
+  league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined,
+): boolean {
+  if (!league) return false;
+  if (league.tradeDeadlineWeek <= 0) return false;
+  return league.currentWeek >= league.tradeDeadlineWeek;
+}
+
 /** Fetch a single league by id, or undefined if not found. */
 export function getLeague(leagueId: string): LeagueRow | undefined {
   return db.select().from(schema.leagues)

@@ -104,6 +104,11 @@ export const leagues = sqliteTable('leagues', {
    *  frontend/src/data/pokemon-learnsets.ts → DraftFormat for the canonical
    *  list. Default 'gen9natdex' preserves pre-#12 behavior. */
   format: text('format').notNull().default('gen9natdex'),
+  /** Canonical IANA timezone for THIS league's deadline cutoffs (e.g.
+   *  'America/New_York'). The auto-forfeit job computes a match's effective
+   *  deadline as end-of-day in this zone. Per-user display labeling is a
+   *  frontend concern; the API exposes this field for that purpose. */
+  timezone: text('timezone').notNull().default('America/New_York'),
 });
 
 // ─── Draft Templates (saved {format, captain count, banlist, tier snapshot}) ─
@@ -245,8 +250,13 @@ export const matches = sqliteTable('matches', {
   id: text('id').primaryKey(), // 'sapphire-w1m1'
   leagueId: text('league_id').notNull().references(() => leagues.id),
   week: integer('week').notNull(),
-  homeTeamId: text('home_team_id').notNull().references(() => teams.id),
-  awayTeamId: text('away_team_id').notNull().references(() => teams.id),
+  /** Home team. NULL for a not-yet-determined playoff bracket slot (e.g. an SF
+   *  whose feeding QF hasn't been played). Rendered as "TBD" at the
+   *  presentation layer — never stored as a 'TBD' sentinel (that violated the
+   *  FK onto teams.id under PRAGMA foreign_keys=ON). */
+  homeTeamId: text('home_team_id').references(() => teams.id),
+  /** Away team. NULL = not-yet-determined bracket slot (see homeTeamId). */
+  awayTeamId: text('away_team_id').references(() => teams.id),
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
   replayUrl: text('replay_url'),
@@ -277,6 +287,14 @@ export const matches = sqliteTable('matches', {
   deadline: text('deadline'),
   /** Marks a forfeited match: 'home', 'away', or 'both' (double-forfeit) */
   forfeitedBy: text('forfeited_by', { enum: ['home', 'away', 'both'] }),
+  /**
+   * Explicit winner team id, set from the Showdown `|win|` flag (or the
+   * adjudicated forfeit survivor). Decouples W/L from the KO score: a forfeit
+   * at full health emits equal KO scores (e.g. 2-2) but a real winner. When
+   * present, standings/playoff advancement use this; when null (legacy rows,
+   * sim matches), they fall back to score comparison. Null for ties/draws.
+   */
+  winnerTeamId: text('winner_team_id').references(() => teams.id),
 });
 
 // ─── Bye Weeks (one row per team-week sit-out for odd-team leagues) ─────────
@@ -412,6 +430,20 @@ export const draftState = sqliteTable('draft_state', {
   timerExpiredForTeam: text('timer_expired_for_team'),
 });
 
+// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+// A coach can pre-set an ordered list of Pokemon. When their pick timer expires
+// and an auto-pick fires, the engine walks this queue top-down and picks the
+// first still-eligible/affordable entry, falling back to highest-affordable
+// when the queue is empty or every entry is invalid. One row per queued mon;
+// `position` is the 0-based order. Replaced wholesale when a coach re-sets it.
+export const draftQueue = sqliteTable('draft_queue', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  leagueId: text('league_id').notNull().references(() => leagues.id),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  position: integer('position').notNull(),
+  pokemonName: text('pokemon_name').notNull(),
+});
+
 // ─── Activity Log ───────────────────────────────────────────────────────────
 
 export const activityLog = sqliteTable('activity_log', {
@@ -529,8 +561,14 @@ export const pinDefinitions = sqliteTable('pin_definitions', {
 // Unique composite (user_id, pin_def_id, season_id) enforces "one Champion per
 // season per user", while still letting a user collect distinct seasons of the
 // same pin. season_id may be NULL for season-agnostic pins (e.g. lifetime
-// achievements, S1 alum). NULL participates in the unique check in SQLite, so
-// season-less pins can only be awarded once per user.
+// achievements, S1 alum).
+//
+// IMPORTANT: SQLite treats every NULL as DISTINCT in a UNIQUE index, so the
+// composite index does NOT dedupe lifetime (season_id = NULL) pins on its own.
+// A separate PARTIAL unique index `pins_user_def_lifetime_idx` on
+// (user_id, pin_def_id) WHERE season_id IS NULL enforces "one lifetime pin per
+// user per definition" (migration 0041). Both indexes together give correct
+// INSERT OR IGNORE idempotency for season-scoped AND lifetime pins.
 //
 // `awarded_by` is NULL for the auto-award job; otherwise the admin's user id.
 // `metadata` is free-form JSON (e.g. `{ pokemon: 'Cinderace' }` for a pin like

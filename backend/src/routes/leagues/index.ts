@@ -40,6 +40,10 @@ export const leagueRoutes = new Elysia()
       draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
       playoffTeamCount: l.playoffTeamCount,
       format: l.format,
+      // Canonical deadline-cutoff timezone for this league. The auto-forfeit
+      // job anchors end-of-day to this zone; the frontend (sweep 3c) labels
+      // each user's local rendering against it.
+      timezone: l.timezone,
       playerCount: teamCounts.get(l.id) ?? 0,
       // Lifecycle fields are per-league (3 leagues run independently per
       // season). Surfaced under `season` for backwards-compat with all

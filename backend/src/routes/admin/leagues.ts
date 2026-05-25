@@ -1,18 +1,21 @@
 import { Elysia } from 'elysia';
-import { db, schema } from '../../db';
+import { db, schema, sqlite } from '../../db';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import { isStaff } from '../../lib/auth';
+import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { runAutoAwards } from '../../lib/pins/auto-award';
+import { mintArchivePins } from '../../lib/pins/archive-mint';
+import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
+import { isLeaguePhase } from '../../lib/queries';
 
 export const leagueAdminRoutes = new Elysia()
+  .guard({ beforeHandle: requireStaff })
 
   // ─── Leagues CRUD ───────────────────────────────────────────────────
 
   .post('/api/leagues', ({ body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { name, color } = body as { name: string; color: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
@@ -25,7 +28,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const {
       name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
       weekDates, weekDatesAutoFilled, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
@@ -128,7 +130,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .delete('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -198,8 +199,11 @@ export const leagueAdminRoutes = new Elysia()
   // ─── Season Management ──────────────────────────────────────────────
 
   .post('/api/leagues/:leagueId/phase', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
+    if (!isLeaguePhase(phase)) {
+      set.status = 400;
+      return { error: `Unknown phase ${phase}`, code: 'unknown_phase' };
+    }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -279,7 +283,7 @@ export const leagueAdminRoutes = new Elysia()
     let scheduleGenerated = false;
     let pinsAwarded = 0;
     tx(() => {
-      const leagueUpdates: Record<string, unknown> = { phase: phase as any };
+      const leagueUpdates: Record<string, unknown> = { phase };
       if (phase === 'regular' && previousPhase !== 'regular') {
         leagueUpdates.currentWeek = 1;
       }
@@ -297,11 +301,22 @@ export const leagueAdminRoutes = new Elysia()
       // leagues that skip playoffs. Re-runs from another phase change won't
       // dupe.
       if (phase === 'offseason' && previousPhase !== 'offseason') {
+        // Match the finalize-season CLI ordering (scripts/finalize-season.ts):
+        // stamp finish positions FIRST (champion/runner-up/SF/QF/regular), then
+        // mint the archive pins (champion / high-score / steal-of-the-draft /
+        // sweeper) which depend on those positions, and only then run the
+        // generic season-end auto-awards. Previously the UI route ran ONLY
+        // runAutoAwards, leaving NULL finish positions + missing champion
+        // pins when an admin advanced via the panel instead of the CLI.
+        assignFinishPositions(sqlite, [params.leagueId]);
+        const archive = mintArchivePins(params.leagueId, {
+          awardedBy: user.id ? parseInt(user.id) : null,
+        });
         const summary = runAutoAwards(params.leagueId, {
           trigger: 'season-end',
           awardedBy: user.id ? parseInt(user.id) : null,
         });
-        pinsAwarded = summary.awarded.length;
+        pinsAwarded = summary.awarded.length + archive.awarded.length;
       }
 
       const isBackward = toRank < fromRank;
@@ -321,7 +336,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, query, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
@@ -344,7 +358,6 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const { order } = body as { order: string[] };
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();

@@ -76,7 +76,7 @@ export function recordMatchResult(
       error: `Match already ${match.status} — dismiss warnings or contact admin to re-record`,
     };
   }
-  if (match.homeTeamId === 'TBD' || match.awayTeamId === 'TBD') {
+  if (match.homeTeamId == null || match.awayTeamId == null) {
     return {
       ok: false,
       status: 400,
@@ -119,11 +119,21 @@ export function recordMatchResult(
   const newStatus: 'completed' | 'disputed' =
     mergedWarnings.length > 0 ? 'disputed' : 'completed';
 
+  // Winner from the entered KO score (the manual recorder enters real scores).
+  // Equal → null (tie / no-contest). Stored explicitly so standings never
+  // re-derive W/L from the differential.
+  const recordWinnerTeamId = homeScore > awayScore
+    ? match.homeTeamId
+    : awayScore > homeScore
+      ? match.awayTeamId
+      : null;
+
   return tx(() => {
     // Update match
     db.update(schema.matches).set({
       homeScore,
       awayScore,
+      winnerTeamId: recordWinnerTeamId,
       replayUrl: replayUrl || match.replayUrl,
       status: newStatus,
       completedAt: new Date().toISOString(),
@@ -160,7 +170,9 @@ export function recordMatchResult(
 
     // ─── Playoff auto-advancement ─────────────────────────────────
     if (newStatus === 'completed' && match.phase === 'playoffs' && match.playoffRound) {
-      const winnerId = homeScore > awayScore ? match.homeTeamId : match.awayTeamId;
+      // home/away are guaranteed non-null here — the TBD guard near the top of
+      // this function returns early for an undetermined bracket slot.
+      const winnerId = (homeScore > awayScore ? match.homeTeamId : match.awayTeamId)!;
       const winnerSeed = homeScore > awayScore ? match.homeSeed : match.awaySeed;
 
       advancePlayoffWinner({

@@ -57,6 +57,48 @@ export function getTimezoneAbbreviation(date: Date, tz?: string): string {
   }
 }
 
+/**
+ * Resolve "end of day (23:59:59) on `dateStr` (YYYY-MM-DD) in IANA `timeZone`"
+ * to a real Date (UTC instant). MUST mirror the backend's `endOfDayInZone`
+ * (auto-forfeit.ts) exactly so the displayed cutoff equals the enforced one.
+ * Appending 'T23:59:59' and letting the browser parse as local would
+ * reintroduce the local-midnight bug for viewers outside the league zone.
+ */
+export function endOfDayInZone(dateStr: string, timeZone: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const desiredLocalMs = Date.UTC(y, m - 1, d, 23, 59, 59);
+
+  function offsetMinutes(utcMs: number): number {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    });
+    const parts = dtf.formatToParts(new Date(utcMs));
+    const get = (t: string) => Number(parts.find(p => p.type === t)!.value);
+    let hour = get('hour');
+    if (hour === 24) hour = 0;
+    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), hour, get('minute'), get('second'));
+    return Math.round((asUtc - utcMs) / 60000);
+  }
+
+  let utcMs = desiredLocalMs - offsetMinutes(desiredLocalMs) * 60000;
+  utcMs = desiredLocalMs - offsetMinutes(utcMs) * 60000;
+  return new Date(utcMs);
+}
+
+/**
+ * Format a week-end / match deadline for display. The instant is anchored to
+ * the league's timezone (cutoff) but RENDERED in the viewer's zone with a TZ
+ * label — e.g. "Sun 11:59 PM EDT". Pass the viewer's `tz`.
+ */
+export function formatDeadline(instant: Date, tz?: string): string {
+  const day = instant.toLocaleDateString(undefined, { weekday: 'short', timeZone: tz });
+  const time = instant.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: tz });
+  const abbr = getTimezoneAbbreviation(instant, tz);
+  return `${day} ${time}${abbr ? ` ${abbr}` : ''}`;
+}
+
 function pickYearOpt(date: Date, mode: 'auto' | 'show' | 'hide' = 'auto'): 'numeric' | undefined {
   if (mode === 'show') return 'numeric';
   if (mode === 'hide') return undefined;

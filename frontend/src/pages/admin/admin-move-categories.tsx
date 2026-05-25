@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { CategoryEditDialog } from './move-categories/category-edit-dialog';
 import { EntryEditDialog } from './move-categories/entry-edit-dialog';
 import { DeleteDialog } from './move-categories/delete-dialog';
+import { getErrorMessage } from '@/lib/errors';
 
 export function AdminMoveCategories() {
   const [categories, setCategories] = useState<ApiMoveCategory[]>([]);
@@ -46,7 +47,7 @@ export function AdminMoveCategories() {
     try {
       const data = await api.getMoveCategories();
       setCategories(data);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load move categories');
     } finally {
       setLoading(false);
@@ -93,8 +94,8 @@ export function AdminMoveCategories() {
         setOpenIds(prev => new Set(prev).add(result.id));
         toast.success(`Created category "${name}"`);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save category');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to save category'));
     }
     setEditCatOpen(false);
   }
@@ -131,8 +132,8 @@ export function AdminMoveCategories() {
           return { ...c, entries };
         }));
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to delete'));
     }
     setDeleteOpen(false);
     setDeleteTarget(null);
@@ -189,8 +190,8 @@ export function AdminMoveCategories() {
         }));
         toast.success(`Added "${name}"`);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save entry');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to save entry'));
     }
     setEditEntryOpen(false);
   }

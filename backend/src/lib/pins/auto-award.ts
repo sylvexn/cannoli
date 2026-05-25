@@ -154,8 +154,8 @@ export function pickCynthiaWinners(streaks: CynthiaStreak[], min = 2): CynthiaSt
 }
 
 export interface StreakMatch {
-  homeTeamId: string;
-  awayTeamId: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
   homeScore: number | null;
   awayScore: number | null;
   forfeitedBy?: 'home' | 'away' | 'both' | null;
@@ -387,6 +387,7 @@ function awardKingslayer(
 
   const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
   const loserId = match.homeScore > match.awayScore ? match.awayTeamId : match.homeTeamId;
+  if (winnerId == null || loserId == null) return; // undetermined bracket slot
 
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
   if (teams.length === 0) return;
@@ -402,6 +403,7 @@ function awardKingslayer(
 
   for (const m of completed) {
     if (m.homeScore == null || m.awayScore == null) continue;
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
     const h = recordByTeam.get(m.homeTeamId);
     const a = recordByTeam.get(m.awayTeamId);
     if (h) {
@@ -456,6 +458,7 @@ function awardFlawless(
   if (match.homeScore === match.awayScore) return;
 
   const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
+  if (winnerId == null) return; // undetermined bracket slot
 
   const row = db.select({
     deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,

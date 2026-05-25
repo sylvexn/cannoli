@@ -12,6 +12,7 @@
 import { db, schema } from '../../db';
 import { and, eq, sql, inArray } from 'drizzle-orm';
 import { tx } from '../tx';
+import { isTradeDeadlinePassed } from '../queries';
 
 export function runExpireTrades() {
   const now = new Date();
@@ -39,9 +40,7 @@ export function runExpireTrades() {
 
   const deadlineRows = liveTrades.filter(t => {
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, t.leagueId)).get();
-    if (!league) return false;
-    if (league.tradeDeadlineWeek <= 0) return false;
-    return league.currentWeek >= league.tradeDeadlineWeek;
+    return isTradeDeadlinePassed(league);
   });
 
   // De-dupe by id

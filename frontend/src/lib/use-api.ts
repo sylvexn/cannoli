@@ -110,6 +110,7 @@ function toLeague(a: ApiLeague): League {
     id: a.id,
     name: a.name,
     color: a.color,
+    timezone: a.timezone ?? 'America/New_York',
     season,
     players: [], // Will be loaded separately via useLeagueTeams
     hasData: true,

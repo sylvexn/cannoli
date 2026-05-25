@@ -4,7 +4,7 @@
  */
 
 import { db, schema } from '../db';
-import { eq, and, asc, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { tx } from './tx';
 import { getBaseFormName } from './pokedex';
 import { effectiveCost } from './tera-cost';
@@ -98,15 +98,16 @@ export function captainHeadroomNeeded(
   slots: number,
 ): number {
   if (slots <= 0) return 0;
-  // Pull tera-banned flags in one query so we can skip ineligible mons.
+  // Pull tera-banned flags for just the roster mons in one IN(...) query.
   const names = roster.map(r => r.name);
   const teraBannedNames = names.length === 0
     ? new Set<string>()
     : new Set(
       db.select({ name: schema.pokemon.name, teraBanned: schema.pokemon.teraBanned })
         .from(schema.pokemon)
+        .where(inArray(schema.pokemon.name, names))
         .all()
-        .filter(p => names.includes(p.name) && p.teraBanned)
+        .filter(p => p.teraBanned)
         .map(p => p.name),
     );
   const markups = roster
@@ -159,10 +160,16 @@ export function validatePick(
   const incomingDex = poke.nationalDexNumber;
   let megaCount = 0;
 
+  // Hydrate all current roster mons in one IN(...) query instead of a point
+  // query per pick (was an N+1 on every pick attempt).
+  const rosterNames = teamPicks.map(p => p.pokemonName);
+  const rosterMons = rosterNames.length
+    ? db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, rosterNames)).all()
+    : [];
+  const rosterMonByName = new Map(rosterMons.map(m => [m.name, m]));
+
   for (const p of teamPicks) {
-    const otherPoke = db.select().from(schema.pokemon)
-      .where(eq(schema.pokemon.name, p.pokemonName))
-      .get();
+    const otherPoke = rosterMonByName.get(p.pokemonName);
     const otherBase = getBaseFormName(p.pokemonName);
     if (otherBase === incomingBase) {
       return {
@@ -264,10 +271,10 @@ export function validatePick(
  * Currently picks the highest-tier Pokemon that fits within the remaining
  * budget (with deterministic alphabetical tiebreaker for replay safety).
  *
- * TODO(post-v1): consult a per-team draft queue (see frontend
- * use-draft-state.draftQueue) so auto-pick respects user intent — fall back
- * to highest-tier only if the queue is empty or every queued mon is already
- * drafted/over-budget. Requires persisting the queue server-side.
+ * Queue-aware: if the coach has a persisted draft queue (see `setDraftQueue` /
+ * the WS `queue` message), auto-pick walks it top-down and selects the first
+ * still-eligible/affordable entry. Falls back to highest-tier affordable when
+ * the queue is empty or every queued mon is drafted/banned/over-budget/conflicting.
  *
  * Returns null if no valid pick exists (shouldn't happen in practice).
  */
@@ -287,11 +294,14 @@ export function getAutoPick(
   const remaining = pointCap - usedPoints;
 
   const teamSpecies = new Set(teamPicks.map(p => getBaseFormName(p.pokemonName)));
-  let teamHasMega = false;
-  for (const p of teamPicks) {
-    const op = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, p.pokemonName)).get();
-    if (op?.formCategory === 'mega') { teamHasMega = true; break; }
-  }
+
+  // Hydrate current roster mons once (was two separate per-pick N+1 loops:
+  // mega-check + dex-collision).
+  const rosterNames = teamPicks.map(p => p.pokemonName);
+  const rosterMons = rosterNames.length
+    ? db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, rosterNames)).all()
+    : [];
+  const teamHasMega = rosterMons.some(m => m.formCategory === 'mega');
 
   // Get all already-drafted pokemon names in this league
   const allPicks = db.select({ name: schema.draftPicks.pokemonName })
@@ -325,34 +335,90 @@ export function getAutoPick(
     maxAffordable = Math.max(0, remaining - futureSlots * MIN_PICK_COST - captainReserve);
   }
 
-  // Pull dex numbers for current team picks so we can also exclude same-natdex collisions.
+  // Pull dex numbers for current team picks so we can also exclude same-natdex
+  // collisions — reuse the already-hydrated roster mons.
   const teamDex = new Set<number>();
-  for (const p of teamPicks) {
-    const op = db.select({ dex: schema.pokemon.nationalDexNumber })
-      .from(schema.pokemon).where(eq(schema.pokemon.name, p.pokemonName)).get();
-    if (op?.dex != null) teamDex.add(op.dex);
+  for (const m of rosterMons) {
+    if (m.nationalDexNumber != null) teamDex.add(m.nationalDexNumber);
   }
 
-  // Find available pokemon sorted by tier descending
+  // Eligibility predicate shared by the queue walk and the highest-affordable
+  // fallback. A mon is pickable if it's available, affordable within the
+  // reserve-adjusted budget, and doesn't violate species/natdex/mega rules.
+  const isEligible = (p: typeof schema.pokemon.$inferSelect): boolean => {
+    if (p.banned) return false;
+    if (drafted.has(p.name)) return false;
+    if (p.tier <= 0 || p.tier > maxAffordable) return false;
+    if (teamSpecies.has(getBaseFormName(p.name))) return false;
+    if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
+    if (teamHasMega && p.formCategory === 'mega') return false;
+    return true;
+  };
+
+  // 1. Queue-aware: honor the coach's pre-set order. Walk it top-down and take
+  // the first still-eligible entry. Hydrate the queued mons in one IN(...).
+  const queued = getDraftQueue(leagueId, teamId);
+  if (queued.length > 0) {
+    const queuedMons = db.select().from(schema.pokemon)
+      .where(inArray(schema.pokemon.name, queued)).all();
+    const byName = new Map(queuedMons.map(m => [m.name, m]));
+    for (const name of queued) {
+      const mon = byName.get(name);
+      if (mon && isEligible(mon)) return { name: mon.name, tier: mon.tier };
+    }
+    // Queue exhausted / all invalid → fall through to highest-affordable.
+  }
+
+  // 2. Fallback: highest-tier affordable, alphabetical tiebreaker (deterministic
+  // — important for pick idempotency / replay).
   const available = db.select()
     .from(schema.pokemon)
     .where(eq(schema.pokemon.banned, false))
     .all()
-    .filter(p => {
-      if (drafted.has(p.name)) return false;
-      if (p.tier <= 0 || p.tier > maxAffordable) return false;
-      if (teamSpecies.has(getBaseFormName(p.name))) return false;
-      if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
-      if (teamHasMega && p.formCategory === 'mega') return false;
-      return true;
-    });
+    .filter(isEligible);
 
   if (available.length === 0) return null;
 
-  // Highest-tier affordable, alphabetical tiebreaker (deterministic — important
-  // for pick idempotency / replay).
   available.sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
   return { name: available[0].name, tier: available[0].tier };
+}
+
+// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+
+/** Max queued mons per team. Mirrors the frontend reducer cap (draftQueue ≤ 3). */
+export const DRAFT_QUEUE_LIMIT = 3;
+
+/** Read a team's persisted draft queue, ordered by position. */
+export function getDraftQueue(leagueId: string, teamId: string): string[] {
+  return db.select({ name: schema.draftQueue.pokemonName })
+    .from(schema.draftQueue)
+    .where(and(
+      eq(schema.draftQueue.leagueId, leagueId),
+      eq(schema.draftQueue.teamId, teamId),
+    ))
+    .orderBy(asc(schema.draftQueue.position))
+    .all()
+    .map(r => r.name);
+}
+
+/**
+ * Replace a team's draft queue wholesale with `names` (deduped, capped at
+ * DRAFT_QUEUE_LIMIT, order preserved). Atomic — delete + re-insert in one tx.
+ */
+export function setDraftQueue(leagueId: string, teamId: string, names: string[]): string[] {
+  const seen = new Set<string>();
+  const clean = names.filter(n => typeof n === 'string' && n.trim() && !seen.has(n) && seen.add(n))
+    .slice(0, DRAFT_QUEUE_LIMIT);
+  return tx(() => {
+    db.delete(schema.draftQueue).where(and(
+      eq(schema.draftQueue.leagueId, leagueId),
+      eq(schema.draftQueue.teamId, teamId),
+    )).run();
+    clean.forEach((name, i) => {
+      db.insert(schema.draftQueue).values({ leagueId, teamId, position: i, pokemonName: name }).run();
+    });
+    return clean;
+  });
 }
 
 // ─── Draft State Operations ─────────────────────────────────────────────────
@@ -418,15 +484,26 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
   };
 }
 
-/** Execute a pick: validate, insert, advance state. Returns the pick or error. */
-export function executePick(
+type ExecutePickResult =
+  | { success: true; pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number } }
+  | { success: false; error: string; code?: PickErrorCode };
+
+/**
+ * Core pick logic WITHOUT opening a transaction. The caller MUST already be
+ * inside a `tx()` (or accept non-atomic execution). Extracted so `executeAutoPick`
+ * — which opens its own tx to resume + auto-pick atomically — can run the pick
+ * inline instead of nesting a second `tx()`. `lib/tx.ts` has no savepoint
+ * nesting, so a nested `tx()` would run inside the outer one and a throw after
+ * the outer mutated draftState could partial-commit. See executePick/executeAutoPick.
+ */
+function _executePickUnlocked(
   leagueId: string,
   pokemonName: string,
   teamId: string,
   actor?: string,
   opts?: { skipTurnCheck?: boolean },
-): { success: true; pick: { teamId: string; pokemonName: string; tier: number; pickNumber: number } } | { success: false; error: string; code?: PickErrorCode } {
-  return tx(() => {
+): ExecutePickResult {
+  {
     const state = db.select().from(schema.draftState)
       .where(eq(schema.draftState.leagueId, leagueId))
       .get();
@@ -528,7 +605,18 @@ export function executePick(
       success: true as const,
       pick: { teamId, pokemonName, tier: poke.tier, pickNumber },
     };
-  });
+  }
+}
+
+/** Execute a pick: validate, insert, advance state. Returns the pick or error. */
+export function executePick(
+  leagueId: string,
+  pokemonName: string,
+  teamId: string,
+  actor?: string,
+  opts?: { skipTurnCheck?: boolean },
+): ExecutePickResult {
+  return tx(() => _executePickUnlocked(leagueId, pokemonName, teamId, actor, opts));
 }
 
 /**
@@ -693,7 +781,10 @@ export function executeAutoPick(leagueId: string, actor?: string): ReturnType<ty
       throw new Error('No valid auto-pick available');
     }
 
-    return executePick(leagueId, autoPick.name, state.timerExpiredForTeam!, actor || 'auto-pick');
+    // Already inside this tx() — call the unlocked core directly. Nesting a
+    // second tx() would (with lib/tx.ts's non-savepoint impl) run inside this
+    // one, so a later throw could partial-commit the draftState mutation above.
+    return _executePickUnlocked(leagueId, autoPick.name, state.timerExpiredForTeam!, actor || 'auto-pick');
   });
 }
 

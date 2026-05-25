@@ -3,8 +3,9 @@ import { db, schema } from '../db';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
-import { getLeague, getTeamRoster } from '../lib/queries';
+import { getLeague, getTeamRoster, isTradeDeadlinePassed as deadlinePassed } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
+import { effectiveCost } from '../lib/tera-cost';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -21,8 +22,9 @@ function regularPhaseError(league: { phase: string; name?: string } | null | und
 
 /**
  * Validate that a proposed trade would leave both rosters legal:
- *   - point cap not exceeded (using costAtDraft, captain markup not modeled
- *     because tera captain status is cleared on transfer)
+ *   - point cap not exceeded (using EFFECTIVE cost — retained tera-captains
+ *     keep their markup; traded mons lose captain status, so their markup is
+ *     dropped from the post-trade total)
  *   - max 1 mega per team
  *   - no duplicate national-dex on either team
  *   - roster size invariant: each team's post-trade roster size must equal
@@ -73,19 +75,28 @@ function validateProposedTrade(opts: {
   const pokemonRows = db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, [...allNames])).all();
   const pokeByName = new Map(pokemonRows.map(p => [p.name, p]));
 
-  // Build post-trade rosters
+  // Build post-trade rosters. Incoming (traded-in) mons land as NON-captains —
+  // tera-captain status (and its cost markup) does not transfer (mirrors
+  // executeRosterSwap, which clears isTeraCaptain on the moved rows). Retained
+  // mons keep their existing captain flag.
   const postProposer = [
     ...proposerRoster.filter(r => !offering.includes(r.pokemonName)),
-    ...recipientRoster.filter(r => requesting.includes(r.pokemonName)),
+    ...recipientRoster.filter(r => requesting.includes(r.pokemonName)).map(r => ({ ...r, isTeraCaptain: false })),
   ];
   const postRecipient = [
     ...recipientRoster.filter(r => !requesting.includes(r.pokemonName)),
-    ...proposerRoster.filter(r => offering.includes(r.pokemonName)),
+    ...proposerRoster.filter(r => offering.includes(r.pokemonName)).map(r => ({ ...r, isTeraCaptain: false })),
   ];
 
   for (const [side, roster] of [['Proposer', postProposer], ['Recipient', postRecipient]] as const) {
-    // Point cap (use costAtDraft as the canonical points; captain markup cleared on transfer)
-    const total = roster.reduce((s, r) => s + (r.costAtDraft || r.tier || 0), 0);
+    // Point cap. Use the EFFECTIVE cost: a RETAINED tera-captain still carries
+    // its markup post-trade (only the TRADED mons lose captain status), so
+    // summing raw costAtDraft would under-count and let a roster slip over the
+    // real cap (TRADE-CAP-CAPTAIN).
+    const total = roster.reduce(
+      (s, r) => s + effectiveCost(r.costAtDraft || r.tier || 0, !!r.isTeraCaptain),
+      0,
+    );
     if (total > pointCap) {
       return `${side} would exceed point cap (${total} > ${pointCap})`;
     }
@@ -130,13 +141,6 @@ function loadTradeContext(tradeId: number) {
   const league = getLeague(trade.leagueId);
   const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
   return { trade, league, season, proposerTeam, recipientTeam };
-}
-
-/** Deadline check now scopes to the league's own currentWeek + tradeDeadlineWeek. */
-function deadlinePassed(league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined): boolean {
-  if (!league) return false;
-  if (league.tradeDeadlineWeek <= 0) return false;
-  return league.currentWeek >= league.tradeDeadlineWeek;
 }
 
 /** Move pokemon between two team rosters atomically. Caller must already be inside tx(). */
@@ -433,10 +437,11 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const teamId = (isStaff(user) && (body as any).teamId) ? (body as any).teamId : team?.id;
+    const { pokemonName, note, teamId: bodyTeamId } =
+      body as { pokemonName: string; note?: string; teamId?: string };
+    const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
-    const { pokemonName, note } = body as { pokemonName: string; note?: string };
     if (!pokemonName?.trim()) { set.status = 400; return { error: 'Pokemon name required' }; }
 
     const result = db.insert(schema.tradeBlockListings).values({
@@ -482,12 +487,11 @@ export const tradeRoutes = new Elysia()
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
 
-    const proposerId = (isStaff(user) && (body as any).proposerId) ? (body as any).proposerId : team?.id;
-    if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
-
-    const { recipientId, offering, requesting } = body as {
-      recipientId: string; offering: string[]; requesting: string[];
+    const { recipientId, offering, requesting, proposerId: bodyProposerId } = body as {
+      recipientId: string; offering: string[]; requesting: string[]; proposerId?: string;
     };
+    const proposerId = (isStaff(user) && bodyProposerId) ? bodyProposerId : team?.id;
+    if (!proposerId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
 
     if (!recipientId) { set.status = 400; return { error: 'Recipient required' }; }
     if (!offering?.length) { set.status = 400; return { error: 'Must offer at least one Pokemon' }; }

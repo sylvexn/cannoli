@@ -3,6 +3,8 @@
  * All league-scoped data flows through these functions.
  */
 
+import type { ApiError } from './errors';
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
@@ -39,8 +41,8 @@ async function mutateJson<T>(method: string, path: string, body?: unknown): Prom
     const err = await res.json().catch(() => ({ error: res.statusText }));
     // Preserve body fields (e.g. `code`, `activeLeagues`) on the thrown Error so
     // callers can branch on structured error codes without re-fetching.
-    const e: Error & { body?: any; status?: number; code?: string } =
-      new Error(err.error || `API error: ${res.status}`);
+    // Shape matches the `ApiError` interface in lib/errors.ts.
+    const e: ApiError = new Error(err.error || `API error: ${res.status}`);
     e.body = err;
     e.status = res.status;
     if (err && typeof err === 'object' && 'code' in err) e.code = err.code;
@@ -69,6 +71,8 @@ export interface ApiLeague {
   color: string;
   draftDate?: string | null;
   draftOrder?: string[] | null;
+  /** IANA zone anchoring deadline cutoffs (TZ-DEADLINE). */
+  timezone?: string | null;
   playoffTeamCount?: number;
   /** Registered-team (== coach) count for this league. */
   playerCount?: number;

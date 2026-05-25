@@ -7,6 +7,7 @@ import { LoadingSprite } from '@/components/loading-sprite';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 import {
   Save, Megaphone, Settings,
   Zap, Loader2,
@@ -66,8 +67,8 @@ export function AdminSiteSettings() {
     try {
       await api.saveSiteSettings(settings as unknown as Record<string, unknown>);
       toast.success('Settings saved');
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
     }

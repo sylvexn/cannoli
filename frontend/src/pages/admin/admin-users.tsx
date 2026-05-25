@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getErrorMessage } from '@/lib/errors';
 
 export function AdminUsers() {
   const tz = useUserTimezone();
@@ -82,8 +83,8 @@ export function AdminUsers() {
       setNewUsername('');
       setNewRole('user');
       toast.success(`User "${created.username}" created`);
-    } catch (err: any) {
-      toast.error(err.message);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   }
 
@@ -93,7 +94,7 @@ export function AdminUsers() {
     try {
       await api.updateUser(id, { active: !user.active });
       setUsers(prev => prev.map(u => u.id === id ? { ...u, active: !u.active } : u));
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   async function handleToggleRole(id: string) {
@@ -103,7 +104,7 @@ export function AdminUsers() {
     try {
       await api.updateUser(id, { role: newRole });
       setUsers(prev => prev.map(u => u.id === id ? { ...u, role: newRole } : u));
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   async function handleResetPassword(user: ApiAuthUser) {
@@ -111,7 +112,7 @@ export function AdminUsers() {
       const { password } = await api.resetUserPassword(user.id);
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, mustChangePassword: true } : u));
       toast.success(`Password reset for "${user.username}": ${password}`);
-    } catch (err: any) { toast.error(err.message); }
+    } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
   function closeCreateDialog() {
