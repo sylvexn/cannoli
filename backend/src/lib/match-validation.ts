@@ -35,6 +35,7 @@ export interface PokemonDataValidationError {
 export interface PokemonDataValidationResult {
   ok: boolean;
   errors: PokemonDataValidationError[];
+  warnings: string[];
 }
 
 /**
@@ -54,8 +55,10 @@ export function validatePokemonData(
   homeTeamId: string,
   awayTeamId: string,
   rosterByTeam: Map<string, Set<string>>,
+  scores?: { homeScore: number; awayScore: number },
 ): PokemonDataValidationResult {
   const errors: PokemonDataValidationError[] = [];
+  const warnings: string[] = [];
   const allowedTeamIds = new Set([homeTeamId, awayTeamId]);
 
   entries.forEach((entry, index) => {
@@ -80,7 +83,49 @@ export function validatePokemonData(
     }
   });
 
-  return { ok: errors.length === 0, errors };
+  // Internal-consistency warnings — only meaningful when scores are supplied
+  // and entries are well-formed (skip if any teamId is off-match to avoid
+  // double-flagging a typo-ridden submission).
+  const teamIdsOk = entries.every(e => allowedTeamIds.has(e.teamId));
+  if (teamIdsOk && entries.length > 0) {
+    let homeDeaths = 0, awayDeaths = 0, homeCount = 0, awayCount = 0;
+    for (const e of entries) {
+      if (e.teamId === homeTeamId) {
+        homeDeaths += e.deaths ?? 0;
+        homeCount++;
+      } else if (e.teamId === awayTeamId) {
+        awayDeaths += e.deaths ?? 0;
+        awayCount++;
+      }
+    }
+
+    if (scores) {
+      // homeScore = KOs scored by home = deaths inflicted on away team
+      if (scores.homeScore !== awayDeaths) {
+        warnings.push(
+          `homeScore=${scores.homeScore} but away-team deaths sum to ${awayDeaths}`,
+        );
+      }
+      if (scores.awayScore !== homeDeaths) {
+        warnings.push(
+          `awayScore=${scores.awayScore} but home-team deaths sum to ${homeDeaths}`,
+        );
+      }
+    }
+
+    if (homeCount > 6) {
+      warnings.push(
+        `${homeCount} Pokemon entries for home team — more than 6 brought to a singles match is unusual`,
+      );
+    }
+    if (awayCount > 6) {
+      warnings.push(
+        `${awayCount} Pokemon entries for away team — more than 6 brought to a singles match is unusual`,
+      );
+    }
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
 }
 
 /**
@@ -91,6 +136,7 @@ export function validatePokemonDataForMatch(
   entries: PokemonDataEntry[],
   homeTeamId: string,
   awayTeamId: string,
+  scores?: { homeScore: number; awayScore: number },
 ): PokemonDataValidationResult {
   const rosterByTeam = new Map<string, Set<string>>();
   for (const teamId of [homeTeamId, awayTeamId]) {
@@ -103,5 +149,5 @@ export function validatePokemonDataForMatch(
       new Set(rows.map(r => r.pokemonName.toLowerCase())),
     );
   }
-  return validatePokemonData(entries, homeTeamId, awayTeamId, rosterByTeam);
+  return validatePokemonData(entries, homeTeamId, awayTeamId, rosterByTeam, scores);
 }

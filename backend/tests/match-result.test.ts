@@ -45,6 +45,55 @@ describe('validatePokemonData', () => {
     );
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('warns on score / deaths-sum mismatch and >6 entries per team', () => {
+    // homeScore=3 should equal awayDeaths (sum of deaths on AWAY); we give
+    // away 4 deaths total → mismatch on home side. awayScore=2 should equal
+    // home deaths; we give home 1 death → mismatch on away side. Plus we
+    // pile 7 entries on the home team to trigger the >6 warning.
+    const result = validatePokemonData(
+      [
+        entry({ teamId: HOME, pokemonName: 'Garchomp', kills: 2, deaths: 1 }),
+        entry({ teamId: HOME, pokemonName: 'Tinkaton', kills: 1, deaths: 0 }),
+        entry({ teamId: HOME, pokemonName: 'Iron Valiant', kills: 0, deaths: 0 }),
+        entry({ teamId: HOME, pokemonName: 'Garchomp', kills: 0, deaths: 0 }),
+        entry({ teamId: HOME, pokemonName: 'Tinkaton', kills: 0, deaths: 0 }),
+        entry({ teamId: HOME, pokemonName: 'Iron Valiant', kills: 0, deaths: 0 }),
+        entry({ teamId: HOME, pokemonName: 'Garchomp', kills: 0, deaths: 0 }),
+        entry({ teamId: AWAY, pokemonName: 'Kingambit', kills: 1, deaths: 2 }),
+        entry({ teamId: AWAY, pokemonName: 'Baxcalibur', kills: 0, deaths: 2 }),
+      ],
+      HOME,
+      AWAY,
+      rosters,
+      { homeScore: 3, awayScore: 2 },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    // Expect 3 warnings: home-mismatch, away-mismatch, home>6
+    expect(result.warnings.length).toBe(3);
+    expect(result.warnings.some(w => w.includes('homeScore=3'))).toBe(true);
+    expect(result.warnings.some(w => w.includes('awayScore=2'))).toBe(true);
+    expect(result.warnings.some(w => w.includes('home team') && w.includes('more than 6'))).toBe(true);
+  });
+
+  test('no warnings when scores match deaths and entry counts are normal', () => {
+    const result = validatePokemonData(
+      [
+        entry({ teamId: HOME, pokemonName: 'Garchomp', kills: 3, deaths: 1 }),
+        entry({ teamId: HOME, pokemonName: 'Tinkaton', kills: 0, deaths: 1 }),
+        entry({ teamId: AWAY, pokemonName: 'Kingambit', kills: 2, deaths: 2 }),
+        entry({ teamId: AWAY, pokemonName: 'Baxcalibur', kills: 0, deaths: 1 }),
+      ],
+      HOME,
+      AWAY,
+      rosters,
+      { homeScore: 3, awayScore: 2 },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toEqual([]);
   });
 
   test('case-insensitive pokemonName match against roster', () => {
