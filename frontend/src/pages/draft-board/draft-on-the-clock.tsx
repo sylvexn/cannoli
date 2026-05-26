@@ -124,21 +124,37 @@ export function DraftOnTheClock({
           </div>
         </div>
 
-        {/* Big timer */}
+        {/* Big timer — when urgency is critical we add a secondary
+            (non-color) signal: an AlertTriangle + the visible word "CRITICAL"
+            so users who can't distinguish the loss-red colour still see the
+            urgency. */}
         {timerEnabled && (
-          <div className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono tabular-nums',
-            isUserTurn
-              ? urgency === 'calm' ? 'text-neon border-neon/40 bg-neon/[0.06]'
-              : urgency === 'warning' ? 'text-draw border-draw/40 bg-draw/[0.06]'
-              : 'text-loss border-loss/40 bg-loss/[0.10] animate-pulse'
-              : 'text-pink/80 border-pink/30 bg-pink/[0.04]',
-            timerPaused && 'animate-pulse',
-          )}>
-            {timerPaused ? <Pause size={14} /> : <Timer size={14} />}
+          <div
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border font-mono tabular-nums',
+              isUserTurn
+                ? urgency === 'calm' ? 'text-neon border-neon/40 bg-neon/[0.06]'
+                : urgency === 'warning' ? 'text-draw border-draw/40 bg-draw/[0.06]'
+                : 'text-loss border-loss/40 bg-loss/[0.10] animate-pulse'
+                : 'text-pink/80 border-pink/30 bg-pink/[0.04]',
+              timerPaused && 'animate-pulse',
+            )}
+            aria-label={
+              isUserTurn && urgency === 'critical'
+                ? `Critical: ${timerSeconds} seconds left to pick`
+                : undefined
+            }
+          >
+            {timerPaused ? <Pause size={14} aria-hidden /> : <Timer size={14} aria-hidden />}
             <span className="text-lg font-bold leading-none">
               {Math.floor(timerSeconds / 60)}:{String(timerSeconds % 60).padStart(2, '0')}
             </span>
+            {isUserTurn && urgency === 'critical' && (
+              <span className="flex items-center gap-1 ml-1 pl-1.5 border-l border-loss/40 text-[9px] uppercase tracking-widest font-bold">
+                <AlertTriangle size={10} aria-hidden />
+                Critical
+              </span>
+            )}
           </div>
         )}
 

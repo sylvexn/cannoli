@@ -895,3 +895,43 @@ aside {
     animation: none;
   }
 }
+
+/* ─── On-the-clock hero entrance ──────────────────────────────────────────
+   Used by `DraftOnTheClock` (applied to its parent wrapper). Two layers:
+     1. The hero itself fades + slides in from above (320ms ease-out).
+     2. A neon edge glow ramps in from 0 → full over 600ms with a 100ms
+        delay, only when it's the user's turn (the .otc-shell-user variant).
+   Reduced-motion users get an instant fade with the final-state shadow. */
+@keyframes otc-shell-enter {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes otc-shell-glow-in {
+  from { box-shadow: 0 0 0 1px rgba(0, 0, 0, 0); }
+  to   { box-shadow:
+           inset 0 0 0 1px color-mix(in oklab, var(--user-primary, #22d3ee) 50%, transparent),
+           0 0 18px -2px color-mix(in oklab, var(--user-primary, #22d3ee) 35%, transparent);
+  }
+}
+.otc-shell {
+  animation: otc-shell-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  position: relative;
+}
+.otc-shell-user {
+  animation:
+    otc-shell-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    otc-shell-glow-in 600ms ease-out 100ms both;
+}
+@media (prefers-reduced-motion) {
+  .otc-shell,
+  .otc-shell-user {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .otc-shell-user {
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklab, var(--user-primary, #22d3ee) 50%, transparent),
+      0 0 18px -2px color-mix(in oklab, var(--user-primary, #22d3ee) 35%, transparent);
+  }
+}
