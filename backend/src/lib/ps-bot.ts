@@ -16,6 +16,7 @@ import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
+import { runAutoAwards } from './pins/auto-award';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
@@ -630,16 +631,67 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
   const team1 = useridToTeam.get(battle.p1);
   const team2 = useridToTeam.get(battle.p2);
 
-  if (!team1 || !team2) return;
+  if (!team1 || !team2) {
+    // Fix 7 — could be a regular scrim, or could be a renamed coach whose new
+    // PS userid no longer maps to a team. Log to activity_log with type
+    // `bot_unmatched_battle` so admins can spot rename patterns. Only log when
+    // the battle's format looks like a Cannoli draft format (contains 'draft')
+    // to avoid drowning admins in scrim noise; if format is unknown, log
+    // unconditionally with a clear message.
+    const fmt = (battle.format || '').toLowerCase();
+    const looksLikeCannoliFormat = fmt.includes('draft') || fmt === '';
+    if (looksLikeCannoliFormat) {
+      db.insert(schema.activityLog).values({
+        type: 'bot_unmatched_battle',
+        category: 'match',
+        actor: BOT_USERNAME,
+        leagueId: 'system',
+        description: `Unmatched battle: ${battle.p1} vs ${battle.p2} in ${battle.roomId}`,
+        metadata: JSON.stringify({
+          roomId: battle.roomId,
+          p1: battle.p1,
+          p2: battle.p2,
+          format: battle.format,
+          hasTeam1: !!team1,
+          hasTeam2: !!team2,
+          note: 'Investigate only if this is a league-format battle (possible PS rename)',
+        }),
+      }).run();
+    }
+    return;
+  }
 
-  // Look for a 'ready' match between these two teams
-  const match = db.select().from(schema.matches)
+  // Fix 6 — load the league so we can prefer matches at the current week, and
+  // gate on league.paused / league.phase (Fix 11). useridToTeam maps each
+  // userid to a single team; if the two teams disagree on leagueId, pick
+  // team1's league (best we can do without ambiguity).
+  const leagueId = team1.leagueId;
+  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+  if (!league) return;
+
+  // Fix 11 — skip writes for paused leagues and leagues not in regular/playoffs.
+  if (league.paused) return;
+  if (league.phase !== 'regular' && league.phase !== 'playoffs') return;
+
+  // Look for 'ready' matches between these two teams.
+  const candidates = db.select().from(schema.matches)
     .where(eq(schema.matches.status, 'ready'))
     .all()
-    .find(m =>
+    .filter(m =>
       (m.homeTeamId === team1.teamId && m.awayTeamId === team2.teamId) ||
       (m.homeTeamId === team2.teamId && m.awayTeamId === team1.teamId),
     );
+
+  // Fix 6 — prefer the match at league.currentWeek; fall back to the earliest
+  // ready week (likely a make-up). Log a warning when falling back.
+  let match = candidates.find(m => m.week === league.currentWeek);
+  if (!match && candidates.length > 0) {
+    const sorted = [...candidates].sort((a, b) => a.week - b.week);
+    match = sorted[0];
+    console.warn(
+      `[PS Bot] No 'ready' match at week ${league.currentWeek} for ${team1.teamId} vs ${team2.teamId} — falling back to week ${match.week} (likely make-up)`,
+    );
+  }
 
   if (match) {
     battle.matchId = match.id;
@@ -690,6 +742,29 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       .get();
 
     if (match) {
+      // Fix 2 — never overwrite a finalized match. Auto-forfeit may have
+      // already written status='completed' with a 0-0 score; the bot's
+      // delayed parse must not silently rewrite that.
+      if (match.status === 'completed' || match.status === 'disputed' || match.status === 'cancelled') {
+        console.log(`[PS Bot] Skipping result write for ${battle.matchId}: match already ${match.status}`);
+        db.insert(schema.activityLog).values({
+          type: 'bot_result_skipped',
+          category: 'match',
+          actor: BOT_USERNAME,
+          leagueId: match.leagueId,
+          description: `Bot result skipped — match already ${match.status} (${battle.roomId})`,
+          metadata: JSON.stringify({
+            matchId: battle.matchId,
+            prevStatus: match.status,
+            roomId: battle.roomId,
+            p1: battle.p1,
+            p2: battle.p2,
+          }),
+        }).run();
+        monitoredBattles.delete(battle.roomId);
+        return;
+      }
+
       const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId)).get();
       const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId)).get();
 
@@ -717,6 +792,16 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         }
       }
 
+      // Cap replayLog at 256 KB — long battles can run 100+ KB of protocol
+      // lines and we don't want a single match row ballooning the SQLite
+      // page cache. The canonical full log lives at replayUrl on the PS
+      // server, so truncation is recoverable.
+      const replayLog = battle.lines.join('\n');
+      const MAX_REPLAY_LOG = 256 * 1024;
+      const truncatedLog = replayLog.length > MAX_REPLAY_LOG
+        ? replayLog.slice(0, MAX_REPLAY_LOG) + '\n[...truncated]'
+        : replayLog;
+
       // Update match record
       db.update(schema.matches)
         .set({
@@ -724,7 +809,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           homeScore,
           awayScore,
           completedAt: new Date().toISOString(),
-          replayLog: battle.lines.join('\n'),
+          replayLog: truncatedLog,
           // Build an absolute URL that resolves to the public sim host's
           // replay viewer. PS exposes battle rooms at `https://{host}/{roomId}`
           // — this works whether or not the room was explicitly /savereplay'd
@@ -759,7 +844,12 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         }
       }
 
-      // Run validation
+      // Run validation. Fix 5 — when warnings exist, flip status to 'disputed'
+      // so the match is excluded from standings/playoffs gating. The manual
+      // handler does the same; bot-flagged matches must not sneak through.
+      // Fix 1 — only fire per-match auto-awards when no warnings; for a
+      // disputed match we wait for dismiss-warnings to mint awards.
+      let hasWarnings = false;
       if (homeTeam && awayTeam) {
         const homeRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, homeTeam.id)).all();
         const awayRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, awayTeam.id)).all();
@@ -776,11 +866,21 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         );
 
         if (warnings.length > 0) {
+          hasWarnings = true;
           db.update(schema.matches)
-            .set({ warnings: JSON.stringify(warnings) })
+            .set({ warnings: JSON.stringify(warnings), status: 'disputed' })
             .where(eq(schema.matches.id, battle.matchId))
             .run();
         }
+      }
+
+      // Fix 1 — fire per-match auto-awards (Kingslayer / Flawless). The
+      // manual record handler does this; the bot is the primary recording
+      // path during a normal season and was missing the call. Skip when the
+      // match is now 'disputed' — dismiss-warnings will run the awards once
+      // an admin clears them.
+      if (!hasWarnings) {
+        runAutoAwards(match.leagueId, { trigger: 'match', matchId: battle.matchId });
       }
 
       // Activity log

@@ -8,7 +8,7 @@
  */
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
 import { createBattle, isBotConnected } from '../lib/ps-bot';
 import { getLeague } from '../lib/queries';
@@ -447,7 +447,13 @@ export const arenaRoutes = new Elysia()
             const isHome = match.homeTeamId === client.teamId;
             const updateField = isHome ? { readyHome: true } : { readyAway: true };
 
-            db.update(schema.matches).set(updateField).where(eq(schema.matches.id, match.id)).run();
+            // Atomic guard: only flip ready flags if the match hasn't been
+            // finalized between getCurrentMatch and now. Without this, a
+            // late ready click could re-touch a completed/disputed row.
+            db.update(schema.matches).set(updateField).where(and(
+              eq(schema.matches.id, match.id),
+              sql`status IN ('scheduled', 'ready', 'in_progress')`,
+            )).run();
 
             // Log ready event
             db.insert(schema.matchReadyLog).values({
@@ -461,7 +467,10 @@ export const arenaRoutes = new Elysia()
             if (updated.readyHome && updated.readyAway) {
               db.update(schema.matches)
                 .set({ status: 'ready', startedAt: new Date().toISOString() })
-                .where(eq(schema.matches.id, match.id)).run();
+                .where(and(
+                  eq(schema.matches.id, match.id),
+                  sql`status = 'scheduled'`,
+                )).run();
 
               scheduleReadyTimeout(match.id);
 

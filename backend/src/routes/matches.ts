@@ -192,8 +192,14 @@ export const matchRoutes = new Elysia()
 
     // Validate pokemonData (teamId in {home,away}; pokemonName on roster).
     // Done before the tx so we don't churn the WAL on bad input.
+    let mergedWarnings: string[] = warnings?.slice() ?? [];
     if (pokemonData?.length) {
-      const validation = validatePokemonDataForMatch(pokemonData, match.homeTeamId, match.awayTeamId);
+      const validation = validatePokemonDataForMatch(
+        pokemonData,
+        match.homeTeamId,
+        match.awayTeamId,
+        { homeScore, awayScore },
+      );
       if (!validation.ok) {
         set.status = 400;
         return {
@@ -202,9 +208,15 @@ export const matchRoutes = new Elysia()
           invalid: validation.errors,
         };
       }
+      // Soft warnings (score/deaths sum mismatch, >6 mons) flow into the
+      // existing disputed-status path rather than blocking — admin can
+      // dismiss them post-record.
+      if (validation.warnings.length > 0) {
+        mergedWarnings = mergedWarnings.concat(validation.warnings);
+      }
     }
 
-    const newStatus = (warnings?.length ?? 0) > 0 ? 'disputed' : 'completed';
+    const newStatus = mergedWarnings.length > 0 ? 'disputed' : 'completed';
 
     return tx(() => {
     // Update match
@@ -214,7 +226,7 @@ export const matchRoutes = new Elysia()
       replayUrl: replayUrl || match.replayUrl,
       status: newStatus,
       completedAt: new Date().toISOString(),
-      warnings: warnings?.length ? JSON.stringify(warnings) : null,
+      warnings: mergedWarnings.length ? JSON.stringify(mergedWarnings) : null,
     }).where(eq(schema.matches.id, params.matchId)).run();
 
     // Insert per-pokemon K/D if provided
@@ -242,7 +254,7 @@ export const matchRoutes = new Elysia()
       actor: user.username,
       leagueId: match.leagueId,
       description: `Recorded result for ${match.homeTeamId} vs ${match.awayTeamId}: ${homeScore}-${awayScore}`,
-      metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, warningCount: warnings?.length ?? 0 }),
+      metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, warningCount: mergedWarnings.length }),
     }).run();
 
     // ─── Playoff auto-advancement ─────────────────────────────────
@@ -321,6 +333,63 @@ export const matchRoutes = new Elysia()
       .get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
 
+    // ─── Playoff downstream chain handling ────────────────────────────
+    // If this match was a completed playoff round, its winner has already
+    // been propagated into downstream cells. Compute downstream rounds and
+    // the prior winner, then either reject (if any downstream is itself
+    // completed — to avoid silent cascading rollback) or queue downstream
+    // cells to be cleared back to 'TBD' so a re-record re-fires advancement.
+    const wasCompleted = match.status === 'completed';
+    const isPlayoffChainable =
+      wasCompleted
+      && match.phase === 'playoffs'
+      && !!match.playoffRound
+      && match.homeScore != null
+      && match.awayScore != null
+      && match.homeScore !== match.awayScore;
+
+    let downstreamToClear: { id: string; clearHome: boolean; clearAway: boolean }[] = [];
+    if (isPlayoffChainable) {
+      const downstreamRounds = match.playoffRound === 'qf'
+        ? ['sf', 'f']
+        : match.playoffRound === 'sf'
+          ? ['f']
+          : [];
+
+      if (downstreamRounds.length > 0) {
+        const winnerId = (match.homeScore as number) > (match.awayScore as number)
+          ? match.homeTeamId
+          : match.awayTeamId;
+
+        const downstream = db.select().from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, match.leagueId),
+            eq(schema.matches.phase, 'playoffs'),
+          ))
+          .all()
+          .filter(m => downstreamRounds.includes(m.playoffRound ?? '')
+            && (m.homeTeamId === winnerId || m.awayTeamId === winnerId));
+
+        // If any downstream is itself completed, refuse — admin must void
+        // those first to avoid an implicit cascading rollback.
+        const lockedDownstream = downstream.filter(m => m.status === 'completed');
+        if (lockedDownstream.length > 0) {
+          set.status = 409;
+          return {
+            error: `Cannot void completed playoff match — downstream rounds depend on its winner and are themselves completed. Void the dependent matches first.`,
+            code: 'playoff_chain_locked',
+            lockedMatchIds: lockedDownstream.map(m => m.id),
+          };
+        }
+
+        downstreamToClear = downstream.map(m => ({
+          id: m.id,
+          clearHome: m.homeTeamId === winnerId,
+          clearAway: m.awayTeamId === winnerId,
+        }));
+      }
+    }
+
     tx(() => {
       db.delete(schema.matchPokemon)
         .where(eq(schema.matchPokemon.matchId, params.matchId))
@@ -340,6 +409,30 @@ export const matchRoutes = new Elysia()
         readyAway: false,
       }).where(eq(schema.matches.id, params.matchId)).run();
 
+      // Clear downstream playoff cells back to 'TBD' so a re-record's
+      // advancePlayoffWinner call re-populates them cleanly.
+      for (const d of downstreamToClear) {
+        const updates: Record<string, unknown> = {};
+        if (d.clearHome) updates.homeTeamId = 'TBD';
+        if (d.clearAway) updates.awayTeamId = 'TBD';
+        if (Object.keys(updates).length > 0) {
+          db.update(schema.matches)
+            .set(updates)
+            .where(eq(schema.matches.id, d.id))
+            .run();
+        }
+      }
+
+      // Clear per-match auto-pins (kingslayer, flawless). Re-record will
+      // re-mint via runAutoAwards. Scoped by metadata.matchId (set by both
+      // awarders) and awarded_by IS NULL (only auto pins).
+      db.run(sql`
+        DELETE FROM pins
+        WHERE awarded_by IS NULL
+          AND pin_def_id IN ('kingslayer', 'flawless')
+          AND json_extract(metadata, '$.matchId') = ${params.matchId}
+      `);
+
       db.insert(schema.activityLog).values({
         type: 'match_voided',
         category: 'admin',
@@ -351,11 +444,47 @@ export const matchRoutes = new Elysia()
           previousStatus: match.status,
           previousHomeScore: match.homeScore,
           previousAwayScore: match.awayScore,
+          clearedDownstream: downstreamToClear.map(d => d.id),
         }),
       }).run();
     });
 
     return { success: true };
+  })
+
+  // ─── Force-mark a match as disputed (admin freeze, pending review) ───
+  // Unlike void this does NOT clear scores, pokemon data, or per-match pins —
+  // it only flags the match for review. Use void to roll back.
+
+  .post('/api/matches/:matchId/dispute', ({ params, body, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const { reason } = body as { reason: string };
+    if (!reason || typeof reason !== 'string') { set.status = 400; return { error: 'reason required' }; }
+
+    const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+    if (match.status === 'scheduled' || match.status === 'ready') {
+      set.status = 400;
+      return { error: 'Cannot dispute a match that has not been recorded' };
+    }
+
+    return tx(() => {
+      db.update(schema.matches)
+        .set({ status: 'disputed', warnings: JSON.stringify([`Admin dispute: ${reason}`]) })
+        .where(eq(schema.matches.id, params.matchId))
+        .run();
+
+      db.insert(schema.activityLog).values({
+        type: 'match_disputed',
+        category: 'match',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Disputed: ${match.homeTeamId} vs ${match.awayTeamId} (W${match.week}) — ${reason}`,
+        metadata: JSON.stringify({ matchId: params.matchId, reason, prevStatus: match.status }),
+      }).run();
+
+      return { success: true };
+    });
   })
 
   // ─── Move match (week / deadline) ───────────────────────────────────────
