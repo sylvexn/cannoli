@@ -368,6 +368,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         <DraftPickLog
           picks={state.allPicks}
           playerLookup={playerLookup}
+          currentPickEvent={pickQueue.current}
+          currentPhase={pickQueue.phase}
         />
       )}
 
@@ -461,7 +463,6 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
                 isDraftComplete={isDraftComplete}
                 draftOrder={draftOrder}
                 presence={presence}
-                wsConnected={wsConnected}
                 timerEnabled={draftTimerEnabled}
               />
             </div>
@@ -506,6 +507,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         queueFull={state.draftQueue.length >= 3}
         userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
         pointCap={state.pointCap}
+        animatingPokemonName={animatingPokemonName}
         onClose={handlePopoverClose}
         onModeChange={handlePopoverModeChange}
         onConfirmDraft={handleConfirmDraft}
@@ -522,6 +524,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         playerLookup={playerLookup}
         canDraft={isUserTurn && !!state.detailPokemon && !ownershipMap.has(state.detailPokemon)}
         onDraft={handleUserPick}
+        animatingPokemonName={animatingPokemonName}
       />
     </div>
     </UserAccentScope>

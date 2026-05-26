@@ -34,7 +34,6 @@ interface DraftControlBarProps {
   isDraftComplete: boolean;
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string }[];
   presence?: DraftPresenceData;
-  wsConnected?: boolean;
   timerEnabled?: boolean;
 }
 
@@ -52,7 +51,6 @@ export function DraftControlBar({
   isDraftComplete,
   draftOrder,
   presence,
-  wsConnected: _wsConnected,
   timerEnabled = true,
 }: DraftControlBarProps) {
   const isServer = state.source === 'server';

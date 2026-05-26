@@ -29,6 +29,10 @@ interface PokemonDetailSheetProps {
   playerLookup: Map<string, Player>;
   canDraft?: boolean;
   onDraft?: (name: string) => void;
+  /** Pokemon currently animating via the pick queue — when this matches `name`,
+   *  we skip the view-transition-name on the hero so the queue's card→roster
+   *  morph is the sole owner of that name. */
+  animatingPokemonName?: string | null;
 }
 
 export function PokemonDetailSheet({
@@ -39,6 +43,7 @@ export function PokemonDetailSheet({
   playerLookup,
   canDraft,
   onDraft,
+  animatingPokemonName,
 }: PokemonDetailSheetProps) {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
@@ -109,7 +114,9 @@ export function PokemonDetailSheet({
               <div className="relative flex items-start gap-4">
                 <div
                   className="flex-shrink-0 rounded-lg bg-surface-overlay/50 p-2"
-                  style={{ viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}` }}
+                  style={animatingPokemonName === name
+                    ? undefined
+                    : { viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}` }}
                 >
                   <PokemonSprite name={name} size="xl" />
                 </div>
