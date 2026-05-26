@@ -1,460 +1,224 @@
-import { Fragment } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { PokemonSprite } from '@/components/pokemon-sprite';
+import { ChevronUp } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
-import { TierBadge } from '@/components/tier-badge';
-import { PointCapBar } from '@/components/point-cap-bar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-  ChevronRight, ChevronLeft, ArrowRightLeft, Zap, AlertTriangle, X,
-  ListOrdered, Circle, Eye, Crown, Sparkles,
-} from 'lucide-react';
+import { useMediaQuery } from '@/lib/use-media-query';
+import { useLocalStorageState } from '@/lib/use-local-storage-state';
+import { DraftSidebarPanel, type DraftSidebarPanelProps } from './draft-sidebar-panel';
+import { DraftSidebarRail } from './draft-sidebar-rail';
 import type { Player } from '@/lib/types';
-import type { Acquisition } from './types';
-import type { DraftPresenceData } from './use-draft-websocket';
-import { getTierEntry } from '@/data/tier-list';
-import { captainHeadroomNeeded } from '@/lib/draft-rules';
-import { ViewTransitionShim } from './use-pick-animation-queue';
 
-/** Matches the unified Phase 2 VT name pattern. The same name is stamped on
- *  the pool card while it's animating so the browser pairs old/new snapshots
- *  and morphs the sprite from the grid into the roster slot. */
-function pickViewTransitionName(name: string): string {
-  return `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+export interface DraftTeamSidebarProps extends Omit<DraftSidebarPanelProps, 'onClose' | 'pinned' | 'onTogglePin' | 'floating'> {
+  /** Legacy collapse-toggle props from the previous bimodal sidebar — accepted for
+   *  source-compat but no longer used: collapse is now driven by viewport size
+   *  + the pin toggle on the largest breakpoint. */
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-interface DraftTeamSidebarProps {
-  /** Players in display order (draft order during draft, standings after) */
-  teamOrder: Player[];
-  teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
-  teamPoints: Map<string, number>;
-  selectedTeamId: string | null;
-  onSelectTeam: (teamId: string | null) => void;
-  collapsed: boolean;
-  onToggleCollapse: () => void;
-  /** Current drafter's team ID (live mode only) */
-  currentDrafterId?: string | null;
-  /** Whether we're in live draft mode */
-  isLiveMode?: boolean;
-  /** The user's team ID (for focused panel in draft mode) */
-  userTeamId?: string | null;
-  /** Point cap for the league */
-  pointCap?: number;
-  /** Tera captain slots configured for this league (for headroom hint) */
-  teraCaptainSlots?: number;
-  /** Roster size for picks-left math */
-  rosterSize?: number;
-  /** User's draft queue (max 3 Pokemon names) */
-  draftQueue?: string[];
-  onQueueRemove?: (name: string) => void;
-  autoDraftQueue?: boolean;
-  onToggleAutoDraft?: () => void;
-  /** Manually draft the top queued Pokemon */
-  onDraftFromQueue?: () => void;
-  isUserTurn?: boolean;
-  /** Live presence data from WebSocket */
-  presence?: DraftPresenceData;
-  /** Pokemon name currently being celebrated by the pick animation queue.
-   *  The matching roster row wraps in <ViewTransition name="..."> so React
-   *  can morph the sprite from the pool card into this slot. */
-  animatingPokemonName?: string | null;
-}
-
-const DEFAULT_ROSTER_SIZE = 10;
-
+/**
+ * Three-tier responsive shell around `DraftSidebarPanel`:
+ *
+ *   - `<1024px`: bottom sheet. Pool gets full width; a 48px chrome bar at the
+ *     bottom shows a Roster summary + Queue count and toggles the sheet.
+ *   - `1024–1440px`: 52px right-edge mini-rail. Hover or click opens an
+ *     overlay drawer that floats over the pool without shrinking it.
+ *   - `≥1440px`: pinned 320px panel by default with a Pin/Unpin toggle.
+ *     When unpinned behaves like the 1024–1440 rail.
+ */
 export function DraftTeamSidebar(props: DraftTeamSidebarProps) {
-  const {
-    teamOrder, teamRosters, teamPoints, selectedTeamId, onSelectTeam,
-    collapsed, onToggleCollapse, currentDrafterId, isLiveMode, userTeamId,
-    pointCap = 110, teraCaptainSlots = 2, rosterSize = DEFAULT_ROSTER_SIZE,
-    draftQueue = [], onQueueRemove, autoDraftQueue, onToggleAutoDraft,
-    onDraftFromQueue, isUserTurn, presence, animatingPokemonName,
-  } = props;
+  const isLarge = useMediaQuery('(min-width: 1440px)');
+  const isMd = useMediaQuery('(min-width: 1024px)');
+  const [pinned, setPinned] = useLocalStorageState<boolean>('draft.sidebarPinned', true);
 
-  const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
-
-  // Collapsed: just team logos vertically
-  if (collapsed) {
+  // Mode resolution
+  // - mobile (no md): bottom sheet
+  // - md (no large): rail + overlay
+  // - large + pinned: docked
+  // - large + unpinned: rail + overlay
+  if (!isMd) {
+    return <BottomSheetShell {...props} />;
+  }
+  if (isLarge && pinned) {
     return (
-      <div className="flex flex-col items-center gap-1 py-2 w-10 bg-surface-raised border-l border-border-default">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleCollapse}
-          className="h-6 w-6 p-0 text-text-muted hover:text-neon mb-2"
-        >
-          <ChevronLeft size={14} />
-        </Button>
-        {teamOrder.map(p => (
-          <button
-            key={p.id}
-            onClick={() => onSelectTeam(p.id)}
-            className={cn(
-              'transition-all duration-150 relative',
-              selectedTeamId === p.id && 'ring-1 ring-neon rounded-full',
-              currentDrafterId === p.id && 'ring-1 ring-pink rounded-full animate-pulse',
-              userTeamId === p.id && 'ring-1 ring-neon/40 rounded-full',
-            )}
-          >
-            <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" />
-          </button>
-        ))}
+      <div className="w-[320px] flex-shrink-0 min-h-0 flex flex-col">
+        <DraftSidebarPanel
+          {...props}
+          pinned
+          onTogglePin={() => setPinned(false)}
+        />
       </div>
     );
   }
-
-  const userPlayer = userTeamId ? teamOrder.find(p => p.id === userTeamId) : undefined;
-  const userPoints = userPlayer ? teamPoints.get(userPlayer.id) ?? 0 : 0;
-  const userRoster = userPlayer ? teamRosters.get(userPlayer.id) ?? [] : [];
-  const remaining = pointCap - userPoints;
-  const picksLeft = Math.max(0, rosterSize - userRoster.length);
-  const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
-  const captainReserve = isLiveMode && userPlayer
-    ? captainHeadroomNeeded(userRoster, teraCaptainSlots)
-    : 0;
-  const captainBudgetWarning = captainReserve > 0 && remaining < captainReserve;
-
-  // Place user's team at the top during live mode
-  const orderedTeams = isLiveMode && userTeamId
-    ? [userPlayer!, ...teamOrder.filter(p => p.id !== userTeamId)].filter(Boolean) as Player[]
-    : teamOrder;
-
   return (
-    <div className="w-[290px] flex-shrink-0 min-h-0 bg-surface-raised border-l border-border-default flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-default">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-heading font-semibold text-text-primary">Teams</span>
-          {isLiveMode && (
-            <Badge className="bg-pink/10 text-pink border border-pink/30 text-[9px] h-4 px-1.5 font-mono">DRAFT</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {presence && presence.spectators.length > 0 && (
-            <span className="text-[9px] font-mono text-text-muted/70 flex items-center gap-1">
-              <Eye size={10} />
-              {presence.spectators.length}
-            </span>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleCollapse}
-            className="h-6 w-6 p-0 text-text-muted hover:text-neon"
-          >
-            <ChevronRight size={14} />
-          </Button>
-        </div>
-      </div>
-
-      <ScrollArea className="flex-1">
-        {/* Live mode: budget cue + queue, anchored under the user's team row */}
-        {orderedTeams.map((p, idx) => {
-          const isUser = isLiveMode && p.id === userTeamId;
-          const isFirst = idx === 0;
-          const isDrafter = currentDrafterId === p.id;
-          const isSelected = selectedTeamId === p.id;
-          const points = teamPoints.get(p.id) ?? 0;
-          const roster = teamRosters.get(p.id) ?? [];
-          const isOnline = connectedTeamIds.has(p.id);
-          const showOnline = !!isLiveMode;
-
-          return (
-            <div key={p.id}>
-              {isLiveMode && isUser && idx === 0 && (
-                <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle">
-                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
-                    Your Draft
-                  </span>
-                </div>
-              )}
-              {!isLiveMode && isFirst && (
-                <div className="px-3 pt-2 pb-1.5 border-b border-border-subtle">
-                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
-                    Teams
-                  </span>
-                </div>
-              )}
-              {/* Section header for "Other teams" appears once after the user's row in live mode */}
-              {isLiveMode && idx === 1 && (
-                <div className="px-3 py-1.5 border-y border-border-subtle bg-surface-overlay/20 flex items-center gap-2">
-                  <span className="text-[10px] font-heading font-semibold text-text-muted uppercase tracking-wider">
-                    Draft Order
-                  </span>
-                  {presence && presence.players.length > 0 && (
-                    <span className="text-[9px] font-mono text-text-muted/60 ml-auto">
-                      {[...connectedTeamIds].filter(id => id !== userTeamId).length}/{orderedTeams.length - 1} online
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <UnifiedTeamRow
-                player={p}
-                points={points}
-                roster={roster}
-                pointCap={pointCap}
-                isUser={isUser}
-                isDrafter={isDrafter}
-                isSelected={isSelected}
-                onSelect={() => onSelectTeam(isSelected ? null : p.id)}
-                isOnline={isOnline}
-                showOnline={showOnline}
-                expanded={isUser /* user's row stays expanded */ || isSelected}
-                forceExpand={isUser}
-                animatingPokemonName={animatingPokemonName}
-              />
-
-              {/* Live-only sections inline under the user's row */}
-              {isLiveMode && isUser && (
-                <>
-                  {/* Budget cue / picks-left math */}
-                  {picksLeft > 0 && (
-                    <div className="px-3 pb-2">
-                      <div className={cn(
-                        'flex items-center justify-between gap-2 px-2 py-1 rounded text-[10px] font-mono',
-                        avgPerPick <= 2
-                          ? 'bg-loss/10 border border-loss/20 text-loss'
-                          : avgPerPick <= 4
-                          ? 'bg-draw/10 border border-draw/20 text-draw'
-                          : 'bg-surface-overlay/40 text-text-muted',
-                      )}>
-                        <span>~<span className="font-bold">{avgPerPick.toFixed(1)}</span>pt/pick</span>
-                        <span className="text-text-muted/60">{picksLeft} picks left</span>
-                        {avgPerPick <= 2 && <AlertTriangle size={10} />}
-                      </div>
-                      {captainReserve > 0 && (
-                        <div className={cn(
-                          'mt-1 flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono',
-                          captainBudgetWarning
-                            ? 'bg-loss/10 border border-loss/20 text-loss'
-                            : 'bg-surface-overlay/30 text-text-muted',
-                        )}>
-                          <span className="flex items-center gap-1">
-                            <Crown size={10} />
-                            captain reserve: <span className="font-bold">{captainReserve}pt</span>
-                          </span>
-                          {captainBudgetWarning && (
-                            <span title="Not enough headroom to designate the configured number of captains at worst-case markup">
-                              <AlertTriangle size={10} />
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Draft queue */}
-                  {draftQueue.length > 0 && (
-                    <div className="px-3 pb-2 border-b border-border-subtle">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <ListOrdered size={11} className="text-pink" />
-                        <span className="text-[10px] font-heading font-semibold text-text-muted uppercase">Queue</span>
-                        <span className="text-[9px] font-mono text-text-muted/60 ml-auto">{draftQueue.length}/3</span>
-                      </div>
-                      <div className="space-y-0.5">
-                        {draftQueue.map((name, qi) => {
-                          const tierEntry = getTierEntry(name);
-                          return (
-                            <div key={name} className="flex items-center gap-1.5 py-0.5 px-1 rounded bg-pink/5 border border-pink/15 group/q">
-                              <span className="text-[9px] font-mono tabular-nums text-pink/60 w-3 shrink-0 text-right">{qi + 1}</span>
-                              <PokemonSprite name={name} size="xs" />
-                              <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{name}</span>
-                              {tierEntry && <TierBadge points={tierEntry.tier} />}
-                              {onQueueRemove && (
-                                <button
-                                  onClick={() => onQueueRemove(name)}
-                                  className="opacity-0 group-hover/q:opacity-100 p-0.5 rounded text-text-muted hover:text-loss transition-all"
-                                >
-                                  <X size={10} />
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {onToggleAutoDraft && (
-                        <button
-                          onClick={onToggleAutoDraft}
-                          className={cn(
-                            'mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all border',
-                            autoDraftQueue
-                              ? 'bg-pink/10 border-pink/30 text-pink'
-                              : 'bg-surface-overlay/30 border-border-subtle text-text-muted hover:border-border-default hover:text-text-secondary',
-                          )}
-                        >
-                          <div className={cn(
-                            'w-6 h-3.5 rounded-full transition-colors relative flex-shrink-0',
-                            autoDraftQueue ? 'bg-pink' : 'bg-surface-overlay',
-                          )}>
-                            <div className={cn(
-                              'absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all',
-                              autoDraftQueue ? 'left-3' : 'left-0.5',
-                            )} />
-                          </div>
-                          <span>Auto-draft from queue</span>
-                        </button>
-                      )}
-                      {!autoDraftQueue && isUserTurn && onDraftFromQueue && (
-                        <button
-                          onClick={onDraftFromQueue}
-                          className={cn(
-                            'group/qd mt-1.5 w-full relative overflow-hidden',
-                            'flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md',
-                            'bg-gradient-to-r from-pink/20 via-neon/20 to-pink/20',
-                            'border border-pink/30 hover:border-neon/50',
-                            'transition-all duration-300',
-                            'hover:shadow-[0_0_16px_rgba(232,121,249,0.2)]',
-                          )}
-                        >
-                          <Sparkles size={12} className="text-neon" />
-                          <span className="text-[11px] font-bold text-text-primary">Draft #{1}</span>
-                          <span className="text-[10px] text-text-muted truncate max-w-[100px]">{draftQueue[0]}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
-      </ScrollArea>
-    </div>
+    <RailWithOverlayShell
+      {...props}
+      showPinToggle={isLarge}
+      pinned={pinned}
+      onTogglePin={() => setPinned(true)}
+    />
   );
 }
 
-// ─── Unified team row template ─────────────────────────────────────────────
+// ─── 1024–1440 + unpinned-large: rail + floating overlay ──────────────────
 
-interface UnifiedTeamRowProps {
-  player: Player;
-  points: number;
-  roster: { name: string; tier: number; acquisition: Acquisition }[];
-  pointCap: number;
-  isUser?: boolean;
-  isDrafter?: boolean;
-  isSelected?: boolean;
-  onSelect: () => void;
-  isOnline?: boolean;
-  showOnline?: boolean;
-  /** Visual expansion (roster shown). User's row always expanded; others on selection. */
-  expanded?: boolean;
-  /** When true the click toggles only inspection elsewhere — row never collapses */
-  forceExpand?: boolean;
-  /** Pokemon name currently animating — wraps the matching roster row in
-   *  ViewTransition so the sprite morphs into the slot. */
-  animatingPokemonName?: string | null;
+interface RailWithOverlayShellProps extends DraftTeamSidebarProps {
+  showPinToggle: boolean;
+  pinned: boolean;
+  onTogglePin: () => void;
 }
 
-function UnifiedTeamRow({
-  player, points, roster, pointCap, isUser, isDrafter, isSelected,
-  onSelect, isOnline, showOnline, expanded, forceExpand, animatingPokemonName,
-}: UnifiedTeamRowProps) {
-  const remaining = pointCap - points;
-  const showRoster = !!expanded;
+function RailWithOverlayShell(props: RailWithOverlayShellProps) {
+  const {
+    teamOrder, isLiveMode, userTeamId, currentDrafterId, presence,
+    selectedTeamId, showPinToggle, pinned, onTogglePin,
+  } = props;
+  const [open, setOpen] = useState(false);
+
+  // Order: user's team first in live mode, mirroring the panel
+  const orderedTeams = isLiveMode && userTeamId
+    ? [
+      teamOrder.find(p => p.id === userTeamId)!,
+      ...teamOrder.filter(p => p.id !== userTeamId),
+    ].filter(Boolean) as Player[]
+    : teamOrder;
+
+  // Esc closes the overlay
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   return (
-    <div className={cn(
-      'relative border-b border-border-subtle/60',
-      isUser && 'bg-gradient-to-r from-neon/[0.05] via-neon/[0.015] to-transparent',
-      isDrafter && !isUser && 'bg-pink/5',
-    )}>
-      {/* Side accent for user / drafter */}
-      {(isUser || isDrafter) && (
-        <div
-          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-md"
-          style={{ backgroundColor: isUser ? player.teamColor : '#e879f9' }}
-        />
-      )}
+    <>
+      <DraftSidebarRail
+        teamOrder={orderedTeams}
+        selectedTeamId={selectedTeamId}
+        onSelectTeam={(id) => { props.onSelectTeam(id); }}
+        onOpen={() => setOpen(true)}
+        currentDrafterId={currentDrafterId}
+        isLiveMode={isLiveMode}
+        userTeamId={userTeamId}
+        presence={presence}
+        pinned={showPinToggle ? pinned : undefined}
+        onTogglePin={showPinToggle ? onTogglePin : undefined}
+      />
 
+      {/* Floating overlay — slides in from the right on top of the pool. */}
       <button
-        onClick={forceExpand ? () => onSelect() : onSelect}
+        type="button"
+        onClick={() => setOpen(false)}
+        aria-label="Close team panel"
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-1.5 transition-colors text-left',
-          'hover:bg-surface-overlay/30',
+          'fixed inset-0 z-40 bg-transparent transition-opacity duration-200',
+          open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+        )}
+      />
+      <aside
+        role="dialog"
+        aria-label="Team panel"
+        aria-hidden={!open}
+        className={cn(
+          'fixed top-0 right-0 z-50 h-screen w-[320px] transition-transform duration-[220ms] ease-out',
+          open ? 'translate-x-0' : 'translate-x-full pointer-events-none',
         )}
       >
-        {showOnline && (
-          <Circle size={5} className={cn('shrink-0', isOnline ? 'fill-win text-win' : 'fill-loss/60 text-loss/60')} />
+        <DraftSidebarPanel
+          {...props}
+          floating
+          onClose={() => setOpen(false)}
+          pinned={showPinToggle ? pinned : undefined}
+          onTogglePin={showPinToggle ? onTogglePin : undefined}
+        />
+      </aside>
+    </>
+  );
+}
+
+// ─── <1024px: bottom sheet ────────────────────────────────────────────────
+
+function BottomSheetShell(props: DraftTeamSidebarProps) {
+  const {
+    teamOrder, teamRosters, userTeamId, draftQueue = [], isLiveMode,
+  } = props;
+  const [open, setOpen] = useState(false);
+
+  const userPlayer = userTeamId ? teamOrder.find(p => p.id === userTeamId) : undefined;
+  const userRoster = userPlayer ? teamRosters.get(userPlayer.id) ?? [] : [];
+
+  // Esc closes the sheet
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <>
+      {/* Persistent bottom chrome bar — taps to open the sheet. */}
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={open ? 'Close team panel' : 'Open team panel'}
+        aria-expanded={open}
+        className={cn(
+          'fixed bottom-0 left-0 right-0 z-30 h-12 px-3 flex items-center gap-3',
+          'bg-surface-raised border-t border-border-default',
+          'text-[11px] font-mono text-text-muted',
         )}
-        <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn('text-xs font-medium truncate', isUser ? 'text-text-primary' : 'text-text-secondary')}>
-              {player.teamAbbrev}
-            </span>
-            {isUser && <Crown size={9} className="text-neon shrink-0" />}
-            {isDrafter && (
-              <Badge className="bg-pink/20 text-pink border-pink/30 text-[8px] h-3.5 px-1 py-0 font-mono">
-                <Zap size={7} className="mr-0.5" />OTC
-              </Badge>
-            )}
-          </div>
-        </div>
-        <span className="text-[10px] font-mono tabular-nums text-text-muted shrink-0">
-          {points}<span className="text-text-muted/40">/{pointCap}</span>
-        </span>
-        <span className="text-[9px] font-mono text-text-muted/60 w-7 text-right shrink-0 tabular-nums">
-          {roster.length}pk
+      >
+        {userPlayer ? (
+          <TeamLogo abbrev={userPlayer.teamAbbrev} color={userPlayer.teamColor} size="sm" />
+        ) : (
+          <div className="w-7 h-7 rounded-full bg-surface-overlay" aria-hidden />
+        )}
+        <span className="text-text-primary">Roster ({userRoster.length})</span>
+        {isLiveMode && draftQueue.length > 0 && (
+          <span className="text-pink">Queue ({draftQueue.length})</span>
+        )}
+        <span className="ml-auto inline-flex items-center text-text-muted">
+          <ChevronUp
+            size={14}
+            className={cn('transition-transform', open && 'rotate-180')}
+          />
         </span>
       </button>
 
-      {/* Inline budget bar — visible always for the user, on selection for others */}
-      {(isUser || (isSelected && roster.length > 0)) && (
-        <div className="px-3 pb-1.5">
-          <PointCapBar used={points} total={pointCap} />
-          {isUser && (
-            <div className="flex justify-between text-[9px] font-mono text-text-muted mt-1">
-              <span>{points}/{pointCap}</span>
-              <span className={cn(
-                'font-bold',
-                remaining < 10 ? 'text-loss' : remaining < 20 ? 'text-draw' : 'text-neon',
-              )}>
-                {remaining}pt left
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Backdrop */}
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        aria-label="Close team panel"
+        className={cn(
+          'fixed inset-0 z-30 bg-black/40 transition-opacity duration-200',
+          open ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+        )}
+      />
 
-      {/* Roster expansion */}
-      {showRoster && (
-        <div className="px-3 pb-2 space-y-0.5">
-          {roster.length > 0 ? roster.map((mon, i) => {
-            const row = (
-              <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40">
-                <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">{i + 1}</span>
-                <PokemonSprite name={mon.name} size="xs" />
-                <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
-                {mon.acquisition.method === 'traded' && (
-                  <ArrowRightLeft size={10} className="text-pink shrink-0" />
-                )}
-                <TierBadge points={mon.tier} />
-              </div>
-            );
-            // Wrap only the row matching the currently-animating pick. The
-            // pool card with the same view-transition-name is unmounting in
-            // the same commit; React pairs them and morphs the sprite.
-            if (animatingPokemonName === mon.name) {
-              return (
-                <ViewTransitionShim
-                  key={mon.name}
-                  name={pickViewTransitionName(mon.name)}
-                  className="pokemon-card-vt"
-                >
-                  {row}
-                </ViewTransitionShim>
-              );
-            }
-            return <Fragment key={mon.name}>{row}</Fragment>;
-          }) : (
-            <div className="text-[10px] text-text-muted py-1 text-center">No picks yet</div>
-          )}
-        </div>
-      )}
-    </div>
+      {/* Sheet itself — anchored above the chrome bar, slides up from below. */}
+      <aside
+        role="dialog"
+        aria-label="Team panel"
+        aria-hidden={!open}
+        className={cn(
+          'fixed bottom-12 left-0 right-0 z-40 max-h-[78vh] flex flex-col',
+          'transition-transform duration-[220ms] ease-out',
+          open ? 'translate-y-0' : 'translate-y-full pointer-events-none',
+        )}
+      >
+        <DraftSidebarPanel
+          {...props}
+          floating
+          onClose={() => setOpen(false)}
+        />
+      </aside>
+    </>
   );
 }

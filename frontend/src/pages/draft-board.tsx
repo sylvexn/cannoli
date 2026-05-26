@@ -101,7 +101,6 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [pickLogExpanded, setPickLogExpanded] = useState(false);
 
   // Card density toggle — controls --card-size CSS var on the page root.
@@ -386,12 +385,21 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
       <div className="flex flex-1 mt-1.5 min-h-0 gap-0">
         {/* Pool column: hero + pool + chrome bar stacked (chrome doesn't extend under sidebar) */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* OTC hero — docks above the pool when a draft is active */}
+          {/* OTC hero — docks above the pool when a draft is active.
+              The .otc-shell class drives the entrance animation (320ms fade +
+              translate); .otc-shell-user adds the neon edge-glow ramp on the
+              user's turn. Both respect prefers-reduced-motion. */}
           {isDraftRunning && currentPick && !isDraftComplete && (() => {
             const drafter = playerLookup.get(currentPick.playerId);
             if (!drafter) return null;
             return (
-              <div className="shrink-0 mb-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
+              <div
+                key={`otc-${currentPick.overallPick}`}
+                className={cn(
+                  'otc-shell shrink-0 mb-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden',
+                  isUserTurn && 'otc-shell-user',
+                )}
+              >
                 <DraftOnTheClock
                   pick={currentPick}
                   player={drafter}
@@ -467,8 +475,6 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
           teamPoints={teamPoints}
           selectedTeamId={state.selectedTeamId}
           onSelectTeam={id => dispatch({ type: 'SELECT_TEAM', teamId: id })}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(c => !c)}
           currentDrafterId={currentPick?.playerId ?? null}
           isLiveMode={isDraftRunning}
           userTeamId={state.userTeamId}
