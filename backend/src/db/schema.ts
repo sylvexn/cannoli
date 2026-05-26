@@ -253,7 +253,7 @@ export const byeWeeks = sqliteTable('bye_weeks', {
 
 export const matchPokemon = sqliteTable('match_pokemon', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  matchId: text('match_id').notNull().references(() => matches.id),
+  matchId: text('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
   teamId: text('team_id').notNull().references(() => teams.id),
   pokemonName: text('pokemon_name').notNull(),
   kills: integer('kills').notNull().default(0),

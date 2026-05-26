@@ -9,6 +9,7 @@
 import { runAutoForfeit } from './jobs/auto-forfeit';
 import { runAdvanceWeek } from './jobs/advance-week';
 import { runExpireTrades } from './jobs/expire-trades';
+import { runStaleInProgressSweep } from './jobs/stale-in-progress';
 
 interface JobDef {
   name: string;
@@ -19,6 +20,7 @@ interface JobDef {
 const JOBS: JobDef[] = [
   // Run auto-forfeit first so a forfeit-as-result is in place before advance-week scans
   { name: 'auto-forfeit', intervalMs: 10 * 60 * 1000, fn: runAutoForfeit },
+  { name: 'stale-in-progress', intervalMs: 10 * 60 * 1000, fn: runStaleInProgressSweep },
   { name: 'advance-week', intervalMs: 60 * 60 * 1000, fn: runAdvanceWeek },
   { name: 'expire-trades', intervalMs: 60 * 60 * 1000, fn: runExpireTrades },
 ];

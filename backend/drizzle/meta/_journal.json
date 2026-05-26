@@ -176,6 +176,13 @@
       "when": 1779700000000,
       "tag": "0024_coach_flair",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1779800000000,
+      "tag": "0025_match_pokemon_cascade",
+      "breakpoints": true
     }
   ]
 }
