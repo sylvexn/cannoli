@@ -49,6 +49,10 @@ interface DraftPokemonPopoverProps {
   userConflictRoster?: ConflictInputRoster;
   /** Point cap (for conflict detection). */
   pointCap?: number;
+  /** Pokemon currently animating via the pick queue — when this matches `name`,
+   *  we skip the view-transition-name on the popover so the queue's card→roster
+   *  morph is the sole owner of that name (no duplicate VT name on the page). */
+  animatingPokemonName?: string | null;
   onClose: () => void;
   onModeChange?: (mode: PokemonPopoverMode) => void;
   onConfirmDraft?: (name: string) => void;
@@ -85,6 +89,7 @@ export function DraftPokemonPopover({
   queueFull,
   userConflictRoster,
   pointCap = 110,
+  animatingPokemonName,
   onClose,
   onModeChange,
   onConfirmDraft,
@@ -214,7 +219,9 @@ export function DraftPokemonPopover({
         <div className="flex items-start gap-2.5">
           <div
             className="flex-shrink-0 rounded-md bg-surface-overlay/50 p-1"
-            style={{ viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}` }}
+            style={animatingPokemonName === name
+              ? undefined
+              : { viewTransitionName: `pokemon-card-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}` }}
           >
             <PokemonSprite name={name} size="md" />
           </div>

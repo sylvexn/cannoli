@@ -8,13 +8,7 @@ import { DraftSidebarPanel, type DraftSidebarPanelProps } from './draft-sidebar-
 import { DraftSidebarRail } from './draft-sidebar-rail';
 import type { Player } from '@/lib/types';
 
-export interface DraftTeamSidebarProps extends Omit<DraftSidebarPanelProps, 'onClose' | 'pinned' | 'onTogglePin' | 'floating'> {
-  /** Legacy collapse-toggle props from the previous bimodal sidebar — accepted for
-   *  source-compat but no longer used: collapse is now driven by viewport size
-   *  + the pin toggle on the largest breakpoint. */
-  collapsed?: boolean;
-  onToggleCollapse?: () => void;
-}
+export type DraftTeamSidebarProps = Omit<DraftSidebarPanelProps, 'onClose' | 'pinned' | 'onTogglePin' | 'floating'>;
 
 /**
  * Three-tier responsive shell around `DraftSidebarPanel`:
