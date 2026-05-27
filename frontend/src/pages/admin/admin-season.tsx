@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAppData } from '@/lib/app-data-context';
+// WIP: useAppData exposes League[] (in-memory), but season hooks/cards expect ApiLeague[]
+// (wire format). Cast at boundary until the types are unified.
+import type { ApiLeague } from '@/lib/api';
 import { Sparkles, Plus } from 'lucide-react';
 import { type EditableLeague } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
@@ -30,7 +33,7 @@ export function AdminSeason() {
   );
 
   // Draft state per league + start/pause/resume actions
-  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues);
+  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues as unknown as ApiLeague[]);
 
   // Sync when defaultLeagues changes
   useEffect(() => {
@@ -48,7 +51,7 @@ export function AdminSeason() {
   const phase = usePhaseControls({ leagueList, leagueStates, refreshLeagues });
 
   // Playoff bracket detection + generate/regenerate flow
-  const playoff = usePlayoffControls(defaultLeagues, refreshLeagues);
+  const playoff = usePlayoffControls(defaultLeagues as unknown as ApiLeague[], refreshLeagues);
 
   // Season archive list (read-only, with toggle)
   const { seasonsList, toggleArchive } = useSeasonArchive();
@@ -90,7 +93,7 @@ export function AdminSeason() {
               league={league}
               state={state}
               draftState={draftStates[league.id]}
-              apiLeague={defaultLeagues.find(l => l.id === league.id)}
+              apiLeague={defaultLeagues.find(l => l.id === league.id) as unknown as ApiLeague | undefined}
               playoffInfo={playoff.playoffInfo[league.id]}
               onEditLeague={mut.openEditLeague}
               onDeleteLeague={mut.confirmDeleteLeague}
@@ -128,8 +131,8 @@ export function AdminSeason() {
       {/* Schedule Dates */}
       <SeasonScheduleDates
         leagueList={leagueList}
-        leagueStates={leagueStates}
-        defaultLeagues={defaultLeagues}
+        leagueStates={leagueStates as Record<string, { totalWeeks: number; weekDates?: Record<string, string> } & Record<string, unknown>>}
+        defaultLeagues={defaultLeagues as unknown as ApiLeague[]}
         refreshLeagues={refreshLeagues}
       />
 

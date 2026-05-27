@@ -220,7 +220,8 @@ export function SpriteShowcase({
           <SwapPicker
             swappingIndex={swappingIndex}
             activeRoster={activeRoster}
-            pool={pool}
+            // WIP: prop typed RosterPokemon[] but downstream picker expects PoolEntry[]; cast at boundary
+            pool={pool as unknown as import('./utils').PoolEntry[]}
             pointsUsed={pointsUsed}
             config={config}
             onSwap={onSwap}
@@ -232,7 +233,8 @@ export function SpriteShowcase({
         {addingMode && theorycraftMode && (
           <AddPicker
             activeRoster={activeRoster}
-            pool={pool}
+            // WIP: prop typed RosterPokemon[] but downstream picker expects PoolEntry[]; cast at boundary
+            pool={pool as unknown as import('./utils').PoolEntry[]}
             pointsUsed={pointsUsed}
             config={config}
             onAdd={onAddMon}

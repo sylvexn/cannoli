@@ -70,16 +70,17 @@ export function StreamPage() {
     dispatch({ type: 'start-loading' });
     Promise.all(
       leagues.map(async (league) => {
-        const [matches, teams] = await Promise.all([
-          api.getSchedule(league.id).catch(() => [] as ApiMatch[]),
+        const [schedule, teams] = await Promise.all([
+          api.getSchedule(league.id).catch(() => ({ matches: [] as ApiMatch[] })),
           api.getTeams(league.id).catch(() => [] as ApiTeam[]),
         ]);
+        const matches = schedule.matches;
         const teamMap = new Map(teams.map(t => [t.id, t]));
         return matches
-          .filter(m => m.week === week)
-          .filter(m => m.replayUrl && m.replayUrl !== '#')
-          .filter(m => m.status === 'completed' || m.homeScore !== null)
-          .sort((a, b) => a.id.localeCompare(b.id))
+          .filter((m: ApiMatch) => m.week === week)
+          .filter((m: ApiMatch) => m.replayUrl && m.replayUrl !== '#')
+          .filter((m: ApiMatch) => m.status === 'completed' || m.homeScore !== null)
+          .sort((a: ApiMatch, b: ApiMatch) => a.id.localeCompare(b.id))
           .map<QueueEntry>(m => {
             const home = teamMap.get(m.homePlayer);
             const away = teamMap.get(m.awayPlayer);

@@ -208,7 +208,7 @@ export function RosterActions({ player }: { player: Player }) {
           <div className="flex items-center gap-2">
             <Select
               value={releaseCandidate}
-              onValueChange={setReleaseCandidate}
+              onValueChange={(v) => setReleaseCandidate(v ?? '')}
               disabled={!canRelease}
             >
               <SelectTrigger className="h-8 text-xs flex-1 bg-surface-overlay">
@@ -264,7 +264,7 @@ export function RosterActions({ player }: { player: Player }) {
               <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1 block">
                 Pokemon
               </label>
-              <Select value={listMon} onValueChange={setListMon}>
+              <Select value={listMon} onValueChange={(v) => setListMon(v ?? '')}>
                 <SelectTrigger className="h-9 text-xs bg-surface-overlay">
                   <SelectValue placeholder="Choose a Pokemon..." />
                 </SelectTrigger>

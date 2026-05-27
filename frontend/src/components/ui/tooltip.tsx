@@ -21,7 +21,8 @@ function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
+// WIP: accept (and discard) asChild for shadcn/Radix-style call sites; base-ui uses `render`.
+function TooltipTrigger({ asChild: _asChild, ...props }: TooltipPrimitive.Trigger.Props & { asChild?: boolean }) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 

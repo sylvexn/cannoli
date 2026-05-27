@@ -28,7 +28,7 @@ export function EventDescription({ event, teamsPerLeague, stripActorPrefix = tru
     return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
   }
 
-  const leagueId = event.leagueId;
+  const leagueId = event.leagueId ?? undefined;
   // Coerce metadata via the typed-event helper. Falsy → fallback path.
   // Each branch narrows independently; keep them flat to avoid over-nesting.
 
@@ -173,7 +173,7 @@ function PokemonList({ names }: { names: string[] }) {
   return (
     <>
       {names.map((n, i) => (
-        <span key={n}>
+        <span key={`${i}-${n}`}>
           {i > 0 ? <span className="text-text-muted"> + </span> : null}
           <PokemonInlineLink name={n} />
         </span>

@@ -28,7 +28,7 @@ export function usePlayoffControls(defaultLeagues: ApiLeague[], refreshLeagues?:
         if (l.season?.phase !== 'playoffs') continue;
         try {
           const sched = await api.getSchedule(l.id);
-          const playoffMatches = sched.filter(m => m.phase === 'playoffs');
+          const playoffMatches = sched.matches.filter(m => m.phase === 'playoffs');
           info[l.id] = { hasBracket: playoffMatches.length > 0, matchCount: playoffMatches.length };
         } catch { /* ignore */ }
       }

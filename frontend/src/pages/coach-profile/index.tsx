@@ -390,7 +390,7 @@ function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
                 {e.description}
               </span>
               <span className="shrink-0 text-[10px] font-mono text-text-muted tabular-nums">
-                {formatRelativeTime(e.timestamp)}
+                {formatRelativeTime(e.timestamp ?? '')}
               </span>
             </li>
           ))}
