@@ -68,12 +68,17 @@ export function EventDescription({ event, teamsPerLeague, stripActorPrefix = tru
 
   if (event.type === 'trade_proposed') {
     const m = asTypedMetadata('trade_proposed', event.metadata);
-    if (!m) return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
+    // Legacy seed/test rows can omit offering/requesting/proposerId/recipientId.
+    // `asTypedMetadata` is a raw cast (no runtime validation), so guard each
+    // optional read here before passing into PokemonList/TeamRef.
+    if (!m || !m.proposerId || !m.recipientId) {
+      return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
+    }
     return (
       <>proposed a trade —
         {' '}<TeamRef leagueId={leagueId} teamId={m.proposerId} teamsPerLeague={teamsPerLeague} />
-        {' '}sends <PokemonList names={m.offering} />
-        {' '}for <PokemonList names={m.requesting} />
+        {' '}sends <PokemonList names={m.offering ?? []} />
+        {' '}for <PokemonList names={m.requesting ?? []} />
         {' '}from <TeamRef leagueId={leagueId} teamId={m.recipientId} teamsPerLeague={teamsPerLeague} />
       </>
     );
@@ -168,8 +173,10 @@ function PokemonInlineLink({ name }: { name: string }) {
   );
 }
 
-function PokemonList({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="text-text-muted italic">nothing</span>;
+function PokemonList({ names }: { names: string[] | undefined }) {
+  // Backend writes are typed, but legacy/seed rows may omit the array entirely;
+  // treat missing the same as empty rather than crashing the whole feed.
+  if (!names || names.length === 0) return <span className="text-text-muted italic">nothing</span>;
   return (
     <>
       {names.map((n, i) => (
