@@ -346,9 +346,17 @@ export class ReplayParser {
       if (ofTag) {
         // Specific Pokemon caused it (Rocky Helmet, Rough Skin, etc.)
         killerNick = ofTag;
-      } else if (fromTag.startsWith('item:') || fromTag.startsWith('ability:')) {
-        // Self-damage from own item/ability (Life Orb recoil, etc.)
-        // No kill credit — it's self-inflicted
+      } else if (
+        fromTag.startsWith('item:')
+        || fromTag.startsWith('ability:')
+        || fromTag === 'Recoil'
+        || fromTag === 'confusion'
+      ) {
+        // Self-damage from own item/ability/recoil/confusion — no kill
+        // credit. Without this branch, the catch-all below would credit
+        // `lastAttacker(target)` — i.e. whoever last attacked the recoiler,
+        // which can be the now-fainted opponent and produces a posthumous
+        // bogus kill.
         killerNick = null;
       } else if (this.isHazard(fromTag)) {
         // Hazard damage — credit whoever set the hazard
@@ -372,10 +380,13 @@ export class ReplayParser {
       killerNick = this.lastAttacker.get(target) ?? null;
     }
 
-    // Store the killer info on the target for when |faint| fires
-    if (killerNick) {
-      this.pendingKiller.set(target, killerNick);
-    }
+    // Store the killer decision on the target for when |faint| fires.
+    // We always set the entry (even when null) so handleFaint can tell
+    // "lethal-hit decision was 'no credit'" from "no lethal hit observed,
+    // fall back to lastAttacker". Without the explicit null marker, a
+    // recoil/confusion self-faint after a prior exchange would fall back
+    // to the (now-fainted) opponent.
+    this.pendingKiller.set(target, killerNick);
 
     return false;
   }
@@ -391,8 +402,12 @@ export class ReplayParser {
     const faintedStats = this.getOrCreateStats(side, species);
     faintedStats.deaths = 1;
 
-    // Apply kill credit
-    const killerNick = this.pendingKiller.get(faintedNick) ?? this.lastAttacker.get(faintedNick);
+    // Apply kill credit. If handleDamage explicitly recorded a decision
+    // (including "null = no credit") use that; otherwise fall back to
+    // lastAttacker (covers faint-without-prior-damage-line scenarios).
+    const killerNick = this.pendingKiller.has(faintedNick)
+      ? this.pendingKiller.get(faintedNick) ?? null
+      : this.lastAttacker.get(faintedNick) ?? null;
 
     if (killerNick) {
       const killerSide = this.nickToSide.get(killerNick);
