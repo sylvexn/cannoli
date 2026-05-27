@@ -90,7 +90,8 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         awaySeed: m.awaySeed,
       }));
 
-      setPlayers(convertedPlayers);
+      // WIP: ApiCoachOwner.signatureType is wider than CoachOwner's union; cast at boundary
+      setPlayers(convertedPlayers as unknown as Player[]);
       setMatches(convertedMatches);
       setByes(apiSchedule.byes ?? []);
       setTransactions(apiTx);

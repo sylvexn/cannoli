@@ -62,7 +62,7 @@ export function SpeedFilterBar({
           )}
         </div>
 
-        <Select value={filters.teamId || 'all'} onValueChange={v => onFiltersChange({ teamId: v === 'all' ? '' : v })}>
+        <Select value={filters.teamId || 'all'} onValueChange={v => onFiltersChange({ teamId: v === 'all' ? '' : v ?? undefined })}>
           <SelectTrigger className="h-7 w-[140px] text-xs bg-surface border-border-subtle">
             <SelectValue placeholder="All teams" />
           </SelectTrigger>

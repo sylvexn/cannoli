@@ -113,6 +113,8 @@ function toLeague(a: ApiLeague): League {
     season,
     players: [], // Will be loaded separately via useLeagueTeams
     hasData: true,
+    // WIP: ApiLeague does not yet expose playoffTeamCount; default to 0 to satisfy League type
+    playoffTeamCount: 0,
   };
 }
 

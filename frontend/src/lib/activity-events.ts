@@ -149,7 +149,7 @@ export type TypedEventName = keyof EventMetadataMap;
  * of casting raw — keeps the renderer's switch statement honest.
  */
 export function asTypedMetadata<K extends TypedEventName>(
-  type: K,
+  _type: K,
   metadata: unknown,
 ): EventMetadataMap[K] | null {
   if (!metadata || typeof metadata !== 'object') return null;

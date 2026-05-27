@@ -7,7 +7,6 @@ import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TeamLogo } from '@/components/team-logo';
 import { TeamLink } from '@/components/team-link';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';

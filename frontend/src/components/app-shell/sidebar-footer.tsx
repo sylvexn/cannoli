@@ -11,6 +11,7 @@ import { FeedbackDialog } from '../feedback-dialog';
 import { UserAccentScope } from '../user-accent-scope';
 import { BotStatusChip } from '../bot-status-chip';
 import { CoachAvatar } from '../coach-avatar';
+import { cn } from '@/lib/utils';
 import type { useAuth } from '@/lib/auth-context';
 
 type AuthUser = NonNullable<ReturnType<typeof useAuth>['user']>;
