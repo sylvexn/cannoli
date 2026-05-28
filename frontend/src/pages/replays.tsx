@@ -11,7 +11,8 @@ import { toast } from 'sonner';
 import type { ReplayEntry, TimeFilter } from './replays/replay-types';
 import { ReplayViewerPanel } from './replays/replay-viewer-panel';
 import { ReplayFilters } from './replays/replay-filters';
-import { ReplayRow } from './replays/replay-row';
+import { ReplayCard } from './replays/replay-card';
+import { ReplayHeroCard } from './replays/replay-hero-card';
 
 export function ReplaysPage() {
   const { leagues, loading: leaguesLoading } = useAppData();
@@ -112,16 +113,15 @@ export function ReplaysPage() {
     }
   }, [searchParams, entries, viewingReplay]);
 
-  // Filter + group
+  // Filter — sorted by week descending so the first item is "most recent"
+  // (used as the hero card pick).
   const filtered = useMemo(() => {
     let result = entries;
 
-    // League filter
     if (leagueFilter.size > 0) {
       result = result.filter(e => leagueFilter.has(e.league.id));
     }
 
-    // Time filter
     if (timeFilter !== 'all') {
       result = result.filter(e => {
         if (timeFilter === 'this-week') return e.match.week === latestReplayWeek;
@@ -135,7 +135,6 @@ export function ReplaysPage() {
       });
     }
 
-    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(e =>
@@ -148,30 +147,26 @@ export function ReplaysPage() {
       );
     }
 
-    return result;
+    // Sort by week descending; tie-break on match id to keep order stable
+    // and deterministic. The first entry feeds the hero card.
+    return [...result].sort((a, b) => {
+      if (b.match.week !== a.match.week) return b.match.week - a.match.week;
+      return b.match.id.localeCompare(a.match.id);
+    });
   }, [entries, search, leagueFilter, timeFilter, latestReplayWeek, user]);
 
-  // Group by week (descending)
-  const grouped = useMemo(() => {
-    const map = new Map<number, ReplayEntry[]>();
-    for (const entry of filtered) {
-      const week = entry.match.week;
-      if (!map.has(week)) map.set(week, []);
-      map.get(week)!.push(entry);
-    }
-    return [...map.entries()].sort((a, b) => b[0] - a[0]);
-  }, [filtered]);
+  // Hero pick = most recent in the current filtered set (filtered[0] after
+  // descending sort). Rest of the cards fill the grid.
+  const heroEntry = filtered[0];
+  const gridEntries = filtered.slice(1);
 
-  // Stats strip — total + by league
+  // Stats — total + sweeps + blowouts. Lives inside the hero card now;
+  // also reused as a fallback strip when no replays match the filters.
   const stats = useMemo(() => {
     const total = entries.length;
-    const byLeague = new Map<string, number>();
-    for (const e of entries) {
-      byLeague.set(e.league.id, (byLeague.get(e.league.id) ?? 0) + 1);
-    }
     // Categories are mutually exclusive: a sweep (6-0) is reported as a sweep,
-    // and a blowout is a non-sweep margin ≥ 4 (6-1, 6-2). This keeps
-    // `total ≥ sweeps + blowouts` and avoids double-counting a 6-0 in both.
+    // and a blowout is a non-sweep margin >= 4 (6-1, 6-2). This keeps
+    // total >= sweeps + blowouts and avoids double-counting a 6-0 in both.
     const sweeps = entries.filter(e => {
       const home = e.match.homeScore ?? 0;
       const away = e.match.awayScore ?? 0;
@@ -184,7 +179,7 @@ export function ReplaysPage() {
       const margin = Math.abs(home - away);
       return !isSweep && margin >= 4;
     }).length;
-    return { total, byLeague, blowouts, sweeps };
+    return { total, sweeps, blowouts };
   }, [entries]);
 
   function toggleLeagueFilter(id: string) {
@@ -220,21 +215,10 @@ export function ReplaysPage() {
   return (
     <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-40 bg-surface p-6')}>
       <div className="flex items-center justify-between mb-3 gap-4">
-        <div className="flex items-baseline gap-4 min-w-0">
-          <h1 className="font-mono text-xl font-bold uppercase tracking-widest shrink-0">
-            <span className="text-neon">Replay</span>{' '}
-            <span className="text-text-primary">Gallery</span>
-          </h1>
-          {!loading && stats.total > 0 && (
-            <div className="flex items-center gap-3 text-[10px] font-mono text-text-muted shrink-0 truncate">
-              <span><span className="text-text-secondary tabular-nums">{stats.total}</span> total</span>
-              <span className="text-border-default">·</span>
-              <span><span className="text-amber-400 tabular-nums">{stats.sweeps}</span> sweep{stats.sweeps !== 1 && 's'}</span>
-              <span className="text-border-default">·</span>
-              <span><span className="text-pink tabular-nums">{stats.blowouts}</span> blowout{stats.blowouts !== 1 && 's'}</span>
-            </div>
-          )}
-        </div>
+        <h1 className="font-mono text-xl font-bold uppercase tracking-widest shrink-0">
+          <span className="text-neon">Replay</span>{' '}
+          <span className="text-text-primary">Gallery</span>
+        </h1>
 
         {isAdmin && (
           <button
@@ -290,27 +274,32 @@ export function ReplaysPage() {
           spriteSize="md"
         />
       ) : (
-        <div className="space-y-5 flex-1 overflow-y-auto">
-          {grouped.map(([week, weekEntries]) => (
-            <div key={week}>
-              <h2 className="text-[11px] font-mono font-semibold uppercase tracking-wider text-text-muted mb-2">
-                Week {week}
-              </h2>
-              <div className="space-y-1">
-                {weekEntries.map((entry, i) => (
-                  <ReplayRow
-                    key={entry.match.id}
-                    entry={entry}
-                    index={i}
-                    isViewing={viewingReplay?.match.id === entry.match.id}
-                    summary={summaries.get(entry.match.id)}
-                    onToggleViewing={handleViewReplay}
-                    onCopyShareLink={copyShareLink}
-                  />
-                ))}
-              </div>
+        <div className="flex-1 overflow-y-auto pr-1">
+          {heroEntry && (
+            <ReplayHeroCard
+              entry={heroEntry}
+              isViewing={viewingReplay?.match.id === heroEntry.match.id}
+              summary={summaries.get(heroEntry.match.id)}
+              stats={stats}
+              onToggleViewing={handleViewReplay}
+              onCopyShareLink={copyShareLink}
+            />
+          )}
+
+          {gridEntries.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {gridEntries.map((entry, i) => (
+                <ReplayCard
+                  key={entry.match.id}
+                  entry={entry}
+                  index={i}
+                  isViewing={viewingReplay?.match.id === entry.match.id}
+                  summary={summaries.get(entry.match.id)}
+                  onToggleViewing={handleViewReplay}
+                />
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
