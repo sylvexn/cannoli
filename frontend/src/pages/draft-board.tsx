@@ -37,19 +37,7 @@ function readStoredDensity(): CardDensity {
   return raw === 'compact' || raw === 'detailed' ? raw : 'comfortable';
 }
 
-/**
- * Wrap a state update in `document.startViewTransition` when the API exists,
- * so popover→sheet handoffs share the sprite morph. Falls back to plain
- * invocation on browsers without the API.
- */
-function withViewTransition(update: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-  if (typeof doc.startViewTransition === 'function') {
-    doc.startViewTransition(() => update());
-  } else {
-    update();
-  }
-}
+import { withViewTransition } from '@/lib/view-transition';
 
 interface DraftBoardPageProps {
   /**

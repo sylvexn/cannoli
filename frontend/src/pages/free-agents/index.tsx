@@ -20,6 +20,7 @@ import { Search, UserPlus, X, ArrowDown, AlertCircle, ShieldAlert, Star } from '
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { pokemonRoute } from '@/lib/pokemon-route';
+import { withViewTransition } from '@/lib/view-transition';
 import { BudgetBar, EmptyState } from './budget-bar';
 
 interface FreeAgent {
@@ -263,7 +264,7 @@ export function FreeAgentsPage() {
                   </button>
                 )}
               </div>
-              <Select value={sortBy} onValueChange={v => setSortBy(v as SortOption)}>
+              <Select value={sortBy} onValueChange={v => withViewTransition(() => setSortBy(v as SortOption))}>
                 <SelectTrigger className="h-8 w-[150px] text-xs bg-surface border-border-subtle">
                   <SelectValue />
                 </SelectTrigger>

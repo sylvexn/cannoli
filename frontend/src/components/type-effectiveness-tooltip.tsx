@@ -1,6 +1,6 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
-import { TYPE_COLORS } from '@/lib/constants';
+import { TYPE_COLORS, EFFECTIVENESS_COLORS } from '@/lib/constants';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useMemo } from 'react';
 
@@ -10,12 +10,12 @@ interface TypeEffectivenessTooltipProps {
   children: React.ReactNode;
 }
 
-const multLabels: { key: string; label: string; color: string }[] = [
-  { key: 'x4', label: '4×', color: '#f87171' },
-  { key: 'x2', label: '2×', color: '#fb923c' },
-  { key: 'x05', label: '½×', color: '#4ade80' },
-  { key: 'x025', label: '¼×', color: '#22d3ee' },
-  { key: 'x0', label: '0×', color: '#a78bfa' },
+const multLabels: { key: keyof typeof EFFECTIVENESS_COLORS; label: string; color: string }[] = [
+  { key: 'x4', label: '4×', color: EFFECTIVENESS_COLORS.x4 },
+  { key: 'x2', label: '2×', color: EFFECTIVENESS_COLORS.x2 },
+  { key: 'x05', label: '½×', color: EFFECTIVENESS_COLORS.x05 },
+  { key: 'x025', label: '¼×', color: EFFECTIVENESS_COLORS.x025 },
+  { key: 'x0', label: '0×', color: EFFECTIVENESS_COLORS.x0 },
 ];
 
 export function TypeEffectivenessTooltip({ types, children }: TypeEffectivenessTooltipProps) {

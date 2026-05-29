@@ -37,6 +37,19 @@ export const MATCHUP_COLORS = {
   statLow: '#f87171',      // <60
 } as const;
 
+/**
+ * Type-effectiveness multiplier colors — used by the defensive matchup tooltip.
+ * Mirrors the win/loss/draw and neon palette so the ladder reads at a glance:
+ *   4× hot, 2× warm, ½× safe, ¼× neon-cool, immune lavender.
+ */
+export const EFFECTIVENESS_COLORS = {
+  x4: '#f87171',   // matches --color-loss
+  x2: '#fb923c',
+  x05: '#4ade80',  // matches --color-win
+  x025: '#22d3ee', // matches --color-neon
+  x0: '#a78bfa',
+} as const;
+
 /** Medal placement colors (1st/2nd/3rd) for archive + leaderboards */
 export const MEDAL_COLORS = {
   gold: '#fcd34d',  // matches text-draw token; kept here for completeness
