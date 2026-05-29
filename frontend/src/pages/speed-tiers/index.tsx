@@ -16,6 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import type { PokemonType } from '@/lib/pokemon';
 
+import { withViewTransition } from '@/lib/view-transition';
+
 import { computeRow, type CalcAssumptions } from './speed-calc';
 import { SpeedFilterBar, type SpeedFilters } from './filter-bar';
 
@@ -142,13 +144,22 @@ export function SpeedTiersPage() {
 
       <SpeedFilterBar
         filters={filters}
-        onFiltersChange={partial => setFilters(prev => ({ ...prev, ...partial }))}
+        onFiltersChange={partial => {
+          // Search/text changes should be instant; structural filter changes
+          // (team, trick-room) cross-fade so reordered rows don't snap.
+          const isTextOnly = Object.keys(partial).length === 1 && 'search' in partial;
+          if (isTextOnly) {
+            setFilters(prev => ({ ...prev, ...partial }));
+          } else {
+            withViewTransition(() => setFilters(prev => ({ ...prev, ...partial })));
+          }
+        }}
         assumptions={assumptions}
-        onAssumptionsChange={partial => setAssumptions(prev => ({ ...prev, ...partial }))}
+        onAssumptionsChange={partial => withViewTransition(() => setAssumptions(prev => ({ ...prev, ...partial })))}
         teams={teams}
         totalCount={rows?.length ?? 0}
         filteredCount={sorted.length}
-        onReset={handleReset}
+        onReset={() => withViewTransition(handleReset)}
       />
 
       <Card className="bg-surface-raised border-border-default overflow-hidden">

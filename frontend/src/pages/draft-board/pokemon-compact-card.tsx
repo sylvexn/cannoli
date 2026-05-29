@@ -370,12 +370,15 @@ export function PokemonCompactCard({
  * (the border carries the same colour signal).
  */
 function pickReadableTextColor(bg: string | undefined): string {
-  if (!bg) return '#fff';
+  // Tracks --color-text-primary / --color-surface so theme tweaks flow through.
+  const LIGHT = 'var(--color-text-primary)';
+  const DARK = 'var(--color-surface)';
+  if (!bg) return LIGHT;
   const hex = bg.replace('#', '');
-  if (hex.length !== 6) return '#fff';
+  if (hex.length !== 6) return LIGHT;
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
   const b = parseInt(hex.slice(4, 6), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? '#0a0a0a' : '#fff';
+  return luminance > 0.6 ? DARK : LIGHT;
 }

@@ -51,8 +51,9 @@ export function ChangePasswordPage() {
         </div>
 
         <div className="space-y-2 text-center">
-          <h1 className="text-lg font-semibold text-text-primary font-heading">
-            Change Password
+          <h1 className="text-lg font-mono font-bold uppercase tracking-wider">
+            <span className="text-pink">Change</span>{' '}
+            <span className="text-text-primary">Password</span>
           </h1>
           {isForced && (
             <p className="text-sm text-draw">

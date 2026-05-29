@@ -374,7 +374,7 @@ function UnifiedTeamRow({
       {(isUser || isDrafter) && (
         <div
           className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r-md"
-          style={{ backgroundColor: isUser ? player.teamColor : '#e879f9' }}
+          style={{ backgroundColor: isUser ? player.teamColor : 'var(--color-pink)' }}
         />
       )}
 
