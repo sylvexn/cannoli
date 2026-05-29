@@ -7,6 +7,7 @@ import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { TeamLink } from '@/components/team-link';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { RecordDisplay } from '@/components/record-display';
@@ -15,7 +16,7 @@ import { PHASE_COLORS, TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import {
   Calendar, ArrowLeftRight, UserPlus, Star, Hourglass, Swords, ChevronRight,
   ExternalLink, Trophy, FlaskConical, BarChart3, LayoutDashboard, Lock,
-  Clock, AlertCircle,
+  Clock, AlertCircle, Compass,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -93,6 +94,8 @@ export function MePage() {
   // Guests: send to League Overview
   if (!user) return <Navigate to="/" replace />;
 
+  const hasNoTeams = !loadingData && myTeams.length === 0;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -106,105 +109,200 @@ export function MePage() {
         </p>
       </div>
 
-      {/* No teams — guide them */}
-      {!loadingData && myTeams.length === 0 && (
-        <Card className="bg-surface-raised border-border-default">
-          <CardContent className="py-2">
-            <EmptyState
-              variant="coming-soon"
-              title="No team yet."
-              subtitle="You don't manage a team in any active league."
-              action={
-                <Link to="/" className="text-neon hover:underline text-xs inline-block">
-                  Browse leagues →
-                </Link>
-              }
-              spriteSize="md"
-              padding="sm"
+      {hasNoTeams ? (
+        // No teams — single column with a primary CTA and side-by-side trades + actions
+        <div className="space-y-4">
+          <NoTeamHero leagues={leagues} />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PendingTradesCard
+              pendingTradesForMe={pendingTradesForMe}
+              leagues={leagues}
             />
-          </CardContent>
-        </Card>
+            <ActionItemsCard
+              myTeams={myTeams}
+              pendingTradesForMe={pendingTradesForMe}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* My Teams (2 cols) */}
+          <div className="lg:col-span-2 space-y-4">
+            <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
+              My Teams
+            </h2>
+            {myTeams.map((entry, i) => (
+              <MyTeamCard key={entry.league.id} entry={entry} index={i} />
+            ))}
+          </div>
+
+          {/* Right column: actions */}
+          <div className="space-y-3">
+            <PendingTradesCard
+              pendingTradesForMe={pendingTradesForMe}
+              leagues={leagues}
+            />
+            <ActionItemsCard
+              myTeams={myTeams}
+              pendingTradesForMe={pendingTradesForMe}
+            />
+          </div>
+        </div>
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* My Teams (2 cols) */}
-        <div className="lg:col-span-2 space-y-4">
-          <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
-            My Teams
-          </h2>
-          {myTeams.map((entry, i) => (
-            <MyTeamCard key={entry.league.id} entry={entry} index={i} />
-          ))}
-        </div>
-
-        {/* Right column: actions */}
-        <div className="space-y-3">
-          {/* Pending trades to me */}
-          <Card className="bg-surface-raised border-border-default">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <ArrowLeftRight size={14} className="text-purple-400" />
-                Pending Trades
-                {pendingTradesForMe.length > 0 && (
-                  <Badge className="ml-auto bg-purple-400/15 text-purple-400 border-purple-400/30 text-[10px]">
-                    {pendingTradesForMe.length}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5">
-              {pendingTradesForMe.length === 0 ? (
-                <EmptyState
-                  variant="quiet"
-                  title="No pending proposals."
-                  spriteSize="md"
-                  padding="sm"
-                />
-              ) : (
-                pendingTradesForMe.slice(0, 5).map(({ leagueId, trade }) => {
-                  const league = leagues.find(l => l.id === leagueId);
-                  return (
-                    <Link
-                      key={trade.id}
-                      to={`/league/${leagueId}/trades`}
-                      className="block px-2 py-1.5 rounded-md hover:bg-surface-overlay/60 transition-colors group"
-                    >
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-medium" style={{ color: league?.color }}>
-                          {league?.name.replace(' League', '')}
-                        </span>
-                        <span className="text-text-muted">W{trade.week}</span>
-                        <ChevronRight size={12} className="ml-auto text-text-muted group-hover:text-neon" />
-                      </div>
-                      <div className="text-[10px] text-text-muted truncate mt-0.5">
-                        +{trade.offering.join(', ')} / -{trade.requesting.join(', ')}
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Phase-aware reminders per league */}
-          <Card className="bg-surface-raised border-border-default">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Hourglass size={14} className="text-draw" />
-                Action Items
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1 text-xs">
-              {myTeams.length === 0 ? (
-                <p className="text-text-muted">Nothing assigned yet.</p>
-              ) : (
-                <ActionItemList myTeams={myTeams} pendingTradesForMe={pendingTradesForMe} />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
     </div>
+  );
+}
+
+// ─── No-team hero ─────────────────────────────────────────────────────
+
+function NoTeamHero({ leagues }: { leagues: League[] }) {
+  return (
+    <Card className="bg-surface-raised border-border-default overflow-hidden">
+      <CardContent className="p-6 space-y-5">
+        <div className="space-y-1.5">
+          <h2 className="text-base font-heading font-semibold text-text-primary">
+            No team yet.
+          </h2>
+          <p className="text-xs text-text-muted max-w-prose">
+            You don't manage a team in any active league. You can still scout,
+            browse rosters, and follow along — pick a league below to get started.
+          </p>
+        </div>
+
+        <div>
+          <Button asChild variant="default" size="sm">
+            <Link to="/">
+              <Compass size={14} />
+              Browse leagues
+            </Link>
+          </Button>
+        </div>
+
+        {leagues.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-border-subtle/50">
+            <h3 className="text-[10px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted">
+              Active leagues
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {leagues.map(league => (
+                <Link
+                  key={league.id}
+                  to={`/league/${league.id}`}
+                  className="gem-wrapper group flex items-center gap-2 py-1.5 px-1 transition-all duration-150"
+                >
+                  <div className={`league-banner league-banner-${league.id} flex-1 min-w-0`}>
+                    <span className="league-banner-text text-white truncate">
+                      {league.name.replace(' League', '')}
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-[9px] px-1 py-0.5 rounded font-bold uppercase shrink-0',
+                      PHASE_COLORS[league.season.phase],
+                    )}
+                  >
+                    {league.season.phase === 'regular'
+                      ? `W${league.season.currentWeek}`
+                      : league.season.phase.slice(0, 3)}
+                  </span>
+                  <ChevronRight
+                    size={12}
+                    className="text-text-muted group-hover:text-text-secondary transition-colors shrink-0"
+                  />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Pending Trades card ──────────────────────────────────────────────
+
+function PendingTradesCard({
+  pendingTradesForMe,
+  leagues,
+}: {
+  pendingTradesForMe: { leagueId: string; trade: ApiTrade }[];
+  leagues: League[];
+}) {
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <ArrowLeftRight size={14} className="text-purple-400" />
+          Pending Trades
+          {pendingTradesForMe.length > 0 && (
+            <Badge className="ml-auto bg-purple-400/15 text-purple-400 border-purple-400/30 text-[10px]">
+              {pendingTradesForMe.length}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1.5">
+        {pendingTradesForMe.length === 0 ? (
+          <EmptyState
+            variant="quiet"
+            title="No pending proposals."
+            spriteSize="md"
+            padding="sm"
+          />
+        ) : (
+          pendingTradesForMe.slice(0, 5).map(({ leagueId, trade }) => {
+            const league = leagues.find(l => l.id === leagueId);
+            return (
+              <Link
+                key={trade.id}
+                to={`/league/${leagueId}/trades`}
+                className="block px-2 py-1.5 rounded-md hover:bg-surface-overlay/60 transition-colors group"
+              >
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-medium" style={{ color: league?.color }}>
+                    {league?.name.replace(' League', '')}
+                  </span>
+                  <span className="text-text-muted">W{trade.week}</span>
+                  <ChevronRight size={12} className="ml-auto text-text-muted group-hover:text-neon" />
+                </div>
+                <div className="text-[10px] text-text-muted truncate mt-0.5">
+                  +{trade.offering.join(', ')} / -{trade.requesting.join(', ')}
+                </div>
+              </Link>
+            );
+          })
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Action Items card ────────────────────────────────────────────────
+
+function ActionItemsCard({
+  myTeams,
+  pendingTradesForMe,
+}: {
+  myTeams: MyTeamEntry[];
+  pendingTradesForMe: { leagueId: string; trade: ApiTrade }[];
+}) {
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Hourglass size={14} className="text-draw" />
+          Action Items
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1 text-xs">
+        {myTeams.length === 0 ? (
+          <p className="text-text-muted">Nothing assigned yet.</p>
+        ) : (
+          <ActionItemList myTeams={myTeams} pendingTradesForMe={pendingTradesForMe} />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
