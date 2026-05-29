@@ -21,12 +21,27 @@ const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 
 const DEFAULT_USER_PASSWORD = 'password';
 
-// Team colors by league position (12 distinct colors)
+// Fallback colors by league position when a team sheet doesn't carry a color.
 const TEAM_COLORS = [
   '#ee8130', '#6390f0', '#7ac74c', '#a33ea1',
   '#e2bf65', '#96d9d6', '#c22e28', '#a98ff3',
   '#f95587', '#b6a136', '#735797', '#b7b7ce',
 ];
+
+/**
+ * Each team's per-team sheet is themed with the coach's chosen color.
+ * The B2 cell sits inside the colored band, so its solid fill is the team color.
+ */
+function readTeamColorFromSheet(wb: XLSX.WorkBook, abbrev: string): string | null {
+  const ws = wb.Sheets[abbrev];
+  if (!ws) return null;
+  const cell = ws['B2'];
+  const rgb = cell?.s?.fgColor?.rgb ?? cell?.s?.bgColor?.rgb;
+  if (typeof rgb !== 'string' || !/^[0-9A-Fa-f]{6}$/.test(rgb)) return null;
+  // Skip neutral fills used for placeholder/template/utility sheets.
+  if (/^(000000|FFFFFF|EFEFEF|434343|666666)$/i.test(rgb)) return null;
+  return `#${rgb.toUpperCase()}`;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -162,7 +177,7 @@ export function importSeason(
   // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
 
   console.log('Importing Pokemon reference data...');
-  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file));
+  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file), { cellStyles: true });
   const pokemonSheet = sheet(refWb, 'Pokemon');
   // Row 1 = headers: Pokemon, Pts, Sprite, Mono Sprite, Smogon Name, Github Name, BW Sprite, Type1, Type2, HP, ATK, DEF, SPA, SPD, SPE, Ability1, Ability2, Hidden Ability, Shiny, Pokemon, Tera Banned
   const pokemonRows: typeof schema.pokemon.$inferInsert[] = [];
@@ -230,7 +245,7 @@ export function importSeason(
 
   for (const league of config.files) {
     console.log(`\nImporting ${league.name}...`);
-    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
+    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
 
     // Create league (lifecycle fields are per-league now)
     db.insert(schema.leagues).values({
@@ -271,13 +286,18 @@ export function importSeason(
       teamNameToId.set(abbrev, teamId);
       coachToTeamId.set(coach, teamId);
 
+      const teamColor =
+        readTeamColorFromSheet(wb, abbrev) ||
+        TEAM_COLORS[teamIds.length - 1] ||
+        '#888888';
+
       db.insert(schema.teams).values({
         id: teamId,
         leagueId: league.id,
         coachName: coach,
         teamName,
         teamAbbrev: abbrev,
-        teamColor: TEAM_COLORS[teamIds.length - 1] || '#888888',
+        teamColor,
         rank,
       }).run();
     }
