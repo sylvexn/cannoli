@@ -31,6 +31,16 @@ const TEAM_COLORS = [
   '#f95587', '#b6a136', '#735797', '#b7b7ce',
 ];
 
+function readTeamColorFromSheet(wb: XLSX.WorkBook, abbrev: string): string | null {
+  const ws = wb.Sheets[abbrev];
+  if (!ws) return null;
+  const cell = ws['B2'];
+  const rgb = cell?.s?.fgColor?.rgb ?? cell?.s?.bgColor?.rgb;
+  if (typeof rgb !== 'string' || !/^[0-9A-Fa-f]{6}$/.test(rgb)) return null;
+  if (/^(000000|FFFFFF|EFEFEF|434343|666666)$/i.test(rgb)) return null;
+  return `#${rgb.toUpperCase()}`;
+}
+
 function sheet(wb: XLSX.WorkBook, name: string): any[][] {
   const ws = wb.Sheets[name];
   if (!ws) throw new Error(`Sheet "${name}" not found in workbook`);
@@ -53,7 +63,7 @@ export function importS9(db: Database) {
 
   for (const league of LEAGUES) {
     console.log(`\nImporting ${league.name} (S9)...`);
-    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
+    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
 
     // Create league (lifecycle fields per-league now)
     db.prepare(`INSERT INTO leagues (id, name, color, season_id, phase, current_week, total_weeks, trade_deadline_week)
@@ -88,9 +98,14 @@ export function importS9(db: Database) {
       coachToTeamId.set(coach, teamId);
       nameToTeamId.set(teamName, teamId);
 
+      const teamColor =
+        readTeamColorFromSheet(wb, abbrev) ||
+        TEAM_COLORS[teamIds.length - 1] ||
+        '#888888';
+
       db.prepare(`INSERT INTO teams (id, league_id, coach_name, team_name, team_abbrev, team_color, rank)
         VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-        teamId, league.id, coach, teamName, abbrev, TEAM_COLORS[teamIds.length - 1] || '#888888', rank
+        teamId, league.id, coach, teamName, abbrev, teamColor, rank
       );
     }
     console.log(`  ${teamIds.length} teams`);
