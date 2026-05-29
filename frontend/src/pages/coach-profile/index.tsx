@@ -14,6 +14,10 @@ import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { ProfileSettingsPanel } from './settings-panel';
+import { useCoachExtras, type CoachResult } from './use-coach-extras';
+import { WinRateSparkline } from './win-rate-sparkline';
+import { SignatureMons } from './signature-mons';
+import { RecentHighlights } from './recent-highlights';
 
 const FALLBACK_PRIMARY = '#7dd3fc';
 const FALLBACK_SECONDARY = '#a78bfa';
@@ -65,6 +69,11 @@ export function CoachProfilePage() {
 
     return () => { cancelled = true; };
   }, [username]);
+
+  // Derived data for the enriched panels (sparkline + signature mons).
+  // Lives outside the main fetch so the profile header paints immediately
+  // and the extras swap in once the per-league fetches resolve.
+  const extras = useCoachExtras(profile);
 
   if (loading) return <PageLoadingSpinner />;
 
@@ -225,15 +234,31 @@ export function CoachProfilePage() {
       {/* Trophy case + Career stats — side by side on lg */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <TrophyCase pins={pins} />
-        <CareerSummary profile={profile} />
+        <CareerSummary
+          profile={profile}
+          results={extras.results}
+          accent={primary}
+        />
       </div>
+
+      {/* Signature mons — top-3 most-rostered across current leagues. */}
+      <SignatureMons
+        mons={extras.signatureMons}
+        accent={primary}
+        inAnyLeague={profile.currentTeams.length > 0}
+      />
 
       {/* Current teams */}
       {profile.currentTeams.length > 0 && (
         <CurrentTeams teams={profile.currentTeams} />
       )}
 
-      {/* Recent moments */}
+      {/* Recent highlights — top 1-3 events as larger cards. Sits above
+          the long-tail wall so the most recent moments read as portraits
+          rather than ledger entries. */}
+      <RecentHighlights events={activity} accent={primary} />
+
+      {/* Wall (long tail) */}
       <RecentMoments activity={activity} />
     </div>
   );
@@ -272,7 +297,13 @@ function TrophyCase({ pins }: { pins: ApiPin[] }) {
   );
 }
 
-function CareerSummary({ profile }: { profile: ApiPublicProfile }) {
+function CareerSummary({
+  profile, results, accent,
+}: {
+  profile: ApiPublicProfile;
+  results: CoachResult[];
+  accent: string;
+}) {
   const c = profile.careerSummary;
   return (
     <div className="rounded-xl border border-border-default bg-surface-raised p-4">
@@ -292,6 +323,23 @@ function CareerSummary({ profile }: { profile: ApiPublicProfile }) {
           value={c.championships > 0 ? String(c.championships) : '—'}
           accent={c.championships > 0 ? '#fbbf24' : undefined}
         />
+        {/* Win-rate sparkline — graceful fallback when there's no completed
+            match history yet (a freshly-drafted coach pre-week-1, or someone
+            in only a draft-phase league). The sparkline itself owns the
+            empty-data path: zero/one points still render meaningfully. */}
+        {results.length >= 2 ? (
+          <div className="pt-1 border-t border-border-subtle/40 mt-1">
+            <WinRateSparkline results={results} color={accent} />
+          </div>
+        ) : (
+          <div className="pt-2 mt-1 border-t border-border-subtle/40">
+            <p className="text-[10px] font-mono text-text-muted leading-snug">
+              {results.length === 1
+                ? 'One match in. The sparkline shows up after match two.'
+                : 'No completed matches yet. Battle results will trace a recent-form line here.'}
+            </p>
+          </div>
+        )}
       </dl>
     </div>
   );
