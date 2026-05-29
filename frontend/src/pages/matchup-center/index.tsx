@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { useMatchupState } from './use-matchup-state';
 import { TeamPicker } from './team-picker';
 import { RosterStrip } from './roster-strip';
+import { OpponentGrid } from './opponent-grid';
 import { OverviewTab } from './tabs/overview-tab';
 import { TypeChartTab } from './tabs/typechart-tab';
 import { StatsTab } from './tabs/stats-tab';
@@ -12,13 +14,27 @@ import { SpeedTab } from './tabs/speed-tab';
 import { MovesTab } from './tabs/moves-tab';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
-import { api } from '@/lib/api';
-import type { RosterPokemon } from '@/lib/types';
+import { api, type ApiTeam } from '@/lib/api';
+import type { League, RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import {
   LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
 } from 'lucide-react';
 import type { MatchupTab } from './use-matchup-state';
+
+/** Phase priority used when picking a default "your team" — drafting > regular >
+ *  playoffs > predraft > offseason. Higher = more urgent / interesting. */
+const PHASE_PRIORITY: Record<string, number> = {
+  draft: 5,
+  regular: 4,
+  playoffs: 3,
+  predraft: 2,
+  offseason: 1,
+};
+
+function phaseRank(league: League): number {
+  return PHASE_PRIORITY[league.season.phase] ?? 0;
+}
 
 export function MatchupCenterPage() {
   const { state, dispatch, activeTeamA, activeTeamB } = useMatchupState();
@@ -27,6 +43,13 @@ export function MatchupCenterPage() {
   const { leagues } = useAppData();
   const [searchParams] = useSearchParams();
   const initRef = useRef(false);
+
+  /** League + teams roster of the user's pre-populated "your team" — drives
+   *  the opponent gem grid. Cleared/replaced when team A changes. */
+  const [opponentContext, setOpponentContext] = useState<{ league: League; teams: ApiTeam[] } | null>(null);
+  /** True once we've finished the initial probe and confirmed the user has no
+   *  managed team in any league — turns the empty state into a "browse" CTA. */
+  const [noManagedTeam, setNoManagedTeam] = useState(false);
 
   // Auto-populate team A with the user's team (and B from deep-link).
   // Only runs once per mount — manual changes via TeamPicker won't be overridden.
@@ -53,13 +76,16 @@ export function MatchupCenterPage() {
               roster: rosterFromApi(team.roster),
               source: { type: 'league', leagueId: league.id, teamId: team.id, label: `${team.teamName} (${league.name.replace(' League', '')})` },
             });
+            setOpponentContext({ league, teams });
             teamAResolved = true;
           }
         }
       }
-      // Fallback: find user's own team in any league
+      // Fallback: find user's own team in any league, prioritising the
+      // most-active league (drafting > regular > playoffs > predraft > offseason).
       if (!teamAResolved && user) {
-        for (const league of leagues) {
+        const sortedLeagues = [...leagues].sort((a, b) => phaseRank(b) - phaseRank(a));
+        for (const league of sortedLeagues) {
           const teams = await api.getTeams(league.id).catch(() => []);
           const team = teams.find(t => t.userId != null && String(t.userId) === user.id);
           if (team) {
@@ -68,9 +94,15 @@ export function MatchupCenterPage() {
               roster: rosterFromApi(team.roster),
               source: { type: 'league', leagueId: league.id, teamId: team.id, label: `${team.teamName} (${league.name.replace(' League', '')})` },
             });
+            setOpponentContext({ league, teams });
+            teamAResolved = true;
             break;
           }
         }
+      }
+
+      if (!teamAResolved) {
+        setNoManagedTeam(true);
       }
 
       // Resolve team B from deep-link
@@ -90,6 +122,39 @@ export function MatchupCenterPage() {
       }
     })();
   }, [leagues, searchParams, user, dispatch]);
+
+  /** Refresh the opponent gem-grid context whenever the user manually changes
+   *  team A via the picker. We re-fetch the league's teams from the matching
+   *  league. Skipped for custom teams (no league context). */
+  useEffect(() => {
+    const src = state.teamASource;
+    if (!src || src.type !== 'league' || !src.leagueId) {
+      setOpponentContext(null);
+      return;
+    }
+    if (opponentContext?.league.id === src.leagueId) return;
+    const league = leagues.find(l => l.id === src.leagueId);
+    if (!league) return;
+    let cancelled = false;
+    api.getTeams(league.id).then(teams => {
+      if (!cancelled) setOpponentContext({ league, teams });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [state.teamASource, leagues, opponentContext?.league.id]);
+
+  function selectOpponent(team: ApiTeam) {
+    if (!opponentContext) return;
+    dispatch({
+      type: 'SET_TEAM_B',
+      roster: rosterFromApi(team.roster),
+      source: {
+        type: 'league',
+        leagueId: opponentContext.league.id,
+        teamId: team.id,
+        label: `${team.teamName} (${opponentContext.league.name.replace(' League', '')})`,
+      },
+    });
+  }
 
   // Preload sprites for both teams
   useEffect(() => {
@@ -134,13 +199,17 @@ export function MatchupCenterPage() {
 
       {/* Roster Strip — always visible */}
       <div className="flex gap-1.5 items-stretch">
-        <RosterStrip
-          team={state.teamA}
-          subTeam={state.subTeamA}
-          onToggle={name => dispatch({ type: 'TOGGLE_SUB_A', name })}
-          side="a"
-          label={state.teamASource?.label}
-        />
+        {state.teamA.length === 0 && noManagedTeam ? (
+          <NoManagedTeamPanel />
+        ) : (
+          <RosterStrip
+            team={state.teamA}
+            subTeam={state.subTeamA}
+            onToggle={name => dispatch({ type: 'TOGGLE_SUB_A', name })}
+            side="a"
+            label={state.teamASource?.label}
+          />
+        )}
         {/* Reset sub-teams button */}
         <div className="flex items-center">
           <button
@@ -152,13 +221,22 @@ export function MatchupCenterPage() {
             <RotateCcw size={14} />
           </button>
         </div>
-        <RosterStrip
-          team={state.teamB}
-          subTeam={state.subTeamB}
-          onToggle={name => dispatch({ type: 'TOGGLE_SUB_B', name })}
-          side="b"
-          label={state.teamBSource?.label}
-        />
+        {state.teamB.length === 0 && opponentContext ? (
+          <OpponentGrid
+            league={opponentContext.league}
+            teams={opponentContext.teams}
+            excludeTeamId={state.teamASource?.type === 'league' ? state.teamASource.teamId : undefined}
+            onSelect={selectOpponent}
+          />
+        ) : (
+          <RosterStrip
+            team={state.teamB}
+            subTeam={state.subTeamB}
+            onToggle={name => dispatch({ type: 'TOGGLE_SUB_B', name })}
+            side="b"
+            label={state.teamBSource?.label}
+          />
+        )}
       </div>
 
       {/* Tabbed Analysis */}
@@ -215,6 +293,30 @@ export function MatchupCenterPage() {
           </TabsContent>
         </div>
       </Tabs>
+    </div>
+  );
+}
+
+/** Side-A panel shown when the viewer doesn't manage any team. Tells them
+ *  what to do next (browse leagues / pick a team manually) instead of just
+ *  saying "Select your team above". */
+function NoManagedTeamPanel() {
+  return (
+    <div className="flex-1 rounded-lg border border-dashed border-[#3b82f6]/20 bg-[#3b82f6]/5 px-3 py-2.5 flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <div className="text-xs font-medium text-[#3b82f6]">No team yet</div>
+        <p className="text-[11px] text-text-muted leading-snug">
+          Pick any league team in the dropdown above, or browse leagues to find one to follow.
+        </p>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="shrink-0"
+        render={<Link to="/" />}
+      >
+        Browse leagues
+      </Button>
     </div>
   );
 }
