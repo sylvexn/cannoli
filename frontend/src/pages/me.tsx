@@ -171,11 +171,9 @@ function NoTeamHero({ leagues }: { leagues: League[] }) {
         </div>
 
         <div>
-          <Button asChild variant="default" size="sm">
-            <Link to="/">
-              <Compass size={14} />
-              Browse leagues
-            </Link>
+          <Button render={<Link to="/" />} variant="default" size="sm">
+            <Compass size={14} />
+            Browse leagues
           </Button>
         </div>
 
