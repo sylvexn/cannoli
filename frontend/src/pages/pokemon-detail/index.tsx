@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useAppData } from '@/lib/app-data-context';
 import { getPokemonData } from '@/data/pokemon-data';
 import { getTierEntry } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -8,11 +9,13 @@ import { TYPE_COLORS } from '@/lib/constants';
 import { TierBadge } from '@/components/tier-badge';
 import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
+import { TeamLink } from '@/components/team-link';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
-import { Swords, ArrowLeft, Shield } from 'lucide-react';
-import { LeagueHistory } from './league-history';
+import { Swords, ArrowLeft, Shield, Gauge, UsersRound } from 'lucide-react';
+import { ScoutingContext } from './scouting-context';
+import type { League, Player } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 
 export function PokemonDetailPage() {
@@ -21,8 +24,6 @@ export function PokemonDetailPage() {
   const decodedName = name ? decodeURIComponent(name) : '';
 
   function handleBack() {
-    // If we have a real history stack, go back. Otherwise, fall back to the
-    // tier list (the closest "browse all Pokemon" surface).
     if (window.history.length > 1) {
       navigate(-1);
     } else {
@@ -50,9 +51,12 @@ export function PokemonDetailPage() {
   const bst = stats.hp + stats.atk + stats.def + stats.spa + stats.spd + stats.spe;
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-5 max-w-6xl">
       {/* Back link */}
-      <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-text-muted hover:text-neon transition-colors">
+      <button
+        onClick={handleBack}
+        className="flex items-center gap-1.5 text-sm text-text-muted hover:text-neon transition-colors"
+      >
         <ArrowLeft size={14} /> Back
       </button>
 
@@ -64,89 +68,191 @@ export function PokemonDetailPage() {
         </h1>
       </div>
 
-      {/* Hero card */}
-      <Card className="bg-surface-raised border-border-default overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-6">
-            {/* Sprite */}
-            <div className="shrink-0 rounded-lg bg-surface-overlay/50 p-4">
-              <PokemonSprite name={decodedName} size="xl" />
-            </div>
+      {/* Top: 2-column scouting layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* LEFT: Identity (~40%) */}
+        <div className="lg:col-span-5">
+          <IdentityCard
+            decodedName={decodedName}
+            types={types}
+            bst={bst}
+            tierEntry={tierEntry}
+            abilities={abilities}
+          />
+        </div>
 
-            {/* Info */}
-            <div className="flex-1 min-w-0 space-y-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <TypeChip types={types} size="sm" />
-                {tierEntry && <TierBadge points={tierEntry.tier} />}
-                <span className="text-sm font-mono text-text-muted">BST {bst}</span>
-              </div>
-
-              {tierEntry && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-xs border-border-subtle text-text-muted font-mono">
-                    Cost: {tierEntry.tier}pt
-                  </Badge>
-                  {tierEntry.teraCost !== tierEntry.tier && (
-                    <Badge variant="outline" className="text-xs border-pink/30 text-pink font-mono">
-                      Tera cost: {tierEntry.teraCost}pt
-                    </Badge>
-                  )}
-                  {tierEntry.teraBanned && (
-                    <Badge variant="outline" className="text-xs border-loss/30 text-loss">
-                      Tera banned
-                    </Badge>
-                  )}
-                </div>
-              )}
-
-              {/* Abilities */}
-              {abilities.length > 0 && (
-                <div>
-                  <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
-                    Abilities
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {abilities.map(a => (
-                      <AbilityChip key={a} name={a} />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Two columns: Stats + Defensive */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Base Stats */}
-        <Card className="bg-surface-raised border-border-default">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-heading font-semibold uppercase tracking-wider text-text-primary flex items-center gap-2">
-              <Swords size={14} className="text-neon" />
-              Base Stats
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            <StatBar label="HP" value={stats.hp} />
-            <StatBar label="Atk" value={stats.atk} />
-            <StatBar label="Def" value={stats.def} />
-            <StatBar label="SpA" value={stats.spa} />
-            <StatBar label="SpD" value={stats.spd} />
-            <StatBar label="Spe" value={stats.spe} />
-            <div className="text-right text-xs font-mono text-text-muted pt-1">
-              Total: {bst}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Defensive Profile */}
-        <DefensiveMatchups types={types} />
+        {/* RIGHT: Stats + Matchups + Speed strip (~60%) */}
+        <div className="lg:col-span-7 space-y-4">
+          <BaseStatsCard stats={stats} bst={bst} />
+          <DefensiveMatchupsCard types={types} />
+          <SpeedTierStrip baseSpeed={stats.spe} />
+        </div>
       </div>
 
-      {/* League History */}
-      <LeagueHistory pokemonName={decodedName} />
+      {/* Bottom: full-width scouting context strip */}
+      <ScoutingContext pokemonName={decodedName} />
     </div>
+  );
+}
+
+/* -------------------- Identity column -------------------- */
+
+interface IdentityCardProps {
+  decodedName: string;
+  types: PokemonType[];
+  bst: number;
+  tierEntry: ReturnType<typeof getTierEntry>;
+  abilities: string[];
+}
+
+function IdentityCard({ decodedName, types, bst, tierEntry, abilities }: IdentityCardProps) {
+  return (
+    <Card className="bg-surface-raised border-border-default h-full">
+      <CardContent className="p-4 space-y-4">
+        {/* Sprite */}
+        <div className="rounded-lg bg-surface-overlay/50 p-4 flex items-center justify-center">
+          <PokemonSprite name={decodedName} size="xl" />
+        </div>
+
+        {/* Types + cost + BST */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <TypeChip types={types} size="sm" />
+            {tierEntry && <TierBadge points={tierEntry.tier} />}
+            <span className="text-xs font-mono text-text-muted">BST {bst}</span>
+          </div>
+
+          {tierEntry && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[10px] border-border-subtle text-text-muted font-mono">
+                Cost: {tierEntry.tier}pt
+              </Badge>
+              {tierEntry.teraCost !== tierEntry.tier && (
+                <Badge variant="outline" className="text-[10px] border-pink/30 text-pink font-mono">
+                  Tera cost: {tierEntry.teraCost}pt
+                </Badge>
+              )}
+              {tierEntry.teraBanned && (
+                <Badge variant="outline" className="text-[10px] border-loss/30 text-loss">
+                  Tera banned
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Abilities */}
+        {abilities.length > 0 && (
+          <div>
+            <h3 className="text-[10px] font-heading font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+              Abilities
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {abilities.map(a => (
+                <AbilityChip key={a} name={a} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Current ownership */}
+        <CurrentOwnerSummary pokemonName={decodedName} />
+      </CardContent>
+    </Card>
+  );
+}
+
+interface OwnershipEntry {
+  league: League;
+  player: Player;
+}
+
+function CurrentOwnerSummary({ pokemonName }: { pokemonName: string }) {
+  const { leagues } = useAppData();
+
+  const owners = useMemo<OwnershipEntry[]>(() => {
+    const results: OwnershipEntry[] = [];
+    for (const league of leagues) {
+      if (!league.hasData) continue;
+      for (const player of league.players) {
+        if (player.roster.some(m => m.name === pokemonName)) {
+          results.push({ league, player });
+        }
+      }
+    }
+    return results;
+  }, [leagues, pokemonName]);
+
+  return (
+    <div>
+      <h3 className="text-[10px] font-heading font-semibold text-text-secondary uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+        <UsersRound size={11} className="text-neon" />
+        On The Block
+      </h3>
+      {owners.length === 0 ? (
+        <p className="text-xs text-text-muted">
+          Free agent across all active leagues.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {owners.map(({ league, player }) => (
+            <div
+              key={`${league.id}-${player.id}`}
+              className="flex items-center gap-2 rounded-md border border-border-subtle bg-surface-overlay/40 px-2 py-1.5"
+            >
+              <Badge
+                variant="outline"
+                className="text-[10px] font-bold uppercase shrink-0"
+                style={{ borderColor: `${league.color}50`, color: league.color }}
+              >
+                {league.name.replace(' League', '')}
+              </Badge>
+              <TeamLink
+                team={{
+                  leagueId: league.id,
+                  teamId: player.id,
+                  teamName: player.teamName,
+                  teamAbbrev: player.teamAbbrev,
+                  teamColor: player.teamColor,
+                  record: player.record,
+                }}
+                logoSize="sm"
+              >
+                <span className="text-xs font-medium text-text-primary hover:text-neon transition-colors truncate">
+                  {player.teamName}
+                </span>
+              </TeamLink>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------- Right column cards -------------------- */
+
+function BaseStatsCard({ stats, bst }: { stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number }; bst: number }) {
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-heading font-semibold uppercase tracking-wider text-text-primary flex items-center gap-2">
+          <Swords size={14} className="text-neon" />
+          Base Stats
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0 space-y-1.5">
+        <StatBar label="HP" value={stats.hp} />
+        <StatBar label="Atk" value={stats.atk} />
+        <StatBar label="Def" value={stats.def} />
+        <StatBar label="SpA" value={stats.spa} />
+        <StatBar label="SpD" value={stats.spd} />
+        <StatBar label="Spe" value={stats.spe} />
+        <div className="text-right text-xs font-mono text-text-muted pt-1">
+          Total: {bst}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -158,7 +264,7 @@ const multLabels: { key: string; label: string; color: string }[] = [
   { key: 'x0', label: 'Immune', color: '#a78bfa' },
 ];
 
-function DefensiveMatchups({ types }: { types: PokemonType[] }) {
+function DefensiveMatchupsCard({ types }: { types: PokemonType[] }) {
   const groups = useMemo(() => {
     const matchups = getDefensiveMatchups(types);
     return groupMatchups(matchups);
@@ -176,7 +282,7 @@ function DefensiveMatchups({ types }: { types: PokemonType[] }) {
           Defensive Matchups
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="p-4 pt-0 space-y-3">
         {visibleTiers.map(tier => {
           const entries = (groups as Record<string, { type: PokemonType }[]>)[tier.key];
           return (
@@ -198,6 +304,82 @@ function DefensiveMatchups({ types }: { types: PokemonType[] }) {
             </div>
           );
         })}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* -------------------- Speed tier band strip -------------------- */
+
+interface SpeedBand {
+  label: string;
+  blurb: string;
+  color: string;
+}
+
+function classifySpeed(base: number): SpeedBand {
+  if (base >= 121)
+    return {
+      label: 'Blistering',
+      blurb: 'Outspeeds nearly everything that isn’t Choice Scarfed.',
+      color: '#22d3ee',
+    };
+  if (base >= 101)
+    return {
+      label: 'Fast',
+      blurb: 'Will outpace most of the meta unscarfed.',
+      color: '#4ade80',
+    };
+  if (base >= 81)
+    return {
+      label: 'Mid',
+      blurb: 'Speed creeps will matter — watch the tier sheet.',
+      color: '#fbbf24',
+    };
+  if (base >= 61)
+    return {
+      label: 'Slow',
+      blurb: 'Wants Trick Room support, priority, or bulk to function.',
+      color: '#fb923c',
+    };
+  return {
+    label: 'Lethargic',
+    blurb: 'Bring it in safely — Trick Room or pivot moves only.',
+    color: '#f87171',
+  };
+}
+
+function SpeedTierStrip({ baseSpeed }: { baseSpeed: number }) {
+  const band = classifySpeed(baseSpeed);
+  return (
+    <Card className="bg-surface-raised border-border-default">
+      <CardContent className="p-3 flex items-center gap-3">
+        <div
+          className="shrink-0 rounded-md px-2 py-1.5 flex items-center gap-1.5"
+          style={{ backgroundColor: `${band.color}1f`, border: `1px solid ${band.color}55` }}
+        >
+          <Gauge size={14} style={{ color: band.color }} />
+          <span className="text-[10px] font-mono uppercase tracking-wider font-bold" style={{ color: band.color }}>
+            {band.label}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs font-heading font-semibold text-text-primary uppercase tracking-wider">
+              Speed Tier
+            </span>
+            <span className="text-xs font-mono text-text-muted">
+              base {baseSpeed}
+            </span>
+          </div>
+          <p className="text-xs text-text-muted leading-snug truncate">{band.blurb}</p>
+        </div>
+        <Link
+          to="/speed-tiers"
+          className="text-[11px] font-mono uppercase tracking-wider text-neon hover:underline shrink-0"
+        >
+          Speed tiers →
+        </Link>
       </CardContent>
     </Card>
   );
