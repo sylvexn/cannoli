@@ -18,42 +18,122 @@ import {
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-function ColorField({ label, value, onChange }: {
+type ColorSlot = 'primary' | 'secondary' | 'tertiary';
+
+const SLOT_LABELS: Record<ColorSlot, string> = {
+  primary: 'Primary',
+  secondary: 'Secondary',
+  tertiary: 'Tertiary',
+};
+
+function SlotChip({
+  slot,
+  label,
+  value,
+  active,
+  onSelect,
+}: {
+  slot: ColorSlot;
   label: string;
-  value: string | null | undefined;
-  onChange: (v: string) => void;
+  value: string | null;
+  active: boolean;
+  onSelect: (slot: ColorSlot) => void;
 }) {
-  const [draft, setDraft] = useState(value || '');
-  useEffect(() => { setDraft(value || ''); }, [value]);
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(slot)}
+      aria-pressed={active}
+      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium uppercase tracking-wider transition-colors ${
+        active
+          ? 'border-neon bg-neon/10 text-text-primary'
+          : 'border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary'
+      }`}
+    >
+      <span
+        className="inline-block h-3 w-3 rounded-full border border-border-subtle"
+        style={{ backgroundColor: value ?? 'transparent' }}
+      />
+      <span>{label}</span>
+      <span
+        className={`text-xs leading-none ${active ? 'text-neon' : 'text-text-muted'}`}
+        aria-hidden
+      >
+        {active ? '●' : '○'}
+      </span>
+    </button>
+  );
+}
+
+function ColorPicker({
+  values,
+  onChange,
+}: {
+  values: Record<ColorSlot, string | null>;
+  onChange: (slot: ColorSlot, value: string) => void;
+}) {
+  const [activeSlot, setActiveSlot] = useState<ColorSlot>('primary');
+  const activeValue = values[activeSlot];
+  const [draft, setDraft] = useState(activeValue || '');
+
+  useEffect(() => {
+    setDraft(activeValue || '');
+  }, [activeValue, activeSlot]);
 
   function commit(v: string) {
-    if (HEX_RE.test(v)) onChange(v);
+    if (HEX_RE.test(v)) onChange(activeSlot, v);
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="text-xs text-text-muted">{label}</label>
-        <Input
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={() => commit(draft)}
-          onKeyDown={e => { if (e.key === 'Enter') commit(draft); }}
-          className="w-24 h-7 text-[11px] font-mono"
-          maxLength={7}
-        />
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {PROFILE_COLOR_SWATCHES.map(c => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => { setDraft(c); onChange(c); }}
-            aria-label={`Set ${label} to ${c}`}
-            className={`w-6 h-6 rounded-full border-2 transition-transform ${value === c ? 'border-text-primary scale-110' : 'border-transparent hover:scale-110'}`}
-            style={{ backgroundColor: c }}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {(Object.keys(SLOT_LABELS) as ColorSlot[]).map(slot => (
+          <SlotChip
+            key={slot}
+            slot={slot}
+            label={SLOT_LABELS[slot]}
+            value={values[slot]}
+            active={activeSlot === slot}
+            onSelect={setActiveSlot}
           />
         ))}
+      </div>
+
+      <div className="rounded-lg border border-border-subtle p-3 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-text-muted">
+            Editing {SLOT_LABELS[activeSlot]}
+          </span>
+          <Input
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={() => commit(draft)}
+            onKeyDown={e => { if (e.key === 'Enter') commit(draft); }}
+            className="w-24 h-7 text-[11px] font-mono"
+            maxLength={7}
+            aria-label={`${SLOT_LABELS[activeSlot]} hex value`}
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PROFILE_COLOR_SWATCHES.map(c => {
+            const selected = activeValue === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => { setDraft(c); onChange(activeSlot, c); }}
+                aria-label={`Set ${SLOT_LABELS[activeSlot]} to ${c}`}
+                aria-pressed={selected}
+                className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                  selected
+                    ? 'border-text-primary scale-110'
+                    : 'border-transparent hover:scale-110'
+                }`}
+                style={{ backgroundColor: c }}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -265,11 +345,14 @@ export function ProfileTab() {
             Used on your avatar, mention pills, and trade cards.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <ColorField label="Primary" value={primary} onChange={setPrimary} />
-            <ColorField label="Secondary" value={secondary} onChange={setSecondary} />
-            <ColorField label="Tertiary" value={tertiary} onChange={setTertiary} />
-          </div>
+          <ColorPicker
+            values={{ primary, secondary, tertiary }}
+            onChange={(slot, v) => {
+              if (slot === 'primary') setPrimary(v);
+              else if (slot === 'secondary') setSecondary(v);
+              else setTertiary(v);
+            }}
+          />
 
           <UserAccentScope
             user={{ primaryColor: primary, secondaryColor: secondary, tertiaryColor: tertiary }}
