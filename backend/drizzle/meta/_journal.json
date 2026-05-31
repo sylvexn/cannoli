@@ -183,6 +183,13 @@
       "when": 1779800000000,
       "tag": "0025_match_pokemon_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1779900000000,
+      "tag": "0026_roster_nickname",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `rosters` ADD `nickname` text;
