@@ -131,6 +131,8 @@ export interface ApiTeam {
 
 export interface ApiRosterPokemon {
   name: string;
+  nickname: string | null;
+  rosterId: number;
   types: string[];
   tier: number;
   isTeraCaptain: boolean;
@@ -188,6 +190,7 @@ export interface ApiAdminMatch {
 
 export interface ApiMatchPokemon {
   name: string;
+  nickname?: string | null;
   kills: number;
   deaths: number;
   teraUsed: boolean;
@@ -197,7 +200,7 @@ export interface ApiMatchPokemon {
 export interface ApiReplaySummary {
   matchId: string;
   isComplete: boolean;
-  mvp: { name: string; kills: number; deaths: number; teamId: string } | null;
+  mvp: { name: string; nickname?: string | null; kills: number; deaths: number; teamId: string } | null;
   teraCount: number;
   sweep: boolean;
   margin: number;
@@ -935,6 +938,11 @@ export const api = {
 
   toggleShiny: (teamId: string, pokemonName: string, isShiny: boolean) =>
     putJson<{ success: boolean }>(`/api/teams/${teamId}/shiny`, { pokemonName, isShiny }),
+
+  setRosterNickname: (teamId: string, rosterId: number, nickname: string | null) =>
+    putJson<{ success: boolean; nickname: string | null }>(
+      `/api/teams/${teamId}/rosters/${rosterId}/nickname`, { nickname },
+    ),
 
   // Free agents
   getFreeAgents: (leagueId: string) =>

@@ -424,6 +424,43 @@ export function importSeason(
       if (rosterCount > 0) {
         console.log(`  ${abbrev}: ${rosterCount} Pokemon on roster`);
       }
+
+      // ─── Nicknames (team-summary card on the team sheet) ─────────────────
+      // Two 3-cell rows of Pokemon names (rows 13/22, cols Q/V/AA = 16/21/26)
+      // pair with nickname rows directly below them (rows 14/23). Cells holding
+      // the literal "NICKNAME" placeholder or the same string as the Pokemon
+      // name (POW/GG fill the slot with the species itself) are ignored.
+      const NICK_PAIRS: Array<{ nameRow: number; nickRow: number }> = [
+        { nameRow: 12, nickRow: 13 }, // 1-indexed rows 13/14
+        { nameRow: 21, nickRow: 22 }, // 1-indexed rows 22/23
+      ];
+      const NICK_COLS = [16, 21, 26]; // Q, V, AA
+
+      const updateNickname = sqlite.prepare(
+        'UPDATE rosters SET nickname = ? WHERE team_id = ? AND pokemon_name = ?',
+      );
+      let nickCount = 0;
+      for (const pair of NICK_PAIRS) {
+        const nameRow = teamSheet[pair.nameRow] || [];
+        const nickRow = teamSheet[pair.nickRow] || [];
+        for (const c of NICK_COLS) {
+          const rawName = nameRow[c];
+          const rawNick = nickRow[c];
+          if (!rawName || typeof rawName !== 'string' || !rawName.trim()) continue;
+          if (!rawNick || typeof rawNick !== 'string' || !rawNick.trim()) continue;
+          const cleanName = normalizePokemonName(rawName.toString());
+          const cleanNick = normalizePokemonName(rawNick.toString()).trim();
+          if (!cleanNick) continue;
+          if (cleanNick.toUpperCase() === 'NICKNAME') continue;
+          if (cleanNick.toLowerCase() === cleanName.toLowerCase()) continue;
+          const capped = cleanNick.slice(0, 40);
+          updateNickname.run(capped, teamId, cleanName);
+          nickCount++;
+        }
+      }
+      if (nickCount > 0) {
+        console.log(`  ${abbrev}: ${nickCount} nicknames`);
+      }
     }
 
     // ─── Draft picks ─────────────────────────────────────────────────────

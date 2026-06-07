@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 import type { SwapEntry } from './utils';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
+import { NicknameEditor } from './nickname-editor';
 
 type SortKey = 'tier' | 'kills' | 'deaths' | 'kpg' | 'spe';
 
@@ -29,6 +30,10 @@ interface RosterTableProps {
   sortDir: 'asc' | 'desc';
   onSort: (key: SortKey) => void;
   onResetAll: () => void;
+  /** When set, renders an inline pencil-button editor for nicknames on each row. */
+  teamId?: string;
+  canEditNickname?: boolean;
+  onNicknameSaved?: (rosterId: number, next: string | null) => void;
 }
 
 export function RosterTable({
@@ -41,6 +46,9 @@ export function RosterTable({
   sortDir,
   onSort,
   onResetAll,
+  teamId,
+  canEditNickname,
+  onNicknameSaved,
 }: RosterTableProps) {
   const { openSideCard } = usePokemonSideCard();
   const pointsUsed = rosterPointsUsed(activeRoster);
@@ -124,20 +132,38 @@ export function RosterTable({
                     <td className="px-3 py-2.5">
                       <Tooltip>
                         <TooltipTrigger>
-                          <div className="flex items-center gap-2">
+                          <div className="group flex items-center gap-2">
                             <button type="button" onClick={() => openSideCard(mon.name)} className="shrink-0 cursor-pointer">
                               <PokemonSprite name={mon.name} size="sm" />
                             </button>
-                            <Link
-                              to={pokemonRoute(mon.name)}
-                              className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} hover:text-neon hover:underline transition-colors`}
-                            >
-                              {mon.name}
-                            </Link>
-                            {mon.isTeraCaptain && (
-                              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
-                            )}
-                            {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <Link
+                                  to={pokemonRoute(mon.name)}
+                                  className={`text-sm font-medium ${mon.isTeraCaptain ? 'text-pink' : 'text-text-primary'} hover:text-neon hover:underline transition-colors`}
+                                >
+                                  {mon.name}
+                                </Link>
+                                {mon.isTeraCaptain && (
+                                  <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black border border-pink/40">T</span>
+                                )}
+                                {isSwapped && <span className="text-[10px] text-pink">(swapped)</span>}
+                                {canEditNickname && teamId && mon.rosterId != null && (
+                                  <NicknameEditor
+                                    teamId={teamId}
+                                    rosterId={mon.rosterId}
+                                    pokemonName={mon.name}
+                                    currentNickname={mon.nickname ?? null}
+                                    onSaved={(next) => onNicknameSaved?.(mon.rosterId!, next)}
+                                  />
+                                )}
+                              </div>
+                              {mon.nickname ? (
+                                <span className="italic text-text-muted text-[11px] truncate leading-tight" title={mon.nickname}>
+                                  "{mon.nickname}"
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
                         </TooltipTrigger>
                         <TooltipContent side="right" align="start" className="bg-surface-raised border-border-default p-0 w-64">

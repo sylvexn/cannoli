@@ -222,6 +222,11 @@ export function TradeBlockPage() {
                           <Link to={pokemonRoute(mon.name)} className="text-sm font-mono font-medium text-text-primary hover:text-neon hover:underline transition-colors">{mon.name}</Link>
                           <TierBadge points={mon.tier} />
                         </div>
+                        {mon.nickname ? (
+                          <div className="italic text-text-muted text-[11px] truncate leading-tight" title={mon.nickname}>
+                            "{mon.nickname}"
+                          </div>
+                        ) : null}
                         <div className="flex items-center gap-1.5 mt-1">
                           <TypeChip types={mon.types as PokemonType[]} size="xs" />
                           {kd && (
