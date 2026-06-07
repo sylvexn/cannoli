@@ -78,6 +78,8 @@ export const standingsRoutes = new Elysia()
 
         return {
           name: r.pokemonName,
+          nickname: r.nickname ?? null,
+          rosterId: r.id,
           types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
           // Surface the snapshotted cost (what the team actually paid) so totals
           // don't shift when admins re-tier a Pokemon mid-season.
