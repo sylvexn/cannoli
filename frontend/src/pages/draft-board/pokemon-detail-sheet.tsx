@@ -126,6 +126,11 @@ export function PokemonDetailSheet({
                       {name}
                     </Link>
                   </h2>
+                  {mon?.nickname ? (
+                    <div className="italic text-text-muted text-xs mt-0.5 truncate" title={mon.nickname}>
+                      "{mon.nickname}"
+                    </div>
+                  ) : null}
 
                   <div className="flex items-center gap-2 mt-1.5">
                     {tierEntry && <TierBadge points={tierEntry.tier} />}
