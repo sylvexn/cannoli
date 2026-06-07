@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { isStaff, isStaffOrTeamOwner } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 
@@ -109,6 +109,45 @@ export const teamAdminRoutes = new Elysia()
     });
 
     return { success: true };
+  })
+
+  // ─── Roster nickname (owner or admin) ──────────────────────────────
+
+  .put('/api/teams/:teamId/rosters/:rosterId/nickname', ({ params, body, user, set }) => {
+    if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
+    const rosterId = parseInt(params.rosterId);
+    if (!Number.isFinite(rosterId)) { set.status = 400; return { error: 'Invalid rosterId' }; }
+
+    const roster = db.select().from(schema.rosters)
+      .where(and(eq(schema.rosters.id, rosterId), eq(schema.rosters.teamId, params.teamId)))
+      .get();
+    if (!roster) { set.status = 404; return { error: 'Roster entry not found for this team' }; }
+
+    const { nickname } = body as { nickname?: string | null };
+    let normalized: string | null;
+    if (nickname == null) {
+      normalized = null;
+    } else if (typeof nickname === 'string') {
+      const trimmed = nickname.trim();
+      if (trimmed.length === 0) {
+        normalized = null;
+      } else if (trimmed.length > 40) {
+        set.status = 400;
+        return { error: 'nickname must be ≤ 40 characters' };
+      } else {
+        normalized = trimmed;
+      }
+    } else {
+      set.status = 400;
+      return { error: 'nickname must be a string or null' };
+    }
+
+    db.update(schema.rosters)
+      .set({ nickname: normalized })
+      .where(eq(schema.rosters.id, rosterId))
+      .run();
+
+    return { success: true, nickname: normalized };
   })
 
   // ─── Team delete (with safety: forbid if has roster/picks/match-results) ─

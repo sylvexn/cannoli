@@ -939,6 +939,11 @@ export const api = {
   toggleShiny: (teamId: string, pokemonName: string, isShiny: boolean) =>
     putJson<{ success: boolean }>(`/api/teams/${teamId}/shiny`, { pokemonName, isShiny }),
 
+  setRosterNickname: (teamId: string, rosterId: number, nickname: string | null) =>
+    putJson<{ success: boolean; nickname: string | null }>(
+      `/api/teams/${teamId}/rosters/${rosterId}/nickname`, { nickname },
+    ),
+
   // Free agents
   getFreeAgents: (leagueId: string) =>
     fetchJson<{ name: string; tier: number; type1: string; type2: string | null; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } }[]>(
