@@ -44,6 +44,7 @@ export const speedTierRoutes = new Elysia()
         // Use teamId+name as a stable composite id (rosters.id can churn).
         id: `${r.teamId}:${r.pokemonName}`,
         name: r.pokemonName,
+        nickname: r.nickname ?? null,
         dex: p?.nationalDexNumber ?? null,
         baseSpeed: p?.spe ?? 0,
         type1: p?.type1 ?? null,

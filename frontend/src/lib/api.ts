@@ -131,6 +131,8 @@ export interface ApiTeam {
 
 export interface ApiRosterPokemon {
   name: string;
+  nickname: string | null;
+  rosterId: number;
   types: string[];
   tier: number;
   isTeraCaptain: boolean;
@@ -188,6 +190,7 @@ export interface ApiAdminMatch {
 
 export interface ApiMatchPokemon {
   name: string;
+  nickname?: string | null;
   kills: number;
   deaths: number;
   teraUsed: boolean;
@@ -197,7 +200,7 @@ export interface ApiMatchPokemon {
 export interface ApiReplaySummary {
   matchId: string;
   isComplete: boolean;
-  mvp: { name: string; kills: number; deaths: number; teamId: string } | null;
+  mvp: { name: string; nickname?: string | null; kills: number; deaths: number; teamId: string } | null;
   teraCount: number;
   sweep: boolean;
   margin: number;

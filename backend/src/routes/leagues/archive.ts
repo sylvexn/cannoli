@@ -73,6 +73,7 @@ export const archiveRoutes = new Elysia()
                 .get();
               return {
                 name: r.pokemonName,
+                nickname: r.nickname ?? null,
                 // costAtDraft snapshot — see /api/leagues/:leagueId/teams.
                 tier: r.costAtDraft || r.tier,
                 types: poke ? [poke.type1, poke.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
