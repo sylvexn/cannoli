@@ -24,7 +24,28 @@ export const matchRoutes = new Elysia()
       .get();
     if (!match) return null;
 
-    const entries = db.select().from(schema.matchPokemon)
+    // LEFT JOIN to rosters (team_id, pokemon_name) so each replay row can
+    // surface the team's chosen nickname for that mon. match_pokemon rows
+    // for traded-out mons may not match a current roster — those just get
+    // null nickname.
+    const entries = db.select({
+      id: schema.matchPokemon.id,
+      matchId: schema.matchPokemon.matchId,
+      teamId: schema.matchPokemon.teamId,
+      pokemonName: schema.matchPokemon.pokemonName,
+      kills: schema.matchPokemon.kills,
+      deaths: schema.matchPokemon.deaths,
+      teraUsed: schema.matchPokemon.teraUsed,
+      teraType: schema.matchPokemon.teraType,
+      nickname: schema.rosters.nickname,
+    }).from(schema.matchPokemon)
+      .leftJoin(
+        schema.rosters,
+        and(
+          eq(schema.rosters.teamId, schema.matchPokemon.teamId),
+          eq(schema.rosters.pokemonName, schema.matchPokemon.pokemonName),
+        ),
+      )
       .where(eq(schema.matchPokemon.matchId, params.matchId))
       .all();
 
@@ -42,6 +63,7 @@ export const matchRoutes = new Elysia()
       : null;
     const mvp = mvpEntry ? {
       name: mvpEntry.pokemonName,
+      nickname: mvpEntry.nickname ?? null,
       kills: mvpEntry.kills,
       deaths: mvpEntry.deaths,
       teamId: mvpEntry.teamId,
@@ -70,6 +92,7 @@ export const matchRoutes = new Elysia()
       // second round-trip to /pokemon
       home: homeMons.map(m => ({
         name: m.pokemonName,
+        nickname: m.nickname ?? null,
         kills: m.kills,
         deaths: m.deaths,
         teraUsed: m.teraUsed,
@@ -77,6 +100,7 @@ export const matchRoutes = new Elysia()
       })),
       away: awayMons.map(m => ({
         name: m.pokemonName,
+        nickname: m.nickname ?? null,
         kills: m.kills,
         deaths: m.deaths,
         teraUsed: m.teraUsed,
@@ -88,7 +112,23 @@ export const matchRoutes = new Elysia()
   // ─── Match Details (pokemon K/D for a specific match) ────────────────
 
   .get('/api/matches/:matchId/pokemon', ({ params }) => {
-    const entries = db.select().from(schema.matchPokemon)
+    const entries = db.select({
+      id: schema.matchPokemon.id,
+      teamId: schema.matchPokemon.teamId,
+      pokemonName: schema.matchPokemon.pokemonName,
+      kills: schema.matchPokemon.kills,
+      deaths: schema.matchPokemon.deaths,
+      teraUsed: schema.matchPokemon.teraUsed,
+      teraType: schema.matchPokemon.teraType,
+      nickname: schema.rosters.nickname,
+    }).from(schema.matchPokemon)
+      .leftJoin(
+        schema.rosters,
+        and(
+          eq(schema.rosters.teamId, schema.matchPokemon.teamId),
+          eq(schema.rosters.pokemonName, schema.matchPokemon.pokemonName),
+        ),
+      )
       .where(eq(schema.matchPokemon.matchId, params.matchId))
       .all();
 
@@ -101,6 +141,7 @@ export const matchRoutes = new Elysia()
     return {
       home: entries.filter(e => e.teamId === match.homeTeamId).map(e => ({
         name: e.pokemonName,
+        nickname: e.nickname ?? null,
         kills: e.kills,
         deaths: e.deaths,
         teraUsed: e.teraUsed,
@@ -108,6 +149,7 @@ export const matchRoutes = new Elysia()
       })),
       away: entries.filter(e => e.teamId === match.awayTeamId).map(e => ({
         name: e.pokemonName,
+        nickname: e.nickname ?? null,
         kills: e.kills,
         deaths: e.deaths,
         teraUsed: e.teraUsed,

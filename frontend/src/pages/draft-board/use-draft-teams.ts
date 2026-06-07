@@ -63,15 +63,27 @@ export function useDraftTeams(
     return map;
   }, [state.view, state.status, state.snakeOrder, state.currentPickIndex]);
 
-  // Team rosters from ownership
+  // Team rosters from ownership. Nickname is sourced from the player's
+  // canonical roster array (the API roster) — ownershipMap doesn't carry it.
   const teamRosters = useMemo(() => {
-    const rosters = new Map<string, { name: string; tier: number; acquisition: Acquisition }[]>();
-    for (const p of players) rosters.set(p.id, []);
+    const rosters = new Map<string, { name: string; tier: number; acquisition: Acquisition; nickname?: string | null }[]>();
+    const nickByKey = new Map<string, string | null>();
+    for (const p of players) {
+      rosters.set(p.id, []);
+      for (const r of p.roster) {
+        if (r.nickname) nickByKey.set(`${p.id}:${r.name}`, r.nickname);
+      }
+    }
     for (const [pokemonName, ownership] of ownershipMap) {
       const entry = rosters.get(ownership.teamId);
       const tierEntry = TIER_LIST.find(t => t.name === pokemonName);
       if (entry) {
-        entry.push({ name: pokemonName, tier: tierEntry?.tier ?? 0, acquisition: ownership.acquisition });
+        entry.push({
+          name: pokemonName,
+          tier: tierEntry?.tier ?? 0,
+          acquisition: ownership.acquisition,
+          nickname: nickByKey.get(`${ownership.teamId}:${pokemonName}`) ?? null,
+        });
       }
     }
     for (const [, roster] of rosters) {

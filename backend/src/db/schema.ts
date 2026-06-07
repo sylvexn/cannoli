@@ -187,6 +187,7 @@ export const rosters = sqliteTable('rosters', {
   isShiny: integer('is_shiny', { mode: 'boolean' }).notNull().default(false),
   acquiredVia: text('acquired_via', { enum: ['draft', 'trade', 'fa'] }).notNull().default('draft'),
   acquiredWeek: integer('acquired_week'),
+  nickname: text('nickname'),
 });
 
 // ─── Draft Picks ─────────────────────────────────────────────────────────────

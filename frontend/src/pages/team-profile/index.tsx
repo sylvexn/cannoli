@@ -457,6 +457,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             sortDir={sortDir}
             onSort={handleSort}
             onResetAll={handleResetAll}
+            teamId={player.id}
+            canEditNickname={!theorycraftMode && (isAdmin || (!!user && player.userId === parseInt(user.id)))}
+            onNicknameSaved={() => { void refresh(); }}
           />
           {/* Owner-only: trade-block listings + release controls */}
           {!theorycraftMode && <RosterActions player={player} />}

@@ -520,13 +520,20 @@ export function FreeAgentsPage() {
                         >
                           <PokemonSprite name={r.name} size="xs" />
                         </button>
-                        <Link
-                          to={pokemonRoute(r.name)}
-                          className="text-xs text-text-primary truncate flex-1 text-left hover:text-neon hover:underline transition-colors"
-                        >
-                          {r.name}
-                          {r.isTeraCaptain && <Star size={9} className="inline ml-1 text-yellow-400 fill-yellow-400" />}
-                        </Link>
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <Link
+                            to={pokemonRoute(r.name)}
+                            className="text-xs text-text-primary truncate text-left hover:text-neon hover:underline transition-colors"
+                          >
+                            {r.name}
+                            {r.isTeraCaptain && <Star size={9} className="inline ml-1 text-yellow-400 fill-yellow-400" />}
+                          </Link>
+                          {r.nickname ? (
+                            <span className="italic text-text-muted text-[10px] truncate leading-tight" title={r.nickname}>
+                              "{r.nickname}"
+                            </span>
+                          ) : null}
+                        </div>
                         <TierBadge points={cost} />
                         {selected && (
                           <button
