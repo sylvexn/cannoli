@@ -28,7 +28,7 @@ function pickViewTransitionName(name: string): string {
 export interface DraftSidebarPanelProps {
   /** Players in display order (draft order during draft, standings after) */
   teamOrder: Player[];
-  teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition }[]>;
+  teamRosters: Map<string, { name: string; tier: number; acquisition: Acquisition; nickname?: string | null }[]>;
   teamPoints: Map<string, number>;
   selectedTeamId: string | null;
   onSelectTeam: (teamId: string | null) => void;
@@ -340,7 +340,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
 interface UnifiedTeamRowProps {
   player: Player;
   points: number;
-  roster: { name: string; tier: number; acquisition: Acquisition }[];
+  roster: { name: string; tier: number; acquisition: Acquisition; nickname?: string | null }[];
   pointCap: number;
   isUser?: boolean;
   isDrafter?: boolean;
@@ -436,7 +436,14 @@ function UnifiedTeamRow({
               <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-surface-overlay/40">
                 <span className="text-[9px] font-mono tabular-nums text-text-muted/50 w-3 shrink-0 text-right">{i + 1}</span>
                 <PokemonSprite name={mon.name} size="xs" />
-                <span className="text-[11px] text-text-primary flex-1 min-w-0 truncate">{mon.name}</span>
+                <div className="flex-1 min-w-0 flex flex-col">
+                  <span className="text-[11px] text-text-primary truncate leading-tight">{mon.name}</span>
+                  {mon.nickname ? (
+                    <span className="italic text-text-muted text-[9px] truncate leading-tight" title={mon.nickname}>
+                      "{mon.nickname}"
+                    </span>
+                  ) : null}
+                </div>
                 {mon.acquisition.method === 'traded' && (
                   <ArrowRightLeft size={10} className="text-pink shrink-0" aria-label="Traded" />
                 )}

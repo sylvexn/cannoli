@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StandingsTableSkeleton, MatchListSkeleton } from '@/components/skeletons';
 import { EmptyState } from '@/components/empty-state';
 import { TeamCoach } from '@/components/team-coach';
+import { PokemonNickname } from '@/components/pokemon-nickname';
 
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
@@ -398,13 +399,18 @@ function StandingsRow({
                   <button type="button" onClick={() => openSideCard(mon.name)} className="shrink-0 cursor-pointer">
                     <PokemonSprite name={mon.name} size="xs" />
                   </button>
-                  <TeraIndicator
-                    name={mon.name}
-                    isTeraCaptain={mon.isTeraCaptain}
-                    teraTypes={mon.teraTypes}
-                    className="text-xs font-medium truncate flex-1"
-                    asLink
-                  />
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <TeraIndicator
+                      name={mon.name}
+                      isTeraCaptain={mon.isTeraCaptain}
+                      teraTypes={mon.teraTypes}
+                      className="text-xs font-medium truncate"
+                      asLink
+                    />
+                    {mon.nickname ? (
+                      <PokemonNickname nickname={mon.nickname} className="leading-none" />
+                    ) : null}
+                  </div>
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />
                   <span className="tabular-nums text-[10px] shrink-0 w-12 text-right">

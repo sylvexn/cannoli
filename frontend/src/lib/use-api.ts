@@ -134,6 +134,8 @@ function toPlayer(a: ApiTeam): Player {
 function toRosterPokemon(a: ApiTeam['roster'][0]): RosterPokemon {
   return {
     name: a.name,
+    nickname: a.nickname ?? null,
+    rosterId: a.rosterId,
     types: a.types as PokemonType[],
     tier: a.tier,
     isTeraCaptain: a.isTeraCaptain,

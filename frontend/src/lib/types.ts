@@ -81,6 +81,10 @@ export interface Player {
 
 export interface RosterPokemon {
   name: string;
+  /** Owner-set nickname (≤ 40 chars, italicized in UI). Null when none set. */
+  nickname?: string | null;
+  /** rosters.id — needed for the PUT nickname route. */
+  rosterId?: number;
   types: PokemonType[];
   /** Base tier cost (before tera captain markup) */
   tier: number;
