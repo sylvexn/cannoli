@@ -444,6 +444,8 @@ export const userPreferences = sqliteTable('user_preferences', {
   notifyMatches: integer('notify_matches', { mode: 'boolean' }).notNull().default(true),
   /** Notify on site announcements */
   notifyAnnouncements: integer('notify_announcements', { mode: 'boolean' }).notNull().default(true),
+  /** IANA timezone string (e.g. 'America/New_York'). Null = use browser-detected zone. */
+  timezone: text('timezone'),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 
