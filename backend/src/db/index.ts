@@ -2,7 +2,8 @@ import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import * as schema from './schema';
-import { resolve } from 'path';
+import { mkdirSync } from 'fs';
+import { dirname, resolve } from 'path';
 
 // Honor CANNOLI_DB_PATH (documented in deploy/README.md + read by the boot
 // guard in src/index.ts) so per-worktree/test DBs can be pointed at a
@@ -11,6 +12,11 @@ const DB_PATH = process.env.CANNOLI_DB_PATH
   ? resolve(process.env.CANNOLI_DB_PATH)
   : resolve(import.meta.dir, '../../data/cannoli.db');
 const MIGRATIONS_DIR = resolve(import.meta.dir, '../../drizzle');
+
+// Ensure the parent dir exists before opening. On a fresh checkout (CI, a new
+// clone) backend/data/ is gitignored and absent, so `new Database()` would
+// throw SQLITE_CANTOPEN — which crashed the e2e webServer on boot.
+mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const sqlite = new Database(DB_PATH);
 sqlite.exec('PRAGMA journal_mode = WAL');
