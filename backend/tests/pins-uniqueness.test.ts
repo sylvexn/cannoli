@@ -21,6 +21,9 @@ import { db, schema } from '../src/db';
 import { eq, and, like, sql } from 'drizzle-orm';
 import { pinRoutes } from '../src/routes/pins';
 
+// `id` is repointed in beforeAll at the throwaway fixture user — `pins.awarded_by`
+// is an FK to `users.id`, so a hardcoded '1' 500s on any DB where user 1 was
+// never seeded (e.g. CI's fresh DB). role/username drive isStaff + the log actor.
 const STAFF = { id: '1', username: 'pintester', role: 'admin' as const };
 const TEST_USERNAME = 'pin-uniq-fixture';
 const TEST_DEF = 'pin-uniq-test-def';
@@ -51,6 +54,8 @@ beforeAll(() => {
   userId = db.insert(schema.users).values({
     username: TEST_USERNAME, passwordHash: 'x', role: 'user', active: true,
   }).returning().get().id;
+  // Award AS this real user so `pins.awarded_by` satisfies its FK on any DB.
+  STAFF.id = String(userId);
 
   // Throwaway pin definition
   db.delete(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, TEST_DEF)).run();

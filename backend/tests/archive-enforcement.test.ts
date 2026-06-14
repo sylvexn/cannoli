@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import { mkdtempSync, rmSync } from 'fs';
+import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
 import { resolve, join } from 'path';
 import * as schema from '../src/db/schema';
@@ -104,13 +104,15 @@ afterAll(() => {
     sqlite: realDbModule.sqlite,
     schema: realDbModule.schema,
   }));
-  // TEST-ISOLATION: do NOT close the temp handle. Bun's `mock.module` override
-  // is process-global and a later-loaded test file may have already bound its
-  // `import { db } from '../src/db'` to our temp DB *before* the restore above
-  // ran (module bindings resolve at load time). Closing the temp handle would
-  // then poison that file with "Cannot use a closed database". The temp file is
-  // unlinked below; the OS reclaims the handle when the process exits.
-  try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  // TEST-ISOLATION: do NOT close the temp handle AND do NOT unlink the temp dir.
+  // Bun's `mock.module` override is process-global and a later-loaded test file
+  // may have already bound its `import { db } from '../src/db'` to our temp DB
+  // *before* the restore above ran (module bindings resolve at load time).
+  // Closing the handle poisons that file with "Cannot use a closed database";
+  // unlinking the file poisons it with "SQLITE_READONLY_DBMOVED" the moment it
+  // writes (a WAL connection cannot survive its backing file being removed).
+  // So we leak the temp dir — it lives under os.tmpdir(), the OS reclaims it.
+  // (Re-adding rmSync here is the TEST-ISOLATION regression; leave it out.)
 });
 
 // ── Blocking on archived rows ─────────────────────────────────────────────────

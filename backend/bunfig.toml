@@ -1,0 +1,4 @@
+[test]
+# Seed the pokemon reference table into an empty DB before any test runs (CI has
+# no XLSX to seed from). No-ops against an already-seeded dev DB. See setup.ts.
+preload = ["./tests/setup.ts"]
