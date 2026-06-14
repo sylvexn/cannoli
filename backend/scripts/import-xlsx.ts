@@ -164,13 +164,20 @@ export const S10_CONFIG: SeasonConfig = {
 
 export const S11_CONFIG: SeasonConfig = {
   seasonNumber: 11,
-  phase: 'draft',
-  currentWeek: 0,
+  // S11 launches with the draft already complete (rosters + tera captains come
+  // in from the XLSX), so the leagues start live in regular-season week 1.
+  phase: 'regular',
+  currentWeek: 1,
   totalWeeks: 11,
+  // League IDs are season-scoped and must be unique across the whole DB. S10
+  // already owns the bare `sapphire`/`ruby`/`emerald` ids, and S9 uses `s9-*`,
+  // so S11 takes `s11-*`. The current season is whichever has the highest
+  // season number (see GET /api/leagues), so the prefix doesn't affect which
+  // leagues surface as "current"; gem theming strips the prefix (leagueGem()).
   files: [
-    { id: 'sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 11.xlsx' },
-    { id: 'ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 11.xlsx' },
-    { id: 'emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 11.xlsx' },
+    { id: 's11-sapphire', name: 'Sapphire League', color: '#2563eb', file: 'Cannoli Sapphire Season 11.xlsx' },
+    { id: 's11-ruby', name: 'Ruby League', color: '#dc2626', file: 'Cannoli Ruby Season 11.xlsx' },
+    { id: 's11-emerald', name: 'Emerald League', color: '#16a34a', file: 'Cannoli Emerald Season 11.xlsx' },
   ],
 };
 
@@ -258,10 +265,23 @@ function importPokemonReference(sqlite: Database, xlsxPath: string): number {
     });
   }
 
-  // Batch insert pokemon
+  // Batch upsert pokemon. UPSERT (not INSERT OR IGNORE) so importing a newer
+  // season over a DB already holding an older season's reference rows refreshes
+  // tiers / bans / stats to the season being imported (latest-season-wins). The
+  // roster insert below reads `pokemon.tier` for cost-at-draft, so the refresh
+  // must land before rosters are written. Harmless for a single-season build
+  // (insert into an empty table). Historical rosters keep their own
+  // `cost_at_draft` snapshot, so refreshing the reference never rewrites them.
   const insertPokemon = sqlite.prepare(`
-    INSERT OR IGNORE INTO pokemon (name, type1, type2, hp, atk, def, spa, spd, spe, ability1, ability2, hidden_ability, tier, tera_banned, banned, form_category)
+    INSERT INTO pokemon (name, type1, type2, hp, atk, def, spa, spd, spe, ability1, ability2, hidden_ability, tier, tera_banned, banned, form_category)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(name) DO UPDATE SET
+      type1=excluded.type1, type2=excluded.type2,
+      hp=excluded.hp, atk=excluded.atk, def=excluded.def,
+      spa=excluded.spa, spd=excluded.spd, spe=excluded.spe,
+      ability1=excluded.ability1, ability2=excluded.ability2, hidden_ability=excluded.hidden_ability,
+      tier=excluded.tier, tera_banned=excluded.tera_banned, banned=excluded.banned,
+      form_category=excluded.form_category
   `);
   for (const p of pokemonRows) {
     insertPokemon.run(
@@ -423,8 +443,11 @@ export function importSeason(
     if (createUsers) {
       const passwordHash = hashSync(DEFAULT_USER_PASSWORD, 10);
       for (const [coach, teamId] of coachToTeamId) {
-        // Normalize username: lowercase, no spaces
-        const username = coach.toLowerCase().replace(/\s+/g, '');
+        // Normalize username: lowercase, strip everything that isn't a letter
+        // or digit (spaces AND punctuation — e.g. a coach handle like
+        // "Will (Peepis)" becomes "willpeepis", which is actually typeable at
+        // the login form).
+        const username = coach.toLowerCase().replace(/[^a-z0-9]/g, '');
         allCoachTeamIds.set(username, teamId);
 
         // Check if user already exists (same coach in multiple leagues across seasons)
@@ -1022,6 +1045,63 @@ export function importSeason(
 
   sqlite.exec('PRAGMA foreign_keys = ON');
   return { coachUserIds: allCoachUserIds, coachTeamIds: allCoachTeamIds };
+}
+
+// ─── Team logos (from the Setup sheet's IMAGE() formulas) ────────────────────
+
+/**
+ * The default/placeholder team logo on the Cannoli sheet template. Teams that
+ * never set a custom logo all point at this same imgur image, so we treat it as
+ * "no logo" and leave logo_path NULL (the UI then renders the colored
+ * abbreviation tile instead of N identical generic images).
+ */
+const PLACEHOLDER_LOGO_ID = 'xvUVyL7';
+
+/**
+ * Import per-team logos for a season from each league's Setup sheet.
+ *
+ * The Setup sheet lists, per team: col K (index 10) = team abbreviation,
+ * col O (index 14) = an `=IMAGE("https://i.imgur.com/….png")` formula holding
+ * the logo URL. The `TeamLogo` component renders full http(s) URLs directly, so
+ * we store the imgur URL straight into `teams.logo_path` — no file hosting.
+ *
+ * Returns the per-league lists of teams that are still on the placeholder logo
+ * so the caller can report them.
+ */
+export function importTeamLogos(
+  sqlite: Database,
+  config: SeasonConfig,
+): { set: number; placeholder: string[] } {
+  let set = 0;
+  const placeholder: string[] = [];
+  const update = sqlite.prepare('UPDATE teams SET logo_path = ? WHERE id = ?');
+
+  for (const league of config.files) {
+    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellFormula: true });
+    const su = wb.Sheets['Setup'];
+    if (!su) {
+      console.log(`  WARNING: no Setup sheet in ${league.file} — skipping logos`);
+      continue;
+    }
+    // Rows 5..16 (0-indexed 4..15) carry the 12 teams.
+    for (let r = 4; r < 16; r++) {
+      const abbrevCell = su[XLSX.utils.encode_cell({ r, c: 10 })];
+      const logoCell = su[XLSX.utils.encode_cell({ r, c: 14 })];
+      const abbrev = abbrevCell?.v;
+      if (!abbrev || typeof abbrev !== 'string') continue;
+      const teamId = `${league.id}-${abbrev.toLowerCase()}`;
+
+      const url = (logoCell?.f || '').match(/https?:\/\/[^"&)]+/)?.[0] ?? null;
+      if (!url || url.includes(PLACEHOLDER_LOGO_ID)) {
+        placeholder.push(teamId);
+        continue;
+      }
+      update.run(url, teamId);
+      set++;
+    }
+  }
+  console.log(`  logos set: ${set}; on placeholder: ${placeholder.length} [${placeholder.join(', ')}]`);
+  return { set, placeholder };
 }
 
 // ─── Post-import: rewind a season's finals to "pending" ─────────────────────
