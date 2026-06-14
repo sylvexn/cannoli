@@ -76,6 +76,12 @@ export function LoginPage() {
   // 'unknown' fallback). Map 'unknown' to 'dev' for the user-facing chip.
   const buildHash = __COMMIT_HASH__ === 'unknown' ? 'dev' : __COMMIT_HASH__;
 
+  // Current season number, derived from the active leagues (highest wins) so the
+  // chip tracks the live season instead of a hardcoded label.
+  const currentSeason = leagues && leagues.length > 0
+    ? leagues.reduce((m, l) => Math.max(m, l.season?.seasonNumber ?? 0), 0) || null
+    : null;
+
   // Already logged in
   if (isAuthenticated && user) {
     return <Navigate to={user.mustChangePassword ? '/change-password' : '/'} replace />;
@@ -100,8 +106,11 @@ export function LoginPage() {
       style={DOT_GRID_STYLE}
     >
       <div className="w-full max-w-sm space-y-8 relative">
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <NeonLogo className="w-64 h-auto" />
+          <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-text-muted/70">
+            Pokémon Draft League
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,6 +153,14 @@ export function LoginPage() {
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
+
+          {/* First-time orientation on the live deployment (the mock build shows
+              the demo card below instead, which already explains itself). */}
+          {!isMockMode && (
+            <p className="text-center text-xs text-text-muted leading-relaxed">
+              Sign in with the username and password from your league admin.
+            </p>
+          )}
         </form>
 
         {/* Demo access card — only rendered on mock.cannoli.live (CANNOLI_MODE=mock).
@@ -182,7 +199,7 @@ export function LoginPage() {
 
         <div className="flex items-center justify-center gap-2">
           <span className="inline-flex items-center rounded border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
-            S10
+            {currentSeason ? `S${currentSeason}` : 'Cannoli'}
           </span>
           <span className="w-px h-3 bg-border-default" />
           <Tooltip>
