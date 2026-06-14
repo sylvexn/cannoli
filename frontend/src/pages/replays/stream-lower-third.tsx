@@ -1,5 +1,6 @@
 import type { League } from '@/lib/types';
 import type { ApiTeam } from '@/lib/api';
+import { leagueGem } from '@/lib/constants';
 
 interface LowerThirdProps {
   league: League;
@@ -18,7 +19,7 @@ export function StreamLowerThird({ league, week, matchIndex, total, homeTeam, aw
   return (
     <div className="fixed bottom-6 left-6 z-30 pointer-events-none">
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-black/70 backdrop-blur-sm border border-white/10 shadow-xl">
-        <div className={`league-banner league-banner-${league.id}`} style={{ minWidth: 0 }}>
+        <div className={`league-banner league-banner-${leagueGem(league.id)}`} style={{ minWidth: 0 }}>
           <span className="league-banner-text text-white">
             {league.name.replace(' League', '')}
           </span>

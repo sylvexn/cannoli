@@ -7,6 +7,7 @@ import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getEffectiveCost } from '@/data/tier-list';
+import { leagueGem } from '@/lib/constants';
 import type { Player, RosterPokemon, League } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 
@@ -698,7 +699,7 @@ function NotAManagerRedirect({
             to={`/league/${l.id}/free-agents`}
             className="gem-wrapper w-full flex items-center gap-1.5 py-1 px-1 transition-all duration-150"
           >
-            <div className={`league-banner league-banner-${l.id} flex-1 min-w-0`}>
+            <div className={`league-banner league-banner-${leagueGem(l.id)} flex-1 min-w-0`}>
               <span className="league-banner-text text-white truncate">
                 {l.name.replace(' League', '')}
               </span>

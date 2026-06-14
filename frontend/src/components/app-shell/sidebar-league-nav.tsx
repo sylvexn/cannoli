@@ -4,7 +4,7 @@ import {
   Trophy, BarChart3, Calendar, ArrowLeftRight,
   LayoutDashboard, ChevronDown, UserPlus,
 } from 'lucide-react';
-import { PHASE_COLORS } from '@/lib/constants';
+import { PHASE_COLORS, leagueGem } from '@/lib/constants';
 import type { useAppData } from '@/lib/app-data-context';
 
 type League = ReturnType<typeof useAppData>['leagues'][number];
@@ -38,7 +38,7 @@ export function SidebarLeagueNav({ leagues, openLeagueId, onToggle, pendingByLea
               onClick={() => onToggle(league.id)}
               className="gem-wrapper w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
             >
-              <div className={`league-banner league-banner-${league.id} flex-1 min-w-0`}>
+              <div className={`league-banner league-banner-${leagueGem(league.id)} flex-1 min-w-0`}>
                 <span className="league-banner-text text-white truncate">
                   {league.name.replace(' League', '')}
                 </span>

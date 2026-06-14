@@ -4,6 +4,7 @@ import { TeamCoachVs } from '@/components/team-coach-vs';
 import type { League } from '@/lib/types';
 import type { ApiTeam } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { leagueGem } from '@/lib/constants';
 
 interface PrerollProps {
   league: League;
@@ -87,7 +88,7 @@ export function StreamPreroll({
       <div className="relative z-10 flex flex-col items-center gap-10 px-12 max-w-5xl w-full">
         {/* League banner top */}
         <div className="gem-wrapper">
-          <div className={`league-banner league-banner-${league.id}`}>
+          <div className={`league-banner league-banner-${leagueGem(league.id)}`}>
             <span className="league-banner-text text-white text-[16px] tracking-[0.22em]">
               {league.name.replace(' League', '')}
             </span>

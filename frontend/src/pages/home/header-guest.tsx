@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LogIn, ChevronRight } from 'lucide-react';
-import { PHASE_COLORS } from '@/lib/constants';
+import { PHASE_COLORS, leagueGem } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import type { League } from '@/lib/types';
 
@@ -40,7 +40,7 @@ export function HeaderGuest({ leagues }: { leagues: League[] }) {
               to={`/league/${league.id}`}
               className="gem-wrapper group inline-flex items-center gap-1.5 transition-all"
             >
-              <div className={`league-banner league-banner-${league.id}`}>
+              <div className={`league-banner league-banner-${leagueGem(league.id)}`}>
                 <span className="league-banner-text text-white">
                   {league.name.replace(' League', '')}
                 </span>

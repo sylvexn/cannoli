@@ -1,5 +1,14 @@
 import type { PokemonType } from './pokemon';
 
+/**
+ * Gem identity for a league id, used to pick its `.league-banner-<gem>` styling.
+ * League ids are season-scoped — the current season uses bare gem names
+ * (`sapphire`/`ruby`/`emerald`) while past seasons are prefixed (`s9-sapphire`,
+ * `s10-ruby`, …). The gem theming is the same regardless of season, so strip any
+ * `sN-` prefix to recover the gem.
+ */
+export const leagueGem = (leagueId: string): string => leagueId.replace(/^s\d+-/, '');
+
 /** Canonical Pokemon type hex colors — use this everywhere instead of local copies */
 export const TYPE_COLORS: Record<PokemonType, string> = {
   normal: '#a8a77a', fire: '#ee8130', water: '#6390f0', electric: '#f7d02c',
