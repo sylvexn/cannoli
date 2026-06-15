@@ -384,6 +384,8 @@ export interface ApiActivityEvent {
 /** One row of the raw API request log (admin "API Logs" tab). */
 export interface ApiRequestLog {
   id: string;
+  /** 'server' = HTTP traffic, 'client' = browser-reported fault. */
+  source: 'server' | 'client';
   method: string;
   path: string;
   status: number;
@@ -391,6 +393,8 @@ export interface ApiRequestLog {
   userId: string | null;
   username: string | null;
   ip: string | null;
+  /** Short correlation ref (5xx + client errors); shown to the user. */
+  errorId: string | null;
   errorName: string | null;
   errorMessage: string | null;
   errorStack: string | null;
@@ -691,16 +695,22 @@ export const api = {
   },
 
   // Raw API request logs (HTTP traffic + errors) — admin "API Logs" tab.
-  getRequestLogs: (params?: { status?: string; method?: string; search?: string; limit?: number; offset?: number }) => {
+  getRequestLogs: (params?: { status?: string; method?: string; source?: string; search?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.status && params.status !== 'all') q.set('status', params.status);
     if (params?.method && params.method !== 'all') q.set('method', params.method);
+    if (params?.source && params.source !== 'all') q.set('source', params.source);
     if (params?.search) q.set('search', params.search);
     if (params?.limit) q.set('limit', String(params.limit));
     if (params?.offset) q.set('offset', String(params.offset));
     return fetchJson<ApiRequestLogResponse>(`/api/admin/request-logs?${q}`);
   },
   clearRequestLogs: () => postJson<{ cleared: number }>('/api/admin/request-logs/clear'),
+
+  // Report a browser-side fault (error boundary / global handlers). Returns a
+  // short ref the user can quote in feedback. Caller swallows failures.
+  reportClientError: (input: { page: string; message: string; name?: string; stack?: string; kind?: string }) =>
+    postJson<{ errorId: string }>('/api/client-errors', input),
 
   getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
 

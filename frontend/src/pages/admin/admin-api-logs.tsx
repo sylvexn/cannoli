@@ -29,6 +29,11 @@ import {
 
 const PAGE_SIZE = 50;
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const SOURCE_FILTERS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All sources' },
+  { value: 'server', label: 'Server (HTTP)' },
+  { value: 'client', label: 'Client (browser)' },
+];
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: 'all', label: 'All statuses' },
   { value: 'errors', label: 'Errors (4xx + 5xx)' },
@@ -52,6 +57,7 @@ const METHOD_CLASSES: Record<string, string> = {
   PUT: 'border-draw/40 text-draw bg-draw/10',
   PATCH: 'border-draw/40 text-draw bg-draw/10',
   DELETE: 'border-loss/40 text-loss bg-loss/10',
+  CLIENT: 'border-pink/40 text-pink bg-pink/10',
 };
 
 /** Color the latency number — slow requests stand out. */
@@ -67,6 +73,7 @@ export function AdminApiLogs() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [methodFilter, setMethodFilter] = useState('all');
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [limit, setLimit] = useState(PAGE_SIZE);
 
   // Debounce the search box so we don't fire a request per keystroke.
@@ -78,11 +85,11 @@ export function AdminApiLogs() {
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getRequestLogs({ status: statusFilter, method: methodFilter, search: debouncedSearch, limit })
+    api.getRequestLogs({ status: statusFilter, method: methodFilter, source: sourceFilter, search: debouncedSearch, limit })
       .then(setData)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [statusFilter, methodFilter, debouncedSearch, limit]);
+  }, [statusFilter, methodFilter, sourceFilter, debouncedSearch, limit]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -103,12 +110,13 @@ export function AdminApiLogs() {
   const hasMore = logs.length < total;
 
   const activeFilters = (statusFilter !== 'all' ? 1 : 0) +
-    (methodFilter !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0);
+    (methodFilter !== 'all' ? 1 : 0) + (sourceFilter !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0);
 
   function clearFilters() {
     setSearch('');
     setStatusFilter('all');
     setMethodFilter('all');
+    setSourceFilter('all');
     setLimit(PAGE_SIZE);
   }
 
@@ -166,6 +174,15 @@ export function AdminApiLogs() {
             className="pl-8 h-8 text-sm"
           />
         </div>
+        <Select value={sourceFilter} onValueChange={v => { setSourceFilter(v ?? 'all'); resetPaging(); }}>
+          <SelectTrigger className="w-[140px] h-8 text-sm">
+            <Filter size={12} className="mr-1 text-text-muted" />
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            {SOURCE_FILTERS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={methodFilter} onValueChange={v => { setMethodFilter(v ?? 'all'); resetPaging(); }}>
           <SelectTrigger className="w-[110px] h-8 text-sm">
             <Filter size={12} className="mr-1 text-text-muted" />
@@ -302,6 +319,8 @@ function LogRow({ log }: { log: ApiRequestLog }) {
       {open && expandable && (
         <div className="px-4 pb-3 pl-10 space-y-2 text-[11px]">
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-text-muted font-mono">
+            <span>source: <span className="text-text-secondary">{log.source}</span></span>
+            {log.errorId && <span>ref: <span className="text-text-secondary">{log.errorId}</span></span>}
             {log.ip && <span>ip: <span className="text-text-secondary">{log.ip}</span></span>}
             {log.userId && <span>user_id: <span className="text-text-secondary">{log.userId}</span></span>}
             <span>at: <span className="text-text-secondary">{ts.toISOString()}</span></span>

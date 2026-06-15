@@ -598,11 +598,19 @@ export const pins = sqliteTable('pins', {
 
 export const requestLogs = sqliteTable('request_logs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Origin of the row: 'server' (HTTP middleware) or 'client' (browser error
+   *  posted to /api/client-errors). Lets the dev tab separate real traffic from
+   *  frontend faults. */
+  source: text('source', { enum: ['server', 'client'] }).notNull().default('server'),
   method: text('method').notNull(),
   path: text('path').notNull(),
   status: integer('status').notNull(),
   /** Wall-clock handler time in milliseconds. */
   durationMs: integer('duration_ms').notNull().default(0),
+  /** Short correlation id surfaced to the user (error boundary "ref") and
+   *  embedded in their feedback issue, so a report ties back to this row.
+   *  Set for server 5xx and every client-error row. */
+  errorId: text('error_id'),
   /** Resolved from the session cookie, when present. */
   userId: integer('user_id'),
   username: text('username'),

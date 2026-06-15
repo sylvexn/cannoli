@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -10,25 +10,42 @@ import { MessageSquarePlus, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/errors';
+import { onOpenFeedback } from '@/lib/feedback-bus';
 
 export function FeedbackDialog() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [errorRef, setErrorRef] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { pathname } = useLocation();
+
+  // Allow other surfaces (e.g. the page error boundary) to open this dialog
+  // prefilled — e.g. "report this crash" carries the error correlation ref.
+  useEffect(() => onOpenFeedback(prefill => {
+    if (prefill.title !== undefined) setTitle(prefill.title);
+    if (prefill.description !== undefined) setDescription(prefill.description);
+    setErrorRef(prefill.errorId ?? null);
+    setOpen(true);
+  }), []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim() || !description.trim()) return;
 
+    // Append the error ref so the issue ties back to a request_logs row.
+    const body = errorRef
+      ? `${description.trim()}\n\nError ref: ${errorRef}`
+      : description.trim();
+
     setSubmitting(true);
     try {
-      const res = await api.submitFeedback(title.trim(), description.trim(), pathname);
+      const res = await api.submitFeedback(title.trim(), body, pathname);
       toast.success(`Feedback submitted (#${res.issueNumber})`);
       setOpen(false);
       setTitle('');
       setDescription('');
+      setErrorRef(null);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, 'Failed to submit feedback'));
     } finally {
@@ -76,6 +93,11 @@ export function FeedbackDialog() {
             <div className="text-xs text-text-muted">
               Current page ({pathname}) will be included automatically.
             </div>
+            {errorRef && (
+              <div className="text-xs text-text-muted">
+                Error ref <span className="font-mono text-text-secondary">{errorRef}</span> is attached so it can be traced.
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                 Cancel

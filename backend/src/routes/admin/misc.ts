@@ -236,6 +236,10 @@ export const miscRoutes = new Elysia()
     const method = (query.method as string) || 'all';
     if (method !== 'all') conds.push(eq(schema.requestLogs.method, method.toUpperCase()));
 
+    // Origin: server HTTP traffic vs. browser-reported faults.
+    const source = (query.source as string) || 'all';
+    if (source === 'server' || source === 'client') conds.push(eq(schema.requestLogs.source, source));
+
     const search = ((query.search as string) || '').trim();
     if (search) {
       const pat = `%${search}%`;
@@ -278,6 +282,7 @@ export const miscRoutes = new Elysia()
     return {
       logs: rows.map(r => ({
         id: String(r.id),
+        source: r.source,
         method: r.method,
         path: r.path,
         status: r.status,
@@ -285,6 +290,7 @@ export const miscRoutes = new Elysia()
         userId: r.userId != null ? String(r.userId) : null,
         username: r.username,
         ip: r.ip,
+        errorId: r.errorId,
         errorName: r.errorName,
         errorMessage: r.errorMessage,
         errorStack: r.errorStack,

@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, RefreshCw, MessageSquarePlus } from 'lucide-react';
+import { reportClientError } from '@/lib/report-error';
+import { openFeedback } from '@/lib/feedback-bus';
 
 interface Props {
   children: ReactNode;
@@ -11,6 +13,8 @@ interface Props {
 
 interface State {
   error: Error | null;
+  /** Server-issued correlation ref for the captured crash, once reported. */
+  errorId: string | null;
 }
 
 /**
@@ -20,24 +24,42 @@ interface State {
  * even when a page crashes.
  */
 export class PageErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, errorId: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { error };
+    return { error, errorId: null };
   }
 
   componentDidUpdate(prevProps: Props) {
     if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
-      this.setState({ error: null });
+      this.setState({ error: null, errorId: null });
     }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // Surface to console for dev — real telemetry hook can replace this later.
     console.error('[PageErrorBoundary]', error, info.componentStack);
+    // Report the crash so it lands in the dev API Logs tab, and stash the
+    // returned correlation ref for the "report this" issue + on-screen display.
+    void reportClientError({
+      kind: 'render',
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }).then(errorId => {
+      if (errorId) this.setState({ errorId });
+    });
   }
 
-  handleReset = () => this.setState({ error: null });
+  handleReset = () => this.setState({ error: null, errorId: null });
+
+  handleReport = () => {
+    const message = this.state.error?.message ?? 'Unknown error';
+    openFeedback({
+      title: 'Page crash',
+      description: `The page crashed with:\n\n${message}\n\nWhat I was doing: `,
+      errorId: this.state.errorId ?? undefined,
+    });
+  };
 
   render() {
     if (!this.state.error) return this.props.children;
@@ -60,14 +82,29 @@ export class PageErrorBoundary extends Component<Props, State> {
             {this.state.error.message}
           </pre>
         )}
-        <button
-          type="button"
-          onClick={this.handleReset}
-          className="mt-5 inline-flex items-center gap-1.5 rounded-md border border-neon/40 bg-neon/5 px-3 py-1.5 text-xs font-medium text-neon transition-colors hover:bg-neon/15 hover:border-neon/70"
-        >
-          <RefreshCw size={12} />
-          Try again
-        </button>
+        {this.state.errorId && (
+          <p className="mt-2 text-[11px] text-text-muted">
+            Error ref <span className="font-mono text-text-secondary">{this.state.errorId}</span>
+          </p>
+        )}
+        <div className="mt-5 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={this.handleReset}
+            className="inline-flex items-center gap-1.5 rounded-md border border-neon/40 bg-neon/5 px-3 py-1.5 text-xs font-medium text-neon transition-colors hover:bg-neon/15 hover:border-neon/70"
+          >
+            <RefreshCw size={12} />
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={this.handleReport}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-surface-overlay px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-overlay/70 hover:text-text-primary"
+          >
+            <MessageSquarePlus size={12} />
+            Report this
+          </button>
+        </div>
       </div>
     );
   }

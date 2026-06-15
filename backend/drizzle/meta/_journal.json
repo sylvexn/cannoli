@@ -309,6 +309,13 @@
       "when": 1781500000000,
       "tag": "0043_request_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1781600000000,
+      "tag": "0044_request_logs_client",
+      "breakpoints": true
     }
   ]
 }
