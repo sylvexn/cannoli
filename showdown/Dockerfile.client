@@ -26,7 +26,12 @@ WORKDIR /client
 # Clone official Pokemon Showdown client (shallow). Pin via PS_CLIENT_REF for reproducibility.
 ARG PS_CLIENT_REPO=https://github.com/smogon/pokemon-showdown-client.git
 ARG PS_CLIENT_REF=master
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# git for the clone; php-cli because the upstream client build's
+# "cachebuster/URLs/news" step shells out to `php` to finalize the HTML
+# entrypoints (testclient.html / index.html). node:20-slim has no php, so that
+# step silently failed ("php: not found") and testclient.html was never written,
+# breaking the sed patch below + leaving nginx with no index to serve.
+RUN apt-get update && apt-get install -y git php-cli && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch ${PS_CLIENT_REF} ${PS_CLIENT_REPO} . \
     && rm -rf .git
 
@@ -60,11 +65,20 @@ RUN node build full
 # Smogon's CDN (which would otherwise hard-code Config.server to sim3.psim.us
 # and Config.loginserver to play.pokemonshowdown.com — connecting users to the
 # official Smogon server instead of our private one).
-RUN sed -i \
-        -e 's|https://play.pokemonshowdown.com/config/config.js|config/config.js|g' \
-        -e 's|//play.pokemonshowdown.com/config/config.js[^"]*|config/config.js|g' \
-        -e 's|\.\./config/testclient-key.js|config/testclient-key.js|g' \
-        play.pokemonshowdown.com/testclient.html play.pokemonshowdown.com/index.html
+RUN for f in testclient.html index.html; do \
+        if [ -f "play.pokemonshowdown.com/$f" ]; then \
+            sed -i \
+                -e 's|https://play.pokemonshowdown.com/config/config.js|config/config.js|g' \
+                -e 's|//play.pokemonshowdown.com/config/config.js[^"]*|config/config.js|g' \
+                -e 's|\.\./config/testclient-key.js|config/testclient-key.js|g' \
+                "play.pokemonshowdown.com/$f"; \
+        fi; \
+    done
+# Fail the build (rather than ship a broken client) if the entrypoint HTML the
+# nginx `index` directive serves wasn't produced — that's the symptom of the
+# php-less build silently dropping testclient.html.
+RUN test -f play.pokemonshowdown.com/testclient.html \
+    || (echo "FATAL: testclient.html missing after build — upstream client build changed" && exit 1)
 
 # Dereference symlinks in the served tree. Upstream ships
 # play.pokemonshowdown.com/config/{config,colors,coil,config-test}.* as
