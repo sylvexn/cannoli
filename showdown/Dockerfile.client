@@ -90,6 +90,18 @@ RUN for f in testclient.html index.html; do \
                 "play.pokemonshowdown.com/$f"; \
         fi; \
     done
+# Cannoli embed tweaks. sim.cannoli.live is only ever shown iframed inside the
+# Cannoli Showdown page, so the PS lobby's own footer chrome (the "Pokémon
+# Showdown | Smogon / Pokédex | Replays | Rules | Forum" strip in
+# .mainmenufooter) is redundant — it just eats vertical space and sits awkwardly
+# above our arena bar. Hide it so the lobby content sits flush above the bar.
+RUN for f in testclient.html index.html; do \
+        if [ -f "play.pokemonshowdown.com/$f" ]; then \
+            sed -i 's#</title>#</title><style>.mainmenufooter{display:none!important}</style>#' \
+                "play.pokemonshowdown.com/$f"; \
+        fi; \
+    done
+
 # Fail the build (rather than ship a broken client) if the entrypoint HTML the
 # nginx `index` directive serves wasn't produced — that's the symptom of the
 # php-less build silently dropping testclient.html.
