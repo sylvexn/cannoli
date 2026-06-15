@@ -65,6 +65,15 @@ COPY showdown/ps-testclient-key.js config/testclient-key.js
 COPY showdown/ps-client-config.js play.pokemonshowdown.com/config/config.js
 COPY showdown/ps-testclient-key.js play.pokemonshowdown.com/config/testclient-key.js
 
+# Pin the transitive pokemon-showdown (sim/server) dependency. `build-indexes`
+# clones the server repo and `git pull`s it to master HEAD to generate the data
+# files — upstream master drifted incompatibly (dist/sim/dex.js TypeError),
+# breaking `node build full`. Replace that `git pull` with a checkout of a server
+# commit from the pinned-client era so the data build is reproducible. (Only
+# build-indexes fetches it; build-learnsets/build-minidex just read its dist.)
+ARG PS_SERVER_REF=e1290bb1fc267e70d474c6a56e2f4d860bb86cf9
+RUN sed -i "s|git pull|git checkout ${PS_SERVER_REF}|" build-tools/build-indexes
+
 # Build the client (generates data files, compiled JS)
 RUN node build full
 
