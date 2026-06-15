@@ -39,18 +39,12 @@ export const teamRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
 
-    // Phase gate: captain assignments lock once the league enters regular play.
-    // Allowed during predraft (pre-draft prep) and draft (live drafting); rejected
-    // for regular/playoffs/offseason. Locking is per-league.
-    if (league && (league.phase === 'regular' || league.phase === 'playoffs' || league.phase === 'offseason')) {
-      set.status = 409;
-      return {
-        error: `Tera captains are locked once the draft ends (current phase: ${league.phase})`,
-        code: 'captains_locked',
-        phase: league.phase,
-      };
-    }
-
+    // Tera captains (and their 3 tera types) are freely editable at any point in
+    // the season per league rules — not locked when the league enters regular
+    // play. The only hard stop is an archived (read-only) team, handled by the
+    // checkTeamArchived guard above. The post-draft captain-gate auto-advance
+    // (see `willLock` below) still only fires during phase=draft, so editing
+    // captains mid-season never advances the phase.
     const maxCaptains = season?.teraCaptainSlots ?? 2;
 
     if (captains.length > maxCaptains) {
