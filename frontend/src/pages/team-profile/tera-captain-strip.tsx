@@ -53,11 +53,13 @@ export function TeraCaptainStrip({
 }: TeraCaptainStripProps) {
   const [addPickerOpen, setAddPickerOpen] = useState(false);
 
-  // Captains lock once the league enters regular play — mirrors backend gate
-  // in PUT /api/teams/:teamId/tera-captains (409 captains_locked).
-  const captainsLocked = !theorycraftMode && (
-    seasonPhase === 'regular' || seasonPhase === 'playoffs' || seasonPhase === 'offseason'
-  );
+  // Tera captains (and their tera types) are freely editable at any point in the
+  // season per league rules — the backend no longer phase-locks
+  // PUT /api/teams/:teamId/tera-captains. The only server-side stop is an
+  // archived team, surfaced via the save's error toast. (seasonPhase retained in
+  // props for callers; intentionally no longer gates editing.)
+  void seasonPhase;
+  const captainsLocked = false;
 
   const captains = activeRoster
     .map((mon, i) => ({ mon, index: i }))
