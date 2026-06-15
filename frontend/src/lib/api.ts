@@ -381,6 +381,36 @@ export interface ApiActivityEvent {
   timestamp: string | null;
 }
 
+/** One row of the raw API request log (admin "API Logs" tab). */
+export interface ApiRequestLog {
+  id: string;
+  method: string;
+  path: string;
+  status: number;
+  durationMs: number;
+  userId: string | null;
+  username: string | null;
+  ip: string | null;
+  errorName: string | null;
+  errorMessage: string | null;
+  errorStack: string | null;
+  timestamp: string | null;
+}
+
+export interface ApiRequestLogResponse {
+  logs: ApiRequestLog[];
+  /** Count of rows matching the active filters (for pagination). */
+  total: number;
+  /** Overview across the whole table, independent of filters. */
+  stats: {
+    total: number;
+    errors4xx: number;
+    errors5xx: number;
+    avgMs: number;
+    p95Ms: number;
+  };
+}
+
 export interface ApiSiteSettings {
   announcement: string | null;
   announcementType: string | null;
@@ -659,6 +689,18 @@ export const api = {
     if (params?.offset) q.set('offset', String(params.offset));
     return fetchJson<{ events: ApiActivityEvent[]; total: number }>(`/api/activity-log?${q}`);
   },
+
+  // Raw API request logs (HTTP traffic + errors) — admin "API Logs" tab.
+  getRequestLogs: (params?: { status?: string; method?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status && params.status !== 'all') q.set('status', params.status);
+    if (params?.method && params.method !== 'all') q.set('method', params.method);
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    return fetchJson<ApiRequestLogResponse>(`/api/admin/request-logs?${q}`);
+  },
+  clearRequestLogs: () => postJson<{ cleared: number }>('/api/admin/request-logs/clear'),
 
   getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
 

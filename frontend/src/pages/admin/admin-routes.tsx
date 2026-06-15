@@ -6,11 +6,12 @@
  * Pin definitions and Pin award are split into two sibling routes that share
  * the same /admin/pins parent header (with sub-tab nav). Other tabs are 1:1.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { AdminSection } from './admin-section';
 import { AdminUsers } from './admin-users';
 import { AdminTeams } from './admin-teams';
@@ -24,6 +25,7 @@ import { AdminTemplates } from './admin-templates';
 import { AdminMoveCategories } from './admin-move-categories';
 import { AdminSiteSettings } from './admin-site-settings';
 import { AdminActivityLog } from './admin-activity-log';
+import { AdminApiLogs } from './admin-api-logs';
 import { AdminFeedback } from './admin-feedback';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
@@ -32,7 +34,7 @@ import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers, FlaskConical,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -79,8 +81,30 @@ export const AdminActivityRoute = () => {
     </AdminSection>
   );
 };
+/**
+ * Route guard for dev-only admin tabs (API Logs, Feedback). Admins are staff
+ * and can reach /admin, but these tabs are dev-tooling — redirect non-dev to
+ * the admin landing tab. Mirrors the server-side requireDev guard so a
+ * hand-typed URL can't render the tab.
+ */
+function DevOnly({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (user?.role !== 'dev') return <Navigate to="/admin" replace />;
+  return <>{children}</>;
+}
+
+export const AdminApiLogsRoute = () => (
+  <DevOnly>
+    <AdminSection icon={Activity} title="API Logs" actions={<ClearApiLogsButton />}>
+      <AdminApiLogs />
+    </AdminSection>
+  </DevOnly>
+);
 export const AdminFeedbackRoute = () => (
-  <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
+  <DevOnly>
+    <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
+  </DevOnly>
 );
 export const AdminBotRoute = () => (
   <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>
@@ -146,6 +170,33 @@ function BackfillPinAuditButton() {
   return (
     <Button variant="ghost" size="sm" onClick={run} disabled={busy} className="h-7 text-[11px]">
       {busy ? 'Backfilling...' : 'Backfill pin events'}
+    </Button>
+  );
+}
+
+/**
+ * Header action for API Logs: wipe the request_logs table. Confirms first —
+ * the log auto-prunes anyway, so this is mostly for clearing noise before a
+ * focused debugging session. Reloads the tab so the cleared state shows.
+ */
+function ClearApiLogsButton() {
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    if (!confirm('Clear all API request logs? This cannot be undone.')) return;
+    setBusy(true);
+    try {
+      const r = await api.clearRequestLogs();
+      toast.success(`Cleared ${r.cleared} request log${r.cleared === 1 ? '' : 's'}`);
+      window.location.reload();
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err) ?? 'Clear failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button variant="ghost" size="sm" onClick={run} disabled={busy} className="h-7 text-[11px]">
+      {busy ? 'Clearing...' : 'Clear logs'}
     </Button>
   );
 }

@@ -15,11 +15,12 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { Badge } from '@/components/ui/badge';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers, FlaskConical,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity,
 } from 'lucide-react';
 
 interface NavItem {
@@ -29,6 +30,8 @@ interface NavItem {
   icon: typeof Users;
   /** When true, NavLink uses `end` so deep sub-routes don't collide. */
   matchEnd?: boolean;
+  /** When true, only the `dev` role sees this tab (admins don't). */
+  devOnly?: boolean;
 }
 
 interface NavGroup {
@@ -68,8 +71,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { slug: 'activity', label: 'Activity Log', icon: ScrollText },
+      { slug: 'api-logs', label: 'API Logs',     icon: Activity, devOnly: true },
       { slug: 'bot',      label: 'PS Bot',       icon: Bot },
-      { slug: 'feedback', label: 'Feedback',     icon: MessageSquare },
+      { slug: 'feedback', label: 'Feedback',     icon: MessageSquare, devOnly: true },
     ],
   },
 ];
@@ -82,6 +86,8 @@ const SIM_NAV_ITEM: NavItem = { slug: 'sim', label: 'Simulator', icon: FlaskConi
 
 export function AdminPage() {
   const [mode, setMode] = useState<'live' | 'mock' | null>(null);
+  const { user } = useAuth();
+  const isDev = user?.role === 'dev';
 
   // Probe /api/health once on mount so admins on mock.cannoli.live get a
   // visible reminder they aren't pointing at the live DB.
@@ -90,12 +96,14 @@ export function AdminPage() {
   }, []);
 
   // Append the mock-only Simulator tab to the System group when the backend
-  // reports mock mode. Other groups pass through unchanged.
-  const navGroups: NavGroup[] = mode === 'mock'
+  // reports mock mode, then drop any dev-only tabs (API Logs, Feedback) for
+  // non-dev staff. Route-level guards back this up server-side.
+  const navGroups: NavGroup[] = (mode === 'mock'
     ? NAV_GROUPS.map(g =>
         g.label === 'System' ? { ...g, items: [...g.items, SIM_NAV_ITEM] } : g,
       )
-    : NAV_GROUPS;
+    : NAV_GROUPS
+  ).map(g => ({ ...g, items: g.items.filter(i => isDev || !i.devOnly) }));
 
   return (
     <div className="flex gap-0">

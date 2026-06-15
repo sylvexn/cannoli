@@ -27,7 +27,7 @@ import {
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
   AdminTemplatesRoute,
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
-  AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
+  AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
   AdminPinsLegacyRedirect, AdminSimRoute,
 } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
@@ -129,6 +129,7 @@ export default function App() {
                     <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
                     <Route path="settings" element={<AdminSiteSettingsRoute />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
+                    <Route path="api-logs" element={<AdminApiLogsRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
                     <Route path="feedback" element={<AdminFeedbackRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
