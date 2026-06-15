@@ -92,23 +92,24 @@ export function ArenaFooter() {
     setIsOpen(true);
   }
 
-  // Resolve the footer's layout.
-  // - Battle HUD takeover wins: ~50vh, in-flow (iframe shrinks).
-  // - Expanded panel: 280px, in-flow (iframe shrinks).
-  // - Collapsed pill bar: absolute-positioned overlay on the iframe's bottom
-  //   edge. The PS client paints its own grey bottom margin in that strip,
-  //   so occluding it pulls the pill visually flush with the canvas content
-  //   (otherwise the pill ended up sitting far beneath the canvas).
-  const isCollapsedOverlay = !viewingBattle && !isOpen;
-  const containerStyle: React.CSSProperties = isCollapsedOverlay
-    ? { position: 'absolute', left: 0, right: 0, bottom: 0, height: COLLAPSED_PX, zIndex: 10 }
+  // Resolve the footer's layout. The footer is ALWAYS in-flow (flex-shrink-0)
+  // so it reserves its own band and chokes the iframe into the remaining space
+  // — the pill bar is therefore always visible and the PS client is forced to
+  // lay out within a deterministic window (no full-height iframe pushing the
+  // canvas below the fold).
+  // - Battle HUD takeover: ~50vh.
+  // - Expanded panel: 280px.
+  // - Collapsed pill bar: 32px.
+  const collapsed = !viewingBattle && !isOpen;
+  const containerStyle: React.CSSProperties = collapsed
+    ? { height: COLLAPSED_PX }
     : viewingBattle
       ? { height: `${BATTLE_VH}vh` }
       : { height: `${EXPANDED_PX}px` };
 
   return (
     <div
-      className={`${isCollapsedOverlay ? '' : 'flex-shrink-0 transition-[height] duration-200 ease-out'} border-t border-border-default bg-surface-base flex flex-col overflow-hidden`}
+      className="flex-shrink-0 transition-[height] duration-200 ease-out border-t border-border-default bg-surface-base flex flex-col overflow-hidden"
       style={containerStyle}
     >
       {/* Pill bar — always visible, even during battle (acts as the "back" affordance is the battle's own bottom bar) */}

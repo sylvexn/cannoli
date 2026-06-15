@@ -25,11 +25,9 @@ export function ShowdownPage() {
           bar visually anchors flush to the iframe edge (no gap from a
           double-bordered child).
 
-          When the footer is in collapsed mode the pill bar is absolute-
-          positioned and overlays the iframe's bottom edge (see ArenaFooter)
-          — the PS client's internal grey bottom margin lives there, so we
-          occlude that strip rather than letting it push the pill bar far
-          below the visible canvas content. */}
+          The footer is always in-flow (see ArenaFooter), so this wrapper is
+          choked to the space above it and the PS client lays out inside a
+          deterministic window. */}
       <div
         className="flex-1 min-h-0 relative"
         style={{ overflow: 'hidden', maxWidth: '100%', maxHeight: '100%' }}
