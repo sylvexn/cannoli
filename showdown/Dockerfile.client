@@ -25,14 +25,21 @@ WORKDIR /client
 
 # Clone official Pokemon Showdown client (shallow). Pin via PS_CLIENT_REF for reproducibility.
 ARG PS_CLIENT_REPO=https://github.com/smogon/pokemon-showdown-client.git
-ARG PS_CLIENT_REF=master
-# git for the clone; php-cli because the upstream client build's
-# "cachebuster/URLs/news" step shells out to `php` to finalize the HTML
-# entrypoints (testclient.html / index.html). node:20-slim has no php, so that
-# step silently failed ("php: not found") and testclient.html was never written,
-# breaking the sed patch below + leaving nginx with no index to serve.
+# PINNED to a known-good commit (2026-05-14, the era this integration was built).
+# Upstream `master` later changed the client build so it no longer produces
+# play.pokemonshowdown.com/testclient.html — which is both the nginx `index` and
+# the SSO entrypoint — breaking the image build (was an unpinned `master`).
+# Bump deliberately only after verifying testclient.html still survives the build.
+ARG PS_CLIENT_REF=aca6c94dd03ca0d7764475eb16f869cb50967910
+# git for the fetch; php-cli for the client build's cachebuster/news step which
+# shells out to `php` (node:20-slim has none).
 RUN apt-get update && apt-get install -y git php-cli && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch ${PS_CLIENT_REF} ${PS_CLIENT_REPO} . \
+# Shallow-fetch the exact pinned commit. `git clone --branch` only accepts a
+# branch/tag name, not a raw SHA, so init + fetch the single commit instead.
+RUN git init -q . \
+    && git remote add origin ${PS_CLIENT_REPO} \
+    && git fetch --depth 1 origin ${PS_CLIENT_REF} \
+    && git checkout -q FETCH_HEAD \
     && rm -rf .git
 
 # Replace upstream jQuery with clean stock version. Smogon's distributed
