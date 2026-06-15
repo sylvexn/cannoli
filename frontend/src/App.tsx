@@ -95,7 +95,7 @@ export default function App() {
               <Route path="pokemon/:name" element={<PokemonDetailPage />} />
               <Route path="coach/:username" element={<CoachProfilePage />} />
               <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
-              <Route path="showdown" element={<ShowdownPage />} />
+              <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="archive" element={<ArchiveLayout />}>
                 <Route index element={<ArchiveHubPage />} />
@@ -109,7 +109,7 @@ export default function App() {
 
               {/* Protected global routes */}
               <Route element={<ProtectedRoute />}>
-                <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
+                <Route path="showdown" element={<ShowdownPage />} />
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>
                   <Route path="admin" element={<AdminPage />}>
