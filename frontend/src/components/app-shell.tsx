@@ -416,7 +416,7 @@ export function AppShell() {
           instead of ~320px), and never exceeds that ceiling on 1440p+ where
           the original 1280 column already reads well. */}
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
-        <div className={isWide ? 'p-4 h-full overflow-hidden' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6'}>
+        <div className={isWide ? 'p-4 h-full overflow-hidden flex flex-col' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6'}>
           {/* Show a return-to-league pill on global routes if we know which
               league the user was last in. Skip on Home where it would just
               be noise (the home page already surfaces league chips). */}
@@ -436,9 +436,16 @@ export function AppShell() {
               </NavLink>
             </div>
           )}
-          <PageErrorBoundary resetKey={pathname}>
-            <Outlet />
-          </PageErrorBoundary>
+          {/* On wide (full-bleed) routes the container is a flex column: the
+              optional "Last visited" pill above takes its natural height and
+              this wrapper fills the rest, so an h-full page (e.g. Showdown)
+              sizes to the remaining space instead of overflowing past the
+              viewport and clipping its own bottom bar. */}
+          <div className={isWide ? 'flex-1 min-h-0' : ''}>
+            <PageErrorBoundary resetKey={pathname}>
+              <Outlet />
+            </PageErrorBoundary>
+          </div>
         </div>
       </main>
 
