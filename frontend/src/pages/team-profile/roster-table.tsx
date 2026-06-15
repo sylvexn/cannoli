@@ -1,6 +1,6 @@
 import type { RosterPokemon } from '@/lib/types';
 import type { LeagueConfig } from '@/lib/types';
-import { getEffectiveCost } from '@/data/tier-list';
+import { getTermCost } from '@/data/tier-list';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { AbilityChip } from '@/components/ability-chip';
@@ -112,7 +112,7 @@ export function RosterTable({
             <tbody>
               {sortedRoster.map(({ mon, originalIndex }) => {
                 const isSwapped = swaps.some(s => s.index === originalIndex);
-                const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
+                const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier;
                 const kpg = mon.seasonStats.gp ? (mon.seasonStats.kills / mon.seasonStats.gp).toFixed(1) : '—';
                 const bst = mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe;
 

@@ -1,9 +1,9 @@
 import type { RosterPokemon, LeagueConfig } from './types';
-import { getEffectiveCost } from '@/data/tier-list';
+import { getTermCost } from '@/data/tier-list';
 
 /** Calculate effective points used by a roster (accounts for tera captain cost markup) */
 export function rosterPointsUsed(roster: RosterPokemon[]): number {
-  return roster.reduce((sum, mon) => sum + getEffectiveCost(mon.name, mon.isTeraCaptain), 0);
+  return roster.reduce((sum, mon) => sum + (mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier), 0);
 }
 
 /** Count how many tera captains are on a roster */

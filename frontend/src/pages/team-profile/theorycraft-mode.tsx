@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 import type { LeagueConfig } from '@/lib/types';
-import { getEffectiveCost } from '@/data/tier-list';
+import { getTermCost } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { ArrowRightLeft, Plus, Search, X } from 'lucide-react';
@@ -33,7 +33,7 @@ export function SwapPicker({
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
   const currentMon = activeRoster[swappingIndex];
-  const currentCost = getEffectiveCost(currentMon.name, currentMon.isTeraCaptain);
+  const currentCost = currentMon.isTeraCaptain ? getTermCost(currentMon.tier) : currentMon.tier;
 
   const filteredAgents = useMemo(() => {
     let list = showTaken ? pool : pool.filter(p => !p.drafted);

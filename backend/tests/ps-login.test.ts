@@ -21,18 +21,17 @@
  * signer falls back to empty s-fields.
  */
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { createVerify } from 'crypto';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { createVerify, generateKeyPairSync } from 'crypto';
 
-const PRIV_PEM = readFileSync(
-  resolve(import.meta.dir, '../../showdown/ps_private.pem'),
-  'utf-8',
-);
-const PUB_PEM = readFileSync(
-  resolve(import.meta.dir, '../../showdown/ps_public.pem'),
-  'utf-8',
-);
+// Generate an ephemeral RSA keypair in-process rather than reading the dev
+// keypair from `showdown/ps_*.pem` — that directory is the gitignored PS clone
+// and is absent in CI / fresh checkouts, which made this whole file throw at
+// load. A fresh key exercises the identical sign→verify round trip.
+const { publicKey: PUB_PEM, privateKey: PRIV_PEM } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
 
 // Must be set before the module is imported (getPrivateKey caches).
 process.env.PS_RSA_PRIVATE_KEY = PRIV_PEM;

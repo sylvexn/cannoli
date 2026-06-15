@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/empty-state';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
-import { getEffectiveCost, canBeTeraCaptain } from '@/data/tier-list';
+import { getTermCost, canBeTeraCaptain } from '@/data/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
@@ -148,8 +148,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     const indexed = activeRoster.map((mon, i) => ({ mon, originalIndex: i }));
     indexed.sort((a, b) => {
       let av: number, bv: number;
-      const aCost = getEffectiveCost(a.mon.name, a.mon.isTeraCaptain);
-      const bCost = getEffectiveCost(b.mon.name, b.mon.isTeraCaptain);
+      const aCost = a.mon.isTeraCaptain ? getTermCost(a.mon.tier) : a.mon.tier;
+      const bCost = b.mon.isTeraCaptain ? getTermCost(b.mon.tier) : b.mon.tier;
       switch (sortKey) {
         case 'tier': av = aCost; bv = bCost; break;
         case 'kills': av = a.mon.seasonStats.kills; bv = b.mon.seasonStats.kills; break;
@@ -293,8 +293,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     } else {
       // Make captain (if valid)
       if (!canBeTeraCaptain(mon.name)) return;
-      const newCost = getEffectiveCost(mon.name, true);
-      const oldCost = getEffectiveCost(mon.name, false);
+      const newCost = getTermCost(mon.tier);
+      const oldCost = mon.tier;
       if (pointsUsed - oldCost + newCost > config.pointCap) return;
       if (captainCount >= config.teraCaptainSlots) return;
       setTeraEdits(prev => {

@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { Player, RosterPokemon, LeagueConfig, LeagueSeason, User } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
-import { getEffectiveCost } from '@/data/tier-list';
+import { getTermCost } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { PointCapBarLarge } from '@/components/point-cap-bar';
@@ -102,7 +102,7 @@ export function SpriteShowcase({
           {activeRoster.map((mon, i) => {
             const isSwapped = swaps.some(s => s.index === (rosterOrder[i] ?? i));
             const isSwapping = swappingIndex === i;
-            const effectiveCost = getEffectiveCost(mon.name, mon.isTeraCaptain);
+            const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier;
             const isPosOver = dragOverIndex === i && draggingPosFrom !== null && draggingPosFrom !== i;
             const beingDragged = draggingPosFrom === i;
             return (

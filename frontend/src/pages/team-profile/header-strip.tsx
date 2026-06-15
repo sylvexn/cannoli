@@ -168,7 +168,10 @@ export function HeaderStrip({
           {/* Win Rate */}
           <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
             <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none text-text-primary">
-              {((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-sm text-text-muted font-normal">%</span>
+              {(player.record.wins + player.record.losses) === 0
+                ? <span className="text-text-muted">—</span>
+                : <>{((player.record.wins / (player.record.wins + player.record.losses)) * 100).toFixed(0)}<span className="text-sm text-text-muted font-normal">%</span></>
+              }
             </div>
             <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Win Rate</span>
           </div>

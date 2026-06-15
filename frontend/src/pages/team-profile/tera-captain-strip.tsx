@@ -4,7 +4,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { getEffectiveCost, canBeTeraCaptain } from '@/data/tier-list';
+import { getTermCost, canBeTeraCaptain } from '@/data/tier-list';
 import { Save, X, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -75,7 +75,7 @@ export function TeraCaptainStrip({
     .filter(({ mon }) => {
       if (mon.isTeraCaptain) return false;
       if (!canBeTeraCaptain(mon.name)) return false;
-      const costDelta = getEffectiveCost(mon.name, true) - getEffectiveCost(mon.name, false);
+      const costDelta = getTermCost(mon.tier) - mon.tier;
       if (pointsUsed + costDelta > config.pointCap) return false;
       return true;
     });
@@ -174,7 +174,7 @@ export function TeraCaptainStrip({
                     </div>
                   )}
                   <div className="text-[10px] text-text-muted">
-                    {getEffectiveCost(mon.name, true)}pt
+                    {getTermCost(mon.tier)}pt
                     <span className="text-text-muted/40 ml-1">(base {mon.tier})</span>
                   </div>
                 </div>
@@ -282,7 +282,7 @@ export function TeraCaptainStrip({
                   </div>
                 ) : (
                   eligible.map(({ mon, index: eligIdx }) => {
-                    const costDelta = getEffectiveCost(mon.name, true) - mon.tier;
+                    const costDelta = getTermCost(mon.tier) - mon.tier;
                     return (
                       <button
                         key={eligIdx}
