@@ -5,6 +5,7 @@ import { isStaff, isStaffOrTeamOwner } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 import { isR2Configured, r2Put, r2Delete, r2PublicUrl } from '../../lib/r2';
+import { writeUpload, uploadsPath } from '../../lib/uploads';
 
 export const teamAdminRoutes = new Elysia()
 
@@ -231,7 +232,7 @@ export const teamAdminRoutes = new Elysia()
       await r2Put(key, buf, file.type);
       storedPath = r2PublicUrl(key);
     } else {
-      await Bun.write(`${process.cwd()}/uploads/${key}`, file);
+      await writeUpload(key, file);
       storedPath = key;
     }
 
@@ -289,9 +290,8 @@ export const teamAdminRoutes = new Elysia()
     const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'png';
     const filename = `${params.teamId}.${safeExt}`;
     const relativePath = `team-banners/${filename}`;
-    const absPath = `${process.cwd()}/uploads/${relativePath}`;
 
-    await Bun.write(absPath, file);
+    await writeUpload(relativePath, file);
 
     db.update(schema.teams).set({ bannerPath: relativePath }).where(eq(schema.teams.id, params.teamId)).run();
     db.insert(schema.activityLog).values({
@@ -313,7 +313,7 @@ export const teamAdminRoutes = new Elysia()
     const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars', 'user-banners'];
     if (!ALLOWED_DIRS.includes(params.dir)) { set.status = 404; return 'Not found'; }
     if (!/^[a-zA-Z0-9_.-]+$/.test(params.file)) { set.status = 400; return 'Invalid filename'; }
-    const path = `${process.cwd()}/uploads/${params.dir}/${params.file}`;
+    const path = uploadsPath(`${params.dir}/${params.file}`);
     const f = Bun.file(path);
     if (!(await f.exists())) { set.status = 404; return 'Not found'; }
     return new Response(f);

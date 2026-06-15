@@ -14,6 +14,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
+import { writeUpload } from '../lib/uploads';
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_BIO = 280;
@@ -202,9 +203,8 @@ export const userRoutes = new Elysia()
     const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? ext : 'png';
     const filename = `${user.id}.${safeExt}`;
     const relativePath = `user-avatars/${filename}`;
-    const absPath = `${process.cwd()}/uploads/${relativePath}`;
 
-    await Bun.write(absPath, file);
+    await writeUpload(relativePath, file);
 
     db.update(schema.users).set({ avatarPath: relativePath }).where(eq(schema.users.id, parseInt(user.id))).run();
     db.insert(schema.activityLog).values({
@@ -235,9 +235,8 @@ export const userRoutes = new Elysia()
     const safeExt = ['png', 'jpg', 'jpeg', 'webp'].includes(ext) ? ext : 'png';
     const filename = `${user.id}.${safeExt}`;
     const relativePath = `user-banners/${filename}`;
-    const absPath = `${process.cwd()}/uploads/${relativePath}`;
 
-    await Bun.write(absPath, file);
+    await writeUpload(relativePath, file);
 
     const publicPath = `/uploads/${relativePath}`;
     db.update(schema.users).set({ bannerUrl: publicPath }).where(eq(schema.users.id, parseInt(user.id))).run();
