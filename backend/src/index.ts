@@ -129,7 +129,13 @@ const app = new Elysia()
       const allowed =
         path === '/api/auth/change-password' ||
         path === '/api/auth/logout' ||
-        path === '/api/auth/me';
+        path === '/api/auth/me' ||
+        // PS SSO endpoints authenticate via the sid cookie + signed assertion,
+        // independent of the app session. They must not be gated on the app's
+        // forced-password-change flow, or Showdown auto-login breaks for any
+        // coach who hasn't yet changed their default password. (Same rationale
+        // as the CSRF exemption above.)
+        path.startsWith('/api/ps/');
       if (!allowed) {
         set.status = 403;
         return { error: 'Password change required', code: 'must_change_password' };
