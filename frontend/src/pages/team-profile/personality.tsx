@@ -4,16 +4,19 @@
  * (no captain_note, viewer is not the owner) collapse silently.
  */
 
-import { useEffect, useState } from 'react';
-import { Pencil, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Pencil, X, Camera } from 'lucide-react';
 import type { Player } from '@/lib/types';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { TeamLogo } from '@/components/team-logo';
 import { useAuth } from '@/lib/auth-context';
 import { canManageTeam } from '@/lib/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getErrorMessage } from '@/lib/errors';
+
+const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 interface PersonalityProps {
   player: Player;
@@ -32,9 +35,50 @@ export function Personality({ player, onSaved }: PersonalityProps) {
   const [captainNote, setCaptainNote] = useState(player.captainNote ?? '');
   const [saving, setSaving] = useState(false);
 
+  // Team logo upload (owner-facing — mirrors the admin panel's control).
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [localLogo, setLocalLogo] = useState<string | null>(player.logoPath ?? null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
   useEffect(() => {
     setCaptainNote(player.captainNote ?? '');
-  }, [player.id, player.captainNote]);
+    setLocalLogo(player.logoPath ?? null);
+  }, [player.id, player.captainNote, player.logoPath]);
+
+  async function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so the same file can be re-picked
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+    if (file.size > MAX_LOGO_BYTES) { toast.error('Image must be under 2MB'); return; }
+    setUploadingLogo(true);
+    try {
+      const result = await api.uploadTeamLogo(player.id, file);
+      // Cache-bust: the filename is stable (teamId.ext) so the browser would
+      // otherwise keep showing the previous logo.
+      setLocalLogo(result.path.replace(/^\/uploads\//, '') + `?v=${Date.now()}`);
+      await onSaved?.();
+      toast.success('Team logo updated');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Upload failed'));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function handleLogoRemove() {
+    setUploadingLogo(true);
+    try {
+      await api.removeTeamLogo(player.id);
+      setLocalLogo(null);
+      await onSaved?.();
+      toast.success('Team logo removed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Remove failed'));
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   const hasContent = !!player.captainNote;
 
@@ -79,6 +123,67 @@ export function Personality({ player, onSaved }: PersonalityProps) {
           >
             <X size={14} />
           </button>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+            Team logo
+          </label>
+          <div className="flex items-center gap-3">
+            <div className="group relative w-16 h-16 shrink-0">
+              <button
+                type="button"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo}
+                className="relative w-full h-full rounded-full overflow-hidden border-2 border-border-default hover:border-neon transition-colors"
+                aria-label="Upload team logo"
+              >
+                <TeamLogo
+                  abbrev={player.teamAbbrev}
+                  color={player.teamColor}
+                  size="xl"
+                  logoPath={localLogo}
+                  className="w-full h-full text-lg"
+                />
+                <span className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera size={18} className="text-white" />
+                </span>
+              </button>
+              {uploadingLogo && (
+                <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center text-[10px] text-white">
+                  …
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logoInputRef.current?.click()}
+                disabled={uploadingLogo}
+              >
+                {localLogo ? 'Replace image' : 'Upload image'}
+              </Button>
+              {localLogo && (
+                <button
+                  type="button"
+                  onClick={handleLogoRemove}
+                  disabled={uploadingLogo}
+                  className="px-3 text-[11px] text-loss/80 hover:text-loss disabled:opacity-50"
+                >
+                  Remove logo
+                </button>
+              )}
+              <span className="px-3 text-[10px] text-text-muted">PNG/JPG/WebP, ≤2MB</span>
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleLogoFile}
+              className="hidden"
+            />
+          </div>
         </div>
 
         <div className="space-y-1.5">
