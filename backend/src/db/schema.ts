@@ -587,6 +587,36 @@ export const pins = sqliteTable('pins', {
   metadata: text('metadata'),
 });
 
+// ─── Request Logs (API observability — every /api/* call + its outcome) ──
+//
+// Lightweight per-request audit written by the logging middleware in
+// src/index.ts (onAfterResponse / onError). Powers the admin "API Logs" tab:
+// see what's being hit, response codes, latency, and stack traces for 5xx.
+// Pruned opportunistically on insert (keep ~last N rows) so the table never
+// grows unbounded. NOT the same as activity_log — that records business
+// events ("trade approved"); this records raw HTTP traffic.
+
+export const requestLogs = sqliteTable('request_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  method: text('method').notNull(),
+  path: text('path').notNull(),
+  status: integer('status').notNull(),
+  /** Wall-clock handler time in milliseconds. */
+  durationMs: integer('duration_ms').notNull().default(0),
+  /** Resolved from the session cookie, when present. */
+  userId: integer('user_id'),
+  username: text('username'),
+  /** Best-effort client IP (X-Forwarded-For first hop, else socket). */
+  ip: text('ip'),
+  /** Error class name (e.g. "ValidationError") — null on success. */
+  errorName: text('error_name'),
+  /** Error message — null on success. */
+  errorMessage: text('error_message'),
+  /** Stack trace for 5xx, truncated. Null otherwise. */
+  errorStack: text('error_stack'),
+  timestamp: text('timestamp').default(sql`(datetime('now'))`),
+});
+
 // ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──
 
 export const scrimPokemon = sqliteTable('scrim_pokemon', {

@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { Octokit } from 'octokit';
-import { isStaff } from '../lib/auth';
+import { isDev } from '../lib/auth';
 import { db, schema } from '../db';
 import { eq, and, isNull } from 'drizzle-orm';
 
@@ -100,7 +100,8 @@ export const feedbackRoutes = new Elysia()
   })
 
   .get('/api/admin/issues', async ({ user, set, query }) => {
-    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    // Dev-only: feedback triage (GitHub issue list) is not for admins.
+    if (!isDev(user)) { set.status = 403; return { error: 'Forbidden' }; }
     if (!octokit || !ghRepo) { set.status = 503; return { error: 'Feedback not configured' }; }
 
     const [owner, repo] = ghRepo.split('/');

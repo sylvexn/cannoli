@@ -98,6 +98,12 @@ export function isStaff(user: { role: string } | null | undefined): boolean {
   return !!user && (user.role === 'dev' || user.role === 'admin');
 }
 
+/** True only for the `dev` role — for tooling that admins shouldn't see
+ *  (raw API logs, feedback triage). Stricter than isStaff. */
+export function isDev(user: { role: string } | null | undefined): boolean {
+  return !!user && user.role === 'dev';
+}
+
 /** True if user is staff or owns the given team (teams.userId === user.id). */
 export function isStaffOrTeamOwner(
   user: { id: string; role: string } | null | undefined,

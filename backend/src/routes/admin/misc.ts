@@ -1,12 +1,12 @@
 import { Elysia } from 'elysia';
-import { db, schema } from '../../db';
-import { eq, desc } from 'drizzle-orm';
+import { db, schema, sqlite } from '../../db';
+import { eq, desc, and, gte, lt, like, or, type SQL } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 import { checkMatchArchived } from '../../lib/archive-guard';
-import { requireStaff } from '../../lib/auth-guards';
+import { requireStaff, requireDev } from '../../lib/auth-guards';
 
 export const miscRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -211,5 +211,109 @@ export const miscRoutes = new Elysia()
       total,
     };
   })
+
+  // ─── API Request Logs (raw HTTP traffic + errors) ───────────────────
+  //
+  // Backs the admin "API Logs" tab. Server-side filtered + paginated (the
+  // table can hold thousands of rows). `stats` is computed over the whole
+  // table as an at-a-glance overview, independent of the active filters.
+  //
+  // DEV-ONLY: the per-route requireDev guard narrows these below the group's
+  // requireStaff — admins can't see raw traffic/stack traces, only devs.
+
+  .get('/api/admin/request-logs', ({ query }) => {
+    const conds: SQL[] = [];
+
+    // Status class: 2xx / 3xx / 4xx / 5xx, or "errors" (any >= 400).
+    const statusClass = (query.status as string) || 'all';
+    if (statusClass === 'errors') {
+      conds.push(gte(schema.requestLogs.status, 400));
+    } else if (/^[2345]xx$/.test(statusClass)) {
+      const base = parseInt(statusClass[0]) * 100;
+      conds.push(and(gte(schema.requestLogs.status, base), lt(schema.requestLogs.status, base + 100))!);
+    }
+
+    const method = (query.method as string) || 'all';
+    if (method !== 'all') conds.push(eq(schema.requestLogs.method, method.toUpperCase()));
+
+    const search = ((query.search as string) || '').trim();
+    if (search) {
+      const pat = `%${search}%`;
+      conds.push(or(
+        like(schema.requestLogs.path, pat),
+        like(schema.requestLogs.username, pat),
+        like(schema.requestLogs.errorMessage, pat),
+      )!);
+    }
+
+    const where = conds.length ? and(...conds) : undefined;
+    const limit = Math.min(parseInt(query.limit as string) || 100, 500);
+    const offset = parseInt(query.offset as string) || 0;
+
+    const rows = db.select().from(schema.requestLogs)
+      .where(where)
+      .orderBy(desc(schema.requestLogs.id))
+      .limit(limit)
+      .offset(offset)
+      .all();
+
+    // Filtered total (for pagination): count rows matching the same predicate.
+    const filteredTotal = db.select({ id: schema.requestLogs.id })
+      .from(schema.requestLogs).where(where).all().length;
+
+    // Overview stats across the whole table (not the filtered view).
+    const stats = sqlite.query<{
+      total: number; c4xx: number; c5xx: number; avg_ms: number | null; p95_ms: number | null;
+    }, []>(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status >= 400 AND status < 500 THEN 1 ELSE 0 END) AS c4xx,
+        SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END) AS c5xx,
+        CAST(AVG(duration_ms) AS INTEGER) AS avg_ms,
+        (SELECT duration_ms FROM request_logs ORDER BY duration_ms
+           LIMIT 1 OFFSET CAST((SELECT COUNT(*) FROM request_logs) * 0.95 AS INTEGER)) AS p95_ms
+      FROM request_logs
+    `).get();
+
+    return {
+      logs: rows.map(r => ({
+        id: String(r.id),
+        method: r.method,
+        path: r.path,
+        status: r.status,
+        durationMs: r.durationMs,
+        userId: r.userId != null ? String(r.userId) : null,
+        username: r.username,
+        ip: r.ip,
+        errorName: r.errorName,
+        errorMessage: r.errorMessage,
+        errorStack: r.errorStack,
+        timestamp: r.timestamp,
+      })),
+      total: filteredTotal,
+      stats: {
+        total: stats?.total ?? 0,
+        errors4xx: stats?.c4xx ?? 0,
+        errors5xx: stats?.c5xx ?? 0,
+        avgMs: stats?.avg_ms ?? 0,
+        p95Ms: stats?.p95_ms ?? 0,
+      },
+    };
+  }, { beforeHandle: requireDev })
+
+  // Wipe the request log (dev housekeeping). Returns how many rows cleared.
+  .post('/api/admin/request-logs/clear', ({ user }) => {
+    const n = sqlite.query('SELECT COUNT(*) AS n FROM request_logs').get() as { n: number };
+    sqlite.exec('DELETE FROM request_logs');
+    db.insert(schema.activityLog).values({
+      type: 'request_logs_cleared',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Cleared ${n.n} API request log rows`,
+      metadata: '{}',
+    }).run();
+    return { cleared: n.n };
+  }, { beforeHandle: requireDev })
 
 ;

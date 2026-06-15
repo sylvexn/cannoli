@@ -23,6 +23,7 @@ import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser } from './lib/ps-bot-seed';
 import { startSchedulers } from './lib/scheduler';
+import { markRequestStart, captureRequestError, logRequest } from './lib/request-log';
 import { sqlite } from './db';
 
 // ─── Boot-time env guards ───────────────────────────────────────────────────
@@ -31,6 +32,16 @@ import { sqlite } from './db';
 const MODE = process.env.CANNOLI_MODE || 'mock';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const DB_PATH = process.env.CANNOLI_DB_PATH;
+
+// Map Elysia's built-in error `code` strings to HTTP status for the request
+// logger (a thrown generic Error doesn't update set.status, so we derive it).
+const ERROR_CODE_STATUS: Record<string, number> = {
+  VALIDATION: 422,
+  NOT_FOUND: 404,
+  PARSE: 400,
+  INVALID_COOKIE_SIGNATURE: 401,
+  INTERNAL_SERVER_ERROR: 500,
+};
 
 // Guard: refuse to boot in mock mode against a DB path that looks live.
 if (MODE === 'mock' && DB_PATH && /live|prod|production/i.test(DB_PATH)) {
@@ -68,6 +79,9 @@ const app = new Elysia()
   // Only rewrites non-canonical paths (e.g. /~~serverId/action.php from direct PS client hits).
   // The ps-client-server proxy already sends to /api/ps/action.php, so skip those.
   .onRequest(({ request, set }) => {
+    // Stamp handler-start for the request logger (read back in onAfterResponse
+    // to compute latency). Cheap WeakMap write; safe for every request.
+    markRequestStart(request);
     const url = new URL(request.url);
     if (url.pathname.includes('/action.php') && url.pathname !== '/api/ps/action.php') {
       const newUrl = new URL(request.url);
@@ -87,6 +101,27 @@ const app = new Elysia()
     const user = token ? validateSession(token) : null;
     if (user) touchHeartbeat(parseInt(user.id));
     return { user: user as AuthUser | null, sessionToken: token };
+  })
+
+  // ── Request logging (admin "API Logs" tab) ─────────────────────────────────
+  // onError captures the thrown error's class/message/stack; onAfterResponse
+  // writes the final row (deduped per Request, so an errored request that also
+  // fires afterResponse produces exactly one row). Both are best-effort and
+  // never throw — see lib/request-log.ts.
+  .onError(({ request, error, code, set, user }) => {
+    captureRequestError(request, error);
+    // Write here too (deduped): if Elysia skips onAfterResponse for an errored
+    // request, this is the only chance to record it. Prefer the framework error
+    // code's status (a thrown Error leaves set.status at its default 200, so we
+    // can't trust it); fall back to an explicit 4xx/5xx the handler set, else 500.
+    const mapped = ERROR_CODE_STATUS[code];
+    const status = mapped ??
+      (typeof set.status === 'number' && set.status >= 400 ? set.status : 500);
+    logRequest({ request, status, user });
+  })
+  .onAfterResponse(({ request, set, user }) => {
+    const status = typeof set.status === 'number' ? set.status : 200;
+    logRequest({ request, status, user });
   })
 
   // ── Auth guards on state-changing requests ─────────────────────────────────
