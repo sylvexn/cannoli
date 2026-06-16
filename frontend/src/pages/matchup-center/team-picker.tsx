@@ -55,7 +55,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
 
   const borderColor = side === 'a' ? '#3b82f6' : '#ef4444';
 
-  function handleValueChange(val: string) {
+  function handleValueChange(val: string | null) {
     if (!val) return;
     if (val === '__custom__') {
       setShowCustom(true);
