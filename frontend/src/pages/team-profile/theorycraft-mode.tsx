@@ -94,12 +94,12 @@ export function SwapPicker({
               return (
                 <button
                   key={fa.name}
-                  onClick={() => { if (!wouldExceed && !fa.drafted) { onSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
+                  onClick={() => { if (!wouldExceed && (!fa.drafted || showTaken)) { onSwap(swappingIndex, freeAgentToRoster(fa)); setHoveredAgent(null); } }}
                   onMouseEnter={() => setHoveredAgent(fa.name)}
                   onMouseLeave={() => { if (hoveredAgent === fa.name) setHoveredAgent(null); }}
-                  disabled={wouldExceed || fa.drafted}
+                  disabled={wouldExceed || (fa.drafted && !showTaken)}
                   className={`relative w-11 h-11 rounded flex items-center justify-center transition-colors ${
-                    fa.drafted ? 'opacity-25 cursor-not-allowed'
+                    fa.drafted && !showTaken ? 'opacity-25 cursor-not-allowed'
                     : wouldExceed ? 'opacity-15 cursor-not-allowed'
                     : isHov ? 'bg-neon/15 ring-1 ring-neon/40'
                     : 'hover:bg-surface-overlay/60'
@@ -268,12 +268,12 @@ export function AddPicker({
               return (
                 <button
                   key={fa.name}
-                  onClick={() => { if (!wouldExceed && !fa.drafted) onAdd(freeAgentToRoster(fa)); }}
+                  onClick={() => { if (!wouldExceed && (!fa.drafted || showTaken)) onAdd(freeAgentToRoster(fa)); }}
                   onMouseEnter={() => setHoveredAgent(fa.name)}
                   onMouseLeave={() => { if (hoveredAgent === fa.name) setHoveredAgent(null); }}
-                  disabled={wouldExceed || fa.drafted}
+                  disabled={wouldExceed || (fa.drafted && !showTaken)}
                   className={`relative w-11 h-11 rounded flex items-center justify-center transition-colors ${
-                    fa.drafted ? 'opacity-25 cursor-not-allowed'
+                    fa.drafted && !showTaken ? 'opacity-25 cursor-not-allowed'
                     : wouldExceed ? 'opacity-15 cursor-not-allowed'
                     : isHov ? 'bg-neon/15 ring-1 ring-neon/40'
                     : 'hover:bg-surface-overlay/60'
