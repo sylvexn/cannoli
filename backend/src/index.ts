@@ -205,6 +205,9 @@ const app = new Elysia()
       mode: MODE,
       db: dbOk ? 'connected' : 'disconnected',
       uptime: Math.round(process.uptime()),
+      // Deployed commit (SOURCE_COMMIT, 12 chars). The CI deploy job polls this
+      // to confirm the *new* build actually came up before moving on / going green.
+      version: GIT_SHA,
     };
   })
 
