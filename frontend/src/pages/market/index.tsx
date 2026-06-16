@@ -106,7 +106,14 @@ export function MarketLayout() {
             <span className="text-[10px] uppercase tracking-wider text-text-muted font-mono">Acting as</span>
             <Select value={actingTeam?.id ?? ''} onValueChange={setActingTeamId}>
               <SelectTrigger className="h-7 w-[240px] text-xs bg-surface border-border-subtle">
-                <SelectValue placeholder="Pick a team..." />
+                {/* Render function — base-ui's Select.Value shows the raw value
+                    (team id) unless given a formatter, since items use id values. */}
+                <SelectValue placeholder="Pick a team...">
+                  {(value: string) => {
+                    const p = value ? players.find(o => o.id === value) : null;
+                    return p ? `${p.teamAbbrev} — ${p.teamName}` : 'Pick a team...';
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {players.map(p => (

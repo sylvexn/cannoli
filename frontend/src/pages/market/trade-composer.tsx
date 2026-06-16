@@ -165,7 +165,22 @@ export function TradeComposer({
             </label>
             <Select value={partnerId ?? ''} onValueChange={handlePartnerChange}>
               <SelectTrigger className="h-9 text-xs bg-surface-overlay">
-                <SelectValue placeholder="Select a team…" />
+                {/* Render function: the partner items have complex JSX children,
+                    so base-ui can't derive a text label and would otherwise show
+                    the raw team id. Map the selected id back to a real label. */}
+                <SelectValue placeholder="Select a team…">
+                  {(value: string) => {
+                    const p = value ? partnerOptions.find(o => o.id === value) : null;
+                    if (!p) return 'Select a team…';
+                    return (
+                      <span className="flex items-center gap-1.5">
+                        <TeamLogo abbrev={p.teamAbbrev} color={p.teamColor} size="sm" logoPath={p.logoPath} />
+                        <span className="font-medium">{p.teamAbbrev}</span>
+                        <span className="text-text-muted">— {p.teamName}</span>
+                      </span>
+                    );
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {partnerOptions.map(p => (
