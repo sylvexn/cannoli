@@ -1,14 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Command, CommandEmpty, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command';
 import { toast } from 'sonner';
 import { api, type ApiUserPreferences } from '@/lib/api';
-import { Sliders, Bell, Eye } from 'lucide-react';
+import { useAuth } from '@/lib/auth-context';
+import { Sliders, Bell, Eye, Globe, ChevronsUpDown } from 'lucide-react';
 import { DEFAULT_LANDING_OPTIONS } from '@/lib/constants';
+import { cn } from '@/lib/utils';
 
 const DEFAULTS: ApiUserPreferences = {
   theme: 'dark',
@@ -17,10 +23,20 @@ const DEFAULTS: ApiUserPreferences = {
   notifyTrades: true,
   notifyMatches: true,
   notifyAnnouncements: true,
+  timezone: null,
   updatedAt: null,
 };
 
+function listIanaZones(): string[] {
+  try {
+    const supported = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+    if (typeof supported === 'function') return supported('timeZone');
+  } catch { /* fall through */ }
+  return ['UTC'];
+}
+
 export function PreferencesTab() {
+  const { refreshTimezone } = useAuth();
   const [server, setServer] = useState<ApiUserPreferences>(DEFAULTS);
   const [draft, setDraft] = useState<ApiUserPreferences>(DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -36,7 +52,8 @@ export function PreferencesTab() {
   const dirty =
     draft.theme !== server.theme ||
     draft.density !== server.density ||
-    draft.defaultLandingPath !== server.defaultLandingPath;
+    draft.defaultLandingPath !== server.defaultLandingPath ||
+    draft.timezone !== server.timezone;
 
   function patch<K extends keyof ApiUserPreferences>(key: K, value: ApiUserPreferences[K]) {
     setDraft(d => ({ ...d, [key]: value }));
@@ -49,9 +66,11 @@ export function PreferencesTab() {
         theme: draft.theme,
         density: draft.density,
         defaultLandingPath: draft.defaultLandingPath,
+        timezone: draft.timezone,
       });
       setServer(draft);
       toast.success('Preferences saved');
+      if (draft.timezone !== server.timezone) await refreshTimezone();
     } catch (err: any) {
       toast.error(err.message || 'Save failed');
     } finally {
@@ -127,6 +146,13 @@ export function PreferencesTab() {
         </CardContent>
       </Card>
 
+      {/* Timezone card */}
+      <TimezoneCard
+        value={draft.timezone}
+        onChange={(tz) => patch('timezone', tz)}
+        loading={loading}
+      />
+
       {/* Notifications card */}
       <Card>
         <CardHeader className="pb-3">
@@ -161,6 +187,88 @@ export function PreferencesTab() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function TimezoneCard({
+  value, onChange, loading,
+}: {
+  value: string | null;
+  onChange: (tz: string | null) => void;
+  loading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const browserZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    [],
+  );
+  const zones = useMemo(listIanaZones, []);
+  const effective = value ?? browserZone;
+  const isExplicit = value != null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Globe size={16} />
+          Timezone
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-[11px] text-text-muted">
+          All timestamps across Cannoli render in this zone. Storage stays in UTC; this is just how dates look to you.
+        </p>
+
+        <div className="flex items-center gap-2">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger
+              disabled={loading}
+              className={cn(
+                'flex h-8 flex-1 items-center justify-between rounded-md border border-input bg-background px-3 text-sm',
+                'disabled:opacity-50',
+              )}
+            >
+              <span className="truncate">
+                {effective}
+                {!isExplicit && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wide text-text-muted">
+                    (browser default)
+                  </span>
+                )}
+              </span>
+              <ChevronsUpDown size={14} className="ml-2 shrink-0 opacity-50" />
+            </PopoverTrigger>
+            <PopoverContent className="w-[320px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search zones…" />
+                <CommandList>
+                  <CommandEmpty>No matching zone.</CommandEmpty>
+                  {zones.map(z => (
+                    <CommandItem
+                      key={z}
+                      value={z}
+                      onSelect={(v) => { onChange(v); setOpen(false); }}
+                      data-checked={z === value ? 'true' : undefined}
+                    >
+                      {z}
+                    </CommandItem>
+                  ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={loading || !isExplicit}
+            onClick={() => onChange(null)}
+          >
+            Match my browser
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
