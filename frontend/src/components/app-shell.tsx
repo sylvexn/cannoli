@@ -226,12 +226,16 @@ export function AppShell() {
 
       {/* Sidebar */}
       <aside className={cn(
-        'bg-surface-raised border-r border-border-default flex flex-col z-50',
+        'bg-surface-raised border-r border-border-default flex flex-col z-50 overflow-hidden',
         isDesktop
-          ? cn('flex-shrink-0 transition-[width] duration-200 ease-out', collapsedRail ? 'w-[60px]' : 'w-56')
-          : cn('fixed inset-y-0 left-0 w-60 transition-transform duration-200 ease-out',
+          ? cn('flex-shrink-0 transition-[width] duration-300 ease-in-out', collapsedRail ? 'w-[60px]' : 'w-56')
+          : cn('fixed inset-y-0 left-0 w-56 transition-transform duration-300 ease-in-out',
               drawerOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'),
       )}>
+      {/* Fixed-width inner shell — holds its target width while the <aside>
+          animates, so content never reflows or drifts during collapse. The
+          panel just curtains open/closed around stationary content. */}
+      <div className={cn('flex h-full flex-col shrink-0', collapsedRail ? 'w-[60px]' : 'w-56')}>
         {/* Logo */}
         <div className={cn('border-b border-border-default', collapsedRail ? 'px-2 py-3' : 'px-3 pt-3 pb-3')}>
           {collapsedRail ? (
@@ -396,6 +400,7 @@ export function AppShell() {
           onLogout={logout}
           collapsed={collapsedRail}
         />
+      </div>
       </aside>
 
       {/* Main content.
