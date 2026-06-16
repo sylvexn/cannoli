@@ -1,5 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazyWithReload } from '@/lib/lazy-with-reload';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppDataProvider } from '@/lib/app-data-context';
@@ -43,11 +44,11 @@ import { CoachProfilePage } from '@/pages/coach-profile';
 import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
 
 // Lazy-loaded heavy routes
-const DraftBoardPage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
-const DraftPracticePage = lazy(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
-const MatchupCenterPage = lazy(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
-const StatsPage = lazy(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
-const SpeedTiersPage = lazy(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
+const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
+const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
+const MatchupCenterPage = lazyWithReload(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
+const StatsPage = lazyWithReload(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
+const SpeedTiersPage = lazyWithReload(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
 
 export default function App() {
   return (
