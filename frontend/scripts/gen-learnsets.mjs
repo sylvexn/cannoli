@@ -1,31 +1,45 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
- * Fetches Pokemon learnset data from Showdown and generates a TypeScript data
- * file keyed by format → display-name → set of move IDs.
+ * Generates the draft-pool learnset data file keyed by format →
+ * display-name → set of move IDs.
+ *
+ * RUN WITH BUN (`bun scripts/gen-learnsets.mjs`): it imports the TypeScript
+ * tier-list module directly to get the authoritative Pokemon name set, which is
+ * far more robust than regex-scraping the generated source.
+ *
+ * NAME SOURCE: the union of every drafted Pokemon across all cost formats
+ * (`getTierList('natdex')` ∪ `getTierList('natdexplus')`). That is the complete
+ * set of mons that can ever appear on a roster, so the coverage page never sees
+ * an unknown name.
+ *
+ * MOVE SOURCE: the local Showdown checkout's `learnsets.json` (network
+ * fallback). Using the bundled data means the coverage page agrees with what
+ * the battle simulator actually validates.
  *
  * SIMPLIFICATION (intentional): we do NOT run Showdown's full rule resolver.
- * Format legality here boils down to: "which gen-source codes are legal
- * to draw moves from?". Concretely:
+ * Format legality here boils down to: "which gen-source codes are legal to
+ * draw moves from?". Concretely:
  *   - gen9natdex                      → every source (all past gens transfer)
- *   - gen9ou / uu / ru / nu / pu / lc → gen9-source only (M/T/L/V/E/S/...
- *                                        prefixed with `9`)
+ *   - gen9ou / uu / ru / nu / pu / lc → gen9-source only (`9`-prefixed)
  *   - gen9ubers                       → gen9-source only
- * Species banlists, item bans, ability clauses, restricted-legend lists, and
- * tier cascades (UU bans OU, etc) are NOT applied. The cannoli draft pool is
- * already a hand-curated tier list — we just want to know "if this league is
- * gen9 OU-rules, can Garchomp run Outrage?" and that question is answered by
- * the move-source codes alone. Banlists can be layered on later in the admin
- * tier list / per-template banlist UI without regenerating this file.
+ * Both cannoli cost formats (natdex / natdexplus) share the SAME move legality
+ * — the "+" only widens the pool/cost, not what moves are legal — so both map
+ * to the full-source `gen9natdex` learnset. Species banlists, item bans,
+ * ability clauses, and tier cascades are NOT applied; the draft pool is already
+ * a hand-curated tier list.
  *
- * Usage: node scripts/gen-learnsets.mjs
+ * Usage: bun scripts/gen-learnsets.mjs
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getTierList, COST_FORMATS } from '../src/data/tier-list.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
+// Repo root is one level above the frontend dir (ROOT).
+const REPO_ROOT = resolve(ROOT, '..');
 
 // Formats we emit. Order matters only for diff readability — the consumer
 // keys by format string.
@@ -50,31 +64,69 @@ function moveSourceMatchesFormat(source, format) {
   return source.startsWith('9');
 }
 
-// ─── 1. Fetch the Showdown learnsets ──────────────────────────────
+// ─── 1. Load the Showdown learnsets (local file, network fallback) ─
 
-console.log('Fetching Showdown learnsets...');
-const res = await fetch('https://play.pokemonshowdown.com/data/learnsets.json');
-if (!res.ok) throw new Error(`Failed to fetch learnsets: ${res.status}`);
-const learnsets = await res.json();
-console.log(`  Loaded ${Object.keys(learnsets).length} learnset entries.`);
+const LOCAL_LEARNSETS = resolve(
+  REPO_ROOT,
+  'showdown/client/play.pokemonshowdown.com/data/learnsets.json',
+);
 
-// ─── 2. Extract all Pokemon names from tier-list.ts ───────────────
-
-const tierListSrc = readFileSync(resolve(ROOT, 'src/data/tier-list.ts'), 'utf8');
-
-const tiersRawMatch = tierListSrc.match(/const TIERS_RAW[\s\S]*?;\s*\n/);
-if (!tiersRawMatch) throw new Error('Could not find TIERS_RAW in tier-list.ts');
-
-const names = [];
-const nameRe = /'((?:[^'\\]|\\.)*)'/g;
-let m;
-while ((m = nameRe.exec(tiersRawMatch[0])) !== null) {
-  const val = m[1].replace(/\\(.)/g, '$1');
-  if (/^\d+$/.test(val) || val.length === 0) continue;
-  names.push(val);
+function parseLearnsetsText(text) {
+  // The .json variant is plain JSON. Guard anyway: some Showdown data files are
+  // JS modules (`exports.BattleLearnsets = {...};`). Strip a leading assignment
+  // and a trailing semicolon if JSON.parse fails outright.
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1) throw new Error('learnsets.json: no object literal found');
+    return JSON.parse(text.slice(start, end + 1));
+  }
 }
 
-console.log(`  Found ${names.length} Pokemon names in TIERS_RAW.`);
+let learnsets;
+if (existsSync(LOCAL_LEARNSETS)) {
+  console.log(`Loading learnsets from local file: ${LOCAL_LEARNSETS}`);
+  learnsets = parseLearnsetsText(readFileSync(LOCAL_LEARNSETS, 'utf8'));
+} else {
+  console.log('Local learnsets.json not found — fetching from Showdown...');
+  const res = await fetch('https://play.pokemonshowdown.com/data/learnsets.json');
+  if (!res.ok) throw new Error(`Failed to fetch learnsets: ${res.status}`);
+  learnsets = await res.json();
+}
+console.log(`  Loaded ${Object.keys(learnsets).length} learnset entries.`);
+
+// Pokedex — used to resolve `changesFrom` form inheritance. Forms that change
+// from another form in battle (Therian, Ogerpon masks, Hoopa-Unbound, Deoxys
+// formes, Rotom appliances) carry an empty/signature-only learnset and inherit
+// the base movepool. `changesFrom` is the precise marker — regional forms
+// (Paldea/Galar/Hisui) have none and keep their own full learnset, so they are
+// untouched. (Megas/Primals don't carry changesFrom here; getBaseFormId handles
+// them by name.)
+const LOCAL_POKEDEX = resolve(
+  REPO_ROOT,
+  'showdown/client/play.pokemonshowdown.com/data/pokedex.json',
+);
+let pokedex;
+if (existsSync(LOCAL_POKEDEX)) {
+  pokedex = parseLearnsetsText(readFileSync(LOCAL_POKEDEX, 'utf8'));
+} else {
+  const res = await fetch('https://play.pokemonshowdown.com/data/pokedex.json');
+  if (!res.ok) throw new Error(`Failed to fetch pokedex: ${res.status}`);
+  pokedex = await res.json();
+}
+console.log(`  Loaded ${Object.keys(pokedex).length} pokedex entries.`);
+
+// ─── 2. Collect every Pokemon name from the tier list (all formats) ─
+// The union across cost formats is the complete roster-eligible universe.
+
+const nameSet = new Set();
+for (const fmt of COST_FORMATS) {
+  for (const entry of getTierList(fmt)) nameSet.add(entry.name);
+}
+const names = [...nameSet].sort();
+console.log(`  Found ${names.length} Pokemon names across ${COST_FORMATS.join(' + ')}.`);
 
 // ─── 3. Name → Showdown learnset ID mapping ──────────────────────
 // Reuse exact same logic from gen-pokemon-data.mjs
@@ -94,6 +146,11 @@ function toPokedexId(name) {
 }
 
 const ID_OVERRIDES = {
+  // Incarnate forms are the base species in Showdown (Therian is the alt form).
+  'Enamorus-Incarnate': 'enamorus',
+  'Landorus-Incarnate': 'landorus',
+  'Thundurus-Incarnate': 'thundurus',
+  'Tornadus-Incarnate': 'tornadus',
   'Basculegion-M': 'basculegion',
   'Indeedee-M': 'indeedee',
   'Meowstic-M': 'meowstic',
@@ -152,15 +209,19 @@ for (const name of names) {
   const entry = learnsets[id];
   const baseId = getBaseFormId(name);
   const baseEntry = baseId ? learnsets[baseId] : null;
+  // Form-inheritance: a `changesFrom` form draws the base species' movepool.
+  const changesFrom = pokedex[id]?.changesFrom;
+  const cfId = changesFrom ? strip(changesFrom) : null;
+  const cfEntry = cfId ? learnsets[cfId] : null;
 
-  if (!entry && !baseEntry) {
+  if (!entry && !baseEntry && !cfEntry) {
     unmatched.push({ name, id });
     continue;
   }
 
-  // Build move → list-of-source-tags map across base + form learnsets.
+  // Build move → list-of-source-tags map across own + inherited learnsets.
   const moveSources = new Map();
-  for (const src of [entry, baseEntry]) {
+  for (const src of [entry, baseEntry, cfEntry]) {
     if (!src?.learnset) continue;
     for (const [moveName, sources] of Object.entries(src.learnset)) {
       if (!moveSources.has(moveName)) moveSources.set(moveName, []);
@@ -183,7 +244,7 @@ for (const name of names) {
 const matchedCount = byFormat.gen9natdex.length;
 console.log(`\n  Matched: ${matchedCount}/${names.length}`);
 if (unmatched.length > 0) {
-  console.log(`  Unmatched (${unmatched.length}):`);
+  console.log(`\n  ⚠ UNMATCHED (${unmatched.length}) — add ID_OVERRIDES entries:`);
   for (const u of unmatched) {
     console.log(`    "${u.name}" → tried ID "${u.id}"`);
   }
@@ -291,4 +352,9 @@ for (const format of FORMATS) {
   const totalMoves = byFormat[format].reduce((s, p) => s + p.moves.length, 0);
   const denom = byFormat[format].length || 1;
   console.log(`  ${format}: ${byFormat[format].length} entries, ${totalMoves} moves (avg ${Math.round(totalMoves / denom)}/mon)`);
+}
+
+if (unmatched.length > 0) {
+  console.error(`\n✖ ${unmatched.length} Pokemon had no learnset match — see list above.`);
+  process.exit(1);
 }
