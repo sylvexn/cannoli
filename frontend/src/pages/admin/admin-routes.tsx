@@ -32,7 +32,7 @@ import { Observability } from './observability';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
-import { AdminAnnouncements } from './admin-announcements';
+import { AdminAnnouncements } from './announcements';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
