@@ -1,6 +1,5 @@
 import { useRef, useState, useCallback, useId, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Search, X, Sparkles, Swords, CircleDot } from 'lucide-react';
 import {
