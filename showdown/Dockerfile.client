@@ -95,9 +95,16 @@ RUN for f in testclient.html index.html; do \
 # Showdown | Smogon / Pokédex | Replays | Rules | Forum" strip in
 # .mainmenufooter) is redundant — it just eats vertical space and sits awkwardly
 # above our arena bar. Hide it so the lobby content sits flush above the bar.
+#
+# Also hide the "Change name"/"Choose name" buttons (every login-panel trigger is
+# a `button[data-href="login"]`). Identity is bound to the Cannoli SSO session —
+# the backend only ever signs an assertion for the logged-in user's own userid,
+# so a rename can't actually succeed — but there's no reason to show users a
+# control that looks like it lets them change who they are. Auto-login via the
+# SSO assertion means they never need to open the login panel manually.
 RUN for f in testclient.html index.html; do \
         if [ -f "play.pokemonshowdown.com/$f" ]; then \
-            sed -i 's#</title>#</title><style>.mainmenufooter{display:none!important}</style>#' \
+            sed -i 's#</title>#</title><style>.mainmenufooter{display:none!important}button[data-href="login"]{display:none!important}</style>#' \
                 "play.pokemonshowdown.com/$f"; \
         fi; \
     done
