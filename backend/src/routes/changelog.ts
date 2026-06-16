@@ -35,7 +35,8 @@ export interface ChangelogEntry {
 
 // Parse + sort once at boot (newest first). String compare is correct for
 // same-format ISO-8601-with-Z timestamps.
-const ENTRIES: ChangelogEntry[] = [...(changelogData as ChangelogEntry[])]
+// Exported so notifications.ts can read the same parsed feed without re-parsing.
+export const ENTRIES: ChangelogEntry[] = [...(changelogData as ChangelogEntry[])]
   .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
 export const changelogRoutes = new Elysia()

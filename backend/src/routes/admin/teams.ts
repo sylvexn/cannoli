@@ -302,7 +302,7 @@ export const teamAdminRoutes = new Elysia()
 
   .get('/uploads/:dir/:file', async ({ params, set }) => {
     // Whitelist directories — only the ones we write to
-    const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars', 'user-banners'];
+    const ALLOWED_DIRS = ['team-logos', 'team-banners', 'user-avatars', 'user-banners', 'feedback-screenshots'];
     if (!ALLOWED_DIRS.includes(params.dir)) { set.status = 404; return 'Not found'; }
     if (!/^[a-zA-Z0-9_.-]+$/.test(params.file)) { set.status = 400; return 'Invalid filename'; }
     const path = uploadsPath(`${params.dir}/${params.file}`);

@@ -7,6 +7,7 @@ import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 import { checkMatchArchived } from '../../lib/archive-guard';
 import { requireStaff, requireDev } from '../../lib/auth-guards';
+import { backfillFeedbackNotifications } from '../../lib/notifications/notify';
 
 export const miscRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -305,6 +306,24 @@ export const miscRoutes = new Elysia()
         p95Ms: stats?.p95_ms ?? 0,
       },
     };
+  }, { beforeHandle: requireDev })
+
+  // ─── Backfill feedback notifications from GitHub ─────────────────────
+  // Re-run the issue-close detector for historical issues. Safe to re-run —
+  // dedupeKey on notifications ensures no double-notifications.
+
+  .post('/api/admin/notifications/backfill-feedback', async ({ body, user }) => {
+    const { issues } = (body ?? {}) as { issues?: number[] };
+    const result = await backfillFeedbackNotifications(issues?.length ? issues : undefined);
+    db.insert(schema.activityLog).values({
+      type: 'notifications_backfilled',
+      category: 'admin',
+      actor: user.username,
+      leagueId: null,
+      description: `Backfilled feedback notifications: ${result.inserted} inserted, ${result.skipped} skipped, ${result.noUser} no-user`,
+      metadata: JSON.stringify({ issues: issues ?? null, ...result }),
+    }).run();
+    return result;
   }, { beforeHandle: requireDev })
 
   // Wipe the request log (dev housekeeping). Returns how many rows cleared.

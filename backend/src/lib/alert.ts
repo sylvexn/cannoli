@@ -285,6 +285,8 @@ export function alertFeedback(args: {
   role: string;
   errorRef?: string | null;
   issueUrl?: string | null;
+  /** Feedback category: 'bug' | 'feature' | 'league' | 'general' */
+  category?: string | null;
 }): void {
   if (!FEEDBACK_WEBHOOK) return;
   if (_dispatching) return;
@@ -292,12 +294,15 @@ export function alertFeedback(args: {
   try {
     _dispatching = true;
 
-    const { title, description, page, reporter, role, errorRef, issueUrl } = args;
+    const { title, description, page, reporter, role, errorRef, issueUrl, category } = args;
 
     const fields: DiscordField[] = [
       { name: 'Reporter', value: `${reporter} (${role})`, inline: true },
     ];
 
+    if (category) {
+      fields.push({ name: 'Category', value: category, inline: true });
+    }
     if (page) {
       fields.push({ name: 'Page', value: trunc(page, 200), inline: true });
     }
