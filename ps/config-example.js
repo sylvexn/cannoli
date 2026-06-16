@@ -124,6 +124,9 @@ exports.startuphook = function () {
 					existing.title = title;
 					existing.settings.introMessage = intro;
 					existing.introMessage = intro;
+					// Read-only for everyone except this league's coaches (granted
+					// room voice by the cannoli-roles plugin) + staff. Idempotent.
+					existing.settings.modchat = '+';
 					if (existing.persist) existing.saveSettings();
 					updated++;
 					continue;
@@ -144,6 +147,11 @@ exports.startuphook = function () {
 					creationTime: Date.now(),
 					introMessage: intro,
 					section: 'official',
+					// Read-only for everyone except this league's coaches (granted
+					// room voice by the cannoli-roles plugin) + staff. The room is
+					// still public/joinable, so everyone can read; modchat only
+					// gates who can talk.
+					modchat: '+',
 				};
 				const room = Rooms.createChatRoom(roomid, title, settings);
 				Rooms.global.settingsList.push(settings);
