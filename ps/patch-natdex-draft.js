@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 /**
- * Patch upstream Pokemon Showdown's `config/formats.ts` to add the Cannoli
- * league banlist to the `[Gen 9] NatDex Draft` format. The upstream entry
- * ships without a banlist; the league rules (`plan/rules`) require a fixed
- * set of ability/item/move bans plus per-Pokemon clauses.
+ * Patch upstream Pokemon Showdown's `config/formats.ts` for Cannoli. Two
+ * independent, idempotent patches:
+ *   1. Add the Cannoli league banlist to the `[Gen 9] NatDex Draft` format.
+ *      The upstream entry ships without a banlist; the league rules
+ *      (`plan/rules`) require a fixed set of ability/item/move bans plus
+ *      per-Pokemon clauses.
+ *   2. Guard the Tera Captains team-preview line so a side with no Tera
+ *      Captains doesn't emit a blank `this.add('')` (which renders as a stray
+ *      empty line in the battle/replay chat).
  *
  * Invoked at provisioning time by both:
  *   - `scripts/setup-showdown.sh` (local dev clone)
  *   - `showdown/Dockerfile.server` (Coolify build)
  *
- * Idempotent: running twice is a no-op (detects the marker comment).
+ * Idempotent: each patch detects its own marker and skips if already applied,
+ * so running twice — or with only one of the two already present — is safe.
  *
  * Usage: node ps/patch-natdex-draft.js <path-to-formats.ts>
  */
@@ -32,12 +38,35 @@ if (!fs.existsSync(absTarget)) {
 const MARKER = '/* cannoli-natdex-draft-patch */';
 
 let src = fs.readFileSync(absTarget, 'utf8');
+let changed = false;
 
+// ── Patch 1: NatDex Draft banlist ───────────────────────────────────────────
 if (src.includes(MARKER)) {
-	console.log(`[patch] formats.ts already patched — skipping`);
-	process.exit(0);
+	console.log(`[patch] banlist already applied — skipping`);
+} else {
+	src = applyBanlist(src);
+	changed = true;
 }
 
+// ── Patch 2: guard the empty Tera Captains team-preview line ─────────────────
+// onTeamPreview() builds `buf` only for sides that have Tera Captains, then
+// unconditionally `this.add(`${buf}`)`. A side with none adds an empty line.
+const TERA_BUGGY = 'this.add(`${buf}`);';
+const TERA_FIXED = 'if (buf) this.add(`${buf}`);';
+if (src.includes(TERA_FIXED)) {
+	console.log(`[patch] tera-captains preview guard already applied — skipping`);
+} else if (src.includes(TERA_BUGGY)) {
+	src = src.replace(TERA_BUGGY, TERA_FIXED);
+	changed = true;
+	console.log(`[patch] formats.ts: guarded empty Tera Captains team-preview line`);
+} else {
+	console.warn(`[patch] tera-captains preview line not found — upstream may have changed (skipping)`);
+}
+
+if (changed) fs.writeFileSync(absTarget, src);
+process.exit(0);
+
+function applyBanlist(src) {
 // The banlist follows plan/rules: clauses-of-record + per-Pokemon move bans.
 // Standard Draft already includes Species/OHKO/Endless Battle/Sleep + the
 // full Evasion Clause (which already bans Bright Powder + Lax Incense via
@@ -73,5 +102,6 @@ if (!re.test(src)) {
 
 src = src.replace(re, `$1${banlistLine}\n$2`);
 
-fs.writeFileSync(absTarget, src);
 console.log(`[patch] formats.ts: added banlist to [Gen 9] NatDex Draft`);
+return src;
+}
