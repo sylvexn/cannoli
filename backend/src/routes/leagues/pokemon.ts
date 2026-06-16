@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, sql, asc, desc } from 'drizzle-orm';
+import { eq, sql, asc } from 'drizzle-orm';
+import { getFormatCostMap, listCostFormats, DEFAULT_COST_FORMAT } from '../../lib/league-costs';
 
 export const pokemonRoutes = new Elysia()
 
@@ -50,19 +51,25 @@ export const pokemonRoutes = new Elysia()
 
   // ─── Tier List ─────────────────────────────────────────────────────
 
-  .get('/api/tier-list', () => {
-    return db.select({
-      name: schema.pokemon.name,
-      tier: schema.pokemon.tier,
-      teraBanned: schema.pokemon.teraBanned,
-      banned: schema.pokemon.banned,
-    }).from(schema.pokemon)
-      .where(sql`(${schema.pokemon.tier} > 0 OR ${schema.pokemon.banned} = 1 OR ${schema.pokemon.teraBanned} = 1) AND ${schema.pokemon.name} NOT LIKE '%(T)'`)
-      .orderBy(desc(schema.pokemon.tier), asc(schema.pokemon.name))
-      .all()
-      .map(p => ({
-        name: p.name,
-        tier: p.tier,
-        status: p.banned ? 'banned' as const : p.teraBanned ? 'tera-banned' as const : 'available' as const,
-      }));
-  });
+  // Per-cost-format tier list. `?format=` selects the cost sheet (default
+  // 'natdexplus'); each format prices/bans species differently (Emerald's
+  // 'natdex' bans legendaries/paradoxes and marks up megas/pseudos). Same
+  // response shape as before — [{name, tier, status}] — so existing readers
+  // that omit the param keep working against the default format.
+  .get('/api/tier-list', ({ query }) => {
+    const format = (query.format as string)?.trim() || DEFAULT_COST_FORMAT;
+    const costs = getFormatCostMap(format);
+    return [...costs.entries()]
+      // Mirror the legacy filter: drop tier-0 non-banned filler + captain "(T)" rows.
+      .filter(([name, c]) => (c.tier > 0 || c.banned || c.teraBanned) && !name.endsWith('(T)'))
+      .map(([name, c]) => ({
+        name,
+        tier: c.tier,
+        status: c.banned ? 'banned' as const : c.teraBanned ? 'tera-banned' as const : 'available' as const,
+      }))
+      .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
+  })
+
+  // The cost formats present in the DB, with labels + which leagues use each —
+  // powers the admin tier-list editor's format picker.
+  .get('/api/cost-formats', () => listCostFormats());

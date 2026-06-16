@@ -1,7 +1,7 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import type { Player, RosterPokemon } from '@/lib/types';
-import { TIER_LIST } from '@/data/tier-list';
+import { getTierList, type CostFormat } from '@/data/tier-list';
 import { TYPE_CHART } from '@/lib/type-effectiveness';
 
 // ─── Interfaces ──────────────────────────────────────────────────
@@ -57,12 +57,12 @@ export function getTeamDefensiveProfile(roster: RosterPokemon[]) {
   return profile;
 }
 
-export function computePool(allPlayers: Player[]): PoolEntry[] {
+export function computePool(allPlayers: Player[], format?: CostFormat): PoolEntry[] {
   const draftedMap = new Map<string, string>();
   for (const p of allPlayers) {
     for (const mon of p.roster) draftedMap.set(mon.name, p.teamAbbrev);
   }
-  return TIER_LIST
+  return getTierList(format)
     .map(entry => ({
       name: entry.name,
       tier: entry.tier,

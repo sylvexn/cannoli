@@ -16,6 +16,7 @@ import { db, schema } from '../../db';
 import { and, eq } from 'drizzle-orm';
 import { tx } from '../tx';
 import { effectiveCost } from '../tera-cost';
+import { getLeagueCostMap } from '../league-costs';
 import {
   startDraft,
   executePick,
@@ -65,11 +66,17 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
 
   const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
 
-  // Candidate pool: all non-banned mons with a real tier, sorted high→low.
-  const pool = db.select().from(schema.pokemon)
-    .where(eq(schema.pokemon.banned, false))
-    .all()
-    .filter(p => p.tier > 0)
+  // Candidate pool: all mons with a real (non-banned, non-zero) tier in the
+  // league's cost format, sorted high→low. Costs come from the format map so
+  // the sim draft honors per-league format overrides (natdex vs natdexplus).
+  const leagueCostMap = getLeagueCostMap(leagueId);
+  const allPokemon = db.select().from(schema.pokemon).all();
+  const pool = allPokemon
+    .map(p => {
+      const cost = leagueCostMap.get(p.name);
+      return { name: p.name, tier: cost?.tier ?? p.tier, banned: cost?.banned ?? p.banned };
+    })
+    .filter(p => !p.banned && p.tier > 0)
     .sort((a, b) => b.tier - a.tier);
 
   let picksMade = 0;
@@ -152,12 +159,10 @@ function assignCaptains(
     return 0;
   }
 
+  // Resolve tera-banned status from the league's cost format (not global pokemon.teraBanned).
+  const costMap = getLeagueCostMap(leagueId);
   const teraBanned = new Set(
-    db.select({ name: schema.pokemon.name })
-      .from(schema.pokemon)
-      .where(eq(schema.pokemon.teraBanned, true))
-      .all()
-      .map(p => p.name),
+    [...costMap.entries()].filter(([, c]) => c.teraBanned).map(([name]) => name),
   );
   const pointCapRow = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId)).get();

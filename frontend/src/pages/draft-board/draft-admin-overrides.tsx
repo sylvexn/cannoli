@@ -25,7 +25,7 @@ import { Crosshair, SkipForward, Undo2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLeague } from '@/lib/league-context';
 import { api } from '@/lib/api';
-import { TIER_LIST } from '@/data/tier-list';
+import { getTierList, DEFAULT_FORMAT } from '@/data/tier-list';
 
 interface DraftAdminOverridesProps {
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string; logoPath?: string | null }[];
@@ -45,13 +45,14 @@ export function DraftAdminOverrides({
   const [forceSearch, setForceSearch] = useState('');
   const [busy, setBusy] = useState<'force' | 'skip' | 'undo' | null>(null);
 
+  const format = league.costFormat ?? DEFAULT_FORMAT;
   const availablePokemon = useMemo(() => {
     const q = forceSearch.toLowerCase();
-    return TIER_LIST
+    return getTierList(format)
       .filter(e => !draftedNames.has(e.name))
       .filter(e => !q || e.name.toLowerCase().includes(q))
       .slice(0, 80); // cap so the dropdown doesn't render the entire dex
-  }, [draftedNames, forceSearch]);
+  }, [draftedNames, forceSearch, format]);
 
   const handleForcePick = useCallback(async () => {
     if (!forceTeamId || !forcePokemon) return;

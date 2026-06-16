@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TIER_LIST, TERA_BANNED, canBeTeraCaptain, type TierEntry } from '@/data/tier-list';
+import {
+  getTierList, getTeraBanned, canBeTeraCaptain,
+  DEFAULT_FORMAT, type CostFormat, type TierEntry,
+} from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import { useAppData } from '@/lib/app-data-context';
 import { Card } from '@/components/ui/card';
@@ -15,11 +18,22 @@ import { tierColor, TIER_COLORS } from '@/lib/constants';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import type { PokemonType } from '@/lib/pokemon';
 
+const FORMAT_LABELS: Record<CostFormat, string> = {
+  natdexplus: 'NatDex+',
+  natdex: 'NatDex',
+};
+
+const FORMAT_DESCRIPTIONS: Record<CostFormat, string> = {
+  natdexplus: 'Ruby/Sapphire — full NatDex+ ruleset',
+  natdex: 'Emerald — legendaries/paradoxes/mythicals banned, megas/pseudos +1pt',
+};
+
 type FilterMode = 'all' | 'captains' | 'tera-banned';
 
 export function TierListPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [format, setFormat] = useState<CostFormat>(DEFAULT_FORMAT);
   const { leagues } = useAppData();
 
   // Build a single ownership index across every active league: pokemon name →
@@ -48,18 +62,18 @@ export function TierListPage() {
   }, [leagues]);
 
   const filtered: TierEntry[] = useMemo(() => {
-    let list = TIER_LIST;
+    let list = getTierList(format);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(e => e.name.toLowerCase().includes(q));
     }
     if (filter === 'captains') {
-      list = list.filter(e => canBeTeraCaptain(e.name));
+      list = list.filter(e => canBeTeraCaptain(e.name, format));
     } else if (filter === 'tera-banned') {
       list = list.filter(e => e.teraBanned);
     }
     return list;
-  }, [search, filter]);
+  }, [search, filter, format]);
 
   // Group by tier, descending. Each tier is rendered as a banner+grid section.
   const byTier = useMemo(() => {
@@ -75,9 +89,10 @@ export function TierListPage() {
     return [...map.entries()].sort((a, b) => b[0] - a[0]);
   }, [filtered]);
 
-  const totalCount = TIER_LIST.length;
-  const captainCount = TIER_LIST.filter(e => canBeTeraCaptain(e.name)).length;
-  const banCount = TERA_BANNED.length;
+  const tierList = getTierList(format);
+  const totalCount = tierList.length;
+  const captainCount = tierList.filter(e => canBeTeraCaptain(e.name, format)).length;
+  const banCount = getTeraBanned(format).length;
 
   return (
     <div className="space-y-4">
@@ -89,6 +104,30 @@ export function TierListPage() {
         <p className="text-sm text-text-muted">
           Browse the full draft pool by tier. {totalCount} Pokemon · {captainCount} captain-eligible · {banCount} tera-banned.
         </p>
+      </div>
+
+      {/* Format toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs font-mono uppercase tracking-wider text-text-muted shrink-0">Format</span>
+        <div className="flex items-center gap-px rounded border border-border-subtle overflow-hidden">
+          {(['natdexplus', 'natdex'] as CostFormat[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFormat(f)}
+              className={cn(
+                'px-3 py-1 text-xs font-medium transition-colors',
+                format === f
+                  ? 'bg-surface-overlay text-text-primary'
+                  : 'text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary',
+              )}
+            >
+              {FORMAT_LABELS[f]}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-text-muted">
+          {FORMAT_DESCRIPTIONS[format]}
+        </span>
       </div>
 
       {/* Filters */}
@@ -136,6 +175,7 @@ export function TierListPage() {
             tier={tier}
             entries={entries}
             ownershipIndex={ownershipIndex}
+            format={format}
           />
         ))}
         {byTier.length === 0 && (
@@ -166,11 +206,12 @@ interface TierSectionProps {
   tier: number;
   entries: TierEntry[];
   ownershipIndex: Map<string, OwnershipEntry[]>;
+  format: CostFormat;
 }
 
-function TierSection({ tier, entries, ownershipIndex }: TierSectionProps) {
+function TierSection({ tier, entries, ownershipIndex, format }: TierSectionProps) {
   const accent = tierColor(tier);
-  const captainEligible = entries.filter(e => canBeTeraCaptain(e.name)).length;
+  const captainEligible = entries.filter(e => canBeTeraCaptain(e.name, format)).length;
   const teraBanned = entries.filter(e => e.teraBanned).length;
   const owned = entries.filter(e => (ownershipIndex.get(e.name)?.length ?? 0) > 0).length;
 
@@ -257,6 +298,7 @@ function TierSection({ tier, entries, ownershipIndex }: TierSectionProps) {
               entry={entry}
               accent={accent}
               ownership={ownershipIndex.get(entry.name) ?? []}
+              format={format}
             />
           ))}
         </div>
@@ -269,12 +311,13 @@ interface TierCardProps {
   entry: TierEntry;
   accent: string;
   ownership: OwnershipEntry[];
+  format: CostFormat;
 }
 
-function TierCard({ entry, accent, ownership }: TierCardProps) {
+function TierCard({ entry, accent, ownership, format }: TierCardProps) {
   const data = getPokemonData(entry.name);
   const types = (data?.types ?? []) as PokemonType[];
-  const captainEligible = canBeTeraCaptain(entry.name);
+  const captainEligible = canBeTeraCaptain(entry.name, format);
   const { openSideCard } = usePokemonSideCard();
   const owned = ownership.length > 0;
 

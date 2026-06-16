@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
 import { Swords, Sparkles, X, ExternalLink, UsersRound } from 'lucide-react';
 import { useLeagueOptional } from '@/lib/league-context';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import { api, type ApiGlobalOwnership } from '@/lib/api';
 import type { Player } from '@/lib/types';
@@ -41,6 +41,9 @@ interface PokemonSideCardProps {
   seasonStats?: { kills: number; deaths: number; gp: number };
   /** Optional: tera captain info */
   teraCaptain?: { teraTypes: string[] };
+  /** Optional: cost format for this league ('natdex' | 'natdexplus'). Defaults
+   *  to 'natdexplus'. Pass league.costFormat when opening from a league context. */
+  format?: CostFormat;
 }
 
 export function PokemonSideCard({
@@ -50,6 +53,7 @@ export function PokemonSideCard({
   globalOwnership,
   seasonStats,
   teraCaptain,
+  format,
 }: PokemonSideCardProps) {
   const league = useLeagueOptional();
   const isOpen = !!name;
@@ -78,8 +82,11 @@ export function PokemonSideCard({
     return () => document.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
+  // Resolve cost format: explicit prop wins, then the in-scope league, then the
+  // default. This lets callers omit the prop when inside a league route.
+  const resolvedFormat = format ?? league?.costFormat ?? DEFAULT_FORMAT;
   const pokeData = name ? getPokemonData(name) : undefined;
-  const tierEntry = name ? getTierEntry(name) : undefined;
+  const tierEntry = name ? getTierEntry(name, resolvedFormat) : undefined;
   const types = pokeData?.types;
   const stats = pokeData?.stats;
   const abilities = pokeData?.abilities ?? [];

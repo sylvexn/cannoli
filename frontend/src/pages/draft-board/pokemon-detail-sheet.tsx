@@ -18,7 +18,7 @@ import { useLeagueUrl } from '@/lib/use-league-url';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierEntry, type CostFormat } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 
 interface PokemonDetailSheetProps {
@@ -33,6 +33,8 @@ interface PokemonDetailSheetProps {
    *  we skip the view-transition-name on the hero so the queue's card→roster
    *  morph is the sole owner of that name. */
   animatingPokemonName?: string | null;
+  /** Active league cost format — drives tier entry lookup. */
+  format?: CostFormat;
 }
 
 export function PokemonDetailSheet({
@@ -44,6 +46,7 @@ export function PokemonDetailSheet({
   canDraft,
   onDraft,
   animatingPokemonName,
+  format,
 }: PokemonDetailSheetProps) {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
@@ -64,7 +67,7 @@ export function PokemonDetailSheet({
   const pokeData = name ? getPokemonData(name) : undefined;
   const ownership = name ? ownershipMap.get(name) : undefined;
   const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
-  const tierEntry = name ? getTierEntry(name) : undefined;
+  const tierEntry = name ? getTierEntry(name, format) : undefined;
   const types = mon?.types ?? pokeData?.types;
   const stats = mon?.stats ?? pokeData?.stats;
   const abilities = mon?.abilities ?? pokeData?.abilities ?? [];

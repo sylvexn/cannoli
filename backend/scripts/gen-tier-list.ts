@@ -4,35 +4,55 @@
  *   bun run scripts/gen-tier-list.ts
  *
  * The frontend static tier list is the cost authority for every draft / roster /
- * free-agent surface, so it must stay byte-for-byte in sync with the same sheet
- * that drives the backend `pokemon` table (see `apply-s11-costs.ts`). Both read
+ * free-agent surface, so it must stay in sync with the same sheets that drive the
+ * backend `format_costs` table (see `apply-cost-formats.ts`). Both read
  * `parse-costs.ts`, so a single sheet edit + re-run keeps them aligned.
+ *
+ * Emits BOTH cost formats (natdex = Emerald, natdexplus = Ruby/Sapphire). The
+ * format-agnostic exports (`TIER_LIST`, `BANNED`, `TERA_BANNED`, and the helpers
+ * called without a format) default to natdexplus, preserving every existing
+ * import; league-scoped surfaces pass the league's `costFormat`.
  */
 
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
-import { parseCosts } from './parse-costs';
+import { parseCostFormat, FORMAT_SHEETS } from './parse-costs';
 
 const OUT = resolve(import.meta.dir, '../../frontend/src/data/tier-list.ts');
-
-const { tiers, banned, teraBanned } = parseCosts();
+const DEFAULT_FORMAT = 'natdexplus';
+const FORMATS = Object.keys(FORMAT_SHEETS); // ['natdex', 'natdexplus']
 
 const quote = (names: string[]): string =>
   names.map((n) => `'${n.replace(/'/g, "\\'")}'`).join(',');
 
-const bannedSrc = quote(banned);
-const teraBannedSrc = quote(teraBanned);
+const parsed = Object.fromEntries(FORMATS.map((f) => [f, parseCostFormat(f)]));
 
-const tierNums = [...tiers.keys()].sort((a, b) => b - a); // 20 → 1
-const tiersSrc = tierNums.map((t) => `  [${t}, [${quote(tiers.get(t)!)}]],`).join('\n');
+function tiersSrc(format: string): string {
+  const { tiers } = parsed[format];
+  const tierNums = [...tiers.keys()].sort((a, b) => b - a); // 20 → 1
+  return tierNums.map((t) => `    [${t}, [${quote(tiers.get(t)!)}]],`).join('\n');
+}
+
+const formatBlock = (format: string): string => `  ${JSON.stringify(format)}: {
+    banned: [${quote(parsed[format].banned)}],
+    teraBanned: [${quote(parsed[format].teraBanned)}],
+    tiers: [
+${tiersSrc(format)}
+    ],
+  },`;
 
 const file = `/**
- * Full tier list — GENERATED from backend/imports/Costs.xlsx (NatDex+ sheet).
+ * Full tier list — GENERATED from backend/imports/Costs.xlsx.
  * Do not hand-edit: re-run \`bun run scripts/gen-tier-list.ts\` from backend/.
- * Categories: Banned, Tera Banned, and tiers 20 → 1.
- * Tera cost schedule included for captain cost computation.
+ *
+ * Two cost formats: 'natdex' (Emerald) and 'natdexplus' (Ruby/Sapphire). The
+ * format-agnostic exports (TIER_LIST/BANNED/TERA_BANNED and helpers called
+ * without a format) default to '${DEFAULT_FORMAT}'.
  */
 
+export type CostFormat = ${FORMATS.map((f) => `'${f}'`).join(' | ')};
+export const COST_FORMATS: CostFormat[] = [${FORMATS.map((f) => `'${f}'`).join(', ')}];
+export const DEFAULT_FORMAT: CostFormat = '${DEFAULT_FORMAT}';
 
 export interface TierEntry {
   name: string;
@@ -52,61 +72,80 @@ export function getTermCost(baseTier: number): number {
   return TERA_COST_MAP[baseTier] ?? baseTier;
 }
 
-// ─── Banned Pokemon (not draftable) ─────────────────────────────
-export const BANNED: string[] = [
-  ${bannedSrc},
-];
+// ─── Raw per-format data ────────────────────────────────────────
+interface FormatData { banned: string[]; teraBanned: string[]; tiers: [number, string[]][]; }
+const FORMAT_DATA: Record<CostFormat, FormatData> = {
+${FORMATS.map(formatBlock).join('\n')}
+};
 
-// ─── Tera Banned (can be drafted, cannot be tera captain) ────────
-export const TERA_BANNED: string[] = [
-  ${teraBannedSrc},
-];
+interface BuiltFormat {
+  tierList: TierEntry[];
+  banned: string[];
+  teraBanned: string[];
+  byName: Map<string, TierEntry>;
+}
 
-// ─── Full tier list (20pt → 1pt) ────────────────────────────────
-const TIERS_RAW: [number, string[]][] = [
-${tiersSrc}
-];
+function build(data: FormatData): BuiltFormat {
+  const teraBannedSet = new Set(data.teraBanned);
+  const tierList = data.tiers.flatMap(([tier, names]) =>
+    names.map((name) => ({
+      name,
+      tier,
+      teraCost: TERA_COST_MAP[tier] ?? tier,
+      teraBanned: teraBannedSet.has(name),
+    })),
+  );
+  const byName = new Map<string, TierEntry>();
+  for (const e of tierList) byName.set(e.name, e);
+  return { tierList, banned: data.banned, teraBanned: data.teraBanned, byName };
+}
 
-// Build the full tier list as a flat array
-export const TIER_LIST: TierEntry[] = TIERS_RAW.flatMap(([tier, names]) =>
-  names.map(name => ({
-    name,
-    tier,
-    teraCost: TERA_COST_MAP[tier] ?? tier,
-    teraBanned: TERA_BANNED.includes(name),
-  }))
-);
+const BUILT: Record<CostFormat, BuiltFormat> = Object.fromEntries(
+  COST_FORMATS.map((f) => [f, build(FORMAT_DATA[f])]),
+) as Record<CostFormat, BuiltFormat>;
 
-// Quick lookup by name
-const tierMap = new Map<string, TierEntry>();
-for (const entry of TIER_LIST) tierMap.set(entry.name, entry);
-export function getTierEntry(name: string): TierEntry | undefined {
-  return tierMap.get(name);
+function fmt(format?: CostFormat): BuiltFormat {
+  return BUILT[format ?? DEFAULT_FORMAT] ?? BUILT[DEFAULT_FORMAT];
+}
+
+// ─── Per-format accessors ───────────────────────────────────────
+export function getTierList(format?: CostFormat): TierEntry[] { return fmt(format).tierList; }
+export function getBanned(format?: CostFormat): string[] { return fmt(format).banned; }
+export function getTeraBanned(format?: CostFormat): string[] { return fmt(format).teraBanned; }
+
+export function getTierEntry(name: string, format?: CostFormat): TierEntry | undefined {
+  return fmt(format).byName.get(name);
 }
 
 /** Get the effective point cost for a Pokemon on a roster */
-export function getEffectiveCost(name: string, isTeraCaptain: boolean): number {
-  const entry = tierMap.get(name);
+export function getEffectiveCost(name: string, isTeraCaptain: boolean, format?: CostFormat): number {
+  const entry = fmt(format).byName.get(name);
   if (!entry) return 0;
   return isTeraCaptain ? entry.teraCost : entry.tier;
 }
 
 /** Check if a Pokemon can be a tera captain (tiers 1-9 only, not tera-banned) */
-export function canBeTeraCaptain(name: string): boolean {
-  const entry = tierMap.get(name);
+export function canBeTeraCaptain(name: string, format?: CostFormat): boolean {
+  const entry = fmt(format).byName.get(name);
   if (!entry) return false;
   if (entry.teraBanned) return false;
   if (entry.tier > 9) return false;
   return true;
 }
 
-/** Total Pokemon in tier list */
+// ─── Format-agnostic exports (default '${DEFAULT_FORMAT}') ───────
+export const TIER_LIST: TierEntry[] = BUILT[DEFAULT_FORMAT].tierList;
+export const BANNED: string[] = BUILT[DEFAULT_FORMAT].banned;
+export const TERA_BANNED: string[] = BUILT[DEFAULT_FORMAT].teraBanned;
+
+/** Total Pokemon in the default-format tier list */
 export const TIER_LIST_SIZE = TIER_LIST.length;
 `;
 
 writeFileSync(OUT, file);
-console.log(
-  `Wrote ${OUT}\n  tiers ${tierNums[tierNums.length - 1]}–${tierNums[0]}, ` +
-    `${[...tiers.values()].reduce((a, b) => a + b.length, 0)} draftable, ` +
-    `${banned.length} banned, ${teraBanned.length} tera-banned`,
-);
+const counts = FORMATS.map((f) => {
+  const { tiers, banned, teraBanned } = parsed[f];
+  const draftable = [...tiers.values()].reduce((a, b) => a + b.length, 0);
+  return `${f}: ${draftable} draftable, ${banned.length} banned, ${teraBanned.length} tera-banned`;
+});
+console.log(`Wrote ${OUT}\n  ${counts.join('\n  ')}`);

@@ -63,10 +63,32 @@ export interface ParsedCosts {
 
 const isTeraRow = (name: string): boolean => /\(T\)\s*$/.test(name);
 
+/** Cost-format id → the sheet name that carries its prices in Costs.xlsx. */
+export const FORMAT_SHEETS: Record<string, string> = {
+  natdex: 'NatDex',
+  natdexplus: 'NatDex+',
+};
+
+/**
+ * Parse one cost format's sheet. `format` selects the sheet via FORMAT_SHEETS
+ * (natdex → "NatDex", natdexplus → "NatDex+"). The encoding is identical across
+ * formats — only the per-species values differ (Emerald/NatDex bans legendaries
+ * outright and prices megas/pseudos +1pt).
+ */
+export function parseCostFormat(format: string, xlsxPath: string = COSTS_XLSX): ParsedCosts {
+  const sheetName = FORMAT_SHEETS[format];
+  if (!sheetName) throw new Error(`Unknown cost format "${format}" (known: ${Object.keys(FORMAT_SHEETS).join(', ')})`);
+  return parseSheet(sheetName, xlsxPath);
+}
+
 export function parseCosts(xlsxPath: string = COSTS_XLSX): ParsedCosts {
+  return parseSheet('NatDex+', xlsxPath);
+}
+
+function parseSheet(sheetName: string, xlsxPath: string): ParsedCosts {
   const wb = XLSX.readFile(xlsxPath);
-  const ws = wb.Sheets['NatDex+'];
-  if (!ws) throw new Error(`Costs.xlsx is missing the "NatDex+" sheet (found: ${wb.SheetNames.join(', ')})`);
+  const ws = wb.Sheets[sheetName];
+  if (!ws) throw new Error(`Costs.xlsx is missing the "${sheetName}" sheet (found: ${wb.SheetNames.join(', ')})`);
   const rows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, blankrows: false });
 
   const basePts = new Map<string, number>();

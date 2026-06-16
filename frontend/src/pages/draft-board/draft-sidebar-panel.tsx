@@ -14,7 +14,7 @@ import {
 import type { Player } from '@/lib/types';
 import type { Acquisition } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierEntry, type CostFormat } from '@/data/tier-list';
 import { captainHeadroomNeeded } from '@/lib/draft-rules';
 import { ViewTransitionShim } from './use-pick-animation-queue';
 
@@ -67,6 +67,8 @@ export interface DraftSidebarPanelProps {
   /** When the panel is rendered as a floating drawer (not pinned), apply a
    *  shadow + match-edge styling. */
   floating?: boolean;
+  /** Active league cost format — drives tier entry and captain reserve lookups. */
+  format?: CostFormat;
 }
 
 const DEFAULT_ROSTER_SIZE = 10;
@@ -83,7 +85,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
     pointCap = 110, teraCaptainSlots = 2, rosterSize = DEFAULT_ROSTER_SIZE,
     draftQueue = [], onQueueRemove, autoDraftQueue, onToggleAutoDraft,
     onDraftFromQueue, isUserTurn, presence, animatingPokemonName,
-    onClose, pinned, onTogglePin, floating,
+    onClose, pinned, onTogglePin, floating, format,
   } = props;
 
   const connectedTeamIds = new Set(presence?.players.map(p => p.teamId) ?? []);
@@ -95,7 +97,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
   const picksLeft = Math.max(0, rosterSize - userRoster.length);
   const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
   const captainReserve = isLiveMode && userPlayer
-    ? captainHeadroomNeeded(userRoster, teraCaptainSlots)
+    ? captainHeadroomNeeded(userRoster, teraCaptainSlots, format)
     : 0;
   const captainBudgetWarning = captainReserve > 0 && remaining < captainReserve;
   // Effective budget for the NEXT pick: raw remaining minus 1pt reserved for
@@ -277,7 +279,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
                       </div>
                       <div className="space-y-0.5">
                         {draftQueue.map((name, qi) => {
-                          const tierEntry = getTierEntry(name);
+                          const tierEntry = getTierEntry(name, format);
                           return (
                             <div key={name} className="flex items-center gap-1.5 py-0.5 px-1 rounded bg-pink/5 border border-pink/15 group/q">
                               <span className="text-[9px] font-mono tabular-nums text-pink/60 w-3 shrink-0 text-right">{qi + 1}</span>

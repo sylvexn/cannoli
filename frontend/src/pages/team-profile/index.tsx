@@ -4,7 +4,7 @@ import { EmptyState } from '@/components/empty-state';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
-import { getTermCost, canBeTeraCaptain } from '@/data/tier-list';
+import { getTermCost, canBeTeraCaptain, DEFAULT_FORMAT } from '@/data/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
@@ -119,7 +119,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     rows.sort((a, b) => a.week - b.week);
     return rows;
   }, [matches, byeWeeks]);
-  const pool = useMemo(() => computePool(players), []);
+  const costFormat = league.costFormat ?? DEFAULT_FORMAT;
+  const pool = useMemo(() => computePool(players, costFormat), [players, costFormat]);
 
   // Initialize roster order
   useEffect(() => {
@@ -293,7 +294,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       setTeraEditingIndex(null);
     } else {
       // Make captain (if valid)
-      if (!canBeTeraCaptain(mon.name)) return;
+      if (!canBeTeraCaptain(mon.name, costFormat)) return;
       const newCost = getTermCost(mon.tier);
       const oldCost = mon.tier;
       if (pointsUsed - oldCost + newCost > config.pointCap) return;

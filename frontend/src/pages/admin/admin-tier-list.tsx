@@ -6,13 +6,14 @@ import { NumberInput } from '@/components/ui/number-input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { api } from '@/lib/api';
+import { api, type ApiCostFormat } from '@/lib/api';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import {
   Search, X, ChevronDown, Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage, isApiError } from '@/lib/errors';
+import { DEFAULT_FORMAT } from '@/data/tier-list';
 
 type BanStatus = 'available' | 'tera-banned' | 'banned';
 
@@ -43,8 +44,25 @@ export function AdminTierList() {
    */
   const [activeLeagues, setActiveLeagues] = useState<ActiveLeague[]>([]);
 
+  // ─── Cost format selector ─────────────────────────────────────────────────
+  const [costFormats, setCostFormats] = useState<ApiCostFormat[]>([]);
+  const [selectedFormat, setSelectedFormat] = useState<string>(DEFAULT_FORMAT);
+
   useEffect(() => {
-    api.getTierList()
+    api.getCostFormats()
+      .then(formats => setCostFormats(formats))
+      .catch(() => {
+        // Fall back to static defaults if endpoint not yet live
+        setCostFormats([
+          { id: 'natdexplus', label: 'NatDex+', leagueIds: [] },
+          { id: 'natdex', label: 'NatDex', leagueIds: [] },
+        ]);
+      });
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    api.getTierList(selectedFormat)
       .then(entries => {
         setPool(entries.map(e => ({
           name: e.name,
@@ -56,7 +74,7 @@ export function AdminTierList() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [selectedFormat]);
 
   useEffect(() => {
     api.getLeagues()
@@ -74,13 +92,16 @@ export function AdminTierList() {
    * Wrap api.updateTierListEntry with an interactive force/confirm path. When
    * the backend rejects with code tier_list_locked / tier_list_confirm_required,
    * we prompt the admin to type an active league name before retrying.
+   *
+   * Always passes `format` so the backend knows which price sheet to edit.
    */
   const sendTierUpdate = useCallback(async (
     name: string,
     data: { tier?: number; status?: string },
   ) => {
+    const payload = { format: selectedFormat, ...data };
     try {
-      await api.updateTierListEntry(name, data);
+      await api.updateTierListEntry(name, payload);
     } catch (err: unknown) {
       const apiErr = isApiError(err) ? err : undefined;
       const code = apiErr?.body?.code ?? apiErr?.code;
@@ -94,14 +115,15 @@ export function AdminTierList() {
           toast.error('Force edit cancelled');
           throw err;
         }
-        await api.updateTierListEntry(name, { ...data, force: true, confirmLeague });
+        await api.updateTierListEntry(name, { ...payload, force: true, confirmLeague });
         toast.warning(`Forced tier-list edit during active league (${confirmLeague})`);
       } else {
         toast.error(getErrorMessage(err, 'Failed to update tier list'));
         throw err;
       }
     }
-  }, [activeLeagues]);
+  }, [activeLeagues, selectedFormat]);
+
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -194,8 +216,60 @@ export function AdminTierList() {
     (statusFilter !== 'all' ? 1 : 0) +
     (search.trim() ? 1 : 0);
 
+  // Derive which leagues use the currently-selected format (for the format selector hint)
+  const formatLeagueHint = useMemo(() => {
+    const fmt = costFormats.find(f => f.id === selectedFormat);
+    if (!fmt || fmt.leagueIds.length === 0) return null;
+    return `${fmt.leagueIds.length} active league${fmt.leagueIds.length === 1 ? '' : 's'}`;
+  }, [costFormats, selectedFormat]);
+
   return (
     <div className="space-y-4">
+      {/* Format selector */}
+      <div className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-raised px-3 py-2">
+        <span className="text-xs font-mono uppercase tracking-wider text-text-muted shrink-0">Format</span>
+        <div className="flex items-center gap-1 rounded border border-border-subtle overflow-hidden">
+          {costFormats.length > 0
+            ? costFormats.map(fmt => (
+              <button
+                key={fmt.id}
+                onClick={() => {
+                  if (fmt.id !== selectedFormat) {
+                    setSelectedFormat(fmt.id);
+                    setSearch('');
+                    setTierFilter('all');
+                    setStatusFilter('all');
+                    setVisibleCount(60);
+                    setEditingName(null);
+                  }
+                }}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  selectedFormat === fmt.id
+                    ? 'bg-surface-overlay text-text-primary'
+                    : 'text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary'
+                }`}
+              >
+                {fmt.label}
+              </button>
+            ))
+            : (
+              // Skeleton while loading
+              ['NatDex+', 'NatDex'].map(label => (
+                <span key={label} className="px-3 py-1 text-xs text-text-muted opacity-40">{label}</span>
+              ))
+            )
+          }
+        </div>
+        {formatLeagueHint && (
+          <span className="text-[11px] text-text-muted font-mono">
+            used by {formatLeagueHint}
+          </span>
+        )}
+        <span className="ml-auto text-[11px] font-mono text-neon/80 uppercase tracking-wider">
+          editing: {costFormats.find(f => f.id === selectedFormat)?.label ?? selectedFormat}
+        </span>
+      </div>
+
       {/* Active-league warning — surfaces backend phase gate */}
       {activeLeagues.length > 0 && (
         <div className="rounded-md border border-loss/30 bg-loss/5 px-3 py-2 text-xs text-loss/90 flex items-center gap-2">

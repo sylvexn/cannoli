@@ -6,6 +6,7 @@ import { tx } from '../lib/tx';
 import { getLeague, getTeamRoster, isTradeDeadlinePassed as deadlinePassed } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
 import { effectiveCost } from '../lib/tera-cost';
+import { getLeagueCostMap } from '../lib/league-costs';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -38,8 +39,9 @@ function validateProposedTrade(opts: {
   offering: string[];
   requesting: string[];
   pointCap: number;
+  leagueId: string;
 }): string | null {
-  const { proposerId, recipientId, offering, requesting, pointCap } = opts;
+  const { proposerId, recipientId, offering, requesting, pointCap, leagueId } = opts;
 
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
@@ -75,6 +77,11 @@ function validateProposedTrade(opts: {
   const pokemonRows = db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, [...allNames])).all();
   const pokeByName = new Map(pokemonRows.map(p => [p.name, p]));
 
+  // League format cost map — used to resolve the price of traded-IN mons that
+  // don't yet have a costAtDraft on the receiving side. Both teams share the
+  // same league so one map covers both rosters.
+  const leagueCosts = getLeagueCostMap(leagueId);
+
   // Build post-trade rosters. Incoming (traded-in) mons land as NON-captains —
   // tera-captain status (and its cost markup) does not transfer (mirrors
   // executeRosterSwap, which clears isTeraCaptain on the moved rows). Retained
@@ -93,10 +100,14 @@ function validateProposedTrade(opts: {
     // its markup post-trade (only the TRADED mons lose captain status), so
     // summing raw costAtDraft would under-count and let a roster slip over the
     // real cap (TRADE-CAP-CAPTAIN).
-    const total = roster.reduce(
-      (s, r) => s + effectiveCost(r.costAtDraft || r.tier || 0, !!r.isTeraCaptain),
-      0,
-    );
+    // For cost resolution: costAtDraft is the frozen snapshot for already-owned
+    // mons (retained or traded in from a prior acquisition). For mons being
+    // traded in here, fall back to the league format cost rather than the raw
+    // global tier so pricing is consistent with this league's format.
+    const total = roster.reduce((s, r) => {
+      const cost = r.costAtDraft || leagueCosts.get(r.pokemonName)?.tier || r.tier || 0;
+      return s + effectiveCost(cost, !!r.isTeraCaptain);
+    }, 0);
     if (total > pointCap) {
       return `${side} would exceed point cap (${total} > ${pointCap})`;
     }
@@ -154,11 +165,20 @@ function executeRosterSwap(opts: {
 }) {
   const { proposerId, recipientId, offering, requesting, week, leagueId } = opts;
 
+  // Resolve league format costs once for pointsOut snapshots in the
+  // transaction log. We capture costAtDraft from each roster row before
+  // moving it (the row is still owned by the original team at read-time).
+  const leagueCosts = getLeagueCostMap(leagueId);
+
+  // Capture snapshots before any updates, then apply moves.
+  const offeringSnapshots = new Map<string, number | null>();
   for (const name of offering) {
     const row = db.select().from(schema.rosters)
       .where(and(eq(schema.rosters.teamId, proposerId), eq(schema.rosters.pokemonName, name)))
       .get();
     if (!row) throw new Error(`Trade invalid: ${proposerId} no longer has ${name}`);
+    // Prefer the frozen costAtDraft snapshot; fall back to the league format cost.
+    offeringSnapshots.set(name, (row.costAtDraft || leagueCosts.get(name)?.tier) ?? null);
     db.update(schema.rosters).set({
       teamId: recipientId,
       acquiredVia: 'trade',
@@ -168,11 +188,14 @@ function executeRosterSwap(opts: {
       teraType1: null, teraType2: null, teraType3: null,
     }).where(eq(schema.rosters.id, row.id)).run();
   }
+
+  const requestingSnapshots = new Map<string, number | null>();
   for (const name of requesting) {
     const row = db.select().from(schema.rosters)
       .where(and(eq(schema.rosters.teamId, recipientId), eq(schema.rosters.pokemonName, name)))
       .get();
     if (!row) throw new Error(`Trade invalid: ${recipientId} no longer has ${name}`);
+    requestingSnapshots.set(name, (row.costAtDraft || leagueCosts.get(name)?.tier) ?? null);
     db.update(schema.rosters).set({
       teamId: proposerId,
       acquiredVia: 'trade',
@@ -182,21 +205,21 @@ function executeRosterSwap(opts: {
     }).where(eq(schema.rosters.id, row.id)).run();
   }
 
-  // One transaction row per Pokemon for record-keeping
+  // One transaction row per Pokemon for record-keeping.
+  // pointsOut: costAtDraft snapshot (captured above) or league format cost —
+  // never the global pokemon.tier baseline, which may differ from this league's format.
   for (const name of offering) {
-    const poke = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, name)).get();
     db.insert(schema.transactions).values({
       leagueId, week, type: 'trade',
       teamId: proposerId, otherTeamId: recipientId,
-      pokemonOut: name, pointsOut: poke?.tier ?? null,
+      pokemonOut: name, pointsOut: offeringSnapshots.get(name) ?? null,
     }).run();
   }
   for (const name of requesting) {
-    const poke = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, name)).get();
     db.insert(schema.transactions).values({
       leagueId, week, type: 'trade',
       teamId: recipientId, otherTeamId: proposerId,
-      pokemonOut: name, pointsOut: poke?.tier ?? null,
+      pokemonOut: name, pointsOut: requestingSnapshots.get(name) ?? null,
     }).run();
   }
 
@@ -354,6 +377,7 @@ export const tradeRoutes = new Elysia()
       recipientId: trade.recipientId,
       offering, requesting,
       pointCap: season?.pointCap ?? 110,
+      leagueId: trade.leagueId,
     });
     if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
 
@@ -528,6 +552,7 @@ export const tradeRoutes = new Elysia()
     const validationErr = validateProposedTrade({
       proposerId, recipientId, offering, requesting,
       pointCap: season?.pointCap ?? 110,
+      leagueId: params.leagueId,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
@@ -646,6 +671,7 @@ export const tradeRoutes = new Elysia()
       offering,
       requesting,
       pointCap: season?.pointCap ?? 110,
+      leagueId: trade.leagueId,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 

@@ -6,7 +6,7 @@ import { useLeagueData } from '@/lib/league-data-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { getEffectiveCost } from '@/data/tier-list';
+import { getEffectiveCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { leagueGem } from '@/lib/constants';
 import type { Player, RosterPokemon, League } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
@@ -41,8 +41,8 @@ function bst(s: FreeAgent['stats']) {
   return s.hp + s.atk + s.def + s.spa + s.spd + s.spe;
 }
 
-function teamPointsUsed(roster: RosterPokemon[]): number {
-  return roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain), 0);
+function teamPointsUsed(roster: RosterPokemon[], format?: CostFormat): number {
+  return roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain, format), 0);
 }
 
 export function FreeAgentsPage() {
@@ -53,6 +53,7 @@ export function FreeAgentsPage() {
 
   const phase = league.season.phase;
   const pointCap = league.season.pointCap;
+  const costFormat = league.costFormat ?? DEFAULT_FORMAT;
   const userIsStaff = isStaff(user);
 
   // Owner's team in this league (if any). Used as the default acting team
@@ -105,17 +106,17 @@ export function FreeAgentsPage() {
   const [dropTarget, setDropTarget] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
-  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster) : 0;
+  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster, costFormat) : 0;
   const remaining = pointCap - pointsUsed;
 
   // After picking, what would the new total be? (assuming optional drop)
   const projectedAfter = useMemo(() => {
     if (!selected || !myTeam) return pointsUsed;
     const dropCost = dropTarget
-      ? getEffectiveCost(dropTarget, !!myTeam.roster.find(r => r.name === dropTarget)?.isTeraCaptain)
+      ? getEffectiveCost(dropTarget, !!myTeam.roster.find(r => r.name === dropTarget)?.isTeraCaptain, costFormat)
       : 0;
     return pointsUsed - dropCost + selected.tier;
-  }, [selected, dropTarget, pointsUsed, myTeam]);
+  }, [selected, dropTarget, pointsUsed, myTeam, costFormat]);
 
   const mustDrop = !!selected && projectedAfter > pointCap && !dropTarget;
   const canSubmit =
@@ -153,7 +154,7 @@ export function FreeAgentsPage() {
       // there exists at least one drop candidate making it fit.
       // Simpler heuristic: tier <= remaining + maxDropCost.
       const maxDrop = myTeam.roster.reduce(
-        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain)),
+        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain, costFormat)),
         0,
       );
       list = list.filter(p => p.tier <= remaining + maxDrop);
@@ -504,7 +505,7 @@ export function FreeAgentsPage() {
                         .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                         .map(r => (
                           <option key={r.name} value={r.name}>
-                            {r.isTeraCaptain ? '[C] ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain)})
+                            {r.isTeraCaptain ? '[C] ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain, costFormat)})
                           </option>
                         ))}
                     </select>
@@ -558,7 +559,7 @@ export function FreeAgentsPage() {
                 {[...myTeam.roster]
                   .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                   .map(r => {
-                    const cost = getEffectiveCost(r.name, r.isTeraCaptain);
+                    const cost = getEffectiveCost(r.name, r.isTeraCaptain, costFormat);
                     const isDrop = dropTarget === r.name;
                     return (
                       <li

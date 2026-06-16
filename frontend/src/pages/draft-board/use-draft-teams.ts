@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { TIER_LIST } from '@/data/tier-list';
+import { getTierList, type CostFormat } from '@/data/tier-list';
 import type { Player } from '@/lib/types';
 import type { Acquisition, DraftState, PoolOwnership } from './types';
 
@@ -20,6 +20,7 @@ export function useDraftTeams(
   players: Player[],
   standings: Player[],
   ownershipMap: Map<string, PoolOwnership>,
+  format?: CostFormat,
 ) {
   // Compute team points from current picks (for active-view validation).
   // Was scoped to demo only because live mode used to derive points from
@@ -74,9 +75,10 @@ export function useDraftTeams(
         if (r.nickname) nickByKey.set(`${p.id}:${r.name}`, r.nickname);
       }
     }
+    const tierList = getTierList(format);
     for (const [pokemonName, ownership] of ownershipMap) {
       const entry = rosters.get(ownership.teamId);
-      const tierEntry = TIER_LIST.find(t => t.name === pokemonName);
+      const tierEntry = tierList.find(t => t.name === pokemonName);
       if (entry) {
         entry.push({
           name: pokemonName,
@@ -90,7 +92,7 @@ export function useDraftTeams(
       roster.sort((a, b) => b.tier - a.tier);
     }
     return rosters;
-  }, [players, ownershipMap]);
+  }, [players, ownershipMap, format]);
 
   const teamPoints = useMemo(() => {
     const points = new Map<string, number>();

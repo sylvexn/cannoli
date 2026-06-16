@@ -330,6 +330,13 @@
       "when": 1781800000000,
       "tag": "0046_changelog_seen",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1781900000000,
+      "tag": "0047_per_league_cost_formats",
+      "breakpoints": true
     }
   ]
 }

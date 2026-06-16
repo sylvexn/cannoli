@@ -16,7 +16,7 @@ import {
   AlertTriangle, ChevronDown,
 } from 'lucide-react';
 import { getPokemonData } from '@/data/pokemon-data';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierEntry, type CostFormat } from '@/data/tier-list';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import {
@@ -54,6 +54,8 @@ interface DraftPokemonPopoverProps {
    *  we skip the view-transition-name on the popover so the queue's card→roster
    *  morph is the sole owner of that name (no duplicate VT name on the page). */
   animatingPokemonName?: string | null;
+  /** Active league cost format — drives tier entry and conflict lookups. */
+  format?: CostFormat;
   onClose: () => void;
   onModeChange?: (mode: PokemonPopoverMode) => void;
   onConfirmDraft?: (name: string) => void;
@@ -91,6 +93,7 @@ export function DraftPokemonPopover({
   userConflictRoster,
   pointCap = 110,
   animatingPokemonName,
+  format,
   onClose,
   onModeChange,
   onConfirmDraft,
@@ -157,7 +160,7 @@ export function DraftPokemonPopover({
 
   const rosterMon = rosterLookup.get(name);
   const pokeData = getPokemonData(name);
-  const tierEntry = getTierEntry(name);
+  const tierEntry = getTierEntry(name, format);
   const ownership = ownershipMap.get(name);
   const owner = ownership ? playerLookup.get(ownership.teamId) : undefined;
   const types = rosterMon?.types ?? pokeData?.types;

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -109,7 +109,34 @@ export const leagues = sqliteTable('leagues', {
    *  deadline as end-of-day in this zone. Per-user display labeling is a
    *  frontend concern; the API exposes this field for that purpose. */
   timezone: text('timezone').notNull().default('America/New_York'),
+  /** Which COST FORMAT this league prices its pool against — 'natdex' (Emerald:
+   *  legendaries/paradoxes/mythicals banned, megas + pseudos +1pt) or 'natdexplus'
+   *  (Ruby/Sapphire: fuller pool). Many leagues share one format; the per-format
+   *  cost sheet lives in `formatCosts`. Default 'natdexplus' mirrors the historic
+   *  single global tier list. See lib/league-costs.ts for resolution. */
+  costFormat: text('cost_format').notNull().default('natdexplus'),
 });
+
+// ─── Format Costs (per-cost-format Pokemon prices / bans) ───────────────────
+//
+// The per-league cost authority. A row overrides the global `pokemon` reference
+// table's tier/banned/teraBanned FOR A GIVEN COST FORMAT. Resolution at read
+// time (lib/league-costs.ts): formatCosts[(league.costFormat, name)] ?? pokemon.
+// Populated from backend/imports/Costs.xlsx by scripts/apply-cost-formats.ts.
+
+export const formatCosts = sqliteTable('format_costs', {
+  /** Cost-format id, e.g. 'natdex' | 'natdexplus'. Free-form so new formats need
+   *  no schema change. */
+  costFormat: text('cost_format').notNull(),
+  pokemonName: text('pokemon_name').notNull(),
+  /** Draft point cost (1-20). 99 = legacy "not draftable" sentinel (we also set
+   *  banned=1, so either signal works). */
+  tier: integer('tier').notNull().default(0),
+  banned: integer('banned', { mode: 'boolean' }).notNull().default(false),
+  teraBanned: integer('tera_banned', { mode: 'boolean' }).notNull().default(false),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.costFormat, t.pokemonName] }),
+}));
 
 // ─── Draft Templates (saved {format, captain count, banlist, tier snapshot}) ─
 

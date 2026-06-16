@@ -33,6 +33,7 @@ import {
   IMPORTS_DIR,
 } from './import-xlsx';
 import { S9_AWARDS, S10_AWARDS, mintManualPins } from '../src/lib/pins/awards-data';
+import { populateFormatCosts, refreshBaseline, assignLeagueCostFormats } from './apply-cost-formats';
 
 const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
 const DRIZZLE_DIR = resolve(import.meta.dir, '../drizzle');
@@ -1118,6 +1119,23 @@ if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
   ).all(ACTIVE_LEAGUE) as { status: string; c: number }[];
   const pretty = counts.map((c) => `${c.status}=${c.c}`).join(' ');
   console.log(`  ${ACTIVE_LEAGUE} reset to regular wk${ACTIVE_WEEK}: ${pretty} (deleted ${playoffDeleted.changes} playoff rows)`);
+}
+
+// ─── Per-league cost formats ─────────────────────────────────────────────────
+// Pokemon + leagues exist by now. Populate format_costs for both cost sheets
+// (NatDex / NatDex+), refresh the pokemon baseline to NatDex+, and assign each
+// league its format (Emerald → natdex, others → natdexplus). Same code path as
+// the standalone apply-cost-formats.ts so a fresh seed and a live apply produce
+// identical per-league pricing.
+{
+  const fmt = sqlite.transaction(() => {
+    refreshBaseline(sqlite);
+    const written = populateFormatCosts(sqlite);
+    const leaguesChanged = assignLeagueCostFormats(sqlite);
+    return { written, leaguesChanged };
+  })();
+  const perFmt = Object.entries(fmt.written).map(([f, n]) => `${f}=${n}`).join(' ');
+  console.log(`\n  cost formats: format_costs(${perFmt}), ${fmt.leaguesChanged} leagues assigned`);
 }
 
 // ─── Final summary ──────────────────────────────────────────────────────────

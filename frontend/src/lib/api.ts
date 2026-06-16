@@ -74,6 +74,9 @@ export interface ApiLeague {
   /** IANA zone anchoring deadline cutoffs (TZ-DEADLINE). */
   timezone?: string | null;
   playoffTeamCount?: number;
+  /** Cost format id ('natdex' | 'natdexplus') — which price sheet this league
+   *  drafts/values its pool against. */
+  costFormat?: string;
   /** Registered-team (== coach) count for this league. */
   playerCount?: number;
   season: {
@@ -567,6 +570,12 @@ export interface ApiTierListEntry {
   status: 'available' | 'tera-banned' | 'banned';
 }
 
+export interface ApiCostFormat {
+  id: string;
+  label: string;
+  leagueIds: string[];
+}
+
 /** Saved {format, captain config, banlist, tier-list snapshot} preset. The
  *  season wizard's "Start from template" option seeds initial state from one
  *  of these so admins don't have to re-enter the same numbers each season. */
@@ -863,7 +872,10 @@ export const api = {
 
   getTradeBlock: (leagueId: string) => fetchJson<ApiTradeBlockListing[]>(`/api/leagues/${leagueId}/trade-block`),
 
-  getTierList: () => fetchJson<ApiTierListEntry[]>('/api/tier-list'),
+  getTierList: (format?: string) =>
+    fetchJson<ApiTierListEntry[]>(format ? `/api/tier-list?format=${encodeURIComponent(format)}` : '/api/tier-list'),
+
+  getCostFormats: () => fetchJson<ApiCostFormat[]>('/api/cost-formats'),
 
   // ─── Draft Templates ─────────────────────────────────────────────
   // A template snapshots format + tier list + bans + captain config so a new
@@ -914,7 +926,7 @@ export const api = {
 
   updateTierListEntry: (
     name: string,
-    data: { tier?: number; status?: string; force?: boolean; confirmLeague?: string },
+    data: { format?: string; tier?: number; status?: string; force?: boolean; confirmLeague?: string },
   ) =>
     putJson<{ success: boolean; forced?: boolean }>(`/api/tier-list/${encodeURIComponent(name)}`, data),
 

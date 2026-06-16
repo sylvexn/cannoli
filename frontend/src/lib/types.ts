@@ -188,6 +188,11 @@ export interface League {
    *  center. See frontend/src/data/pokemon-learnsets.ts → DraftFormat.
    *  Optional for backwards compat (treated as 'gen9natdex' when missing). */
   format?: import('@/data/pokemon-learnsets').DraftFormat;
+  /** Cost format — which per-league price sheet this league drafts/values its
+   *  pool against ('natdex' = Emerald, 'natdexplus' = Ruby/Sapphire). Drives
+   *  cost display + captain eligibility on every league-scoped surface. Optional
+   *  for backwards compat (treated as 'natdexplus' when missing). */
+  costFormat?: import('@/data/tier-list').CostFormat;
   season: LeagueSeason;
   players: Player[];
   /** Registered-team (== coach) count, from `/api/leagues`. The `players`

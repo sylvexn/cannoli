@@ -51,6 +51,10 @@ export const leagueRoutes = new Elysia()
       draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
       playoffTeamCount: l.playoffTeamCount,
       format: l.format,
+      // Cost format ('natdex' | 'natdexplus') — which per-league price sheet this
+      // league's pool is drafted/valued against. Drives the frontend's cost
+      // display + the backend draft/FA/trade cost math (see lib/league-costs.ts).
+      costFormat: l.costFormat,
       // Canonical deadline-cutoff timezone for this league. The auto-forfeit
       // job anchors end-of-day to this zone; the frontend (sweep 3c) labels
       // each user's local rendering against it.

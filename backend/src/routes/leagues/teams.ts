@@ -1,9 +1,10 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { effectiveCost } from '../../lib/tera-cost';
+import { getLeagueCostMap } from '../../lib/league-costs';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 
@@ -52,16 +53,18 @@ export const teamRoutes = new Elysia()
       return { error: `Max ${maxCaptains} tera captains allowed` };
     }
 
-    // Validate eligibility: not tera-banned, tier ≤ 9
+    // Validate eligibility: not tera-banned, tier ≤ 9 — resolved from THIS
+    // league's cost format so format-specific overrides are respected.
+    const leagueCosts = getLeagueCostMap(team.leagueId);
     for (const c of captains) {
-      const pkmn = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, c.pokemonName)).get();
-      if (pkmn?.teraBanned) {
+      const resolved = leagueCosts.get(c.pokemonName);
+      if (resolved?.teraBanned) {
         set.status = 400;
         return { error: `${c.pokemonName} is tera-banned` };
       }
-      if (pkmn && pkmn.tier > 9) {
+      if (resolved && resolved.tier > 9) {
         set.status = 400;
-        return { error: `${c.pokemonName} is tier ${pkmn.tier} — captains must be tier 9 or below` };
+        return { error: `${c.pokemonName} is tier ${resolved.tier} — captains must be tier 9 or below` };
       }
       if (c.teraTypes.length > 3) {
         set.status = 400;
@@ -250,10 +253,12 @@ export const teamRoutes = new Elysia()
       )
     );
 
-    // Get all draftable pokemon (tier > 0, not banned)
+    // Fetch per-pokemon display data (types, stats) from the reference table.
+    // Draftability + cost come from THIS league's format map.
+    const costs = getLeagueCostMap(params.leagueId);
+
     const allPokemon = db.select({
       name: schema.pokemon.name,
-      tier: schema.pokemon.tier,
       type1: schema.pokemon.type1,
       type2: schema.pokemon.type2,
       hp: schema.pokemon.hp,
@@ -262,19 +267,25 @@ export const teamRoutes = new Elysia()
       spa: schema.pokemon.spa,
       spd: schema.pokemon.spd,
       spe: schema.pokemon.spe,
-    }).from(schema.pokemon)
-      .where(and(sql`${schema.pokemon.tier} > 0`, eq(schema.pokemon.banned, false)))
-      .all();
+    }).from(schema.pokemon).all();
 
     return allPokemon
-      .filter(p => !rostered.has(p.name))
-      .map(p => ({
-        name: p.name,
-        tier: p.tier,
-        type1: p.type1,
-        type2: p.type2,
-        stats: { hp: p.hp, atk: p.atk, def: p.def, spa: p.spa, spd: p.spd, spe: p.spe },
-      }));
+      .filter(p => {
+        if (rostered.has(p.name)) return false;
+        const c = costs.get(p.name);
+        // Only include mons that are draftable in THIS league's format
+        return c !== undefined && c.tier > 0 && !c.banned;
+      })
+      .map(p => {
+        const c = costs.get(p.name)!;
+        return {
+          name: p.name,
+          tier: c.tier,       // league-format cost, not global pokemon.tier
+          type1: p.type1,
+          type2: p.type2,
+          stats: { hp: p.hp, atk: p.atk, def: p.def, spa: p.spa, spd: p.spd, spe: p.spe },
+        };
+      });
   })
 
   .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, body, user, set }) => {
@@ -311,11 +322,17 @@ export const teamRoutes = new Elysia()
       return { error: 'Not your team' };
     }
 
-    // Verify pokemon exists, is draftable (tier > 0), and isn't banned
-    const pkmn = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
-    if (!pkmn) { set.status = 404; return { error: 'Pokemon not found' }; }
-    if (pkmn.tier <= 0) { set.status = 400; return { error: `${pokemonName} is not draftable` }; }
-    if (pkmn.banned) { set.status = 400; return { error: `${pokemonName} is banned` }; }
+    // Verify pokemon exists and is draftable in THIS league's format.
+    // Draftability (tier > 0, not banned) is resolved from the league cost map
+    // so format-specific overrides are respected. We still fetch the global row
+    // to confirm the species exists at all (a species absent from both tables
+    // returns undefined from the cost map too, but the 404 is more informative).
+    const pkmnGlobal = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
+    if (!pkmnGlobal) { set.status = 404; return { error: 'Pokemon not found' }; }
+    const leagueCosts = getLeagueCostMap(params.leagueId);
+    const pkmnCost = leagueCosts.get(pokemonName);
+    if (!pkmnCost || pkmnCost.tier <= 0) { set.status = 400; return { error: `${pokemonName} is not draftable` }; }
+    if (pkmnCost.banned) { set.status = 400; return { error: `${pokemonName} is banned` }; }
 
     const alreadyRostered = db.select().from(schema.rosters)
       .where(eq(schema.rosters.pokemonName, pokemonName))
@@ -385,13 +402,14 @@ export const teamRoutes = new Elysia()
             .run();
         }
 
-        // Add new pokemon to roster — snapshot costAtDraft so later admin
-        // tier-list edits don't retroactively rewrite this team's point total.
+        // Add new pokemon to roster — snapshot costAtDraft from the league's
+        // cost format so later tier-list edits (or format changes) don't
+        // retroactively rewrite this team's point total.
         db.insert(schema.rosters).values({
           teamId,
           pokemonName,
-          tier: pkmn.tier,
-          costAtDraft: pkmn.tier,
+          tier: pkmnCost.tier,
+          costAtDraft: pkmnCost.tier,
           acquiredVia: 'fa',
           acquiredWeek: week,
         }).run();
@@ -459,14 +477,14 @@ export const teamRoutes = new Elysia()
           );
         }
 
-        // Transaction record
+        // Transaction record — pointsIn from the league format snapshot
         db.insert(schema.transactions).values({
           leagueId: params.leagueId,
           week,
           type: 'fa',
           teamId,
           pokemonIn: pokemonName,
-          pointsIn: pkmn.tier,
+          pointsIn: pkmnCost.tier,
           pokemonOut: dropPokemonName || null,
         }).run();
 

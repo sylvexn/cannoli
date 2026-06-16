@@ -113,6 +113,7 @@ function toLeague(a: ApiLeague): League {
     name: a.name,
     color: a.color,
     timezone: a.timezone ?? 'America/New_York',
+    costFormat: (a.costFormat as import('@/data/tier-list').CostFormat) ?? 'natdexplus',
     season,
     players: [], // Will be loaded separately via useLeagueTeams
     hasData: true,

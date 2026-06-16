@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, type Dispatch } from 'react';
 import { toast } from 'sonner';
-import { TIER_LIST, BANNED } from '@/data/tier-list';
+import { getTierList, getBanned, type CostFormat } from '@/data/tier-list';
 import {
   findPickConflict, captainHeadroomNeeded, type ConflictInputRoster,
 } from '@/lib/draft-rules';
 import type { DraftAction, DraftState, SnakeSlot } from './types';
-
-const BANNED_SET = new Set(BANNED);
 
 /**
  * Mirrors backend draft-engine.getAutoPick: filters banned, drafted, and any
@@ -17,10 +15,12 @@ function simulatorAutoPick(
   drafted: Set<string>,
   roster: ConflictInputRoster,
   pointCap: number,
+  format?: CostFormat,
 ): { name: string; tier: number } | null {
-  const available = TIER_LIST.filter(e => {
+  const bannedSet = new Set(getBanned(format));
+  const available = getTierList(format).filter(e => {
     if (drafted.has(e.name)) return false;
-    if (BANNED_SET.has(e.name)) return false;
+    if (bannedSet.has(e.name)) return false;
     if (e.tier <= 0) return false;
     if (findPickConflict(e.name, e.tier, roster, pointCap)) return false;
     return true;
@@ -49,6 +49,8 @@ interface UseDraftAutoPickersOptions {
    * the queue drains because `queueIdle` is in their deps.
    */
   queueIdle: boolean;
+  /** Active league cost format — determines tier list + bans for auto-pick and captain reserve. */
+  format?: CostFormat;
 }
 
 /**
@@ -66,7 +68,7 @@ interface UseDraftAutoPickersOptions {
 export function useDraftAutoPickers({
   state, dispatch, draftedSet,
   demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
-  teraCaptainSlots, queueIdle,
+  teraCaptainSlots, queueIdle, format,
 }: UseDraftAutoPickersOptions) {
   const isActive = state.view === 'active';
   const isRunning = isActive && state.status === 'running';
@@ -89,10 +91,10 @@ export function useDraftAutoPickers({
       .filter(p => p.playerId === teamId)
       .map(p => ({ name: p.pokemonName, tier: p.tier }));
     const captainReserve = teraCaptainSlots > 0
-      ? captainHeadroomNeeded(rosterEntries, teraCaptainSlots)
+      ? captainHeadroomNeeded(rosterEntries, teraCaptainSlots, format)
       : 0;
     return { pokemonNames: names, pointsUsed, picksLeft, captainReserve };
-  }, [state.view, state.allPicks, demoTeamRosterNames, demoTeamPoints, picksLeftByTeam, teraCaptainSlots]);
+  }, [state.view, state.allPicks, demoTeamRosterNames, demoTeamPoints, picksLeftByTeam, teraCaptainSlots, format]);
 
   // Toast when it becomes the user's turn
   const prevIsUserTurn = useRef(false);
@@ -114,14 +116,14 @@ export function useDraftAutoPickers({
     const delay = setTimeout(() => {
       const ctx = buildConflictRoster(currentSlot.teamId);
       if (!ctx) return;
-      const pick = simulatorAutoPick(draftedSet, ctx, state.pointCap);
+      const pick = simulatorAutoPick(draftedSet, ctx, state.pointCap, format);
       if (pick) {
         dispatch({ type: 'PICK_LANDED', pokemonName: pick.name, tier: pick.tier });
       }
     }, 300 + Math.random() * 700);
 
     return () => clearTimeout(delay);
-  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, queueIdle, buildConflictRoster, draftedSet, state.pointCap, dispatch]);
+  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, queueIdle, buildConflictRoster, draftedSet, state.pointCap, format, dispatch]);
 
   // Simulator-only: auto-pick for the user on timer expiry. Live mode pauses
   // on expiry server-side; admin resolves explicitly.
@@ -133,11 +135,11 @@ export function useDraftAutoPickers({
 
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
     if (!ctx) return;
-    const pick = simulatorAutoPick(draftedSet, ctx, state.pointCap);
+    const pick = simulatorAutoPick(draftedSet, ctx, state.pointCap, format);
     if (pick) {
       dispatch({ type: 'PICK_LANDED', pokemonName: pick.name, tier: pick.tier });
     }
-  }, [state.source, isRunning, isUserTurn, state.timerSeconds, queueIdle, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
+  }, [state.source, isRunning, isUserTurn, state.timerSeconds, queueIdle, buildConflictRoster, draftedSet, state.pointCap, format, state.userTeamId, dispatch]);
 
   // Auto-draft from queue when it's user's turn and autoDraftQueue is enabled.
   // Simulator-only: server source runs picks through the WS (handleUserPick).
@@ -155,10 +157,11 @@ export function useDraftAutoPickers({
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
     if (!ctx) return;
 
+    const tierList = getTierList(format);
     let chosen: { name: string; tier: number } | null = null;
     for (const name of state.draftQueue) {
       if (draftedSet.has(name)) continue;
-      const entry = TIER_LIST.find(e => e.name === name);
+      const entry = tierList.find(e => e.name === name);
       if (!entry) continue;
       if (findPickConflict(name, entry.tier, ctx, state.pointCap)) continue;
       chosen = { name, tier: entry.tier };
@@ -167,7 +170,7 @@ export function useDraftAutoPickers({
     if (!chosen) return;
 
     dispatch({ type: 'PICK_LANDED', pokemonName: chosen.name, tier: chosen.tier });
-  }, [state.source, isUserTurn, state.autoDraftQueue, state.draftQueue, isRunning, isComplete, queueIdle, buildConflictRoster, draftedSet, state.pointCap, state.userTeamId, dispatch]);
+  }, [state.source, isUserTurn, state.autoDraftQueue, state.draftQueue, isRunning, isComplete, queueIdle, buildConflictRoster, draftedSet, state.pointCap, format, state.userTeamId, dispatch]);
 
   return {
     currentSlot,

@@ -18,7 +18,8 @@
     "test:all": "bun run test && bun run test:unit && bun run test:e2e"
   },
   "dependencies": {
-    "@fontsource-variable/cinzel": "^5.2.8"
+    "@fontsource-variable/cinzel": "^5.2.8",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",

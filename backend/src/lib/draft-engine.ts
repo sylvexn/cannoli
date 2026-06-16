@@ -8,6 +8,7 @@ import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { tx } from './tx';
 import { getBaseFormName } from './pokedex';
 import { effectiveCost } from './tera-cost';
+import { getLeagueCostMap } from './league-costs';
 
 // ─── Structured error codes ────────────────────────────────────────────────
 // Mirrors frontend draft-rules ConflictReason kinds — wire-formatted for the
@@ -96,24 +97,21 @@ const MIN_PICK_COST = 1;
  * of {name, tier} entries. Tier 9→12, 8→10, 7→9, 6→8, 5→6, 4→5, 3→4, 2→2, 1→1.
  * Mirrors frontend draft-rules.captainHeadroomNeeded: only tier-≤9 mons are
  * eligible, tera-banned mons are excluded, and we sum the highest markups.
+ *
+ * `leagueId` is used to resolve tera-banned status from the league's cost format
+ * rather than the global pokemon table.
  */
 export function captainHeadroomNeeded(
   roster: { name: string; tier: number }[],
   slots: number,
+  leagueId: string,
 ): number {
   if (slots <= 0) return 0;
-  // Pull tera-banned flags for just the roster mons in one IN(...) query.
-  const names = roster.map(r => r.name);
-  const teraBannedNames = names.length === 0
-    ? new Set<string>()
-    : new Set(
-      db.select({ name: schema.pokemon.name, teraBanned: schema.pokemon.teraBanned })
-        .from(schema.pokemon)
-        .where(inArray(schema.pokemon.name, names))
-        .all()
-        .filter(p => p.teraBanned)
-        .map(p => p.name),
-    );
+  // Resolve tera-banned flags from the league's cost format map.
+  const costs = getLeagueCostMap(leagueId);
+  const teraBannedNames = new Set(
+    roster.map(r => r.name).filter(name => costs.get(name)?.teraBanned),
+  );
   const markups = roster
     .filter(r => r.tier >= 1 && r.tier <= 9 && !teraBannedNames.has(r.name))
     .map(r => Math.max(0, effectiveCost(r.tier, true) - r.tier))
@@ -139,7 +137,14 @@ export function validatePick(
     .get();
 
   if (!poke) return { valid: false, error: `Pokemon "${pokemonName}" not found`, code: 'not_found' };
-  if (poke.banned) return { valid: false, error: `${pokemonName} is banned`, code: 'banned' };
+
+  // Cost/ban resolution uses the league's format map (not the global pokemon.banned).
+  const costs = getLeagueCostMap(leagueId);
+  const pokeCost = costs.get(pokemonName);
+  const pokeBanned = pokeCost?.banned ?? poke.banned;
+  const pokeTier = pokeCost?.tier ?? poke.tier;
+
+  if (pokeBanned) return { valid: false, error: `${pokemonName} is banned`, code: 'banned' };
 
   // 2. Not already drafted in this league
   const existingPick = db.select().from(schema.draftPicks)
@@ -202,13 +207,13 @@ export function validatePick(
     return { valid: false, code: 'mega_cap', error: `Max 1 Mega per team — already have one` };
   }
 
-  // 4. Point cap check (raw)
+  // 4. Point cap check (raw) — use the league-format tier, not the global pokemon.tier
   const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
-  if (usedPoints + poke.tier > pointCap) {
+  if (usedPoints + pokeTier > pointCap) {
     return {
       valid: false,
       code: 'over_budget',
-      error: `Would exceed point cap (${usedPoints} + ${poke.tier} > ${pointCap})`,
+      error: `Would exceed point cap (${usedPoints} + ${pokeTier} > ${pointCap})`,
     };
   }
 
@@ -232,13 +237,13 @@ export function validatePick(
       .slice(state.currentPickIndex + 1)
       .filter(s => s.teamId === teamId).length;
     const reserve = futureSlots * MIN_PICK_COST;
-    const remainingAfter = pointCap - usedPoints - poke.tier;
+    const remainingAfter = pointCap - usedPoints - pokeTier;
     if (remainingAfter < reserve) {
       const maxAffordable = pointCap - usedPoints - reserve;
       return {
         valid: false,
         code: 'roster_reserve',
-        error: `${poke.tier}pt would leave too little for ${futureSlots} remaining pick${futureSlots === 1 ? '' : 's'} (max ${maxAffordable}pt now)`,
+        error: `${pokeTier}pt would leave too little for ${futureSlots} remaining pick${futureSlots === 1 ? '' : 's'} (max ${maxAffordable}pt now)`,
       };
     }
 
@@ -250,16 +255,16 @@ export function validatePick(
     if (captainSlots > 0) {
       const projectedRoster = [
         ...teamPicks.map(p => ({ name: p.pokemonName, tier: p.tier })),
-        { name: pokemonName, tier: poke.tier },
+        { name: pokemonName, tier: pokeTier },
       ];
-      const captainReserve = captainHeadroomNeeded(projectedRoster, captainSlots);
+      const captainReserve = captainHeadroomNeeded(projectedRoster, captainSlots, leagueId);
       // Need enough left over for both remaining picks (≥ MIN each) AND captain markup.
       const needed = reserve + captainReserve;
       if (remainingAfter < needed) {
         return {
           valid: false,
           code: 'captain_reserve_violation',
-          error: `${poke.tier}pt would leave only ${remainingAfter}pt — need ${needed}pt for ${futureSlots} more pick${futureSlots === 1 ? '' : 's'} + ${captainReserve}pt captain markup`,
+          error: `${pokeTier}pt would leave only ${remainingAfter}pt — need ${needed}pt for ${futureSlots} more pick${futureSlots === 1 ? '' : 's'} + ${captainReserve}pt captain markup`,
         };
       }
     }
@@ -325,6 +330,9 @@ export function getAutoPick(
   const season = league
     ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get()
     : null;
+  // Load the league's cost map once — used for banned/tier/teraBanned resolution.
+  const costMap = getLeagueCostMap(leagueId);
+
   let maxAffordable = remaining;
   if (state && state.status === 'in_progress' && league?.draftOrder) {
     const teamOrder: string[] = JSON.parse(league.draftOrder);
@@ -334,7 +342,7 @@ export function getAutoPick(
       .filter(s => s.teamId === teamId).length;
     const captainSlots = season?.teraCaptainSlots ?? 0;
     const captainReserve = captainSlots > 0
-      ? captainHeadroomNeeded(teamPicks.map(p => ({ name: p.pokemonName, tier: p.tier })), captainSlots)
+      ? captainHeadroomNeeded(teamPicks.map(p => ({ name: p.pokemonName, tier: p.tier })), captainSlots, leagueId)
       : 0;
     maxAffordable = Math.max(0, remaining - futureSlots * MIN_PICK_COST - captainReserve);
   }
@@ -349,10 +357,14 @@ export function getAutoPick(
   // Eligibility predicate shared by the queue walk and the highest-affordable
   // fallback. A mon is pickable if it's available, affordable within the
   // reserve-adjusted budget, and doesn't violate species/natdex/mega rules.
+  // Cost/ban resolution uses the league's format map; form/dex data stays on pokemon.
   const isEligible = (p: typeof schema.pokemon.$inferSelect): boolean => {
-    if (p.banned) return false;
+    const cost = costMap.get(p.name);
+    const effectiveBanned = cost?.banned ?? p.banned;
+    const effectiveTier = cost?.tier ?? p.tier;
+    if (effectiveBanned) return false;
     if (drafted.has(p.name)) return false;
-    if (p.tier <= 0 || p.tier > maxAffordable) return false;
+    if (effectiveTier <= 0 || effectiveTier > maxAffordable) return false;
     if (teamSpecies.has(getBaseFormName(p.name))) return false;
     if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
     if (teamHasMega && p.formCategory === 'mega') return false;
@@ -368,23 +380,32 @@ export function getAutoPick(
     const byName = new Map(queuedMons.map(m => [m.name, m]));
     for (const name of queued) {
       const mon = byName.get(name);
-      if (mon && isEligible(mon)) return { name: mon.name, tier: mon.tier };
+      if (mon && isEligible(mon)) {
+        const effectiveTier = costMap.get(mon.name)?.tier ?? mon.tier;
+        return { name: mon.name, tier: effectiveTier };
+      }
     }
     // Queue exhausted / all invalid → fall through to highest-affordable.
   }
 
   // 2. Fallback: highest-tier affordable, alphabetical tiebreaker (deterministic
   // — important for pick idempotency / replay).
+  // Pull all mons from pokemon table (for form/dex data) then apply isEligible
+  // which uses costMap for the ban/tier check.
   const available = db.select()
     .from(schema.pokemon)
-    .where(eq(schema.pokemon.banned, false))
     .all()
     .filter(isEligible);
 
   if (available.length === 0) return null;
 
-  available.sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name));
-  return { name: available[0].name, tier: available[0].tier };
+  available.sort((a, b) => {
+    const tierA = costMap.get(a.name)?.tier ?? a.tier;
+    const tierB = costMap.get(b.name)?.tier ?? b.tier;
+    return tierB - tierA || a.name.localeCompare(b.name);
+  });
+  const best = available[0];
+  return { name: best.name, tier: costMap.get(best.name)?.tier ?? best.tier };
 }
 
 // ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
@@ -547,10 +568,10 @@ function _executePickUnlocked(
       return { success: false as const, error: validation.error!, code: validation.code };
     }
 
-    // Get pokemon tier
-    const poke = db.select().from(schema.pokemon)
-      .where(eq(schema.pokemon.name, pokemonName))
-      .get()!;
+    // Resolve this pick's tier from the league's cost format (not the global pokemon.tier).
+    // This snapshot is what gets frozen into draftPicks.tier and rosters.costAtDraft.
+    const pickCosts = getLeagueCostMap(leagueId);
+    const resolvedTier = pickCosts.get(pokemonName)?.tier ?? 0;
 
     // Insert the draft pick
     const pickNumber = state.currentPickIndex + 1;
@@ -559,16 +580,16 @@ function _executePickUnlocked(
       teamId,
       pickNumber,
       pokemonName,
-      tier: poke.tier,
+      tier: resolvedTier,
     }).run();
 
-    // Also add to roster — snapshot costAtDraft = current pokemon.tier so later
+    // Also add to roster — snapshot costAtDraft from the league's format so later
     // admin tier-list edits don't retroactively shift point totals.
     db.insert(schema.rosters).values({
       teamId,
       pokemonName,
-      tier: poke.tier,
-      costAtDraft: poke.tier,
+      tier: resolvedTier,
+      costAtDraft: resolvedTier,
       acquiredVia: 'draft',
     }).run();
 
@@ -593,8 +614,8 @@ function _executePickUnlocked(
       category: 'draft',
       actor: actor || teamId,
       leagueId,
-      description: `${teamId} picked ${pokemonName} (tier ${poke.tier})`,
-      metadata: JSON.stringify({ pickNumber, teamId, pokemonName, tier: poke.tier }),
+      description: `${teamId} picked ${pokemonName} (tier ${resolvedTier})`,
+      metadata: JSON.stringify({ pickNumber, teamId, pokemonName, tier: resolvedTier }),
     }).run();
 
     if (isComplete) {
@@ -610,7 +631,7 @@ function _executePickUnlocked(
 
     return {
       success: true as const,
-      pick: { teamId, pokemonName, tier: poke.tier, pickNumber },
+      pick: { teamId, pokemonName, tier: resolvedTier, pickNumber },
     };
   }
 }

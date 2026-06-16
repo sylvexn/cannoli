@@ -7,7 +7,7 @@
  * The backend remains authoritative — these helpers exist for UX, not security.
  */
 
-import { getEffectiveCost, TERA_BANNED } from '@/data/tier-list';
+import { getEffectiveCost, getTeraBanned, type CostFormat } from '@/data/tier-list';
 
 export type FormCategory = 'base' | 'mega' | 'regional' | 'other';
 
@@ -228,11 +228,13 @@ export function describeWarning(w: PickWarning): string {
 export function captainHeadroomNeeded(
   roster: { name: string; tier: number }[],
   slots: number,
+  format?: CostFormat,
 ): number {
   if (slots <= 0) return 0;
+  const teraBanned = getTeraBanned(format);
   const eligible = roster
-    .filter(r => r.tier <= 9 && r.tier >= 1 && !TERA_BANNED.includes(r.name))
-    .map(r => Math.max(0, getEffectiveCost(r.name, true) - r.tier))
+    .filter(r => r.tier <= 9 && r.tier >= 1 && !teraBanned.includes(r.name))
+    .map(r => Math.max(0, getEffectiveCost(r.name, true, format) - r.tier))
     .sort((a, b) => b - a);
   let total = 0;
   for (let i = 0; i < Math.min(slots, eligible.length); i++) total += eligible[i];

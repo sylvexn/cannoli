@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getPokemonData } from '@/data/pokemon-data';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TypeChip } from '@/components/type-chip';
 import { TYPE_COLORS } from '@/lib/constants';
@@ -17,7 +17,9 @@ import { Swords, ArrowLeft, Shield, Gauge, UsersRound, Clapperboard, ExternalLin
 import { api, type ApiGlobalOwnership, type ApiPokemonRecentBattle } from '@/lib/api';
 import type { PokemonType } from '@/lib/pokemon';
 
-export function PokemonDetailPage() {
+/** Optional cost format — pass `league.costFormat` when rendering inside a
+ *  league context. Defaults to 'natdexplus' when absent. */
+export function PokemonDetailPage({ format }: { format?: CostFormat } = {}) {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const decodedName = name ? decodeURIComponent(name) : '';
@@ -31,7 +33,7 @@ export function PokemonDetailPage() {
   }
 
   const pokeData = decodedName ? getPokemonData(decodedName) : undefined;
-  const tierEntry = decodedName ? getTierEntry(decodedName) : undefined;
+  const tierEntry = decodedName ? getTierEntry(decodedName, format ?? DEFAULT_FORMAT) : undefined;
 
   if (!pokeData || !decodedName) {
     return (

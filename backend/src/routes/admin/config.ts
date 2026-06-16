@@ -3,6 +3,7 @@ import { db, schema } from '../../db';
 import { eq, sql } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
 import { requireStaff } from '../../lib/auth-guards';
+import { getFormatCostMap, invalidateCostCache, DEFAULT_COST_FORMAT } from '../../lib/league-costs';
 
 // Group-level staff guard: every route below is staff-only. The guard runs
 // before each handler and short-circuits non-staff with 401/403, so the check
@@ -32,7 +33,10 @@ export const configRoutes = new Elysia()
   // ─── Tier List ──────────────────────────────────────────────────────
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {
-    const { tier, status, force, confirmLeague } = body as {
+    const { format: rawFormat, tier, status, force, confirmLeague } = body as {
+      /** Which cost format to edit — 'natdex' | 'natdexplus'. Edits land in
+       *  `format_costs`, so they only affect leagues using that format. */
+      format?: string;
       tier?: number;
       status?: string;
       /** Acknowledge that this edit will affect a league past draft — required when active leagues exist */
@@ -40,6 +44,7 @@ export const configRoutes = new Elysia()
       /** Must match the active (regular/playoffs) league's name when force=true */
       confirmLeague?: string;
     };
+    const format = rawFormat?.trim() || DEFAULT_COST_FORMAT;
 
     // Phase gate: refuse mid-draft / mid-season tier moves unless the caller
     // explicitly confirms via { force: true, confirmLeague: <league name> }.
@@ -81,17 +86,29 @@ export const configRoutes = new Elysia()
       }
     }
 
-    const existing = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, params.name)).get();
-    if (!existing) { set.status = 404; return { error: 'Pokemon not found' }; }
+    // Resolve the species' CURRENT value in this format (existing format_costs
+    // row, or the pokemon-table baseline). Unknown species → 404.
+    const before = getFormatCostMap(format).get(params.name);
+    if (!before) { set.status = 404; return { error: 'Pokemon not found' }; }
 
-    const updates: Record<string, unknown> = {};
-    if (tier !== undefined) updates.tier = tier;
-    if (status === 'banned') { updates.banned = true; updates.teraBanned = false; }
-    else if (status === 'tera-banned') { updates.teraBanned = true; updates.banned = false; }
-    else if (status === 'available') { updates.banned = false; updates.teraBanned = false; }
+    // Build the full target row (format_costs needs every column on insert).
+    const after = { tier: before.tier, banned: before.banned, teraBanned: before.teraBanned };
+    if (tier !== undefined) after.tier = tier;
+    if (status === 'banned') { after.banned = true; after.teraBanned = false; }
+    else if (status === 'tera-banned') { after.teraBanned = true; after.banned = false; }
+    else if (status === 'available') { after.banned = false; after.teraBanned = false; }
 
     tx(() => {
-      db.update(schema.pokemon).set(updates).where(eq(schema.pokemon.name, params.name)).run();
+      db.insert(schema.formatCosts).values({
+        costFormat: format,
+        pokemonName: params.name,
+        tier: after.tier,
+        banned: after.banned,
+        teraBanned: after.teraBanned,
+      }).onConflictDoUpdate({
+        target: [schema.formatCosts.costFormat, schema.formatCosts.pokemonName],
+        set: { tier: after.tier, banned: after.banned, teraBanned: after.teraBanned },
+      }).run();
 
       // Force-edits during regular/playoffs are flagged with a distinct activity
       // type so they're easy to filter in the audit view.
@@ -102,12 +119,13 @@ export const configRoutes = new Elysia()
         actor: user!.username,
         leagueId: null,
         description: isForced
-          ? `FORCED tier-list edit: ${params.name} (during ${activeLeagues.map(l => l.name).join(', ')}) — confirmed: "${confirmLeague}"`
-          : `Tier-list edit: ${params.name}${tier !== undefined ? ` → tier ${tier}` : ''}${status ? ` [${status}]` : ''}`,
+          ? `FORCED tier-list edit [${format}]: ${params.name} (during ${activeLeagues.map(l => l.name).join(', ')}) — confirmed: "${confirmLeague}"`
+          : `Tier-list edit [${format}]: ${params.name}${tier !== undefined ? ` → tier ${tier}` : ''}${status ? ` [${status}]` : ''}`,
         metadata: JSON.stringify({
           pokemon: params.name,
-          before: { tier: existing.tier, banned: existing.banned, teraBanned: existing.teraBanned },
-          after: updates,
+          format,
+          before,
+          after,
           forced: isForced,
           confirmLeague: confirmLeague ?? null,
           activeLeagues: activeLeagues.map(l => l.id),
@@ -115,6 +133,7 @@ export const configRoutes = new Elysia()
       }).run();
     });
 
+    invalidateCostCache(format);
     return { success: true, forced: activeLeagues.length > 0 };
   })
 
