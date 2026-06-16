@@ -76,13 +76,15 @@ psserver=false; match '^(showdown/Dockerfile\.server|ps/)' && psserver=true
 psclient=false; match '^showdown/(Dockerfile\.client|nginx\.conf|ps-client-config\.js|ps-testclient-key\.js)' && psclient=true
 
 # ── 2. Build the ordered deploy plan ────────────────────────────────────────
-# Order = mock before live (mock is the canary), backend before its frontend.
+# Order = LIVE first (prod is the priority — git push should land on cannoli.live
+# ASAP), then mock; backend before its frontend within each. The fast-checks gate
+# (lint/type/unit, which boots the backend in tests) is the pre-deploy safety net.
 # Fields: name|uuid|kind|url   kind ∈ {backend,web,internal}
 PLAN=()
-$backend  && PLAN+=("cannoli-backend-mock|bg57felkp9yhq663xr9zn4ry|backend|https://mock.cannoli.live/api/health")
-$frontend && PLAN+=("cannoli-frontend-mock|ikfwnq7d8f0g9yqlu83qb18r|web|https://mock.cannoli.live")
 $backend  && PLAN+=("cannoli-backend-live|akbbnhszn7nvyyvjo641w6k5|backend|https://cannoli.live/api/health")
 $frontend && PLAN+=("cannoli-frontend-live|kovl8psu9d9cpkz13z3b0dkn|web|https://cannoli.live")
+$backend  && PLAN+=("cannoli-backend-mock|bg57felkp9yhq663xr9zn4ry|backend|https://mock.cannoli.live/api/health")
+$frontend && PLAN+=("cannoli-frontend-mock|ikfwnq7d8f0g9yqlu83qb18r|web|https://mock.cannoli.live")
 $psserver && PLAN+=("cannoli-ps-server|g10cjpf53ao0mqs63qtzxn4d|internal|-")
 $psclient && PLAN+=("cannoli-ps-client|idyup5ngjnwlnkzr8bx408q7|web|https://sim.cannoli.live")
 # cannoli-maintenance is intentionally omitted — cannoli.live is live, the
