@@ -1,5 +1,47 @@
 [
   {
+    "id": "day1-patch-2026-06",
+    "date": "2026-06-16T16:00:00Z",
+    "category": "improvement",
+    "title": "Day 1 patch",
+    "body": "Cannoli 1.0 went live yesterday, so naturally here's the obligatory day-one patch. A round of launch-week fixes and polish from your feedback, rolled up below."
+  },
+  {
+    "id": "battle-any-week-2026-06",
+    "date": "2026-06-16T15:30:00Z",
+    "category": "feature",
+    "title": "Battle early or make up a week",
+    "body": "When you start a battle you can now pick which week it counts for — play ahead up to two weeks, or make up a missed match any time."
+  },
+  {
+    "id": "nicknames-2026-06",
+    "date": "2026-06-16T15:00:00Z",
+    "category": "feature",
+    "title": "Nickname your Pokemon",
+    "body": "Name your roster from the new Manage Roster panel on your team page. Nicknames show under each sprite, with the species name on hover."
+  },
+  {
+    "id": "natdex-data-2026-06",
+    "date": "2026-06-16T14:30:00Z",
+    "category": "fix",
+    "title": "Complete National Dex+ data",
+    "body": "Types and learnsets are rebuilt from the latest data. The tier list now shows types for every Pokemon (Paradox and Legendaries included), and coverage no longer drops moves like Moltres's Defog."
+  },
+  {
+    "id": "draft-search-2026-06",
+    "date": "2026-06-16T14:00:00Z",
+    "category": "feature",
+    "title": "Search the draft pool",
+    "body": "A unified search bar on the draft board — filter the pool by name, type, move, ability or cost, with suggestions as you type."
+  },
+  {
+    "id": "replays-inapp-2026-06",
+    "date": "2026-06-16T13:30:00Z",
+    "category": "feature",
+    "title": "Watch any replay in-app",
+    "body": "Every Season 9, 10 and 11 replay now plays right inside Cannoli — no trip to Showdown required."
+  },
+  {
     "id": "visual-fx-2026-06",
     "date": "2026-06-15T18:00:00Z",
     "category": "improvement",
