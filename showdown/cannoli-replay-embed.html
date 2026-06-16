@@ -436,6 +436,19 @@
         document.getElementById('status').style.display = 'none';
         var $player = window.jQuery('#player').show();
 
+        // Force animated sprites regardless of any inherited localStorage prefs.
+        // Dex.prefs() reads window.Storage.prefs() first (battle-dex.ts ~line 326).
+        // Setting Storage here before Battle is constructed prevents noanim/nogif/
+        // bwgfx/nopastgens from leaking in from the parent page's localStorage.
+        window.Storage = {
+          prefs: function (prop) {
+            if (prop === 'noanim' || prop === 'nogif' || prop === 'bwgfx' || prop === 'nopastgens') {
+              return false;
+            }
+            return undefined;
+          },
+        };
+
         var battle = new window.Battle({
           id: replay.id,
           $frame: $player.find('.battle'),
