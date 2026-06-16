@@ -415,6 +415,66 @@ export interface ApiRequestLogResponse {
   };
 }
 
+// ─── Observability dashboard (dev-only) ───────────────────────────────────────
+
+export type ErrorGroupStatus = 'open' | 'resolved' | 'muted';
+
+export interface ApiErrorGroup {
+  id: number;
+  fingerprint: string;
+  kind: string;
+  errorName: string | null;
+  sampleMessage: string | null;
+  samplePath: string | null;
+  count: number;
+  affectedUsers: number;
+  status: ErrorGroupStatus;
+  firstSeen: string | null;
+  lastSeen: string | null;
+  firstVersion: string | null;
+  lastVersion: string | null;
+  /** True when first seen within the dashboard's "new" window. */
+  isNew: boolean;
+  /** Per-bucket occurrence counts for the last 24h (oldest→newest sparkline). */
+  spark: number[];
+}
+
+export interface ApiErrorGroupDetail extends ApiErrorGroup {
+  sampleStack: string | null;
+  resolvedAt: string | null;
+  resolvedVersion: string | null;
+  /** Most recent occurrences (joined request_logs rows). */
+  occurrences: ApiRequestLog[];
+}
+
+export interface ApiObservabilityOverview {
+  groups: ApiErrorGroup[];
+  total: number;
+  /** Counts by status across all groups (independent of filters). */
+  stats: { open: number; resolved: number; muted: number; newToday: number };
+}
+
+export interface ApiObservabilityTrends {
+  /** Buckets oldest→newest over the requested window. */
+  buckets: { t: string; total: number; errors: number; p95Ms: number }[];
+  slowestEndpoints: { path: string; avgMs: number; p95Ms: number; count: number }[];
+}
+
+export interface ApiHealthCheck {
+  name: string;
+  status: 'ok' | 'degraded' | 'down';
+  detail: string | null;
+  latencyMs: number | null;
+  checkedAt: string | null;
+  lastOkAt: string | null;
+}
+
+export interface ApiObservabilityHealth {
+  checks: ApiHealthCheck[];
+  uptimeSeconds: number;
+  version: string;
+}
+
 export interface ApiSiteSettings {
   announcement: string | null;
   announcementType: string | null;
@@ -707,9 +767,32 @@ export const api = {
   },
   clearRequestLogs: () => postJson<{ cleared: number }>('/api/admin/request-logs/clear'),
 
+  // ── Observability dashboard (dev-only) ──
+  getErrorGroups: (params?: { status?: string; kind?: string; search?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status && params.status !== 'all') q.set('status', params.status);
+    if (params?.kind && params.kind !== 'all') q.set('kind', params.kind);
+    if (params?.search) q.set('search', params.search);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    return fetchJson<ApiObservabilityOverview>(`/api/admin/observability/groups?${q}`);
+  },
+  getErrorGroup: (id: number) =>
+    fetchJson<ApiErrorGroupDetail>(`/api/admin/observability/groups/${id}`),
+  setErrorGroupStatus: (id: number, status: ErrorGroupStatus) =>
+    postJson<{ success: boolean }>(`/api/admin/observability/groups/${id}/status`, { status }),
+  getObservabilityTrends: (window?: '24h' | '7d') =>
+    fetchJson<ApiObservabilityTrends>(`/api/admin/observability/trends?window=${window ?? '24h'}`),
+  getObservabilityHealth: () =>
+    fetchJson<ApiObservabilityHealth>('/api/admin/observability/health'),
+  getObservabilityUnread: () =>
+    fetchJson<{ unread: number }>('/api/admin/observability/unread'),
+  markObservabilitySeen: () =>
+    postJson<{ success: boolean }>('/api/admin/observability/seen'),
+
   // Report a browser-side fault (error boundary / global handlers). Returns a
   // short ref the user can quote in feedback. Caller swallows failures.
-  reportClientError: (input: { page: string; message: string; name?: string; stack?: string; kind?: string }) =>
+  reportClientError: (input: { page: string; message: string; name?: string; stack?: string; kind?: string; breadcrumbs?: unknown[]; version?: string }) =>
     postJson<{ errorId: string }>('/api/client-errors', input),
 
   getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
@@ -1121,8 +1204,8 @@ export const api = {
     deleteJson<{ success: boolean }>(`/api/teams/${teamId}${opts?.force ? '?force=1' : ''}`),
 
   // Feedback
-  submitFeedback: (title: string, description: string, page?: string) =>
-    postJson<{ success: boolean; issueNumber: number; issueUrl: string }>('/api/feedback', { title, description, page }),
+  submitFeedback: (title: string, description: string, page?: string, errorRef?: string) =>
+    postJson<{ success: boolean; issueNumber: number | null; issueUrl: string | null }>('/api/feedback', { title, description, page, errorRef }),
 
   getFeedbackIssues: (state?: 'open' | 'closed' | 'all') =>
     fetchJson<ApiFeedbackIssue[]>(`/api/admin/issues${state ? `?state=${state}` : ''}`),

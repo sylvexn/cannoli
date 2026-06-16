@@ -26,6 +26,8 @@ export const clientErrorRoutes = new Elysia()
         message: body.message,
         stack: body.stack ?? null,
         kind: body.kind ?? null,
+        breadcrumbs: body.breadcrumbs ?? null,
+        version: body.version ?? null,
       },
       { user: user ? { id: user.id, username: user.username } : null, ip },
     );
@@ -38,5 +40,7 @@ export const clientErrorRoutes = new Elysia()
       name: t.Optional(t.String()),
       stack: t.Optional(t.String()),
       kind: t.Optional(t.String()),
+      breadcrumbs: t.Optional(t.Array(t.Unknown())),
+      version: t.Optional(t.String()),
     }),
   });

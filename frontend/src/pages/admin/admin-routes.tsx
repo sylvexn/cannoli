@@ -27,6 +27,7 @@ import { AdminSiteSettings } from './admin-site-settings';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminApiLogs } from './admin-api-logs';
 import { AdminFeedback } from './admin-feedback';
+import { Observability } from './observability';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
@@ -34,7 +35,7 @@ import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -106,6 +107,16 @@ export const AdminFeedbackRoute = () => (
     <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
   </DevOnly>
 );
+export const AdminObservabilityRoute = () => {
+  // Mark the dev's observability view as "seen" on mount so the nav unread
+  // badge clears (best-effort; the badge is a pull signal, not authoritative).
+  useEffect(() => { api.markObservabilitySeen().catch(() => {}); }, []);
+  return (
+    <DevOnly>
+      <AdminSection icon={Gauge} title="Observability"><Observability /></AdminSection>
+    </DevOnly>
+  );
+};
 export const AdminBotRoute = () => (
   <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>
 );

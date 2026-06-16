@@ -12,6 +12,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
 import { createBattle, isBotConnected } from '../lib/ps-bot';
 import { getLeague } from '../lib/queries';
+import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
 
 /**
@@ -659,7 +660,15 @@ export const arenaRoutes = new Elysia()
       } catch (err) {
         // Malformed message — don't crash the socket, but log at debug so the
         // failure isn't silently swallowed (this once hid the WS-IDENTITY bug).
+        // Also funnel into observability — a WS throw never hits Elysia onError.
         console.debug('[arena] failed to handle WS message:', err);
+        logServerFault({
+          kind: 'ws',
+          name: err instanceof Error ? err.name : 'WsError',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack ?? null : null,
+          path: '/ws/arena',
+        });
       }
     },
 

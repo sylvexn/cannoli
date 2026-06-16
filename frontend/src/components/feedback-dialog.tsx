@@ -33,15 +33,13 @@ export function FeedbackDialog() {
     e.preventDefault();
     if (!title.trim() || !description.trim()) return;
 
-    // Append the error ref so the issue ties back to a request_logs row.
-    const body = errorRef
-      ? `${description.trim()}\n\nError ref: ${errorRef}`
-      : description.trim();
-
     setSubmitting(true);
     try {
-      const res = await api.submitFeedback(title.trim(), body, pathname);
-      toast.success(`Feedback submitted (#${res.issueNumber})`);
+      // errorRef is passed as a dedicated field — the backend attaches it to
+      // both the GitHub issue and the Discord mirror so it ties back to a
+      // request_logs row / error group.
+      const res = await api.submitFeedback(title.trim(), description.trim(), pathname, errorRef ?? undefined);
+      toast.success(res.issueNumber ? `Feedback submitted (#${res.issueNumber})` : 'Feedback submitted');
       setOpen(false);
       setTitle('');
       setDescription('');

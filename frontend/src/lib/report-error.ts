@@ -12,6 +12,7 @@
  * itself become a new error the user sees.
  */
 import { api } from './api';
+import { getBreadcrumbs, APP_VERSION, installBreadcrumbs } from './breadcrumbs';
 
 /** Don't spam the backend with the same fault on a tight loop. Dedupe by a
  *  signature for a short window. */
@@ -50,6 +51,8 @@ export async function reportClientError(input: ReportInput): Promise<string | nu
       name: input.name,
       stack: input.stack,
       kind: input.kind,
+      breadcrumbs: getBreadcrumbs(),
+      version: APP_VERSION,
     });
     return res.errorId ?? null;
   } catch {
@@ -63,6 +66,10 @@ let installed = false;
 export function installGlobalErrorReporting() {
   if (installed || typeof window === 'undefined') return;
   installed = true;
+
+  // Start recording breadcrumbs (navigation, clicks, API calls) so that any
+  // subsequent error report includes the trail of actions that led to the crash.
+  installBreadcrumbs();
 
   window.addEventListener('error', (e: ErrorEvent) => {
     void reportClientError({

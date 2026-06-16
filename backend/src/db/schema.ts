@@ -622,7 +622,71 @@ export const requestLogs = sqliteTable('request_logs', {
   errorMessage: text('error_message'),
   /** Stack trace for 5xx, truncated. Null otherwise. */
   errorStack: text('error_stack'),
+  /** Stable hash grouping identical faults into an error_groups row. Set for
+   *  rows that carry an error (server 5xx + every client row); null otherwise. */
+  fingerprint: text('fingerprint'),
+  /** Per-request correlation id (also echoed in the x-request-id response
+   *  header) so a server log row ties to the response the client saw. */
+  requestId: text('request_id'),
+  /** Redacted request context captured on 5xx (JSON: role, redacted body). */
+  context: text('context'),
+  /** Client breadcrumb trail (JSON array) attached to source='client' rows. */
+  breadcrumbs: text('breadcrumbs'),
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
+});
+
+// ─── Error groups (observability) ─────────────────────────────────────────────
+// One row per distinct fault, keyed by a normalized fingerprint. request_logs
+// rows (which prune at ~5000) link back via their `fingerprint` column; this
+// table never prunes, so counts/first-seen survive the raw occurrences. Powers
+// the dev Observability dashboard triage queue + Discord alert dedupe.
+
+export const errorGroups = sqliteTable('error_groups', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /** sha1(kind:name:normMessage:topFrame), 16 hex chars. */
+  fingerprint: text('fingerprint').notNull().unique(),
+  /** Origin class: server | client | render | window | unhandledrejection | ws | process. */
+  kind: text('kind').notNull().default('server'),
+  errorName: text('error_name'),
+  /** Representative (first-seen) message/path/stack for display. */
+  sampleMessage: text('sample_message'),
+  samplePath: text('sample_path'),
+  sampleStack: text('sample_stack'),
+  count: integer('count').notNull().default(0),
+  /** Distinct authenticated users hit (maintained via error_group_users). */
+  affectedUsers: integer('affected_users').notNull().default(0),
+  status: text('status', { enum: ['open', 'resolved', 'muted'] }).notNull().default('open'),
+  firstSeen: text('first_seen').default(sql`(datetime('now'))`),
+  lastSeen: text('last_seen').default(sql`(datetime('now'))`),
+  /** Git SHA when first/last seen — powers "new in this deploy" + regression reopen. */
+  firstVersion: text('first_version'),
+  lastVersion: text('last_version'),
+  resolvedAt: text('resolved_at'),
+  /** Version a group was marked resolved at; if last_version moves past this the
+   *  group auto-reopens (regression). */
+  resolvedVersion: text('resolved_version'),
+  /** Last Discord alert timestamp — per-fingerprint debounce/coalesce window. */
+  notifiedAt: text('notified_at'),
+});
+
+// Distinct-user tracking for error_groups.affectedUsers. INSERT OR IGNORE on
+// each occurrence with a userId; the count survives request_logs pruning.
+export const errorGroupUsers = sqliteTable('error_group_users', {
+  fingerprint: text('fingerprint').notNull(),
+  userId: integer('user_id').notNull(),
+});
+
+// ─── Health checks (heartbeat self-monitor) ───────────────────────────────────
+// Latest status per probe (DB / PS bot / WS / ...). One row per probe name,
+// upserted by the in-process heartbeat; flips ok→down fire a Discord alert.
+
+export const healthChecks = sqliteTable('health_checks', {
+  name: text('name').primaryKey(),
+  status: text('status', { enum: ['ok', 'degraded', 'down'] }).notNull(),
+  detail: text('detail'),
+  latencyMs: integer('latency_ms'),
+  checkedAt: text('checked_at'),
+  lastOkAt: text('last_ok_at'),
 });
 
 // ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──

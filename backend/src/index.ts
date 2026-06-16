@@ -24,7 +24,9 @@ import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser } from './lib/ps-bot-seed';
 import { startSchedulers } from './lib/scheduler';
-import { markRequestStart, captureRequestError, logRequest } from './lib/request-log';
+import { markRequestStart, captureRequestError, logRequest, logServerFault, getRequestId } from './lib/request-log';
+import { startHeartbeat } from './lib/heartbeat';
+import { GIT_SHA } from './lib/version';
 import { sqlite } from './db';
 
 // ─── Boot-time env guards ───────────────────────────────────────────────────
@@ -123,6 +125,12 @@ const app = new Elysia()
   .onAfterResponse(({ request, set, user }) => {
     const status = typeof set.status === 'number' ? set.status : 200;
     logRequest({ request, status, user });
+  })
+  // Echo the per-request correlation id so a client can quote it alongside the
+  // server log row. Set in onRequest (markRequestStart); read back here.
+  .onRequest(({ request, set }) => {
+    const rid = getRequestId(request);
+    if (rid) set.headers['x-request-id'] = rid;
   })
 
   // ── Auth guards on state-changing requests ─────────────────────────────────
@@ -235,5 +243,37 @@ if (process.env.PS_SERVER_WS_URL) {
 
 // Start cron-style schedulers (auto-forfeit, week-advance)
 startSchedulers();
+
+// In-process self-monitor: probes DB / PS bot on an interval, records into
+// health_checks, and Discord-alerts on ok→down flips. Catches silent deaths
+// (e.g. PS bot disconnect) that no user-facing error would ever surface.
+startHeartbeat();
+
+// Process-level crash backstop. An uncaughtException / unhandledRejection
+// bypasses Elysia's onError entirely — capture it into the observability
+// pipeline (grouped + Discord-alerted) before the runtime would otherwise
+// swallow or terminate. Best-effort; logging itself never throws.
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  logServerFault({
+    kind: 'process',
+    name: err?.name ?? 'UncaughtException',
+    message: err?.message ?? String(err),
+    stack: err?.stack ?? null,
+    path: '/process/uncaughtException',
+  });
+});
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[unhandledRejection]', reason);
+  logServerFault({
+    kind: 'process',
+    name: reason?.name ?? 'UnhandledRejection',
+    message: reason?.message ?? String(reason),
+    stack: reason?.stack ?? null,
+    path: '/process/unhandledRejection',
+  });
+});
+
+console.log(`Build: ${GIT_SHA}`);
 
 export type App = typeof app;

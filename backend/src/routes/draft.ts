@@ -10,6 +10,7 @@ import type { PickErrorCode } from '../lib/draft-engine';
 import { isStaff } from '../lib/auth';
 import { getLeague } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
+import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs } from '../lib/ws-broadcast';
 
 /**
@@ -582,8 +583,16 @@ export const draftRoutes = new Elysia()
         }
       } catch (err) {
         // Surface at debug so a parse/handler failure isn't fully silent
-        // (this swallow once hid the WS-IDENTITY bug).
+        // (this swallow once hid the WS-IDENTITY bug). Also funnel into the
+        // observability pipeline — a draft WS throw never hits Elysia's onError.
         console.debug('[draft] failed to handle WS message:', err);
+        logServerFault({
+          kind: 'ws',
+          name: err instanceof Error ? err.name : 'WsError',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack ?? null : null,
+          path: '/ws/draft',
+        });
         ws.send(JSON.stringify({ type: 'error', error: 'Invalid message' }));
       }
     },

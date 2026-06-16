@@ -3,6 +3,7 @@ import { Octokit } from 'octokit';
 import { isDev } from '../lib/auth';
 import { db, schema } from '../db';
 import { eq, and, isNull } from 'drizzle-orm';
+import { alertFeedback } from '../lib/alert';
 
 const ghToken = process.env.GITHUB_TOKEN;
 const ghRepo = process.env.GITHUB_REPO;
@@ -12,11 +13,27 @@ export const feedbackRoutes = new Elysia()
 
   .post('/api/feedback', async ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    if (!octokit || !ghRepo) { set.status = 503; return { error: 'Feedback not configured' }; }
 
-    const { title, description, page } = body as { title: string; description: string; page?: string };
+    const { title, description, page, errorRef } = body as { title: string; description: string; page?: string; errorRef?: string };
     if (!title?.trim()) { set.status = 400; return { error: 'Title required' }; }
     if (!description?.trim()) { set.status = 400; return { error: 'Description required' }; }
+
+    // Mirror EVERY submission to Discord (fire-and-forget) regardless of whether
+    // the GitHub issue path is configured — the requirement is that all feedback
+    // reaches the hook. The issue creation below is additive.
+    alertFeedback({
+      title: title.trim(),
+      description: description.trim(),
+      page: page ?? null,
+      reporter: user.username,
+      role: user.role,
+      errorRef: errorRef ?? null,
+    });
+
+    // No GitHub integration configured → Discord mirror is the whole delivery.
+    if (!octokit || !ghRepo) {
+      return { success: true, issueNumber: null, issueUrl: null };
+    }
 
     const [owner, repo] = ghRepo.split('/');
     const issueBody = [
@@ -25,6 +42,7 @@ export const feedbackRoutes = new Elysia()
       '---',
       `**Reporter:** ${user.username} (${user.role})`,
       page ? `**Page:** ${page}` : null,
+      errorRef ? `**Error ref:** ${errorRef}` : null,
       `**Submitted:** ${new Date().toISOString()}`,
     ].filter(Boolean).join('\n');
 

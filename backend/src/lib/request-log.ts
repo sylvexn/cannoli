@@ -15,6 +15,9 @@
  * it can't grow without bound. No background job required.
  */
 import { db, schema, sqlite } from '../db';
+import { computeFingerprint, recordOccurrence } from './error-groups';
+import { alertFault } from './alert';
+import { GIT_SHA } from './version';
 
 /** Keep roughly this many of the newest rows; prune the rest. */
 const MAX_ROWS = 5000;
@@ -24,6 +27,70 @@ const PRUNE_EVERY = 250;
 const MAX_STACK = 4000;
 
 let insertsSincePrune = 0;
+
+/** Per-request correlation id, generated in markRequestStart and echoed in the
+ *  x-request-id response header (see src/index.ts) so a server log row ties to
+ *  the exact response the client saw. Distinct from the user-facing errorId. */
+const requestIdByRequest = new WeakMap<Request, string>();
+
+/** Fingerprint a fault, roll it into its error_groups row, and fire a Discord
+ *  alert (coalesced). Shared by every ingest path (server 5xx, client, ws,
+ *  process). Best-effort — never throws. Returns the computed fingerprint so the
+ *  caller can stamp it on the request_logs row. */
+function groupAndAlert(input: {
+  kind: string;
+  name?: string | null;
+  message: string;
+  path?: string | null;
+  stack?: string | null;
+  userId?: number | null;
+  errorId?: string | null;
+}): string | null {
+  try {
+    const fingerprint = computeFingerprint(input);
+    const rec = recordOccurrence({
+      fingerprint,
+      kind: input.kind,
+      name: input.name ?? null,
+      message: input.message,
+      path: input.path ?? null,
+      stack: input.stack ?? null,
+      userId: input.userId ?? null,
+      version: GIT_SHA,
+    });
+    if (rec) {
+      alertFault({
+        fingerprint,
+        kind: input.kind,
+        errorName: rec.errorName ?? input.name ?? null,
+        message: input.message,
+        path: input.path ?? null,
+        count: rec.count,
+        affectedUsers: rec.affectedUsers,
+        errorRef: input.errorId ?? null,
+        version: GIT_SHA,
+        isNew: rec.isNew,
+        isSpike: rec.isSpike,
+      });
+    }
+    return fingerprint;
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort short correlation id used for x-request-id. */
+function genRequestId(): string {
+  return (
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 10)
+  );
+}
+
+/** Read the request id stamped in markRequestStart (for the response header). */
+export function getRequestId(request: Request): string | undefined {
+  return requestIdByRequest.get(request);
+}
 
 /** Short, user-quotable correlation id (e.g. "k3f9q2a1"). Stamped on server
  *  5xx rows and every client-error row; surfaced in the error boundary and
@@ -42,9 +109,10 @@ const errorByRequest = new WeakMap<Request, CapturedError>();
 const startByRequest = new WeakMap<Request, number>();
 const logged = new WeakSet<Request>();
 
-/** Stamp the handler-start time (called from onRequest). */
+/** Stamp the handler-start time + a correlation id (called from onRequest). */
 export function markRequestStart(request: Request) {
   startByRequest.set(request, performance.now());
+  requestIdByRequest.set(request, genRequestId());
 }
 
 /**
@@ -103,6 +171,23 @@ export function logRequest({ request, status, user }: LogArgs) {
 
     const startedAt = startByRequest.get(request);
     const durationMs = startedAt != null ? Math.max(0, Math.round(performance.now() - startedAt)) : 0;
+    const errorId = status >= 500 ? genErrorId() : null;
+    const userId = user ? parseInt(user.id) : null;
+
+    // Group + alert genuine server faults. Compute the fingerprint here so it's
+    // stamped on the row (drill-down) and rolled into its error_groups row.
+    const fingerprint =
+      status >= 500 && captured
+        ? groupAndAlert({
+            kind: 'server',
+            name: captured.name,
+            message: captured.message,
+            path,
+            stack: captured.stack ?? null,
+            userId,
+            errorId,
+          })
+        : null;
 
     db.insert(schema.requestLogs).values({
       source: 'server',
@@ -110,13 +195,16 @@ export function logRequest({ request, status, user }: LogArgs) {
       path,
       status,
       durationMs,
-      userId: user ? parseInt(user.id) : null,
+      userId,
       username: user?.username ?? null,
       ip: clientIp(request),
-      errorId: status >= 500 ? genErrorId() : null,
+      errorId,
       errorName: captured?.name ?? null,
       errorMessage: captured?.message ?? null,
       errorStack: stack,
+      fingerprint,
+      requestId: requestIdByRequest.get(request) ?? null,
+      context: status >= 500 ? errorContext(request) : null,
     }).run();
 
     if (++insertsSincePrune >= PRUNE_EVERY) {
@@ -138,6 +226,10 @@ export interface ClientErrorInput {
   stack?: string | null;
   /** Which browser hook caught it — recorded in error_name for triage. */
   kind?: 'render' | 'window' | 'unhandledrejection' | string | null;
+  /** Recent user actions leading up to the fault (ring buffer from the client). */
+  breadcrumbs?: unknown[] | null;
+  /** Frontend build version (git SHA) the fault occurred on. */
+  version?: string | null;
 }
 
 /**
@@ -153,22 +245,42 @@ export function logClientError(
   const errorId = genErrorId();
   try {
     const kind = (input.kind || 'render').toString().slice(0, 40);
+    const path = (input.page || '/').slice(0, 512);
+    const message = (input.message || 'Unknown client error').slice(0, 1000);
+    const userId = ctx.user ? parseInt(ctx.user.id) : null;
+
+    // Roll the client fault into its error_groups row + alert. The fingerprint
+    // kind is the browser hook (render/window/unhandledrejection) so client and
+    // server faults stay in distinct groups.
+    const fingerprint = groupAndAlert({
+      kind,
+      name: input.name ?? null,
+      message,
+      path,
+      stack: input.stack ?? null,
+      userId,
+      errorId,
+    });
+
     db.insert(schema.requestLogs).values({
       source: 'client',
       // Client faults aren't HTTP calls; we borrow method/status to slot into
       // the existing schema: a synthetic 500 so they group with server errors,
       // and the originating page as the path.
       method: 'CLIENT',
-      path: (input.page || '/').slice(0, 512),
+      path,
       status: 500,
       durationMs: 0,
-      userId: ctx.user ? parseInt(ctx.user.id) : null,
+      userId,
       username: ctx.user?.username ?? null,
       ip: ctx.ip ?? null,
       errorId,
       errorName: input.name ? `${input.name} (${kind})` : kind,
-      errorMessage: (input.message || 'Unknown client error').slice(0, 1000),
+      errorMessage: message,
       errorStack: input.stack ? input.stack.slice(0, MAX_STACK) : null,
+      fingerprint,
+      context: input.version ? JSON.stringify({ version: input.version }) : null,
+      breadcrumbs: serializeBreadcrumbs(input.breadcrumbs),
     }).run();
 
     if (++insertsSincePrune >= PRUNE_EVERY) {
@@ -179,6 +291,83 @@ export function logClientError(
     /* never throw from logging */
   }
   return errorId;
+}
+
+/**
+ * Record a server-side fault that doesn't flow through the HTTP error hooks —
+ * a WebSocket handler throw (kind 'ws') or a process-level
+ * uncaughtException/unhandledRejection (kind 'process'). Slots into request_logs
+ * as a synthetic server 500 row and rolls into its error_groups row + alert.
+ * Best-effort — never throws.
+ */
+export function logServerFault(input: {
+  kind: 'ws' | 'process';
+  name?: string | null;
+  message: string;
+  stack?: string | null;
+  path?: string | null;
+  userId?: number | null;
+}): string {
+  const errorId = genErrorId();
+  try {
+    const message = (input.message || 'Unknown server fault').slice(0, 1000);
+    const path = (input.path || `/${input.kind}`).slice(0, 512);
+    const fingerprint = groupAndAlert({
+      kind: input.kind,
+      name: input.name ?? null,
+      message,
+      path,
+      stack: input.stack ?? null,
+      userId: input.userId ?? null,
+      errorId,
+    });
+    db.insert(schema.requestLogs).values({
+      source: 'server',
+      method: input.kind.toUpperCase(),
+      path,
+      status: 500,
+      durationMs: 0,
+      userId: input.userId ?? null,
+      username: null,
+      ip: null,
+      errorId,
+      errorName: input.name ?? input.kind,
+      errorMessage: message,
+      errorStack: input.stack ? input.stack.slice(0, MAX_STACK) : null,
+      fingerprint,
+    }).run();
+    if (++insertsSincePrune >= PRUNE_EVERY) {
+      insertsSincePrune = 0;
+      prune();
+    }
+  } catch {
+    /* never throw from logging */
+  }
+  return errorId;
+}
+
+/** Compact, safe breadcrumb JSON (caps length so a row can't bloat). */
+function serializeBreadcrumbs(crumbs?: unknown[] | null): string | null {
+  try {
+    if (!crumbs || !Array.isArray(crumbs) || crumbs.length === 0) return null;
+    return JSON.stringify(crumbs.slice(-20)).slice(0, 4000);
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort request context for a 5xx row — UA + referer (no body: it's
+ *  already consumed by the handler by the time we log). Helps triage which
+ *  client/route hit the fault. */
+function errorContext(request: Request): string | null {
+  try {
+    return JSON.stringify({
+      ua: request.headers.get('user-agent')?.slice(0, 300) ?? null,
+      referer: request.headers.get('referer')?.slice(0, 300) ?? null,
+    });
+  } catch {
+    return null;
+  }
 }
 
 /** Best-effort X-Forwarded-For first hop (we sit behind Coolify's proxy). */

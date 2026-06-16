@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity,
+  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
 } from 'lucide-react';
 
 interface NavItem {
@@ -71,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { slug: 'activity', label: 'Activity Log', icon: ScrollText },
+      { slug: 'observability', label: 'Observability', icon: Gauge, devOnly: true },
       { slug: 'api-logs', label: 'API Logs',     icon: Activity, devOnly: true },
       { slug: 'bot',      label: 'PS Bot',       icon: Bot },
       { slug: 'feedback', label: 'Feedback',     icon: MessageSquare, devOnly: true },
@@ -86,6 +87,7 @@ const SIM_NAV_ITEM: NavItem = { slug: 'sim', label: 'Simulator', icon: FlaskConi
 
 export function AdminPage() {
   const [mode, setMode] = useState<'live' | 'mock' | null>(null);
+  const [unreadErrors, setUnreadErrors] = useState(0);
   const { user } = useAuth();
   const isDev = user?.role === 'dev';
 
@@ -94,6 +96,20 @@ export function AdminPage() {
   useEffect(() => {
     api.getHealth().then(h => setMode(h.mode)).catch(() => setMode(null));
   }, []);
+
+  // Dev-only: poll the count of new/unseen error groups so the Observability
+  // nav item carries a live unread badge — a passive "something just broke"
+  // signal even without the Discord push. Best-effort.
+  useEffect(() => {
+    if (!isDev) return;
+    let alive = true;
+    const tick = () => api.getObservabilityUnread()
+      .then(r => { if (alive) setUnreadErrors(r.unread); })
+      .catch(() => {});
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [isDev]);
 
   // Append the mock-only Simulator tab to the System group when the backend
   // reports mock mode, then drop any dev-only tabs (API Logs, Feedback) for
@@ -153,6 +169,11 @@ export function AdminPage() {
                       <>
                         <Icon size={14} className={isActive ? 'text-neon' : ''} />
                         {item.label}
+                        {item.slug === 'observability' && unreadErrors > 0 && (
+                          <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-loss/20 text-loss text-[10px] font-mono font-bold tabular-nums">
+                            {unreadErrors > 99 ? '99+' : unreadErrors}
+                          </span>
+                        )}
                       </>
                     )}
                   </NavLink>
