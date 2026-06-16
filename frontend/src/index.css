@@ -243,6 +243,12 @@
   inherits: true;
   initial-value: #22d3ee;
 }
+/* Animatable conic angle for the .spin-border glow-kit utility. */
+@property --border-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
 
 /* ─── Background texture ─── */
 body::before {
@@ -414,7 +420,9 @@ aside {
   transition: none;
 }
 
-.gem-wrapper:hover .league-banner::before {
+/* Glint is the non-interactive treatment; enhanced .gem-3d gems use a
+   pointer-tracked specular instead (defined in the Gem 3D block below). */
+.gem-wrapper:not(.gem-3d):hover .league-banner::before {
   animation: glint 0.6s ease-out forwards;
 }
 
@@ -493,6 +501,72 @@ aside {
     0 1px 4px rgba(22, 163, 74, 0.4),
     inset 0 1px 1px rgba(187, 247, 208, 0.2),
     inset 0 -1px 1px rgba(5, 46, 22, 0.4);
+}
+
+/* ── Gem 3D interactive treatment (sidebar nav, opt-in via .gem-3d) ──
+   Pointer-tracked tilt + cursor specular + hue-matched glow. No conic sheen.
+   --mx/--my (0–1) are written by usePointerTilt on the .league-banner itself.
+   The glow uses filter: drop-shadow (not box-shadow) because the banner has a
+   clip-path, which would clip an outer box-shadow but not a drop-shadow. */
+.gem-3d {
+  perspective: 520px;
+}
+
+.gem-3d .league-banner {
+  transform-style: preserve-3d;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.18s ease;
+  will-change: transform;
+}
+
+.gem-3d .league-banner.tilt {
+  transform:
+    rotateX(calc((var(--my, 0.5) - 0.5) * -10deg))
+    rotateY(calc((var(--mx, 0.5) - 0.5) * 16deg))
+    translateZ(8px) scale(1.04);
+}
+
+/* Pointer-tracked specular highlight — overrides the glint ::before for gems. */
+.gem-3d .league-banner::before {
+  inset: 0;
+  transform: none;
+  opacity: 0;
+  background: radial-gradient(
+    110px circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.1) 28%,
+    transparent 58%
+  );
+  mix-blend-mode: overlay;
+  transition: opacity 0.2s ease;
+  animation: none;
+}
+.gem-3d .league-banner:hover::before {
+  opacity: 1;
+}
+
+/* Hue-matched dark glow bloom on hover (clip-path-safe drop-shadows). */
+.gem-3d .league-banner-sapphire:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(37, 99, 235, 0.55))
+    drop-shadow(0 7px 22px rgba(37, 99, 235, 0.4));
+}
+.gem-3d .league-banner-ruby:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(220, 38, 38, 0.55))
+    drop-shadow(0 7px 22px rgba(220, 38, 38, 0.4));
+}
+.gem-3d .league-banner-emerald:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(22, 163, 74, 0.55))
+    drop-shadow(0 7px 22px rgba(22, 163, 74, 0.4));
+}
+
+@media (prefers-reduced-motion) {
+  .gem-3d .league-banner,
+  .gem-3d .league-banner.tilt {
+    transform: none;
+    transition: filter 0.18s ease;
+  }
 }
 
 /* ─── Neon Logo ─── */
@@ -1065,3 +1139,71 @@ aside {
 [data-colorblind='true'] .bg-\[\#2e1515\]         { background-color: #3b240a; }
 [data-colorblind='true'] .bg-\[\#3b1515\]         { background-color: #4a2c0a; }
 [data-colorblind='true'] .bg-\[\#5c1a1a\]         { background-color: #6b3410; }
+
+/* ─── Glow + gradient kit ───
+   color-mix-driven glows already live on .card-interactive / .identity-glow.
+   These add the two continuous-gradient pieces from the FX showcase. Both are
+   gated below on prefers-reduced-motion AND GPU tier. */
+
+/* Animated conic gradient border — spins only on hover (low duty cycle).
+   Wrap a solid-bg child; the 1.5px padding reveals the conic as a border ring.
+   Set --spin-accent to tint it (e.g. a league color). */
+.spin-border {
+  position: relative;
+  padding: 1.5px;
+  border-radius: inherit;
+  isolation: isolate;
+}
+.spin-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--border-spin),
+    transparent 0deg,
+    var(--spin-accent, var(--color-neon, #22d3ee)) 70deg,
+    transparent 150deg,
+    transparent 360deg
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.spin-border:hover::before {
+  opacity: 1;
+  animation: border-spin 3s linear infinite;
+}
+@keyframes border-spin { to { --border-spin: 360deg; } }
+
+/* Flowing multi-color gradient button background. */
+.btn-gradient {
+  background: linear-gradient(110deg, #22d3ee, #3b82f6, #e879f9, #22d3ee);
+  background-size: 300% 100%;
+  animation: btn-flow 6s linear infinite;
+}
+.btn-gradient:hover { filter: brightness(1.08); }
+@keyframes btn-flow { to { background-position: 300% 0; } }
+
+/* ─── Performance gate: no hardware acceleration → freeze continuous FX ───
+   Keyed on the GPU tier set once at boot by gpu-capability.ts. Mirrors the set
+   of continuous animations that the reduced-motion blocks already neutralize.
+   Hover-only / discrete effects (gem tilt, card glow, gradient buttons' static
+   look) keep working — they cost nothing when idle, so gating them would only
+   degrade the experience for no benefit. */
+:root[data-gpu='software'] .btn-gradient,
+:root[data-gpu='none'] .btn-gradient,
+:root[data-gpu='software'] .spin-border:hover::before,
+:root[data-gpu='none'] .spin-border:hover::before,
+:root[data-gpu='software'] .animate-shimmer,
+:root[data-gpu='none'] .animate-shimmer,
+:root[data-gpu='software'] .animate-breathe,
+:root[data-gpu='none'] .animate-breathe,
+:root[data-gpu='software'] .pulse-glow,
+:root[data-gpu='none'] .pulse-glow,
+:root[data-gpu='software'] .neon-spark,
+:root[data-gpu='none'] .neon-spark,
+:root[data-gpu='software'] .neon-glow-layer,
+:root[data-gpu='none'] .neon-glow-layer {
+  animation: none !important;
+}

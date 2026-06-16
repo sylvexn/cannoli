@@ -400,7 +400,7 @@ function OnTheBlockCard({ pokemonName }: { pokemonName: string }) {
   );
 }
 
-type CoachLinkRole = 'dev' | 'admin' | 'user' | null;
+type CoachLinkRole = 'dev' | 'admin' | 'user' | 'bot' | null;
 
 function RecentBattlesCard({ pokemonName }: { pokemonName: string }) {
   const [rows, setRows] = useState<ApiPokemonRecentBattle[] | null>(null);

@@ -23,7 +23,7 @@ interface OnlineUser {
   primaryColor: string | null;
   secondaryColor: string | null;
   tertiaryColor: string | null;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
   statusMessage: string | null;
   lastSeenAt: string | null;
 }

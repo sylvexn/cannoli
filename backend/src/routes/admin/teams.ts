@@ -4,6 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { isStaff, isStaffOrTeamOwner } from '../../lib/auth';
 import { tx } from '../../lib/tx';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
+import { deleteTeamCascade } from '../../lib/team-cascade';
 import { isR2Configured, r2Put, r2Delete, r2PublicUrl } from '../../lib/r2';
 import { writeUpload, uploadsPath } from '../../lib/uploads';
 
@@ -180,18 +181,9 @@ export const teamAdminRoutes = new Elysia()
     }
 
     tx(() => {
-      // Cascade clean up team-scoped rows. Don't touch matches with other live teams.
-      db.delete(schema.rosters).where(eq(schema.rosters.teamId, params.teamId)).run();
-      db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, params.teamId)).run();
-      db.delete(schema.draftPicks).where(eq(schema.draftPicks.teamId, params.teamId)).run();
-      db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.teamId, params.teamId)).run();
-      db.delete(schema.playerAvailability).where(eq(schema.playerAvailability.teamId, params.teamId)).run();
-      db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.teamId, params.teamId)).run();
-      // Drop matches mentioning this team (other team's record loses those rows too — necessary for a clean delete)
-      db.delete(schema.matches).where(sql`${schema.matches.homeTeamId} = ${params.teamId} OR ${schema.matches.awayTeamId} = ${params.teamId}`).run();
-      db.delete(schema.transactions).where(sql`${schema.transactions.teamId} = ${params.teamId} OR ${schema.transactions.otherTeamId} = ${params.teamId}`).run();
-      db.delete(schema.trades).where(sql`${schema.trades.proposerId} = ${params.teamId} OR ${schema.trades.recipientId} = ${params.teamId}`).run();
-      db.delete(schema.teams).where(eq(schema.teams.id, params.teamId)).run();
+      // Cascade clean up team-scoped rows + draft-order reconciliation. Shared
+      // with the membership "remove coach" route so both stay in lockstep.
+      deleteTeamCascade(params.teamId, team.leagueId);
 
       db.insert(schema.activityLog).values({
         type: 'team_deleted',

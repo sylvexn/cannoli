@@ -5,6 +5,7 @@ import {
   LayoutDashboard, ChevronDown, UserPlus,
 } from 'lucide-react';
 import { PHASE_COLORS, leagueGem } from '@/lib/constants';
+import { usePointerTilt } from '@/lib/use-pointer-tilt';
 import type { useAppData } from '@/lib/app-data-context';
 
 type League = ReturnType<typeof useAppData>['leagues'][number];
@@ -26,6 +27,8 @@ interface SidebarLeagueNavProps {
 }
 
 export function SidebarLeagueNav({ leagues, openLeagueId, onToggle, pendingByLeague }: SidebarLeagueNavProps) {
+  const tilt = usePointerTilt();
+
   return (
     <>
       {leagues.map(league => {
@@ -36,9 +39,12 @@ export function SidebarLeagueNav({ leagues, openLeagueId, onToggle, pendingByLea
             {/* League header — accordion toggle */}
             <button
               onClick={() => onToggle(league.id)}
-              className="gem-wrapper w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
+              className="gem-wrapper gem-3d w-full flex items-center gap-1.5 py-1.5 px-1 transition-all duration-150"
             >
-              <div className={`league-banner league-banner-${leagueGem(league.id)} flex-1 min-w-0`}>
+              <div
+                {...tilt}
+                className={`league-banner league-banner-${leagueGem(league.id)} flex-1 min-w-0`}
+              >
                 <span className="league-banner-text text-white truncate">
                   {league.name.replace(' League', '')}
                 </span>

@@ -15,6 +15,7 @@ import { useAuth } from '@/lib/auth-context';
 import { AdminSection } from './admin-section';
 import { AdminUsers } from './admin-users';
 import { AdminTeams } from './admin-teams';
+import { AdminMembership } from './admin-membership';
 import { AdminLeagues } from './admin-leagues';
 import { AdminSeason } from './admin-season';
 import { AdminMatches } from './admin-matches';
@@ -36,6 +37,7 @@ import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
+  UsersRound,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -43,6 +45,9 @@ export const AdminUsersRoute = () => (
 );
 export const AdminTeamsRoute = () => (
   <AdminSection icon={Shield} title="Teams"><AdminTeams /></AdminSection>
+);
+export const AdminMembershipRoute = () => (
+  <AdminSection icon={UsersRound} title="Membership"><AdminMembership /></AdminSection>
 );
 export const AdminLeaguesRoute = () => (
   <AdminSection icon={Globe} title="Leagues"><AdminLeagues /></AdminSection>

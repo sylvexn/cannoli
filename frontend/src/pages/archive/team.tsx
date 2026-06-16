@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { pokemonRoute } from '@/lib/pokemon-route';
+import { ReplayLink } from '@/components/replay-link';
 import { cn } from '@/lib/utils';
 import { Sparkles, TrendingUp, TrendingDown, Repeat, UserPlus, Crown, Award, Play } from 'lucide-react';
 import * as Icons from 'lucide-react';
@@ -247,14 +248,20 @@ export function ArchiveTeamPage() {
                         {m.phase === 'playoffs' ? (m.playoffRound?.toUpperCase() ?? 'PO') : `W${m.week}`}
                       </span>
                       {m.replayUrl && (
-                        <a
-                          href={m.replayUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <ReplayLink
+                          matchId={m.matchId}
+                          context={{
+                            homeLabel: team.teamAbbrev,
+                            awayLabel: opp?.teamAbbrev,
+                            week: m.week,
+                            playoffRound: m.playoffRound,
+                            leagueName: league?.name,
+                            leagueColor: league?.color,
+                          }}
                           className="text-purple-400 hover:underline flex items-center"
                         >
                           <Play size={9} />
-                        </a>
+                        </ReplayLink>
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">

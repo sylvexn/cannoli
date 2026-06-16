@@ -10,7 +10,7 @@ interface AppData {
 
 const AppDataContext = createContext<AppData>({ leagues: [], loading: true, refreshLeagues: () => {} });
 
-function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): League[] {
+export function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>>): League[] {
   return apiLeagues.map(a => {
     const season: LeagueSeason = a.season ? {
       id: a.season.id,

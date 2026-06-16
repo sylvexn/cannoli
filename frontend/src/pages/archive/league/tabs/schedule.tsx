@@ -3,6 +3,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { Badge } from '@/components/ui/badge';
 import { Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ReplayLink } from '@/components/replay-link';
 import type { FullLeagueData, ScheduleMatch, TeamRow } from '../types';
 
 /** Full season schedule grouped by week. Includes every regular-season AND
@@ -25,7 +26,7 @@ export function ScheduleTab({ data }: { data: FullLeagueData }) {
             <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">Week {w}</div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
               {byWeek.get(w)!.map(m => (
-                <ScheduleMatchRow key={m.id} match={m} teamMap={teamMap} />
+                <ScheduleMatchRow key={m.id} match={m} teamMap={teamMap} league={data.league} />
               ))}
             </div>
           </CardContent>
@@ -35,7 +36,7 @@ export function ScheduleTab({ data }: { data: FullLeagueData }) {
   );
 }
 
-function ScheduleMatchRow({ match, teamMap }: { match: ScheduleMatch; teamMap: Map<string, TeamRow> }) {
+function ScheduleMatchRow({ match, teamMap, league }: { match: ScheduleMatch; teamMap: Map<string, TeamRow>; league: FullLeagueData['league'] }) {
   const home = teamMap.get(match.homeTeamId);
   const away = teamMap.get(match.awayTeamId);
   const hasResult = match.homeScore != null && match.awayScore != null;
@@ -79,15 +80,20 @@ function ScheduleMatchRow({ match, teamMap }: { match: ScheduleMatch; teamMap: M
           </Badge>
         )}
         {match.replayUrl && (
-          <a
-            href={match.replayUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <ReplayLink
+            matchId={match.id}
+            context={{
+              homeLabel: home?.teamAbbrev,
+              awayLabel: away?.teamAbbrev,
+              week: match.week,
+              playoffRound: match.playoffRound,
+              leagueName: league.name,
+              leagueColor: league.color,
+            }}
             className="inline-flex items-center gap-0.5 text-purple-400 hover:underline"
-            onClick={e => e.stopPropagation()}
           >
             <Play size={9} /> Replay
-          </a>
+          </ReplayLink>
         )}
       </div>
     </div>

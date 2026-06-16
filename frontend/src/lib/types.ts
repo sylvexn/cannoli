@@ -4,7 +4,7 @@ import type { PokemonType } from './pokemon';
 export interface User {
   id: string;
   username: string;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
@@ -36,7 +36,7 @@ export interface CoachOwner {
   primaryColor: string | null;
   secondaryColor: string | null;
   tertiaryColor: string | null;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
 }
 
 export interface Player {

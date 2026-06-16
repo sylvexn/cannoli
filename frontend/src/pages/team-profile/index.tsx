@@ -13,7 +13,8 @@ import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, ExternalLink, Shield, Calendar, Zap, Sword } from 'lucide-react';
+import { ArrowLeft, Play, Shield, Calendar, Zap, Sword } from 'lucide-react';
+import { ReplayLink } from '@/components/replay-link';
 
 import { useAuth } from '@/lib/auth-context';
 import { canManageTeam } from '@/lib/permissions';
@@ -530,7 +531,20 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                         </span>
                       )}
                       {match.replayUrl && (
-                        <a href={match.replayUrl} className="text-text-muted/40 hover:text-neon transition-colors"><ExternalLink size={10} /></a>
+                        <ReplayLink
+                          matchId={match.id}
+                          context={{
+                            homeLabel: player.teamAbbrev,
+                            awayLabel: opponent.teamAbbrev,
+                            week: match.week,
+                            playoffRound: match.playoffRound,
+                            leagueName: league.name,
+                            leagueColor: league.color,
+                          }}
+                          className="text-text-muted/40 hover:text-neon transition-colors"
+                        >
+                          <Play size={10} />
+                        </ReplayLink>
                       )}
                     </div>
                   );

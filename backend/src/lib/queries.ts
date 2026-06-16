@@ -48,6 +48,44 @@ export function getLeague(leagueId: string): LeagueRow | undefined {
     .get();
 }
 
+/** Result of the membership-editability check — a structured ok/blocked shape
+ *  matching the `{ error, code }` convention the admin routes return. */
+export type MembershipGate =
+  | { ok: true }
+  | { ok: false; reason: string; code: string };
+
+/**
+ * Whether a league's coach membership (add / remove / move coaches) can still be
+ * edited. Allowed only *before the draft actually starts*: `predraft`, or
+ * `draft` phase while the draft hasn't begun. Once the draft is in
+ * progress / paused / completed — or the league has advanced to regular+ —
+ * membership is locked, because from that point on a coach has rosters,
+ * matches, standings and trades that a naive move/remove would strand.
+ *
+ * Shared by every membership handler so the gate can never drift between them.
+ */
+export function isMembershipEditable(leagueId: string): MembershipGate {
+  const league = getLeague(leagueId);
+  if (!league) return { ok: false, reason: 'League not found', code: 'league_not_found' };
+  if (league.phase !== 'predraft' && league.phase !== 'draft') {
+    return {
+      ok: false,
+      reason: `League is in ${league.phase} phase — membership locks once the season is underway`,
+      code: 'membership_locked_phase',
+    };
+  }
+  const ds = db.select().from(schema.draftState)
+    .where(eq(schema.draftState.leagueId, leagueId)).get();
+  if (ds && (ds.status !== 'not_started' || ds.currentPickIndex > 0)) {
+    return {
+      ok: false,
+      reason: 'Draft has already started — membership is locked',
+      code: 'membership_locked_draft',
+    };
+  }
+  return { ok: true };
+}
+
 /** Fetch a league together with its teams. Returns undefined if league is missing. */
 export function getLeagueWithTeams(
   leagueId: string,

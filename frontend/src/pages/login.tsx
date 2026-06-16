@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { NeonLogo } from '@/components/neon-logo';
@@ -9,6 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { FlaskConical, ChevronRight } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
 import { leagueGem } from '@/lib/constants';
+import { BRAND_PALETTE, buildGradientCss } from '@/lib/shader-gradient';
+import { ShaderField } from '@/components/shader-field-lazy';
 
 // Compact phase labels for the public active-leagues strip. We deliberately
 // use lowercase here — pre-auth ornament, reads like a status line, not a UI
@@ -102,11 +104,20 @@ export function LoginPage() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-surface flex items-center justify-center p-4 relative"
-      style={DOT_GRID_STYLE}
-    >
-      <div className="w-full max-w-sm space-y-8 relative">
+    <div className="min-h-screen bg-surface flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Animated shader backdrop (GPU-gated; static gradient fallback otherwise) */}
+      <Suspense fallback={<div className="absolute inset-0 z-0" style={{ background: buildGradientCss(BRAND_PALETTE) }} />}>
+        <ShaderField colors={BRAND_PALETTE} speed={0.55} distortion={1.0} className="absolute inset-0 z-0" />
+      </Suspense>
+      {/* Dark scrim keeps the centered card crisp over the motion */}
+      <div
+        className="absolute inset-0 z-0 pointer-events-none"
+        style={{ background: 'radial-gradient(ellipse 58% 50% at 50% 45%, rgba(8,8,13,0.55) 0%, rgba(8,8,13,0.86) 100%)' }}
+      />
+      {/* Dot-grid texture, dialed back, layered above the shader */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-60" style={DOT_GRID_STYLE} />
+
+      <div className="w-full max-w-sm space-y-8 relative z-10">
         <div className="flex flex-col items-center gap-2">
           <NeonLogo className="w-64 h-auto" />
           <p className="text-[11px] font-mono uppercase tracking-[0.25em] text-text-muted/70">
@@ -150,7 +161,7 @@ export function LoginPage() {
           <Button
             type="submit"
             disabled={loading || !username || !password}
-            className="w-full bg-neon text-surface-base hover:bg-neon/90"
+            className="btn-gradient w-full text-surface-base font-semibold border-0 disabled:opacity-60"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>

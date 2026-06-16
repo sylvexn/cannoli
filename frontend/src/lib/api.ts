@@ -101,7 +101,7 @@ export interface ApiCoachOwner {
   primaryColor: string | null;
   secondaryColor: string | null;
   tertiaryColor: string | null;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
 }
 
 export interface ApiTeam {
@@ -125,6 +125,44 @@ export interface ApiTeam {
   record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
   tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: ApiRosterPokemon[];
+}
+
+/** One coach row in the admin league-membership view. */
+export interface ApiMembershipCoach {
+  id: string;
+  teamName: string;
+  teamAbbrev: string;
+  teamColor: string;
+  logoPath: string | null;
+  coachName: string;
+  userId: number | null;
+  manager: { username: string; displayName: string | null } | null;
+  /** Career totals across ALL of this coach's teams (keyed on userId) —
+   *  null when the team has no linked user account. */
+  career: {
+    seasonsPlayed: number;
+    wins: number;
+    losses: number;
+    kills: number;
+    deaths: number;
+    championships: number;
+  } | null;
+}
+
+export interface ApiMembershipLeague {
+  id: string;
+  name: string;
+  color: string;
+  phase: string;
+  /** Whether coaches can still be added / removed / moved (before draft start). */
+  editable: boolean;
+  lockReason: string | null;
+  teams: ApiMembershipCoach[];
+}
+
+export interface ApiMembership {
+  seasonNumber: number | null;
+  leagues: ApiMembershipLeague[];
 }
 
 export interface ApiRosterPokemon {
@@ -255,7 +293,7 @@ export interface ApiDraftState {
 export interface ApiAuthUser {
   id: string;
   username: string;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
@@ -314,7 +352,7 @@ export interface ApiPublicProfile {
   /** User's role — surfaced on the profile page as an ADMIN chip when
    *  applicable. Only set on backends that include it (older deploys may
    *  omit it; treat undefined as `'user'`). */
-  role?: 'dev' | 'admin' | 'user' | null;
+  role?: 'dev' | 'admin' | 'user' | 'bot' | null;
   currentTeams: Array<{
     teamId: string;
     leagueId: string;
@@ -691,6 +729,17 @@ export interface ApiFeedbackIssue {
   url: string;
 }
 
+export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
+
+export interface ApiChangelogEntry {
+  id: string;
+  /** ISO 8601 timestamp (UTC). */
+  date: string;
+  category: ChangelogCategory;
+  title: string;
+  body?: string;
+}
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -705,8 +754,9 @@ export const api = {
   changePassword: (currentPassword: string, newPassword: string) =>
     postJson<{ success: boolean }>('/api/auth/change-password', { currentPassword, newPassword }),
 
-  // League data
-  getLeagues: () => fetchJson<ApiLeague[]>('/api/leagues'),
+  // League data. `all: true` returns leagues across every season (incl.
+  // archived) — used by the Replay Gallery to browse historical replays.
+  getLeagues: (all = false) => fetchJson<ApiLeague[]>(`/api/leagues${all ? '?all=1' : ''}`),
 
   getSeasons: () => fetchJson<{
     id: number;
@@ -1056,7 +1106,7 @@ export const api = {
     primaryColor: string | null;
     secondaryColor: string | null;
     tertiaryColor: string | null;
-    role: 'dev' | 'admin' | 'user';
+    role: 'dev' | 'admin' | 'user' | 'bot';
     statusMessage: string | null;
     lastSeenAt: string | null;
   }> }>('/api/online'),
@@ -1208,6 +1258,21 @@ export const api = {
   deleteTeam: (teamId: string, opts?: { force?: boolean }) =>
     deleteJson<{ success: boolean }>(`/api/teams/${teamId}${opts?.force ? '?force=1' : ''}`),
 
+  // League membership (add / move / remove coaches before draft start)
+  getMembership: () => fetchJson<ApiMembership>('/api/admin/membership'),
+  addCoach: (data: {
+    leagueId: string;
+    userId: number;
+    teamName: string;
+    teamAbbrev: string;
+    teamColor?: string;
+    coachName?: string;
+  }) => postJson<{ id: string }>('/api/admin/membership/add', data),
+  moveCoach: (teamId: string, toLeagueId: string) =>
+    postJson<{ success: boolean }>('/api/admin/membership/move', { teamId, toLeagueId }),
+  removeCoachTeam: (teamId: string) =>
+    deleteJson<{ success: boolean }>(`/api/admin/membership/team/${teamId}`),
+
   // Feedback
   submitFeedback: (title: string, description: string, page?: string, errorRef?: string) =>
     postJson<{ success: boolean; issueNumber: number | null; issueUrl: string | null }>('/api/feedback', { title, description, page, errorRef }),
@@ -1220,6 +1285,13 @@ export const api = {
 
   acknowledgeFeedback: (issueNumber: number) =>
     postJson<{ success: boolean }>(`/api/feedback/${issueNumber}/acknowledge`),
+
+  // Changelog ("What's New")
+  getChangelog: () =>
+    fetchJson<{ entries: ApiChangelogEntry[]; lastSeenAt: string | null }>('/api/changelog'),
+
+  markChangelogSeen: () =>
+    postJson<{ success: boolean; seenAt: string }>('/api/changelog/seen'),
 
   // Match management
   getAdminMatches: (params?: { leagueId?: string; status?: string }) => {

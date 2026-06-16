@@ -4,7 +4,7 @@ import { parseSessionToken, validateSession } from '../lib/auth';
 export interface AuthUser {
   id: string;
   username: string;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;

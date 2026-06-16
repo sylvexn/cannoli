@@ -11,14 +11,23 @@ export const leagueRoutes = new Elysia()
 
   // ─── Leagues ─────────────────────────────────────────────────────────
 
-  .get('/api/leagues', () => {
-    const season = db.select().from(schema.seasons)
+  .get('/api/leagues', ({ query }) => {
+    // `?all=1` returns leagues across EVERY season (incl. archived) — used by
+    // the Replay Gallery to browse historical replays. Default (no param)
+    // keeps the legacy behaviour: just the latest season's leagues.
+    const includeAll = query?.all === '1' || query?.all === 'true';
+
+    const allSeasons = db.select().from(schema.seasons)
       .orderBy(desc(schema.seasons.seasonNumber))
-      .get();
-    if (!season) return [];
-    const leagues = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.seasonId, season.id))
       .all();
+    if (allSeasons.length === 0) return [];
+    const seasonsById = new Map(allSeasons.map(s => [s.id, s]));
+    const seasonScope = includeAll ? allSeasons : [allSeasons[0]!];
+    const seasonIds = new Set(seasonScope.map(s => s.id));
+
+    const leagues = db.select().from(schema.leagues)
+      .all()
+      .filter(l => seasonIds.has(l.seasonId));
     // Per-league registered-team count. A coach == a team (teams.userId), so
     // the team count is the player count. The admin Leagues tab reads this;
     // previously it had no count source and rendered "0 players".
@@ -32,7 +41,9 @@ export const leagueRoutes = new Elysia()
         .all()
         .map(r => [r.leagueId, r.count]),
     );
-    return leagues.map(l => ({
+    return leagues.map(l => {
+      const season = seasonsById.get(l.seasonId) ?? null;
+      return ({
       id: l.id,
       name: l.name,
       color: l.color,
@@ -65,7 +76,8 @@ export const leagueRoutes = new Elysia()
         weekDatesAutoFilled: !!l.weekDatesAutoFilled,
         archived: !!season.archived,
       } : null,
-    }));
+    });
+    });
   })
 
   // ─── Season ──────────────────────────────────────────────────────────

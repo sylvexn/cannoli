@@ -2,7 +2,7 @@
  * Small pure chip/badge sub-components extracted from coach-profile/index.tsx
  * to keep that file under the 600-LOC standard. All presentational, no state.
  */
-import { Shield, Crown, Medal } from 'lucide-react';
+import { Shield, Crown, Medal, Bot } from 'lucide-react';
 
 export function TeamColorChip({ color, abbrev }: { color: string; abbrev: string }) {
   return (
@@ -26,7 +26,7 @@ export function TeamColorChip({ color, abbrev }: { color: string; abbrev: string
 
 /** ADMIN / DEV chip in the identity strip. Mirrors the styling used in
  *  CoachLink so the chip reads consistently across surfaces. */
-export function RoleChip({ role }: { role: 'admin' | 'dev' }) {
+export function RoleChip({ role }: { role: 'admin' | 'dev' | 'bot' }) {
   if (role === 'dev') {
     return (
       <span
@@ -39,14 +39,26 @@ export function RoleChip({ role }: { role: 'admin' | 'dev' }) {
       </span>
     );
   }
+  if (role === 'bot') {
+    return (
+      <span
+        aria-label="Bot"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-violet-400/15 text-violet-400 ring-1 ring-violet-400/30"
+        title="Bot"
+      >
+        <Bot size={9} />
+        Bot
+      </span>
+    );
+  }
   return (
     <span
-      aria-label="Elder"
+      aria-label="Elite 4"
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
-      title="Elder"
+      title="Elite 4"
     >
       <Shield size={9} />
-      Elder
+      Elite 4
     </span>
   );
 }

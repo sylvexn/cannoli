@@ -10,8 +10,9 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ExternalLink, Zap, Swords, Loader2 } from 'lucide-react';
+import { ChevronDown, Play, Zap, Swords, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ReplayLink } from '@/components/replay-link';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { useLeague } from '@/lib/league-context';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
@@ -160,15 +161,20 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             <Swords className="w-3.5 h-3.5" />
           </Link>
           {isCompleted && match.replayUrl && match.replayUrl !== '#' && (
-            <a
-              href={match.replayUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={e => e.stopPropagation()}
+            <ReplayLink
+              matchId={match.id}
+              context={{
+                homeLabel: homePlayer.teamAbbrev,
+                awayLabel: awayPlayer.teamAbbrev,
+                week: match.week,
+                playoffRound: match.playoffRound,
+                leagueName: league.name,
+                leagueColor: league.color,
+              }}
               className="text-text-muted hover:text-neon transition-colors p-1"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+              <Play className="w-3.5 h-3.5" />
+            </ReplayLink>
           )}
           {canExpand && (
             <ChevronDown className={cn(

@@ -1,7 +1,11 @@
+import { Suspense } from 'react';
 import { Play, Image as ImageIcon, Link2, Flame, Zap, Trophy, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { leagueGem } from '@/lib/constants';
+import { buildGradientCss, gemPaletteFor } from '@/lib/shader-gradient';
+import { ShaderField } from '@/components/shader-field-lazy';
 import type { ReplayEntry } from './replay-types';
 import { BroughtPreview } from './brought-preview';
 
@@ -40,44 +44,50 @@ export function ReplayHeroCard({
   const teraHeavy = weekEnded && summary && summary.teraCount >= 3;
   const hasMvp = weekEnded && summary?.mvp && summary.mvp.kills > 0;
 
+  const heroPalette = gemPaletteFor(leagueGem(league.id));
+
   return (
+    <div className="spin-border rounded-xl mb-5" style={{ ['--spin-accent' as never]: league.color }}>
     <div
-      className="relative rounded-xl border border-border-default bg-surface-raised overflow-hidden mb-5"
+      className="relative rounded-xl border border-border-default bg-surface-raised overflow-hidden"
       style={{
         ['--card-accent' as never]: league.color,
         background: `linear-gradient(120deg, ${league.color}12 0%, var(--color-surface-raised, #161821) 55%)`,
       }}
     >
       <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-0">
-        {/* Left: preview pane */}
-        <div
-          className="relative flex items-center justify-center min-h-[180px] border-b md:border-b-0 md:border-r border-border-subtle"
-          style={{
-            background: `radial-gradient(ellipse at 30% 50%, ${league.color}18 0%, transparent 70%)`,
-          }}
-        >
-          {summary && (summary.home.length > 0 || summary.away.length > 0) ? (
-            <BroughtPreview
-              home={summary.home}
-              away={summary.away}
-              homeColor={homeTeam?.teamColor}
-              awayColor={awayTeam?.teamColor}
-              size="md"
-            />
-          ) : (
-            <div className="flex flex-col items-center gap-2 text-text-muted/70">
-              <ImageIcon size={28} strokeWidth={1.25} />
-              <span className="text-[10px] font-mono uppercase tracking-widest">No preview yet</span>
-            </div>
-          )}
+        {/* Left: preview pane — animated shader background (GPU-gated) */}
+        <div className="relative flex items-center justify-center min-h-[180px] overflow-hidden border-b md:border-b-0 md:border-r border-border-subtle">
+          <Suspense fallback={<div className="absolute inset-0" style={{ background: buildGradientCss(heroPalette) }} />}>
+            <ShaderField colors={heroPalette} speed={0.85} className="absolute inset-0" />
+          </Suspense>
+          {/* Dark scrim so sprites/badges stay legible over the shader */}
+          <div className="absolute inset-0 bg-gradient-to-r from-surface-raised/30 via-transparent to-surface-raised/55 pointer-events-none" />
 
-          <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-neon/10 border border-neon/30 text-neon text-[9px] font-mono font-bold uppercase tracking-widest">
+          <div className="relative z-10 flex items-center justify-center">
+            {summary && (summary.home.length > 0 || summary.away.length > 0) ? (
+              <BroughtPreview
+                home={summary.home}
+                away={summary.away}
+                homeColor={homeTeam?.teamColor}
+                awayColor={awayTeam?.teamColor}
+                size="md"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-text-muted/70">
+                <ImageIcon size={28} strokeWidth={1.25} />
+                <span className="text-[10px] font-mono uppercase tracking-widest">No preview yet</span>
+              </div>
+            )}
+          </div>
+
+          <span className="z-10 absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-neon/10 border border-neon/30 text-neon text-[9px] font-mono font-bold uppercase tracking-widest">
             <Sparkles size={10} />
             Featured
           </span>
 
           {(sweep || teraHeavy || hasMvp) && (
-            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+            <div className="z-10 absolute top-3 right-3 flex items-center gap-1.5">
               {hasMvp && (
                 <span
                   className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -202,6 +212,7 @@ export function ReplayHeroCard({
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

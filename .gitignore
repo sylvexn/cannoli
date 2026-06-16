@@ -12,6 +12,7 @@ dist/
 
 # Playwright run artifacts
 tests/e2e/.results/
+tests/e2e/.fx/
 
 # Environment
 .env

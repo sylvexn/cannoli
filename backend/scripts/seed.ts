@@ -93,16 +93,16 @@ function seedSystemAccounts() {
     active: true,
   }).run();
 
-  // Root admin account
+  // Root system/bot account
   db.insert(schema.users).values({
     username: 'root',
     passwordHash: hashSync('root', 10),
-    role: 'admin',
+    role: 'bot',
     mustChangePassword: true,
     active: true,
   }).run();
 
-  console.log('  Created: syl (dev), root (admin)');
+  console.log('  Created: syl (dev), root (bot)');
 }
 
 // ─── Seed site settings ─────────────────────────────────────────────────────
