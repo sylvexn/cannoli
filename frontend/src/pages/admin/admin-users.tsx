@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { api } from '@/lib/api';
 import type { ApiAuthUser } from '@/lib/api';
+import { useUserTimezone } from '@/lib/format';
 import { CoachLink } from '@/components/coach-link';
 import {
   UserPlus, MoreHorizontal, KeyRound, ShieldCheck, ShieldOff,
@@ -22,6 +23,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export function AdminUsers() {
+  const tz = useUserTimezone();
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -224,7 +226,7 @@ export function AdminUsers() {
 
             {/* Created date */}
             <span className="text-[10px] text-text-muted/60 font-mono tabular-nums w-[80px] text-right">
-              {user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'}
+              {user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit', timeZone: tz }) : '—'}
             </span>
 
             {/* Actions */}

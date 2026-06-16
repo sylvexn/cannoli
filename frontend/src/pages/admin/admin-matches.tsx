@@ -9,6 +9,7 @@ import {
 import { api } from '@/lib/api';
 import type { ApiAdminMatch } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
+import { useFormatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
@@ -24,6 +25,7 @@ import { MatchActionsDropdown } from './matches/match-actions-dropdown';
 
 export function AdminMatches() {
   const { leagues } = useAppData();
+  const fmtDateTime = useFormatDateTime();
   const [matches, setMatches] = useState<ApiAdminMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [leagueFilter, setLeagueFilter] = useState('all');
@@ -249,8 +251,8 @@ export function AdminMatches() {
                               <div>Match ID: <span className="text-text-secondary font-mono">{match.id}</span></div>
                               <div>League: <span className="text-text-secondary">{league?.name ?? match.leagueId}</span></div>
                               {match.psRoomId && <div>PS Room: <span className="text-text-secondary font-mono">{match.psRoomId}</span></div>}
-                              {match.startedAt && <div>Started: <span className="text-text-secondary">{new Date(match.startedAt).toLocaleString()}</span></div>}
-                              {match.completedAt && <div>Completed: <span className="text-text-secondary">{new Date(match.completedAt).toLocaleString()}</span></div>}
+                              {match.startedAt && <div>Started: <span className="text-text-secondary">{fmtDateTime(match.startedAt)}</span></div>}
+                              {match.completedAt && <div>Completed: <span className="text-text-secondary">{fmtDateTime(match.completedAt)}</span></div>}
                               {match.replayUrl && (
                                 <div>
                                   Replay: <a href={match.replayUrl} target="_blank" rel="noopener" className="text-neon hover:underline">{match.replayUrl}</a>
