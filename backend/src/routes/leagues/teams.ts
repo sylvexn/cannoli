@@ -236,7 +236,7 @@ export const teamRoutes = new Elysia()
 
   // ─── Free Agent Pool ────────────────────────────────────────────────
 
-  .get('/api/leagues/:leagueId/free-agents', ({ params }) => {
+  .get('/api/leagues/:leagueId/free-agents', ({ params, query }) => {
     // Get all rostered pokemon names in this league
     const teams = db.select().from(schema.teams)
       .where(eq(schema.teams.leagueId, params.leagueId))
@@ -269,7 +269,7 @@ export const teamRoutes = new Elysia()
       spe: schema.pokemon.spe,
     }).from(schema.pokemon).all();
 
-    return allPokemon
+    const freeAgents = allPokemon
       .filter(p => {
         if (rostered.has(p.name)) return false;
         const c = costs.get(p.name);
@@ -286,26 +286,67 @@ export const teamRoutes = new Elysia()
           stats: { hp: p.hp, atk: p.atk, def: p.def, spa: p.spa, spd: p.spd, spe: p.spe },
         };
       });
+
+    // Optional: if the caller passes ?teamId=<id>, include FA budget info for
+    // that team. This avoids a second round-trip in the FA page on load.
+    const teamId = (query as Record<string, string>).teamId;
+    if (teamId) {
+      const settings = db.select().from(schema.siteSettings).get();
+      const faPickupsPerSeason = settings?.faPickupsPerSeason ?? 6;
+      const usedPickups = db.select().from(schema.transactions)
+        .where(and(
+          eq(schema.transactions.leagueId, params.leagueId),
+          eq(schema.transactions.teamId, teamId),
+          eq(schema.transactions.type, 'fa'),
+        ))
+        .all()
+        .filter(t => t.pokemonIn != null).length;
+      return {
+        freeAgents,
+        budget: {
+          faUsed: usedPickups,
+          faRemaining: faPickupsPerSeason - usedPickups,
+          faPerSeason: faPickupsPerSeason,
+        },
+      };
+    }
+
+    return freeAgents;
   })
 
   .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
-    const { teamId, pokemonName, dropPokemonName } = body as {
+    // Accept both legacy single-mon shape and new multi-mon shape.
+    // New: { teamId, pickupNames: string[], dropNames?: string[] }
+    // Legacy (still accepted): { teamId, pokemonName, dropPokemonName? }
+    const raw = body as {
       teamId: string;
-      pokemonName: string;
+      // multi shape
+      pickupNames?: string[];
+      dropNames?: string[];
+      // legacy single shape
+      pokemonName?: string;
       dropPokemonName?: string;
     };
 
-    if (!teamId || !pokemonName) {
+    const teamId = raw.teamId;
+    if (!teamId) { set.status = 400; return { error: 'teamId required' }; }
+
+    // Normalise to arrays
+    const pickupNames: string[] = raw.pickupNames?.length
+      ? raw.pickupNames
+      : raw.pokemonName ? [raw.pokemonName] : [];
+    const dropNames: string[] = raw.dropNames?.length
+      ? raw.dropNames
+      : raw.dropPokemonName ? [raw.dropPokemonName] : [];
+
+    if (pickupNames.length === 0) {
       set.status = 400;
-      return { error: 'teamId and pokemonName required' };
+      return { error: 'At least one Pokemon to pick up is required' };
     }
 
-    // Resolve target team (whichever teamId was supplied — including a staff
-    // override). Always assert the resolved team belongs to the path league
-    // before mutating rosters/transactions, even though staff may override
-    // `teamId` in the body.
+    // Resolve target team
     const team = db.select().from(schema.teams)
       .where(eq(schema.teams.id, teamId))
       .get();
@@ -316,49 +357,59 @@ export const teamRoutes = new Elysia()
     }
 
     // Authorization: staff can pick up onto any team; otherwise the caller must
-    // own the target team (and can only act on their own team).
+    // own the target team.
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
       set.status = 403;
       return { error: 'Not your team' };
     }
 
-    // Verify pokemon exists and is draftable in THIS league's format.
-    // Draftability (tier > 0, not banned) is resolved from the league cost map
-    // so format-specific overrides are respected. We still fetch the global row
-    // to confirm the species exists at all (a species absent from both tables
-    // returns undefined from the cost map too, but the 404 is more informative).
-    const pkmnGlobal = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
-    if (!pkmnGlobal) { set.status = 404; return { error: 'Pokemon not found' }; }
+    // Verify all pickups exist and are draftable in THIS league's format.
     const leagueCosts = getLeagueCostMap(params.leagueId);
-    const pkmnCost = leagueCosts.get(pokemonName);
-    if (!pkmnCost || pkmnCost.tier <= 0) { set.status = 400; return { error: `${pokemonName} is not draftable` }; }
-    if (pkmnCost.banned) { set.status = 400; return { error: `${pokemonName} is banned` }; }
+    const pickupCosts: { name: string; tier: number }[] = [];
+    for (const pokemonName of pickupNames) {
+      const pkmnGlobal = db.select().from(schema.pokemon).where(eq(schema.pokemon.name, pokemonName)).get();
+      if (!pkmnGlobal) { set.status = 404; return { error: `Pokemon not found: ${pokemonName}` }; }
+      const pkmnCost = leagueCosts.get(pokemonName);
+      if (!pkmnCost || pkmnCost.tier <= 0) { set.status = 400; return { error: `${pokemonName} is not draftable` }; }
+      if (pkmnCost.banned) { set.status = 400; return { error: `${pokemonName} is banned` }; }
+      pickupCosts.push({ name: pokemonName, tier: pkmnCost.tier });
+    }
 
-    const alreadyRostered = db.select().from(schema.rosters)
-      .where(eq(schema.rosters.pokemonName, pokemonName))
+    // Check for duplicate pickups in the batch
+    const pickupSet = new Set(pickupNames);
+    if (pickupSet.size !== pickupNames.length) {
+      set.status = 400;
+      return { error: 'Duplicate Pokemon in pickup list' };
+    }
+
+    // Check none of the pickups are already rostered in this league
+    const teamsInLeague = db.select({ id: schema.teams.id })
+      .from(schema.teams)
+      .where(eq(schema.teams.leagueId, params.leagueId))
       .all()
-      .some(r => {
-        const t = db.select().from(schema.teams).where(eq(schema.teams.id, r.teamId)).get();
-        return t?.leagueId === params.leagueId;
+      .map(t => t.id);
+
+    for (const pokemonName of pickupNames) {
+      const alreadyRostered = teamsInLeague.some(tid => {
+        return db.select().from(schema.rosters)
+          .where(and(eq(schema.rosters.teamId, tid), eq(schema.rosters.pokemonName, pokemonName)))
+          .get() != null;
       });
-    if (alreadyRostered) { set.status = 400; return { error: `${pokemonName} is already rostered` }; }
+      if (alreadyRostered) { set.status = 400; return { error: `${pokemonName} is already rostered` }; }
+    }
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = league?.currentWeek ?? 0;
+    const settings = db.select().from(schema.siteSettings).get();
 
     // ── Phase / deadline gate ──
-    // - predraft / draft / offseason: drafting is the pickup mechanism; if hit,
-    //   allow (no-op gate, explicit per spec).
-    // - regular: blocked once currentWeek > faDeadlineWeek (site setting).
-    // - playoffs: always blocked, no FA in playoffs.
     if (league) {
       if (league.phase === 'playoffs') {
         set.status = 409;
         return { error: 'Free agent pickups are closed during playoffs', code: 'fa_playoffs_closed' };
       }
       if (league.phase === 'regular') {
-        const settings = db.select().from(schema.siteSettings).get();
         const faDeadline = settings?.faDeadlineWeek ?? 7;
         if (week > faDeadline) {
           set.status = 409;
@@ -372,12 +423,36 @@ export const teamRoutes = new Elysia()
       }
     }
 
+    // ── FA budget check ──
+    // Count how many FA pickups this team has used this season by summing
+    // transactions of type 'fa' where pokemonIn IS NOT NULL (drops have
+    // pokemonIn=null). Each mon picked up costs 1 slot.
+    const faPickupsPerSeason = settings?.faPickupsPerSeason ?? 6;
+    const usedPickups = db.select().from(schema.transactions)
+      .where(and(
+        eq(schema.transactions.leagueId, params.leagueId),
+        eq(schema.transactions.teamId, teamId),
+        eq(schema.transactions.type, 'fa'),
+      ))
+      .all()
+      .filter(t => t.pokemonIn != null).length;
+
+    const budgetRemaining = faPickupsPerSeason - usedPickups;
+    if (pickupNames.length > budgetRemaining) {
+      set.status = 400;
+      return {
+        error: `FA budget exceeded — picking up ${pickupNames.length} would use ${usedPickups + pickupNames.length} of ${faPickupsPerSeason} allowed pickups (${budgetRemaining} remaining)`,
+        code: 'fa_budget_exceeded',
+        faUsed: usedPickups,
+        faRemaining: budgetRemaining,
+        faPerSeason: faPickupsPerSeason,
+      };
+    }
+
     try {
       return tx(() => {
-        // Drop pokemon if specified — fail loudly if the named mon isn't on
-        // the team. Previously this silently no-op'd, letting the pickup
-        // succeed and bust the point cap.
-        if (dropPokemonName) {
+        // ── Apply drops first ──
+        for (const dropPokemonName of dropNames) {
           const droppedRow = db.select().from(schema.rosters)
             .where(and(
               eq(schema.rosters.teamId, teamId),
@@ -385,14 +460,16 @@ export const teamRoutes = new Elysia()
             ))
             .get();
           if (!droppedRow) {
-            throw Object.assign(new Error(`${dropPokemonName} is not on ${team.teamName}'s roster`), { _status: 400, _code: 'fa_drop_not_found' });
+            throw Object.assign(
+              new Error(`${dropPokemonName} is not on ${team.teamName}'s roster`),
+              { _status: 400, _code: 'fa_drop_not_found' },
+            );
           }
           db.delete(schema.rosters)
             .where(eq(schema.rosters.id, droppedRow.id))
             .run();
 
-          // Drop also clears any trade-block listing on that mon for this
-          // team — they no longer own it.
+          // Drop also clears any trade-block listing on that mon for this team
           db.delete(schema.tradeBlockListings)
             .where(and(
               eq(schema.tradeBlockListings.leagueId, params.leagueId),
@@ -402,31 +479,27 @@ export const teamRoutes = new Elysia()
             .run();
         }
 
-        // Add new pokemon to roster — snapshot costAtDraft from the league's
-        // cost format so later tier-list edits (or format changes) don't
-        // retroactively rewrite this team's point total.
-        db.insert(schema.rosters).values({
-          teamId,
-          pokemonName,
-          tier: pkmnCost.tier,
-          costAtDraft: pkmnCost.tier,
-          acquiredVia: 'fa',
-          acquiredWeek: week,
-        }).run();
+        // ── Apply pickups ──
+        for (const { name: pokemonName, tier } of pickupCosts) {
+          db.insert(schema.rosters).values({
+            teamId,
+            pokemonName,
+            tier,
+            costAtDraft: tier,
+            acquiredVia: 'fa',
+            acquiredWeek: week,
+          }).run();
+        }
 
-        // ── Post-swap roster legality re-check ──
-        // Re-run the same invariants that draft/trade enforce against the
-        // resulting roster. Must abort the tx on any violation.
+        // ── Post-swap roster legality re-check (run once on final roster) ──
         const newRoster = db.select().from(schema.rosters)
           .where(eq(schema.rosters.teamId, teamId))
           .all();
 
-        // Roster size cap. Must NOT exceed league.rosterSize. Teams may sit
-        // below the cap (e.g. mid-recovery from a release), but a pickup
-        // that would push them over requires a paired drop.
+        // Roster size cap
         if (league && newRoster.length > league.rosterSize) {
           throw Object.assign(
-            new Error(`Pickup would put roster at ${newRoster.length} (max ${league.rosterSize}) — a drop is required`),
+            new Error(`Pickup would put roster at ${newRoster.length} (max ${league.rosterSize}) — additional drops are required`),
             { _status: 400, _code: 'fa_roster_size_exceeded' },
           );
         }
@@ -444,7 +517,7 @@ export const teamRoutes = new Elysia()
         }
         if (megaCount > 1) {
           throw Object.assign(
-            new Error(`Adding ${pokemonName} would put 2 Megas on the team (max 1)`),
+            new Error(`Pickup would put ${megaCount} Megas on the team (max 1)`),
             { _status: 400, _code: 'fa_mega_cap' },
           );
         }
@@ -477,30 +550,48 @@ export const teamRoutes = new Elysia()
           );
         }
 
-        // Transaction record — pointsIn from the league format snapshot
-        db.insert(schema.transactions).values({
-          leagueId: params.leagueId,
-          week,
-          type: 'fa',
-          teamId,
-          pokemonIn: pokemonName,
-          pointsIn: pkmnCost.tier,
-          pokemonOut: dropPokemonName || null,
-        }).run();
+        // ── Transaction records (one row per pokemon moved) ──
+        for (const { name: pokemonName, tier } of pickupCosts) {
+          db.insert(schema.transactions).values({
+            leagueId: params.leagueId,
+            week,
+            type: 'fa',
+            teamId,
+            pokemonIn: pokemonName,
+            pointsIn: tier,
+          }).run();
+        }
+        for (const dropPokemonName of dropNames) {
+          const dropCost = leagueCosts.get(dropPokemonName)?.tier ?? null;
+          db.insert(schema.transactions).values({
+            leagueId: params.leagueId,
+            week,
+            type: 'fa',
+            teamId,
+            pokemonOut: dropPokemonName,
+            pointsOut: dropCost,
+          }).run();
+        }
 
-        // Activity log — category 'fa' so the activity feed/filters can
-        // distinguish FA movement from trades. (Type 'fa_pickup' was
-        // mismatched against category 'trade' historically.)
+        // Activity log
+        const pickupStr = pickupNames.join(', ');
+        const dropStr = dropNames.length > 0 ? `, dropped ${dropNames.join(', ')}` : '';
         db.insert(schema.activityLog).values({
           type: 'fa_pickup',
           category: 'fa',
           actor: user.username,
           leagueId: params.leagueId,
-          description: `FA: ${team.teamName} picked up ${pokemonName}${dropPokemonName ? `, dropped ${dropPokemonName}` : ''}`,
-          metadata: JSON.stringify({ teamId, pokemonName, dropPokemonName }),
+          description: `FA: ${team.teamName} picked up ${pickupStr}${dropStr}`,
+          metadata: JSON.stringify({ teamId, pickupNames, dropNames }),
         }).run();
 
-        return { success: true };
+        const newFaUsed = usedPickups + pickupNames.length;
+        return {
+          success: true,
+          faUsed: newFaUsed,
+          faRemaining: faPickupsPerSeason - newFaUsed,
+          faPerSeason: faPickupsPerSeason,
+        };
       });
     } catch (e: any) {
       if (e?._status) {

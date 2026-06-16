@@ -546,6 +546,9 @@ export interface ApiSiteSettings {
   defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
+  faDeadlineWeek?: number;
+  faPickupsPerSeason?: number;
+  defaultPlayoffTeamCount?: number;
 }
 
 export interface ApiMoveCategoryEntry {
@@ -1532,13 +1535,27 @@ export const api = {
     ),
 
   // Free agents
-  getFreeAgents: (leagueId: string) =>
-    fetchJson<{ name: string; tier: number; type1: string; type2: string | null; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } }[]>(
-      `/api/leagues/${leagueId}/free-agents`
-    ),
+  getFreeAgents: (leagueId: string, teamId?: string) => {
+    const url = teamId
+      ? `/api/leagues/${leagueId}/free-agents?teamId=${encodeURIComponent(teamId)}`
+      : `/api/leagues/${leagueId}/free-agents`;
+    return fetchJson<
+      | { name: string; tier: number; type1: string; type2: string | null; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } }[]
+      | {
+          freeAgents: { name: string; tier: number; type1: string; type2: string | null; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } }[];
+          budget: { faUsed: number; faRemaining: number; faPerSeason: number };
+        }
+    >(url);
+  },
 
-  freeAgentPickup: (leagueId: string, data: { teamId: string; pokemonName: string; dropPokemonName?: string }) =>
-    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/free-agents/pickup`, data),
+  freeAgentPickup: (
+    leagueId: string,
+    data: { teamId: string; pickupNames: string[]; dropNames?: string[] },
+  ) =>
+    postJson<{ success: boolean; faUsed: number; faRemaining: number; faPerSeason: number }>(
+      `/api/leagues/${leagueId}/free-agents/pickup`,
+      data,
+    ),
 
   // Speed tiers (rostered pokemon + base speed + ability list, league-wide)
   getSpeedTiers: (leagueId: string) =>

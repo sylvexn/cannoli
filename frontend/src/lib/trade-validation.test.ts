@@ -4,10 +4,12 @@ import type { Player, RosterPokemon } from '@/lib/types';
 
 /**
  * Pure-logic coverage for the shared trade validator. This is the client-side
- * pre-flight that drives the inline "even swap / point cap / max 1 mega /
- * duplicate species" feedback in the trade composer and disables the Send
- * button. The backend re-verifies, but a regression here means the UI lies to
- * the user about legality.
+ * pre-flight that drives the inline "point cap / max 1 mega / duplicate species"
+ * feedback in the trade composer and disables the Send button. The backend
+ * re-verifies, but a regression here means the UI lies to the user about legality.
+ *
+ * Unequal (N-for-M) trades are now legal as long as both resulting rosters pass
+ * all other invariants (point cap, mega cap, no natdex dupes, roster size).
  *
  * Run: `bun test` from frontend/.
  */
@@ -57,7 +59,9 @@ describe('validateTrade', () => {
     expect(issues).toEqual([]);
   });
 
-  test('flags an uneven (2-for-1) swap on the count side', () => {
+  test('allows an unequal (2-for-1) swap when both rosters stay legal', () => {
+    // a gives Gengar(16) + Pikachu(4) = 20pt for Garchomp(16).
+    // postA: [Garchomp=16] → 16 ≤ 110. postB: [Gengar=16, Pikachu=4] → 20 ≤ 110.
     const a = team('a', 'AAA', [mon('Gengar', 16), mon('Pikachu', 4)]);
     const b = team('b', 'BBB', [mon('Garchomp', 16)]);
     const issues = validateTrade({
@@ -65,7 +69,21 @@ describe('validateTrade', () => {
       offering: new Set(['Gengar', 'Pikachu']), requesting: new Set(['Garchomp']),
       pointCap: cap,
     });
-    expect(issues.some(i => i.side === 'count' && /even/i.test(i.message))).toBe(true);
+    expect(issues).toEqual([]);
+  });
+
+  test('flags a roster-size violation on a 1-for-2 when recipient would exceed cap', () => {
+    const a = team('a', 'AAA', [mon('Gengar', 16)]);
+    const b = team('b', 'BBB', [mon('A', 4), mon('B', 4), mon('C', 4)]);
+    // a gives 1, gets 2 → postA has 2 mons, postB has 2 mons. With rosterSize=2 → postB=2, ok.
+    // With rosterSize=1 → postA=2 > 1, should flag.
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Gengar']), requesting: new Set(['A', 'B']),
+      pointCap: cap,
+      rosterSize: 1,
+    });
+    expect(issues.some(i => /max/i.test(i.message))).toBe(true);
   });
 
   test('flags a side that would exceed the point cap', () => {

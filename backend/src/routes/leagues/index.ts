@@ -174,6 +174,7 @@ export const leagueRoutes = new Elysia()
       draftDemoVisible: row.draftDemoVisible ?? isMock,
       faDeadlineWeek: row.faDeadlineWeek ?? 7,
       defaultPlayoffTeamCount: row.defaultPlayoffTeamCount ?? 6,
+      faPickupsPerSeason: row.faPickupsPerSeason ?? 6,
     };
   })
 

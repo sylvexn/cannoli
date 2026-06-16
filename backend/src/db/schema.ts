@@ -436,6 +436,10 @@ export const siteSettings = sqliteTable('site_settings', {
   faDeadlineWeek: integer('fa_deadline_week').notNull().default(7),
   /** Default playoff bracket size for newly-generated brackets (2/4/6/8). */
   defaultPlayoffTeamCount: integer('default_playoff_team_count').notNull().default(6),
+  /** Max free-agent pickups a team may make in one season (each pokemon picked
+   *  up costs 1 slot; drops are free). Enforced per-team against the fa
+   *  transactions table. Default 6. */
+  faPickupsPerSeason: integer('fa_pickups_per_season').notNull().default(6),
 });
 
 // ─── Draft State (tracks active/completed drafts per league) ────────────────

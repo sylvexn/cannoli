@@ -358,6 +358,13 @@
       "when": 1782200000000,
       "tag": "0050_unify_announcements",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1782300000000,
+      "tag": "0051_fa_pickups_per_season",
+      "breakpoints": true
     }
   ]
 }

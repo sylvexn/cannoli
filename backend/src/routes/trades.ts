@@ -28,8 +28,8 @@ function regularPhaseError(league: { phase: string; name?: string } | null | und
  *     dropped from the post-trade total)
  *   - max 1 mega per team
  *   - no duplicate national-dex on either team
- *   - roster size invariant: each team's post-trade roster size must equal
- *     pre-trade size (= league.rosterSize). Asymmetric trades not supported.
+ *   - roster size: neither team may exceed league.rosterSize after the swap.
+ *     Unequal (N-for-M) trades are allowed as long as neither side goes over cap.
  *
  * Returns null if valid, or an error message string.
  */
@@ -40,18 +40,12 @@ function validateProposedTrade(opts: {
   requesting: string[];
   pointCap: number;
   leagueId: string;
+  rosterSize?: number;
 }): string | null {
-  const { proposerId, recipientId, offering, requesting, pointCap, leagueId } = opts;
+  const { proposerId, recipientId, offering, requesting, pointCap, leagueId, rosterSize } = opts;
 
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
-
-  // Roster-size invariant: trades must swap equal counts so neither team
-  // ends up below (or above) league.rosterSize. Asymmetric trades aren't
-  // supported — they'd leave the loser's roster short come matchday.
-  if (offering.length !== requesting.length) {
-    return `Trade must offer and request the same number of Pokemon (offered ${offering.length}, requested ${requesting.length})`;
-  }
 
   // Pull rosters
   const proposerRoster = getTeamRoster(proposerId);
@@ -94,6 +88,17 @@ function validateProposedTrade(opts: {
     ...recipientRoster.filter(r => !requesting.includes(r.pokemonName)),
     ...proposerRoster.filter(r => offering.includes(r.pokemonName)).map(r => ({ ...r, isTeraCaptain: false })),
   ];
+
+  // Roster size cap: neither team may end up with more than rosterSize mons.
+  // (Teams may go below the cap — that's fine; they can FA pickup later.)
+  if (rosterSize != null) {
+    if (postProposer.length > rosterSize) {
+      return `Proposer would have ${postProposer.length} Pokemon after the trade (max ${rosterSize})`;
+    }
+    if (postRecipient.length > rosterSize) {
+      return `Recipient would have ${postRecipient.length} Pokemon after the trade (max ${rosterSize})`;
+    }
+  }
 
   for (const [side, roster] of [['Proposer', postProposer], ['Recipient', postRecipient]] as const) {
     // Point cap. Use the EFFECTIVE cost: a RETAINED tera-captain still carries
@@ -378,6 +383,7 @@ export const tradeRoutes = new Elysia()
       offering, requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
+      rosterSize: league?.rosterSize,
     });
     if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
 
@@ -548,11 +554,12 @@ export const tradeRoutes = new Elysia()
       return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
 
-    // Roster legality (point cap + mega + dex)
+    // Roster legality (point cap + mega + dex + roster size)
     const validationErr = validateProposedTrade({
       proposerId, recipientId, offering, requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: params.leagueId,
+      rosterSize: league?.rosterSize,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
@@ -672,6 +679,7 @@ export const tradeRoutes = new Elysia()
       requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
+      rosterSize: league?.rosterSize,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 

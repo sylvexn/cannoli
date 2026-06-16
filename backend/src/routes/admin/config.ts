@@ -23,6 +23,7 @@ export const configRoutes = new Elysia()
       draftDemoVisible: s.draftDemoVisible !== undefined ? !!s.draftDemoVisible : true,
       faDeadlineWeek: (s.faDeadlineWeek as number) ?? 7,
       defaultPlayoffTeamCount: (s.defaultPlayoffTeamCount as number) ?? 6,
+      faPickupsPerSeason: (s.faPickupsPerSeason as number) ?? 6,
     }).where(eq(schema.siteSettings.id, 1)).run();
 
     return { success: true };

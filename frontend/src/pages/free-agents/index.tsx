@@ -19,7 +19,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { TypeChip } from '@/components/type-chip';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
-import { Search, UserPlus, X, ArrowDown, AlertCircle, ShieldAlert, Star } from 'lucide-react';
+import { Search, UserPlus, X, ArrowDown, AlertCircle, ShieldAlert, Star, Plus, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { pokemonRoute } from '@/lib/pokemon-route';
@@ -33,6 +33,12 @@ interface FreeAgent {
   type1: string;
   type2: string | null;
   stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number };
+}
+
+interface FaBudget {
+  faUsed: number;
+  faRemaining: number;
+  faPerSeason: number;
 }
 
 type SortOption = 'tier-desc' | 'tier-asc' | 'name-asc' | 'spe-desc' | 'bst-desc';
@@ -50,130 +56,138 @@ export function FreeAgentsPage() {
   const league = useLeague();
   const { refresh } = useLeagueData();
   const { openSideCard } = usePokemonSideCard();
-  // Acting team is resolved once by the Market hub (owned team, or the staff
-  // "acting as" picker) and handed down via outlet context.
   const { actingTeam: myTeam } = useMarket();
 
   const phase = league.season.phase;
   const pointCap = league.season.pointCap;
   const costFormat = league.costFormat ?? DEFAULT_FORMAT;
 
-  // Free agents fetched from backend
+  // Free agents + optional FA budget
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
+  const [faBudget, setFaBudget] = useState<FaBudget | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (phase === 'predraft' || phase === 'draft') return;
-    if (!myTeam) return;
+  function fetchFreeAgents() {
+    if (phase === 'predraft' || phase === 'draft' || !myTeam) return;
     setLoading(true);
-    api.getFreeAgents(league.id)
-      .then(setFreeAgents)
+    api.getFreeAgents(league.id, myTeam.id)
+      .then(res => {
+        if (Array.isArray(res)) {
+          setFreeAgents(res as FreeAgent[]);
+          setFaBudget(null);
+        } else {
+          setFreeAgents((res as { freeAgents: FreeAgent[]; budget: FaBudget }).freeAgents);
+          setFaBudget((res as { freeAgents: FreeAgent[]; budget: FaBudget }).budget);
+        }
+      })
       .catch(() => toast.error('Failed to load free agents'))
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    fetchFreeAgents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league.id, phase, myTeam?.id]);
 
   // Filters
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  // 0 sentinel = "unset" (the tier list goes 1–20, so 0 is safe as "no filter")
   const [tierMin, setTierMin] = useState<number>(0);
   const [tierMax, setTierMax] = useState<number>(0);
   const [sortBy, setSortBy] = useState<SortOption>('tier-desc');
   const [hideUnaffordable, setHideUnaffordable] = useState(false);
 
-  // Pickup state
-  const [selected, setSelected] = useState<FreeAgent | null>(null);
-  const [dropTarget, setDropTarget] = useState<string>('');
+  // Multi-pickup state
+  const [pendingPickups, setPendingPickups] = useState<FreeAgent[]>([]);
+  const [pendingDrops, setPendingDrops] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
-  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster, costFormat) : 0;
-  const remaining = pointCap - pointsUsed;
-
-  // After picking, what would the new total be? (assuming optional drop)
-  const projectedAfter = useMemo(() => {
-    if (!selected || !myTeam) return pointsUsed;
-    const dropCost = dropTarget
-      ? getEffectiveCost(dropTarget, !!myTeam.roster.find(r => r.name === dropTarget)?.isTeraCaptain, costFormat)
-      : 0;
-    return pointsUsed - dropCost + selected.tier;
-  }, [selected, dropTarget, pointsUsed, myTeam, costFormat]);
-
-  const mustDrop = !!selected && projectedAfter > pointCap && !dropTarget;
-  const canSubmit =
-    !!selected &&
-    !submitting &&
-    projectedAfter <= pointCap;
-
-  // Reset drop target when selection changes
+  // Reset when team changes
   useEffect(() => {
-    setDropTarget('');
-  }, [selected?.name]);
+    setPendingPickups([]);
+    setPendingDrops(new Set());
+  }, [myTeam?.id]);
 
-  const filtered = useMemo(() => {
-    let list = freeAgents;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        p =>
-          p.name.toLowerCase().includes(q) ||
-          p.type1.toLowerCase().includes(q) ||
-          (p.type2 && p.type2.toLowerCase().includes(q)),
-      );
-    }
-    if (typeFilter !== 'all') {
-      list = list.filter(p =>
-        p.type1.toLowerCase() === typeFilter ||
-        (p.type2 && p.type2.toLowerCase() === typeFilter),
-      );
-    }
-    if (tierMin > 0) list = list.filter(p => p.tier >= tierMin);
-    if (tierMax > 0) list = list.filter(p => p.tier <= tierMax);
+  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster, costFormat) : 0;
 
-    if (hideUnaffordable && myTeam) {
-      // If the team is full and would need to drop, "affordable" means
-      // there exists at least one drop candidate making it fit.
-      // Simpler heuristic: tier <= remaining + maxDropCost.
-      const maxDrop = myTeam.roster.reduce(
-        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain, costFormat)),
-        0,
-      );
-      list = list.filter(p => p.tier <= remaining + maxDrop);
-    }
+  // Projected point total after pending pickups + drops
+  const projectedAfter = useMemo(() => {
+    if (!myTeam) return pointsUsed;
+    const dropCost = [...pendingDrops].reduce((sum, name) => {
+      const r = myTeam.roster.find(r => r.name === name);
+      return sum + getEffectiveCost(name, !!r?.isTeraCaptain, costFormat);
+    }, 0);
+    const pickupCost = pendingPickups.reduce((sum, fa) => sum + fa.tier, 0);
+    return pointsUsed - dropCost + pickupCost;
+  }, [pendingPickups, pendingDrops, pointsUsed, myTeam, costFormat]);
 
-    const cmp = (a: FreeAgent, b: FreeAgent) => {
-      switch (sortBy) {
-        case 'tier-desc': return b.tier - a.tier || a.name.localeCompare(b.name);
-        case 'tier-asc': return a.tier - b.tier || a.name.localeCompare(b.name);
-        case 'name-asc': return a.name.localeCompare(b.name);
-        case 'spe-desc': return b.stats.spe - a.stats.spe || a.name.localeCompare(b.name);
-        case 'bst-desc': return bst(b.stats) - bst(a.stats) || a.name.localeCompare(b.name);
-      }
-    };
-    return [...list].sort(cmp);
-  }, [freeAgents, search, typeFilter, tierMin, tierMax, hideUnaffordable, sortBy, remaining, myTeam]);
+  // Projected roster size after pending transaction
+  const projectedRosterSize = useMemo(() => {
+    if (!myTeam) return 0;
+    return myTeam.roster.length - pendingDrops.size + pendingPickups.length;
+  }, [myTeam, pendingPickups, pendingDrops]);
+
+  const rosterSize = league.season.rosterSize;
+  const overCap = projectedAfter > pointCap;
+  const overRoster = projectedRosterSize > rosterSize;
+  const faRemaining = faBudget?.faRemaining ?? null;
+  const overFaBudget = faRemaining !== null && pendingPickups.length > faRemaining;
+
+  const canSubmit =
+    pendingPickups.length > 0 &&
+    !submitting &&
+    !overCap &&
+    !overRoster &&
+    !overFaBudget;
+
+  function togglePickup(fa: FreeAgent) {
+    setPendingPickups(prev => {
+      const exists = prev.some(p => p.name === fa.name);
+      if (exists) return prev.filter(p => p.name !== fa.name);
+      return [...prev, fa];
+    });
+  }
+
+  function toggleDrop(name: string) {
+    setPendingDrops(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
 
   async function handlePickup() {
-    if (!selected || !myTeam) return;
+    if (!myTeam || pendingPickups.length === 0) return;
     setSubmitting(true);
     try {
-      await api.freeAgentPickup(league.id, {
+      const result = await api.freeAgentPickup(league.id, {
         teamId: myTeam.id,
-        pokemonName: selected.name,
-        dropPokemonName: dropTarget || undefined,
+        pickupNames: pendingPickups.map(p => p.name),
+        dropNames: [...pendingDrops],
       });
-      toast.success(
-        dropTarget
-          ? `Picked up ${selected.name}, dropped ${dropTarget}`
-          : `Picked up ${selected.name}`,
-      );
-      // Optimistically remove from list & clear selection
-      setFreeAgents(prev => prev.filter(p => p.name !== selected.name));
-      setSelected(null);
-      setDropTarget('');
-      // Refresh teams (so the right pane updates with the new roster)
+      const pickupStr = pendingPickups.map(p => p.name).join(', ');
+      const dropStr = pendingDrops.size > 0 ? `, dropped ${[...pendingDrops].join(', ')}` : '';
+      toast.success(`Picked up ${pickupStr}${dropStr}`);
+
+      // Update FA budget from response
+      if ('faRemaining' in result) {
+        setFaBudget({
+          faUsed: result.faUsed,
+          faRemaining: result.faRemaining,
+          faPerSeason: result.faPerSeason,
+        });
+      }
+
+      // Optimistically remove pickups from FA list + clear selections
+      const pickedNames = new Set(pendingPickups.map(p => p.name));
+      setFreeAgents(prev => prev.filter(p => !pickedNames.has(p.name)));
+      setPendingPickups([]);
+      setPendingDrops(new Set());
+
+      // Refresh roster data
       await refresh();
-      // Refetch FA list (in case backend has computed new state)
-      api.getFreeAgents(league.id).then(setFreeAgents).catch(() => {});
+      fetchFreeAgents();
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, 'Pickup failed'));
     } finally {
@@ -206,6 +220,47 @@ export function FreeAgentsPage() {
   if (!myTeam) {
     return <NotAManagerRedirect currentLeagueId={league.id} currentLeagueName={league.name} />;
   }
+
+  const filtered = (() => {
+    let list = freeAgents;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        p =>
+          p.name.toLowerCase().includes(q) ||
+          p.type1.toLowerCase().includes(q) ||
+          (p.type2 && p.type2.toLowerCase().includes(q)),
+      );
+    }
+    if (typeFilter !== 'all') {
+      list = list.filter(p =>
+        p.type1.toLowerCase() === typeFilter ||
+        (p.type2 && p.type2.toLowerCase() === typeFilter),
+      );
+    }
+    if (tierMin > 0) list = list.filter(p => p.tier >= tierMin);
+    if (tierMax > 0) list = list.filter(p => p.tier <= tierMax);
+
+    if (hideUnaffordable && myTeam) {
+      const remaining = pointCap - pointsUsed;
+      const maxDrop = myTeam.roster.reduce(
+        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain, costFormat)),
+        0,
+      );
+      list = list.filter(p => p.tier <= remaining + maxDrop);
+    }
+
+    const cmp = (a: FreeAgent, b: FreeAgent) => {
+      switch (sortBy) {
+        case 'tier-desc': return b.tier - a.tier || a.name.localeCompare(b.name);
+        case 'tier-asc': return a.tier - b.tier || a.name.localeCompare(b.name);
+        case 'name-asc': return a.name.localeCompare(b.name);
+        case 'spe-desc': return b.stats.spe - a.stats.spe || a.name.localeCompare(b.name);
+        case 'bst-desc': return bst(b.stats) - bst(a.stats) || a.name.localeCompare(b.name);
+      }
+    };
+    return [...list].sort(cmp);
+  })();
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
@@ -308,13 +363,13 @@ export function FreeAgentsPage() {
                   {filtered.slice(0, 250).map((p, i) => {
                     const projectedIfPicked = pointsUsed + p.tier;
                     const overBudget = projectedIfPicked > pointCap;
-                    const isSelected = selected?.name === p.name;
+                    const isPending = pendingPickups.some(pk => pk.name === p.name);
                     return (
                       <li
                         key={p.name}
                         className={cn(
                           'stagger-item row-interactive flex items-center gap-2 px-2 py-1 rounded transition-colors group',
-                          isSelected
+                          isPending
                             ? 'bg-neon/10 ring-1 ring-neon/40'
                             : 'hover:bg-surface-overlay/40',
                         )}
@@ -340,21 +395,21 @@ export function FreeAgentsPage() {
                         />
                         <span className="text-[10px] text-text-muted font-mono tabular-nums">{p.stats.spe} spe</span>
                         <span className="text-[10px] text-text-muted/50 font-mono tabular-nums">{bst(p.stats)} bst</span>
-                        {overBudget && (
+                        {overBudget && !isPending && (
                           <span className="text-[10px] text-loss font-semibold flex items-center gap-1">
                             <AlertCircle size={10} /> needs drop
                           </span>
                         )}
                         <button
-                          onClick={() => setSelected(p)}
+                          onClick={() => togglePickup(p)}
                           className={cn(
-                            'ml-auto text-[10px] font-semibold transition-all px-2 py-0.5 rounded',
-                            isSelected
+                            'ml-auto text-[10px] font-semibold transition-all px-2 py-0.5 rounded flex items-center gap-1',
+                            isPending
                               ? 'text-neon bg-neon/10'
                               : 'text-neon/70 hover:text-neon hover:bg-neon/10 opacity-0 group-hover:opacity-100',
                           )}
                         >
-                          {isSelected ? 'Selected' : 'Pickup'}
+                          {isPending ? <><Minus size={9} /> Remove</> : <><Plus size={9} /> Add</>}
                         </button>
                       </li>
                     );
@@ -370,7 +425,7 @@ export function FreeAgentsPage() {
           </CardContent>
         </Card>
 
-        {/* ─── Right pane: My roster + pickup form ──────────────────── */}
+        {/* ─── Right pane: Confirm pickup + my roster ────────────────── */}
         <div className="flex flex-col gap-3 min-h-0">
           {/* Pickup form */}
           <Card>
@@ -378,88 +433,106 @@ export function FreeAgentsPage() {
               <CardTitle className="text-sm flex items-center gap-2">
                 <UserPlus size={14} className="text-neon" />
                 Confirm Pickup
+                {pendingPickups.length > 0 && (
+                  <span className="ml-auto text-[11px] font-mono text-neon bg-neon/10 px-1.5 py-0.5 rounded">
+                    {pendingPickups.length} queued
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {!selected ? (
+              {/* FA budget readout */}
+              {faBudget && (
+                <div className={cn(
+                  'flex items-center justify-between text-[11px] font-mono mb-3 px-2 py-1.5 rounded border',
+                  overFaBudget
+                    ? 'border-loss/40 bg-loss/10 text-loss'
+                    : faBudget.faRemaining === 0
+                    ? 'border-draw/40 bg-draw/10 text-draw'
+                    : 'border-border-subtle bg-surface-overlay/20 text-text-muted',
+                )}>
+                  <span>FA pickups</span>
+                  <span className="font-semibold">
+                    {faBudget.faUsed + pendingPickups.length} / {faBudget.faPerSeason}
+                    {faBudget.faRemaining - pendingPickups.length !== faBudget.faRemaining - 0 && (
+                      <span className="text-text-muted ml-1">({Math.max(0, faBudget.faRemaining - pendingPickups.length)} left)</span>
+                    )}
+                    {faBudget.faRemaining > 0 && pendingPickups.length === 0 && (
+                      <span className="text-text-muted ml-1">({faBudget.faRemaining} left)</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {pendingPickups.length === 0 ? (
                 <div className="text-xs text-text-muted py-3 text-center">
-                  Choose a Pokemon from the list to add it to {myTeam.teamAbbrev}.
+                  Click "+ Add" on any Pokemon to queue them for pickup.
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {/* Selected pokemon */}
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-neon/5 border border-neon/20">
-                    <PokemonSprite name={selected.name} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <Link to={pokemonRoute(selected.name)} className="text-sm font-semibold text-text-primary truncate hover:text-neon hover:underline transition-colors block">{selected.name}</Link>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <TierBadge points={selected.tier} />
-                        <TypeChip
-                          types={[selected.type1.toLowerCase() as PokemonType, ...(selected.type2 ? [selected.type2.toLowerCase() as PokemonType] : [])]}
-                          size="xs"
-                        />
-                      </div>
+                  {/* Queued pickups */}
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                      Picking up ({pendingPickups.length})
                     </div>
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="text-text-muted hover:text-text-primary"
-                      aria-label="Clear selection"
-                    >
-                      <X size={14} />
-                    </button>
+                    <div className="space-y-1">
+                      {pendingPickups.map(fa => (
+                        <div key={fa.name} className="flex items-center gap-2 p-1.5 rounded-md bg-neon/5 border border-neon/20">
+                          <PokemonSprite name={fa.name} size="xs" />
+                          <Link to={pokemonRoute(fa.name)} className="text-xs font-semibold text-text-primary flex-1 truncate hover:text-neon hover:underline transition-colors">{fa.name}</Link>
+                          <TierBadge points={fa.tier} />
+                          <button
+                            onClick={() => togglePickup(fa)}
+                            className="text-text-muted hover:text-loss"
+                            aria-label={`Remove ${fa.name}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Drop target selector */}
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1 flex items-center gap-1">
-                      <span>Drop (optional)</span>
-                      {mustDrop && (
-                        <span className="text-loss font-semibold">— required, over cap</span>
-                      )}
-                    </div>
-                    <select
-                      value={dropTarget}
-                      onChange={e => setDropTarget(e.target.value)}
-                      className={cn(
-                        'w-full text-xs px-2 py-1.5 rounded bg-surface border focus:outline-none',
-                        mustDrop ? 'border-loss/60 focus:border-loss' : 'border-border-subtle focus:border-neon/40',
-                      )}
-                    >
-                      <option value="">— No drop —</option>
-                      {[...myTeam.roster]
-                        .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
-                        .map(r => (
-                          <option key={r.name} value={r.name}>
-                            {r.isTeraCaptain ? '[C] ' : ''}{r.name} (T{getEffectiveCost(r.name, r.isTeraCaptain, costFormat)})
-                          </option>
-                        ))}
-                    </select>
+                  {/* Point cap + roster size summary */}
+                  <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+                    <span>Points after</span>
+                    <span className={cn('font-semibold', overCap ? 'text-loss' : 'text-text-primary')}>
+                      {projectedAfter} / {pointCap}
+                      {overCap && <span className="text-loss ml-1">over by {projectedAfter - pointCap}</span>}
+                    </span>
                   </div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
+                    <span>Roster after</span>
+                    <span className={cn('font-semibold', overRoster ? 'text-loss' : 'text-text-primary')}>
+                      {projectedRosterSize} / {rosterSize}
+                      {overRoster && <span className="text-loss ml-1">— drop {projectedRosterSize - rosterSize} more</span>}
+                    </span>
+                  </div>
+
+                  {overFaBudget && (
+                    <div className="text-[10px] text-loss font-semibold">
+                      Only {faRemaining} FA pickup{faRemaining === 1 ? '' : 's'} remaining this season.
+                    </div>
+                  )}
 
                   {/* Confirm */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={handlePickup}
-                      disabled={!canSubmit}
-                      className="flex-1 h-8 text-xs"
-                    >
-                      <ArrowDown size={12} className="mr-1" />
-                      {submitting ? 'Picking up...' : 'Confirm Pickup'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setSelected(null)}
-                      className="h-8 text-xs"
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                  <div className="text-[10px] text-text-muted text-center">
-                    {projectedAfter} / {pointCap} after pickup
-                    {projectedAfter > pointCap && (
-                      <span className="text-loss font-semibold"> — over by {projectedAfter - pointCap}</span>
-                    )}
-                  </div>
+                  <Button
+                    onClick={handlePickup}
+                    disabled={!canSubmit}
+                    className="w-full h-8 text-xs"
+                  >
+                    <ArrowDown size={12} className="mr-1" />
+                    {submitting
+                      ? 'Processing...'
+                      : `Confirm ${pendingPickups.length} Pickup${pendingPickups.length !== 1 ? 's' : ''}${pendingDrops.size > 0 ? ` + ${pendingDrops.size} Drop${pendingDrops.size !== 1 ? 's' : ''}` : ''}`}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => { setPendingPickups([]); setPendingDrops(new Set()); }}
+                    className="w-full h-7 text-xs"
+                  >
+                    Clear all
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -480,12 +553,17 @@ export function FreeAgentsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex-1 min-h-0 overflow-y-auto">
+              {pendingPickups.length > 0 && (
+                <div className="text-[10px] text-text-muted mb-2 pb-2 border-b border-border-subtle">
+                  Click "Drop" to remove a Pokemon to make room. Drops are free and don't use your FA budget.
+                </div>
+              )}
               <ul className="space-y-0.5">
                 {[...myTeam.roster]
                   .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                   .map(r => {
                     const cost = getEffectiveCost(r.name, r.isTeraCaptain, costFormat);
-                    const isDrop = dropTarget === r.name;
+                    const isDrop = pendingDrops.has(r.name);
                     return (
                       <li
                         key={r.name}
@@ -516,9 +594,9 @@ export function FreeAgentsPage() {
                           ) : null}
                         </div>
                         <TierBadge points={cost} />
-                        {selected && (
+                        {pendingPickups.length > 0 && (
                           <button
-                            onClick={() => setDropTarget(prev => (prev === r.name ? '' : r.name))}
+                            onClick={() => toggleDrop(r.name)}
                             className={cn(
                               'text-[10px] px-1.5 py-0.5 rounded font-semibold transition-colors',
                               isDrop
@@ -542,9 +620,6 @@ export function FreeAgentsPage() {
 }
 
 // ─── Non-manager redirect ────────────────────────────────────────────────
-// When the viewer doesn't manage a team in *this* league, surface the
-// leagues they DO manage in (where free agency is open) instead of
-// dead-ending. Only includes leagues past the draft phase.
 function NotAManagerRedirect({
   currentLeagueId,
   currentLeagueName,
@@ -573,7 +648,6 @@ function NotAManagerRedirect({
       const managed = results
         .filter(({ league, teams }) => {
           if (league.id === currentLeagueId) return false;
-          // Only leagues with free agency open (past draft).
           if (league.season.phase === 'predraft' || league.season.phase === 'draft') return false;
           return teams.some(t => t.userId != null && String(t.userId) === user.id);
         })
@@ -588,7 +662,7 @@ function NotAManagerRedirect({
       <EmptyState
         icon={<AlertCircle className="text-text-muted" size={28} />}
         title="Not a manager in this league"
-        message={`Checking your other leagues...`}
+        message="Checking your other leagues..."
       />
     );
   }

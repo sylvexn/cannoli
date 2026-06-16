@@ -193,6 +193,7 @@ export function LegalityMeter({
   requesting,
   pointCap,
   submitError,
+  rosterSize,
 }: {
   proposer: Player;
   recipient: Player;
@@ -200,14 +201,34 @@ export function LegalityMeter({
   requesting: Set<string>;
   pointCap: number;
   submitError?: string | null;
+  rosterSize?: number;
 }) {
-  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap });
+  const league = useLeague();
+  const effectiveRosterSize = rosterSize ?? league.season.rosterSize;
+  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, rosterSize: effectiveRosterSize });
   const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap);
   const hasSelections = offering.size > 0 && requesting.size > 0;
   const isLegal = hasSelections && issues.length === 0;
 
+  // Give/get point totals for unequal-swap awareness
+  const givePts = proposer.roster.filter(m => offering.has(m.name)).reduce((s, m) => s + (m.tier || 0), 0);
+  const getPts = recipient.roster.filter(m => requesting.has(m.name)).reduce((s, m) => s + (m.tier || 0), 0);
+  const isUnequal = offering.size !== requesting.size;
+
   return (
     <div className="space-y-2">
+      {/* Give vs get point comparison — shown when sides differ in count or value */}
+      {hasSelections && (givePts !== getPts || isUnequal) && (
+        <div className="flex items-center gap-3 px-2.5 py-1.5 rounded-md bg-surface-overlay/40 border border-border-subtle text-[11px] font-mono">
+          <span className="text-loss">Give {givePts}pt × {offering.size}</span>
+          <span className="text-text-muted">vs</span>
+          <span className="text-win">Get {getPts}pt × {requesting.size}</span>
+          <span className={cn('ml-auto font-semibold', getPts > givePts ? 'text-win' : getPts < givePts ? 'text-loss' : 'text-text-muted')}>
+            {getPts > givePts ? `+${getPts - givePts}` : getPts < givePts ? `−${givePts - getPts}` : 'even'}
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <PointsCard team={proposer} pts={pts.proposer} cap={pointCap} />
         <PointsCard team={recipient} pts={pts.recipient} cap={pointCap} />
@@ -224,7 +245,7 @@ export function LegalityMeter({
       {isLegal && (
         <div className="rounded-md border border-win/30 bg-win/5 p-2.5 flex items-center gap-2 text-[11px] text-win">
           <Check size={14} className="shrink-0" />
-          <span>Even swap, both teams legal — point cap, mega limit, and species check pass.</span>
+          <span>Both rosters legal — point cap, mega limit, and species check pass.</span>
         </div>
       )}
 

@@ -4,11 +4,13 @@
  * (the backend re-verifies authoritatively).
  *
  * Rules mirrored:
- *   - symmetry: both sides must move the same number of mons (roster size is
- *     fixed, so an uneven swap leaves a team short/over)
  *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft)
  *   - max 1 mega per team
  *   - no duplicate species (proxy for the national-dex check)
+ *   - roster size: neither team may exceed their roster cap after the swap
+ *
+ * Unequal (N-for-M) trades are allowed — each side just needs ≥1 and a legal
+ * resulting roster.
  *
  * Lives in lib/ (not under the old wizard/) so every market surface imports the
  * same copy — previously the propose dialog shipped a private fork that drifted.
@@ -18,8 +20,8 @@ import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
 import type { Player, RosterPokemon } from '@/lib/types';
 
 export interface ValidationIssue {
-  /** Which side the issue lands on; 'count' is the symmetry rule (neither side). */
-  side: 'offering' | 'requesting' | 'count';
+  /** Which side the issue lands on. */
+  side: 'offering' | 'requesting';
   message: string;
 }
 
@@ -29,22 +31,16 @@ export interface ValidateTradeOpts {
   offering: Set<string>;
   requesting: Set<string>;
   pointCap: number;
+  /** League roster size cap. If provided, validates neither side goes over. */
+  rosterSize?: number;
 }
 
 export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
-  const { proposer, recipient, offering, requesting, pointCap } = opts;
+  const { proposer, recipient, offering, requesting, pointCap, rosterSize } = opts;
   const issues: ValidationIssue[] = [];
 
   // Nothing selected on a side yet → not-yet-legal, but don't nag.
   if (offering.size === 0 || requesting.size === 0) return issues;
-
-  // Symmetry: rosters are fixed-size, so the swap must be even.
-  if (offering.size !== requesting.size) {
-    issues.push({
-      side: 'count',
-      message: `Trade must be even — you're moving ${offering.size} for ${requesting.size}. Add or remove a Pokemon so both sides match.`,
-    });
-  }
 
   const offered = proposer.roster.filter(m => offering.has(m.name));
   const requested = recipient.roster.filter(m => requesting.has(m.name));
@@ -59,17 +55,25 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     ...offered,
   ];
 
-  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[]) {
+  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[], rosterMax?: number) {
+    // Roster size
+    if (rosterMax != null && roster.length > rosterMax) {
+      issues.push({ side, message: `${label} would have ${roster.length} Pokemon (max ${rosterMax})` });
+    }
+
+    // Point cap
     const total = roster.reduce((s, m) => s + (m.tier || 0), 0);
     if (total > pointCap) {
       issues.push({ side, message: `${label} would exceed point cap (${total} > ${pointCap})` });
     }
 
+    // Mega cap
     const megas = roster.filter(m => isMegaForm(m.name));
     if (megas.length > 1) {
       issues.push({ side, message: `${label} would have ${megas.length} megas (${megas.map(m => m.name).join(', ')}) — max 1` });
     }
 
+    // Duplicate species
     const baseSeen = new Map<string, string>();
     for (const m of roster) {
       const base = getBaseFormName(m.name);
@@ -82,8 +86,8 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     }
   }
 
-  check('offering', 'Your team', postProposer);
-  check('requesting', recipient.teamAbbrev, postRecipient);
+  check('offering', 'Your team', postProposer, rosterSize);
+  check('requesting', recipient.teamAbbrev, postRecipient, rosterSize);
 
   return issues;
 }

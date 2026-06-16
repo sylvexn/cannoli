@@ -66,8 +66,12 @@ export function AdminFreeAgents() {
     Promise.all([
       api.getFreeAgents(selectedLeague),
       api.getTeams(selectedLeague),
-    ]).then(([fa, t]) => {
-      setFreeAgents(fa);
+    ]).then(([faRes, t]) => {
+      // getFreeAgents may return either a plain array (no teamId) or
+      // { freeAgents, budget } (with teamId). Admin panel doesn't pass a teamId,
+      // so it always gets the plain array — but guard for forward-compat.
+      const fa = Array.isArray(faRes) ? faRes : (faRes as { freeAgents: FreeAgent[] }).freeAgents;
+      setFreeAgents(fa as FreeAgent[]);
       setTeams(t.map(team => ({
         id: team.id,
         teamName: team.teamName,
@@ -150,16 +154,17 @@ export function AdminFreeAgents() {
     try {
       await api.freeAgentPickup(selectedLeague, {
         teamId: pickupTeam,
-        pokemonName: pickupPokemon,
-        dropPokemonName: dropPokemon || undefined,
+        pickupNames: [pickupPokemon],
+        dropNames: dropPokemon ? [dropPokemon] : [],
       });
       toast.success(`${pickupPokemon} picked up successfully`);
       setPickupPokemon(null);
       setPickupTeam('');
       setDropPokemon('');
       // Refresh
-      const fa = await api.getFreeAgents(selectedLeague);
-      setFreeAgents(fa);
+      const faRes = await api.getFreeAgents(selectedLeague);
+      const fa = Array.isArray(faRes) ? faRes : (faRes as { freeAgents: FreeAgent[] }).freeAgents;
+      setFreeAgents(fa as FreeAgent[]);
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, 'Pickup failed'));
     }
