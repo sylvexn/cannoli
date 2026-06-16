@@ -18,7 +18,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useArenaWebSocket, type ArenaMatch, type LiveMatch, type ScrimLobby } from './use-arena-websocket';
+import { useArenaWebSocket } from './use-arena-websocket';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { Swords, Users, Tv2, ChevronDown } from 'lucide-react';
 import { OfficialMatchCard } from './footer/official-match';
@@ -43,41 +43,34 @@ export function ArenaFooter() {
   const { user } = useAuth();
   const arena = useArenaWebSocket();
 
-  // REST seed before WS populates
-  const [restMatch, setRestMatch] = useState<ArenaMatch | null>(null);
-  const [restLive, setRestLive] = useState<LiveMatch[]>([]);
-  const [restScrims, setRestScrims] = useState<ScrimLobby[]>([]);
+  const { myMatches, liveMatches, scrimLobbies } = arena;
 
-  useEffect(() => {
-    fetch('/api/arena/state', { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => {
-        setRestMatch(data.myMatch);
-        setRestLive(data.liveMatches);
-        setRestScrims(data.scrimLobbies);
-      })
-      .catch(() => {});
-  }, []);
+  // Which week the coach has picked to battle. Defaults to the current-week
+  // fixture, falling back to the earliest still-playable one.
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const playable = myMatches.filter(m => m.status !== 'completed' && m.status !== 'disputed');
+  const defaultMatch =
+    playable.find(m => m.isCurrentWeek) ?? playable[0] ?? myMatches[0] ?? null;
+  const selectedMatch =
+    myMatches.find(m => m.matchId === selectedMatchId) ?? defaultMatch;
 
-  const myMatch = arena.myMatch ?? restMatch;
-  const liveMatches = arena.liveMatches.length > 0 ? arena.liveMatches : restLive;
-  const scrimLobbies = arena.scrimLobbies.length > 0 ? arena.scrimLobbies : restScrims;
+  const liveMine = myMatches.find(m => m.status === 'in_progress' && m.psRoomId);
 
   const [viewingBattle, setViewingBattle] = useState<ViewingBattle | null>(null);
 
-  // Auto-enter HUD when our match goes in_progress
+  // Auto-enter HUD when any of our matches goes in_progress (whichever week).
   useEffect(() => {
-    if (myMatch?.status === 'in_progress' && myMatch.psRoomId && !viewingBattle) {
-      const home = myMatch.homeTeam?.name ?? 'Home';
-      const away = myMatch.awayTeam?.name ?? 'Away';
+    if (liveMine?.psRoomId && !viewingBattle) {
+      const home = liveMine.homeTeam?.name ?? 'Home';
+      const away = liveMine.awayTeam?.name ?? 'Away';
       setViewingBattle({
-        matchId: myMatch.matchId,
-        psRoomId: myMatch.psRoomId,
+        matchId: liveMine.matchId,
+        psRoomId: liveMine.psRoomId,
         isOfficial: true,
-        label: `Week ${myMatch.week}: ${home} vs ${away}`,
+        label: `Week ${liveMine.week}: ${home} vs ${away}`,
       });
     }
-  }, [myMatch?.status, myMatch?.psRoomId]);
+  }, [liveMine?.matchId, liveMine?.psRoomId]);
 
   // Persisted pill + open state
   const [activePill, setActivePill] = useLocalStorageState<Pill>('arena-footer-pill', 'match');
@@ -121,7 +114,7 @@ export function ArenaFooter() {
             icon={<Swords size={12} />}
             label="Match"
             accent="orange"
-            badge={myMatch?.status === 'in_progress' ? 'LIVE' : null}
+            badge={liveMine ? 'LIVE' : null}
           />
           <PillButton
             active={isOpen && activePill === 'scrims'}
@@ -174,7 +167,9 @@ export function ArenaFooter() {
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           {activePill === 'match' && (
             <OfficialMatchCard
-              match={myMatch}
+              matches={myMatches}
+              selected={selectedMatch}
+              onSelect={setSelectedMatchId}
               user={user}
               onReady={arena.readyUp}
               onUnready={arena.unready}

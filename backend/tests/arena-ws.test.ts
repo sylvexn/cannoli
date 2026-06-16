@@ -101,6 +101,7 @@ const leagueId = `${tag}-lg`;
 const homeTid = `${tag}-home`;
 const awayTid = `${tag}-away`;
 const matchId = `${tag}-w1m1`;
+const matchId2 = `${tag}-w3m1`; // same two teams, a later week (early/make-up battle)
 let seasonId: number;
 let homeSession: string;
 let awaySession: string;
@@ -138,11 +139,15 @@ beforeAll(() => {
   db.insert(schema.matches).values({
     id: matchId, leagueId, week: 1, homeTeamId: homeTid, awayTeamId: awayTid, status: 'scheduled',
   }).run();
+  db.insert(schema.matches).values({
+    id: matchId2, leagueId, week: 3, homeTeamId: homeTid, awayTeamId: awayTid, status: 'scheduled',
+  }).run();
 });
 
 function cleanupFixture() {
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId)).run();
-  db.delete(schema.matches).where(eq(schema.matches.id, matchId)).run();
+  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId2)).run();
+  db.delete(schema.matches).where(eq(schema.matches.leagueId, leagueId)).run();
   db.delete(schema.teams).where(eq(schema.teams.leagueId, leagueId)).run();
   for (const id of userIds) {
     db.delete(schema.sessions).where(eq(schema.sessions.userId, id)).run();
@@ -157,6 +162,15 @@ function resetMatch() {
     .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
     .where(eq(schema.matches.id, matchId)).run();
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId)).run();
+}
+
+/** Reset both the current-week and later-week fixtures to a clean scheduled state. */
+function resetBoth() {
+  db.update(schema.matches)
+    .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
+    .where(eq(schema.matches.leagueId, leagueId)).run();
+  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId)).run();
+  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId2)).run();
 }
 
 const cookie = (s: string) => `session=${s}`;
@@ -384,6 +398,91 @@ describe('topic isolation', () => {
     expect(countType(spectator, 'scrim_state')).toBe(before);
 
     spectator.close(); a.close(); b.close();
+    await sleep(50);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// 6. Pick which week to battle (issue #15: early / make-up battles)
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('pick battle week', () => {
+  test('GET /api/arena/state lists every playable week, current week flagged', async () => {
+    resetBoth();
+    const res = await fetch(`http://localhost:${port}/api/arena/state`, { headers: { cookie: cookie(homeSession) } });
+    const data = await res.json();
+
+    const weeks = data.myMatches.map((m: any) => m.week).sort((a: number, b: number) => a - b);
+    expect(weeks).toEqual([1, 3]);
+
+    expect(data.myMatches.find((m: any) => m.week === 1).isCurrentWeek).toBe(true);
+    expect(data.myMatches.find((m: any) => m.week === 3).isCurrentWeek).toBe(false);
+
+    // myMatch (the sticky banner's single match) stays the current-week fixture.
+    expect(data.myMatch.matchId).toBe(matchId);
+  });
+
+  test('match_ready with an explicit matchId readies THAT week, not the current one', async () => {
+    resetBoth();
+    const home = await connect(cookie(homeSession));
+    await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+
+    // Coach picks the week-3 fixture to play early.
+    send(home, { type: 'match_ready', matchId: matchId2 });
+    await waitFor(home, (m) => m.some((x) => x.type === 'match_state' && x.matchId === matchId2));
+
+    const w3 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId2)).get()!;
+    const w1 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+    expect(w3.readyHome).toBe(true);
+    expect(w1.readyHome).toBe(false); // current-week match untouched
+
+    home.close();
+    await sleep(50);
+  });
+
+  test('both teams readying the same future-week match flips it to ready', async () => {
+    resetBoth();
+    const home = await connect(cookie(homeSession));
+    const away = await connect(cookie(awaySession));
+    await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+    await waitFor(away, (m) => m.some((x) => x.type === 'identified'));
+
+    send(home, { type: 'match_ready', matchId: matchId2 });
+    send(away, { type: 'match_ready', matchId: matchId2 });
+
+    await waitFor(home, () => {
+      const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId2)).get()!;
+      return m.status === 'ready';
+    });
+
+    const w3 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId2)).get()!;
+    expect(w3.readyHome).toBe(true);
+    expect(w3.readyAway).toBe(true);
+    expect(w3.status).toBe('ready');
+    // The current-week fixture must not have been dragged along.
+    const w1 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+    expect(w1.status).toBe('scheduled');
+
+    home.close();
+    away.close();
+    await sleep(50);
+  });
+
+  test('match_ready with a matchId the team does not own is rejected', async () => {
+    resetBoth();
+    const home = await connect(cookie(homeSession));
+    await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+
+    send(home, { type: 'match_ready', matchId: 'no-such-match' });
+    const errored = await waitFor(home, (m) => m.some((x) => x.type === 'error' && /no match/i.test(x.message)));
+    expect(errored).toBe(true);
+
+    const w1 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+    const w3 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId2)).get()!;
+    expect(w1.readyHome).toBe(false);
+    expect(w3.readyHome).toBe(false);
+
+    home.close();
     await sleep(50);
   });
 });

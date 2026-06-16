@@ -17,6 +17,7 @@ export interface ArenaMatch {
   matchId: string;
   leagueId: string;
   week: number;
+  isCurrentWeek?: boolean; // true for the league's active-week fixture
   status: 'scheduled' | 'ready' | 'in_progress' | 'completed' | 'disputed';
   readyHome: boolean;
   readyAway: boolean;
@@ -73,7 +74,8 @@ export interface LiveMatchStats {
 }
 
 export interface ArenaState {
-  myMatch: ArenaMatch | null;
+  /** Every playable fixture for the coach's team (any week), for the week picker. */
+  myMatches: ArenaMatch[];
   liveMatches: LiveMatch[];
   scrimLobbies: ScrimLobby[];
   liveStats: LiveMatchStats | null;
@@ -89,13 +91,28 @@ export function useArenaWebSocket() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const [state, setState] = useState<ArenaState>({
-    myMatch: null,
+    myMatches: [],
     liveMatches: [],
     scrimLobbies: [],
     liveStats: null,
     spectatorCounts: {},
     connected: false,
   });
+
+  // Seed (and re-seed on reconnect) the slices the WS only sends deltas for.
+  // Without this, myMatches/liveMatches/scrimLobbies would stay empty until
+  // something changed server-side.
+  const refreshState = useCallback(() => {
+    fetch('/api/arena/state', { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setState(s => ({
+        ...s,
+        myMatches: data.myMatches ?? [],
+        liveMatches: data.liveMatches ?? [],
+        scrimLobbies: data.scrimLobbies ?? [],
+      })))
+      .catch(() => {});
+  }, []);
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -107,7 +124,9 @@ export function useArenaWebSocket() {
 
     ws.onopen = () => {
       setState(s => ({ ...s, connected: true }));
-      // Auth happens via cookie on WS upgrade — no explicit identify needed
+      // Auth happens via cookie on WS upgrade — no explicit identify needed.
+      // Pull a fresh snapshot now that we're (re)connected.
+      refreshState();
     };
 
     ws.onmessage = (event) => {
@@ -120,43 +139,40 @@ export function useArenaWebSocket() {
             break;
 
           case 'match_state':
-            setState(s => {
-              // Update myMatch if it's our match
-              if (s.myMatch && s.myMatch.matchId === msg.matchId) {
-                return {
-                  ...s,
-                  myMatch: {
-                    ...s.myMatch,
-                    status: msg.status,
-                    readyHome: msg.readyHome,
-                    readyAway: msg.readyAway,
-                    psRoomId: msg.psRoomId,
-                  },
-                };
-              }
-              return s;
-            });
+            setState(s => ({
+              ...s,
+              myMatches: s.myMatches.map(m =>
+                m.matchId === msg.matchId
+                  ? {
+                      ...m,
+                      status: msg.status,
+                      readyHome: msg.readyHome,
+                      readyAway: msg.readyAway,
+                      psRoomId: msg.psRoomId,
+                    }
+                  : m,
+              ),
+            }));
             break;
 
           case 'match_live':
-            setState(s => {
-              if (s.myMatch && s.myMatch.matchId === msg.matchId) {
-                return {
-                  ...s,
-                  myMatch: { ...s.myMatch, status: 'in_progress', psRoomId: msg.psRoomId },
-                };
-              }
-              return s;
-            });
+            setState(s => ({
+              ...s,
+              myMatches: s.myMatches.map(m =>
+                m.matchId === msg.matchId
+                  ? { ...m, status: 'in_progress', psRoomId: msg.psRoomId }
+                  : m,
+              ),
+            }));
             break;
 
           case 'match_result':
-            setState(s => {
-              if (s.myMatch && s.myMatch.matchId === msg.matchId) {
-                return { ...s, myMatch: { ...s.myMatch, status: 'completed' } };
-              }
-              return s;
-            });
+            setState(s => ({
+              ...s,
+              myMatches: s.myMatches.map(m =>
+                m.matchId === msg.matchId ? { ...m, status: 'completed' } : m,
+              ),
+            }));
             break;
 
           case 'live_matches':
@@ -209,7 +225,7 @@ export function useArenaWebSocket() {
     ws.onerror = () => {
       ws.close();
     };
-  }, []);
+  }, [refreshState]);
 
   // Connect on mount, disconnect on unmount
   useEffect(() => {
@@ -229,8 +245,8 @@ export function useArenaWebSocket() {
     }
   }, []);
 
-  const readyUp = useCallback(() => send({ type: 'match_ready' }), [send]);
-  const unready = useCallback(() => send({ type: 'match_unready' }), [send]);
+  const readyUp = useCallback((matchId: string) => send({ type: 'match_ready', matchId }), [send]);
+  const unready = useCallback((matchId: string) => send({ type: 'match_unready', matchId }), [send]);
 
   const createScrim = useCallback((format?: string, invitee?: string) => {
     send({ type: 'scrim_create', format, invitee });
