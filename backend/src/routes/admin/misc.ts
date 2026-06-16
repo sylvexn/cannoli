@@ -2,7 +2,7 @@ import { Elysia } from 'elysia';
 import { db, schema, sqlite } from '../../db';
 import { eq, desc, and, gte, lt, like, or, type SQL } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
-import { getBotStatus, restartBot } from '../../lib/ps-bot';
+import { getBotStatus, restartBot, importBattleForMatch } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 import { checkMatchArchived } from '../../lib/archive-guard';
@@ -162,6 +162,58 @@ export const miscRoutes = new Elysia()
     });
 
     return { success: true };
+  })
+
+  // ─── Import a played battle into a scheduled match ──────────────────
+  //
+  // Attaches a finished PS battle (e.g. one played outside the Arena flow) to
+  // a scheduled match, reading its saved replay off disk and recording it
+  // through the regular completion path (result + per-Pokemon K/D + replay
+  // URL). v1 refuses to overwrite an already-finalized match.
+
+  .post('/api/admin/matches/:matchId/import-battle', ({ params, query, body, user, set }) => {
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
+
+    const { roomId } = (body ?? {}) as { roomId?: string };
+    if (!roomId || !roomId.trim()) {
+      set.status = 422;
+      return { error: 'roomId required' };
+    }
+
+    const result = importBattleForMatch(params.matchId, roomId);
+    if (!result.ok) {
+      set.status = result.status;
+      return { error: result.error };
+    }
+
+    // Look the match up for the leagueId on the audit row.
+    const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
+    db.insert(schema.activityLog).values({
+      type: 'battle_imported',
+      category: 'match',
+      actor: user.username,
+      leagueId: match?.leagueId ?? null,
+      description: `Imported battle into ${params.matchId}: ${result.homeScore}-${result.awayScore} (${result.pokemonCount} Pokemon, status ${result.status})`,
+      metadata: JSON.stringify({
+        matchId: params.matchId,
+        roomId,
+        homeScore: result.homeScore,
+        awayScore: result.awayScore,
+        winnerTeamId: result.winnerTeamId,
+        pokemonCount: result.pokemonCount,
+        status: result.status,
+        by: user.username,
+      }),
+    }).run();
+
+    return {
+      success: true,
+      homeScore: result.homeScore,
+      awayScore: result.awayScore,
+      winnerTeamId: result.winnerTeamId,
+      pokemonCount: result.pokemonCount,
+    };
   })
 
   // ─── Activity Log ───────────────────────────────────────────────────
