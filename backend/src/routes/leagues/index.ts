@@ -167,6 +167,7 @@ export const leagueRoutes = new Elysia()
     const row = db.select().from(schema.siteSettings).get();
     if (!row) return {
       draftDemoVisible: isMock,
+      faPickupsPerSeason: 6,
     };
     return {
       defaultUserPassword: row.defaultUserPassword,

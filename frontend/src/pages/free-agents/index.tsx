@@ -360,9 +360,12 @@ export function FreeAgentsPage() {
               ) : (
                 <ul className="space-y-0.5">
                   {filtered.slice(0, 250).map((p, i) => {
-                    const projectedIfPicked = pointsUsed + p.tier;
-                    const overBudget = projectedIfPicked > pointCap;
                     const isPending = pendingPickups.some(pk => pk.name === p.name);
+                    // Project against the full queued state (pending drops free
+                    // budget, other pending pickups consume it) so "needs drop"
+                    // matches the actual submit gate.
+                    const projectedIfPicked = isPending ? projectedAfter : projectedAfter + p.tier;
+                    const overBudget = projectedIfPicked > pointCap;
                     return (
                       <li
                         key={p.name}
@@ -453,12 +456,7 @@ export function FreeAgentsPage() {
                   <span>FA pickups</span>
                   <span className="font-semibold">
                     {faBudget.faUsed + pendingPickups.length} / {faBudget.faPerSeason}
-                    {faBudget.faRemaining - pendingPickups.length !== faBudget.faRemaining - 0 && (
-                      <span className="text-text-muted ml-1">({Math.max(0, faBudget.faRemaining - pendingPickups.length)} left)</span>
-                    )}
-                    {faBudget.faRemaining > 0 && pendingPickups.length === 0 && (
-                      <span className="text-text-muted ml-1">({faBudget.faRemaining} left)</span>
-                    )}
+                    <span className="text-text-muted ml-1">({Math.max(0, faBudget.faRemaining - pendingPickups.length)} left)</span>
                   </span>
                 </div>
               )}

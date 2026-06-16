@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { buildUploadUrl } from '@/lib/api';
 
@@ -90,6 +90,9 @@ export function CoachAvatar({
   const initial = (displayName?.trim() || username || '?').charAt(0).toUpperCase();
   const px = resolveSize(size);
   const [imgError, setImgError] = useState(false);
+  // A new avatarPath (e.g. just uploaded, or reset to default) should re-attempt
+  // the image rather than stay stuck on a prior load failure.
+  useEffect(() => setImgError(false), [avatarPath]);
 
   // Ring stack: outer slot is presence > ringColor (mutually exclusive —
   // presence is more time-sensitive than the identity-color flair). Inner

@@ -382,6 +382,13 @@ export const teamRoutes = new Elysia()
       return { error: 'Duplicate Pokemon in pickup list' };
     }
 
+    // Check for duplicate drops in the batch (a repeated name would delete once
+    // then fail "not on roster" on the second pass — guard for a clear error).
+    if (new Set(dropNames).size !== dropNames.length) {
+      set.status = 400;
+      return { error: 'Duplicate Pokemon in drop list' };
+    }
+
     // Check none of the pickups are already rostered in this league
     const teamsInLeague = db.select({ id: schema.teams.id })
       .from(schema.teams)
@@ -452,6 +459,9 @@ export const teamRoutes = new Elysia()
     try {
       return tx(() => {
         // ── Apply drops first ──
+        // Snapshot what each dropped mon actually cost (costAtDraft) so the
+        // transaction ledger records the paid value, not the current tier.
+        const droppedCosts = new Map<string, number>();
         for (const dropPokemonName of dropNames) {
           const droppedRow = db.select().from(schema.rosters)
             .where(and(
@@ -465,6 +475,7 @@ export const teamRoutes = new Elysia()
               { _status: 400, _code: 'fa_drop_not_found' },
             );
           }
+          droppedCosts.set(dropPokemonName, droppedRow.costAtDraft ?? droppedRow.tier);
           db.delete(schema.rosters)
             .where(eq(schema.rosters.id, droppedRow.id))
             .run();
@@ -562,7 +573,7 @@ export const teamRoutes = new Elysia()
           }).run();
         }
         for (const dropPokemonName of dropNames) {
-          const dropCost = leagueCosts.get(dropPokemonName)?.tier ?? null;
+          const dropCost = droppedCosts.get(dropPokemonName) ?? leagueCosts.get(dropPokemonName)?.tier ?? null;
           db.insert(schema.transactions).values({
             leagueId: params.leagueId,
             week,
