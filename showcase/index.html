@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cannoli · FX Showcase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;800&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   CANNOLI FX SHOWCASE
+   A throwaway demo of proposed visual techniques.
+   Everything here is liftable into frontend/src/index.css.
+   ============================================================ */
+
+/* ---- Houdini registered props: the unlock for animatable gradients ---- */
+@property --gem-sheen   { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+@property --border-spin { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+
+/* ---- Cannoli theme tokens (mirrors index.css @theme) ---- */
+:root{
+  --surface:#08080d; --surface-raised:#111118; --surface-overlay:#1a1a24;
+  --border-default:#252530; --border-subtle:#1c1c28;
+  --neon:#22d3ee; --neon-glow:rgba(34,211,238,.15);
+  --pink:#e879f9; --pink-glow:rgba(232,121,249,.15);
+  --text-primary:#eeeef2; --text-secondary:#9499a8; --text-muted:#5c6070;
+  --win:#4ade80; --loss:#f87171; --draw:#fbbf24;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--surface); color:var(--text-primary);
+  font-family:'Inter',system-ui,sans-serif; line-height:1.5;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+/* ambient corner light leaks, like the real app body::before */
+body::before{
+  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
+  background:
+    radial-gradient(ellipse 80% 60% at 18% 8%, rgba(34,211,238,.05), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 85% 92%, rgba(232,121,249,.04), transparent 55%);
+}
+a{color:inherit}
+
+/* reusable feTurbulence grain overlay for "natural" texture */
+.grain::after{
+  content:''; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/></svg>");
+}
+
+/* ---- layout shell ---- */
+.wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 28px 120px}
+.topbar{
+  position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:18px;
+  padding:14px 28px; backdrop-filter:blur(14px) saturate(1.4);
+  background:linear-gradient(180deg, rgba(8,8,13,.85), rgba(8,8,13,.55));
+  border-bottom:1px solid var(--border-subtle);
+}
+.brand{font-family:'JetBrains Mono',monospace; font-weight:700; letter-spacing:.18em; font-size:13px; text-transform:uppercase}
+.brand .a{color:var(--neon)} .brand .b{color:var(--text-primary)}
+.topbar .spacer{flex:1}
+.tnav{display:flex; gap:6px}
+.tnav a{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-secondary); padding:6px 10px; border-radius:7px; transition:.18s}
+.tnav a:hover{color:var(--text-primary); background:var(--surface-overlay)}
+.toggle{
+  display:inline-flex; align-items:center; gap:7px; font-size:11px; font-family:'JetBrains Mono',monospace;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--text-secondary);
+  border:1px solid var(--border-default); background:var(--surface-raised);
+  padding:6px 11px; border-radius:8px; cursor:pointer; transition:.18s; user-select:none;
+}
+.toggle:hover{color:var(--text-primary); border-color:#3a3a48}
+.toggle[data-on="true"]{color:var(--neon); border-color:color-mix(in oklab,var(--neon) 45%,transparent); box-shadow:0 0 14px -4px var(--neon-glow)}
+
+/* ---- section scaffolding ---- */
+section{padding-top:78px; scroll-margin-top:64px}
+.sec-title{font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:.14em; font-size:clamp(20px,3vw,30px); font-weight:700; margin-bottom:6px}
+.sec-title .a{color:var(--neon)} .sec-title .b{color:var(--text-primary)}
+.sec-sub{color:var(--text-secondary); max-width:62ch; font-size:14.5px; margin-bottom:26px}
+.sec-sub code{font-family:'JetBrains Mono',monospace; font-size:12.5px; background:var(--surface-overlay); padding:1px 6px; border-radius:5px; color:var(--neon)}
+
+/* ============================================================
+   1. WEBGL SHADER HERO
+   ============================================================ */
+.hero{
+  position:relative; height:min(64vh,520px); border-radius:18px; overflow:hidden;
+  margin-top:30px; border:1px solid var(--border-default);
+  box-shadow:0 30px 80px -40px #000, inset 0 0 0 1px rgba(255,255,255,.02);
+}
+.hero canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+.hero .vignette{position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(ellipse 90% 75% at 50% 40%, transparent 40%, rgba(0,0,0,.55) 100%)}
+.hero .content{position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end; padding:36px; gap:14px}
+.hero h1{font-family:'JetBrains Mono',monospace; font-weight:700; letter-spacing:.04em; font-size:clamp(30px,6vw,58px); text-transform:uppercase; text-shadow:0 4px 30px rgba(0,0,0,.6); line-height:1}
+.hero h1 .glow{color:#fff; text-shadow:0 0 26px rgba(255,255,255,.45),0 4px 30px rgba(0,0,0,.6)}
+.hero p{max-width:48ch; color:rgba(255,255,255,.82); text-shadow:0 2px 14px rgba(0,0,0,.7); font-size:15px}
+.hero-controls{position:absolute; top:18px; left:18px; display:flex; gap:8px; z-index:3}
+.pal-btn{
+  font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+  border:1px solid rgba(255,255,255,.18); background:rgba(0,0,0,.32); backdrop-filter:blur(8px);
+  color:#fff; padding:7px 13px; border-radius:9px; cursor:pointer; transition:.18s;
+}
+.pal-btn:hover{background:rgba(0,0,0,.5)}
+.pal-btn[data-active="true"]{border-color:#fff; box-shadow:0 0 18px -2px rgba(255,255,255,.4)}
+
+/* ============================================================
+   2. SIDEBAR GEMS
+   ============================================================ */
+.gems-stage{display:grid; grid-template-columns:248px 1fr; gap:34px; align-items:start}
+@media (max-width:760px){ .gems-stage{grid-template-columns:1fr} }
+
+/* mini sidebar mock — mirrors app-shell aside */
+.sidebar-mock{
+  background:var(--surface-raised); border:1px solid var(--border-default);
+  border-radius:14px; padding:14px 12px; display:flex; flex-direction:column; gap:5px;
+  position:relative; overflow:hidden;
+}
+.sidebar-mock .sb-head{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--text-muted); padding:4px 6px 10px}
+.sidebar-mock .home{display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:8px; color:var(--text-secondary); font-size:13px; font-weight:500}
+.sidebar-mock .home:hover{background:var(--surface-overlay); color:var(--text-primary)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--neon);box-shadow:0 0 8px var(--neon)}
+
+/* GEM WRAPPER + BANNER — base (≈ current app) */
+.gem-wrapper{
+  display:flex; align-items:center; gap:8px; width:100%; padding:6px 4px;
+  background:none; border:0; cursor:pointer; transition:transform .15s ease;
+  --mx:.5; --my:.5; perspective:480px;
+}
+.league-banner{
+  position:relative; flex:1; min-width:0; display:flex; align-items:center;
+  padding:6px 16px 6px 18px;
+  clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 7px 50%);
+  transition:transform .28s cubic-bezier(.2,.7,.3,1), filter .15s ease, box-shadow .25s ease;
+  transform-style:preserve-3d; will-change:transform;
+  isolation:isolate;
+}
+.league-banner-text{
+  position:relative; z-index:3;
+  font-family:'Cinzel',serif; font-weight:700; font-size:12px; letter-spacing:.12em;
+  text-transform:uppercase; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.55);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:color .2s ease, text-shadow .2s ease;
+}
+.phase-badge{
+  font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--draw); background:rgba(251,191,36,.12); padding:2px 6px; border-radius:5px; flex-shrink:0;
+}
+.chev{color:var(--text-muted); flex-shrink:0; transition:.2s}
+.gem-wrapper:hover .chev{color:var(--text-secondary)}
+
+/* the 5-layer faceted gradients — straight from the real app */
+.league-banner-sapphire{
+  background:
+    linear-gradient(135deg,rgba(37,99,235,0) 20%,rgba(96,165,250,.4) 35%,rgba(37,99,235,0) 50%),
+    linear-gradient(225deg,rgba(59,130,246,0) 15%,rgba(147,197,253,.3) 30%,rgba(59,130,246,0) 45%),
+    linear-gradient(170deg,rgba(30,58,138,0) 40%,rgba(96,165,250,.35) 55%,rgba(30,58,138,0) 70%),
+    linear-gradient(300deg,rgba(29,78,216,0) 30%,rgba(191,219,254,.2) 45%,rgba(29,78,216,0) 55%),
+    linear-gradient(135deg,#172554 0%,#1e3a8a 15%,#1d4ed8 35%,#2563eb 50%,#1d4ed8 65%,#1e3a8a 85%,#172554 100%);
+  box-shadow:0 1px 4px rgba(37,99,235,.4), inset 0 1px 1px rgba(147,197,253,.2), inset 0 -1px 1px rgba(23,37,84,.4);
+}
+.league-banner-ruby{
+  background:
+    linear-gradient(135deg,rgba(220,38,38,0) 20%,rgba(252,165,165,.35) 35%,rgba(220,38,38,0) 50%),
+    linear-gradient(225deg,rgba(239,68,68,0) 15%,rgba(254,202,202,.25) 30%,rgba(239,68,68,0) 45%),
+    linear-gradient(170deg,rgba(127,29,29,0) 40%,rgba(252,165,165,.3) 55%,rgba(127,29,29,0) 70%),
+    linear-gradient(300deg,rgba(185,28,28,0) 30%,rgba(254,226,226,.15) 45%,rgba(185,28,28,0) 55%),
+    linear-gradient(135deg,#450a0a 0%,#7f1d1d 15%,#b91c1c 35%,#dc2626 50%,#b91c1c 65%,#7f1d1d 85%,#450a0a 100%);
+  box-shadow:0 1px 4px rgba(220,38,38,.4), inset 0 1px 1px rgba(254,202,202,.2), inset 0 -1px 1px rgba(69,10,10,.4);
+}
+.league-banner-emerald{
+  background:
+    linear-gradient(135deg,rgba(22,163,74,0) 20%,rgba(134,239,172,.35) 35%,rgba(22,163,74,0) 50%),
+    linear-gradient(225deg,rgba(34,197,94,0) 15%,rgba(187,247,208,.25) 30%,rgba(34,197,94,0) 45%),
+    linear-gradient(170deg,rgba(20,83,45,0) 40%,rgba(134,239,172,.3) 55%,rgba(20,83,45,0) 70%),
+    linear-gradient(300deg,rgba(21,128,61,0) 30%,rgba(220,252,231,.15) 45%,rgba(21,128,61,0) 55%),
+    linear-gradient(135deg,#052e16 0%,#14532d 15%,#15803d 35%,#16a34a 50%,#15803d 65%,#14532d 85%,#052e16 100%);
+  box-shadow:0 1px 4px rgba(22,163,74,.4), inset 0 1px 1px rgba(187,247,208,.2), inset 0 -1px 1px rgba(5,46,22,.4);
+}
+
+/* BASE hover (≈ current behaviour) — only when NOT enhanced */
+.sidebar-mock:not(.enhanced) .gem-wrapper:hover .league-banner{filter:brightness(1.1)}
+
+/* ===== ENHANCED: full gemstone treatment ===== */
+/* layer 1 — pointer-tracked specular (the refraction highlight) */
+.enhanced .league-banner::before{
+  content:''; position:absolute; inset:0; z-index:2; pointer-events:none;
+  border-radius:inherit; opacity:0; transition:opacity .25s ease;
+  background:radial-gradient(120px circle at calc(var(--mx)*100%) calc(var(--my)*100%),
+            rgba(255,255,255,.5), rgba(255,255,255,.08) 30%, transparent 60%);
+  mix-blend-mode:overlay;
+}
+/* layer 2 — conic sheen that sweeps around on hover */
+.enhanced .league-banner::after{
+  content:''; position:absolute; inset:-40%; z-index:1; pointer-events:none;
+  background:conic-gradient(from var(--gem-sheen),
+            transparent 0deg, rgba(255,255,255,.22) 18deg, transparent 48deg, transparent 360deg);
+  mix-blend-mode:screen; opacity:0; transition:opacity .3s ease;
+}
+.enhanced .gem-wrapper:hover .league-banner::before{opacity:1}
+.enhanced .gem-wrapper:hover .league-banner::after{opacity:1; animation:gem-rotate 2.6s linear infinite}
+@keyframes gem-rotate{ to{ --gem-sheen:360deg; } }
+
+/* layer 3 — 3D tilt toward the cursor */
+.enhanced .gem-wrapper.tilt .league-banner{
+  transform:
+    perspective(480px)
+    rotateX(calc((var(--my) - .5) * -10deg))
+    rotateY(calc((var(--mx) - .5) *  16deg))
+    translateZ(6px) scale(1.03);
+}
+
+/* layer 4 — hue-matched dark glow bloom (per gem) */
+.enhanced .gem-wrapper:hover .league-banner-sapphire{
+  box-shadow:0 0 0 1px rgba(96,165,250,.45), 0 3px 14px -3px rgba(37,99,235,.65), 0 10px 36px -10px rgba(37,99,235,.55), inset 0 1px 1px rgba(191,219,254,.35);
+}
+.enhanced .gem-wrapper:hover .league-banner-ruby{
+  box-shadow:0 0 0 1px rgba(252,165,165,.45), 0 3px 14px -3px rgba(220,38,38,.65), 0 10px 36px -10px rgba(220,38,38,.55), inset 0 1px 1px rgba(254,202,202,.35);
+}
+.enhanced .gem-wrapper:hover .league-banner-emerald{
+  box-shadow:0 0 0 1px rgba(134,239,172,.45), 0 3px 14px -3px rgba(22,163,74,.65), 0 10px 36px -10px rgba(22,163,74,.55), inset 0 1px 1px rgba(187,247,208,.35);
+}
+/* per-gem text glow (kept from current app, intensified) */
+.enhanced .gem-wrapper:hover .league-banner-sapphire .league-banner-text{color:#dbeafe; text-shadow:0 0 10px rgba(191,219,254,.6),0 1px 3px rgba(0,0,0,.5)}
+.enhanced .gem-wrapper:hover .league-banner-ruby   .league-banner-text{color:#ffe4e6; text-shadow:0 0 10px rgba(254,205,211,.6),0 1px 3px rgba(0,0,0,.5)}
+.enhanced .gem-wrapper:hover .league-banner-emerald .league-banner-text{color:#dcfce7; text-shadow:0 0 10px rgba(187,247,208,.6),0 1px 3px rgba(0,0,0,.5)}
+
+/* notes panel beside the sidebar */
+.notes{display:flex; flex-direction:column; gap:14px}
+.note-card{background:var(--surface-raised); border:1px solid var(--border-default); border-radius:12px; padding:16px 18px}
+.note-card h4{font-family:'Space Grotesk',sans-serif; font-size:14px; margin-bottom:5px; display:flex; align-items:center; gap:8px}
+.note-card p{font-size:13px; color:var(--text-secondary)}
+.note-card .k{font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--neon)}
+.swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+.hint{font-size:12.5px; color:var(--text-muted); margin-top:12px; font-style:italic}
+
+/* ============================================================
+   3. GLOW + GRADIENT KIT
+   ============================================================ */
+.kit{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:18px}
+.glow-card{
+  position:relative; border-radius:14px; padding:20px; overflow:hidden;
+  background:var(--surface-raised); border:1px solid var(--border-default);
+  transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease;
+  --accent:var(--neon); --accent-glow:var(--neon-glow);
+}
+.glow-card:hover{ transform:translateY(-4px); box-shadow:0 14px 40px -16px var(--accent-glow), 0 0 0 1px color-mix(in oklab,var(--accent) 35%,transparent) }
+.glow-card h4{font-family:'Space Grotesk',sans-serif; font-size:15px; margin-bottom:6px}
+.glow-card p{font-size:12.5px; color:var(--text-secondary)}
+.glow-card .chip{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:6px; margin-bottom:12px; color:var(--accent); background:color-mix(in oklab,var(--accent) 14%,transparent)}
+.glow-card.c-sapphire{--accent:#3b82f6;--accent-glow:rgba(59,130,246,.3)}
+.glow-card.c-ruby{--accent:#ef4444;--accent-glow:rgba(239,68,68,.3)}
+.glow-card.c-emerald{--accent:#22c55e;--accent-glow:rgba(34,197,94,.3)}
+.glow-card.c-neon{--accent:#22d3ee;--accent-glow:rgba(34,211,238,.3)}
+
+/* animated gradient border via @property conic spin */
+.spin-border{position:relative; border-radius:14px; padding:1px; overflow:hidden}
+.spin-border::before{content:''; position:absolute; inset:-50%; z-index:0;
+  background:conic-gradient(from var(--border-spin), transparent 0deg, var(--accent) 70deg, transparent 150deg, transparent 360deg);}
+.spin-border:hover::before{animation:border-spin 3s linear infinite}
+@keyframes border-spin{ to{ --border-spin:360deg } }
+.spin-border > *{position:relative; z-index:1; border-radius:13px; background:var(--surface-raised)}
+
+/* animated gradient button */
+.gbtn{
+  position:relative; border:0; cursor:pointer; color:#06121a; font-weight:700;
+  font-family:'Space Grotesk',sans-serif; font-size:14px; padding:12px 22px; border-radius:11px;
+  background:linear-gradient(110deg,#22d3ee,#3b82f6,#e879f9,#22d3ee); background-size:300% 100%;
+  box-shadow:0 6px 22px -8px rgba(34,211,238,.6); transition:transform .18s ease, box-shadow .25s;
+  animation:btn-flow 6s linear infinite;
+}
+.gbtn:hover{transform:translateY(-2px); box-shadow:0 10px 30px -8px rgba(34,211,238,.7)}
+@keyframes btn-flow{ to{ background-position:300% 0 } }
+
+footer{margin-top:90px; padding-top:24px; border-top:1px solid var(--border-subtle); color:var(--text-muted); font-size:13px}
+footer code{font-family:'JetBrains Mono',monospace; color:var(--neon)}
+
+/* ---- reduced motion (toggle OR OS pref) ---- */
+body.motion-off *{animation:none !important; transition:none !important}
+@media (prefers-reduced-motion:reduce){ *{animation:none !important} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand"><span class="a">CANNOLI</span><span class="b">·FX</span></span>
+  <nav class="tnav">
+    <a href="#hero">Shader hero</a>
+    <a href="#gems">Sidebar gems</a>
+    <a href="#kit">Glow kit</a>
+  </nav>
+  <span class="spacer"></span>
+  <button class="toggle" id="motionToggle" data-on="false">Reduce motion</button>
+</div>
+
+<div class="wrap">
+
+  <!-- ============ HERO ============ -->
+  <section id="hero">
+    <div class="sec-title"><span class="a">SHADER</span> <span class="b">HERO</span></div>
+    <p class="sec-sub">A real WebGL fragment shader — domain-warped fractal noise flowing between each league's palette, with film grain baked in. This is the surface that earns the GPU cost (banner / dashboard / login). In production we'd swap this for <code>@paper-design/shaders</code> MeshGradient; the hand-rolled version here proves the look with zero deps.</p>
+    <div class="hero grain">
+      <canvas id="shader"></canvas>
+      <div class="hero-controls">
+        <button class="pal-btn" data-pal="sapphire" data-active="true">Sapphire</button>
+        <button class="pal-btn" data-pal="emerald">Emerald</button>
+        <button class="pal-btn" data-pal="ruby">Ruby</button>
+      </div>
+      <div class="vignette"></div>
+      <div class="content">
+        <h1>SAPPHIRE <span class="glow">LEAGUE</span></h1>
+        <p>Vibrant color, deep dark glow, organic motion. Text and UI sit crisp above the shader via a vignette + blur scrim.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SIDEBAR GEMS ============ -->
+  <section id="gems">
+    <div class="sec-title"><span class="a">SIDEBAR</span> <span class="b">GEMS</span></div>
+    <p class="sec-sub">The starting point you asked for. <strong>Hover a gem and move your cursor across it</strong> — it tilts in 3D toward the pointer, a specular highlight tracks your cursor (refraction), a conic sheen sweeps around, and a hue-matched glow blooms underneath. Flip the toggle to compare against the current static banners.</p>
+
+    <div style="display:flex;gap:12px;margin-bottom:22px;align-items:center">
+      <button class="toggle" id="enhanceToggle" data-on="true">Enhanced gemstone</button>
+      <span class="hint" style="margin:0">← toggle off for current app baseline</span>
+    </div>
+
+    <div class="gems-stage">
+      <div class="sidebar-mock enhanced grain" id="sidebarMock">
+        <div class="sb-head">Leagues · S11</div>
+        <div class="home"><span class="dot"></span> Home</div>
+
+        <button class="gem-wrapper">
+          <div class="league-banner league-banner-sapphire"><span class="league-banner-text">Sapphire</span></div>
+          <span class="phase-badge">Draft</span>
+          <svg class="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+
+        <button class="gem-wrapper">
+          <div class="league-banner league-banner-emerald"><span class="league-banner-text">Emerald</span></div>
+          <span class="phase-badge" style="color:var(--win);background:rgba(74,222,128,.12)">Reg</span>
+          <svg class="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+
+        <button class="gem-wrapper">
+          <div class="league-banner league-banner-ruby"><span class="league-banner-text">Ruby</span></div>
+          <span class="phase-badge" style="color:var(--pink);background:rgba(232,121,249,.12)">PO</span>
+          <svg class="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="notes">
+        <div class="note-card">
+          <h4><span class="swatch" style="background:#3b82f6"></span> Pointer-tracked 3D tilt + specular</h4>
+          <p>JS sets <span class="k">--mx / --my</span> from the pointer; CSS does the rest with <span class="k">perspective() rotateX/rotateY</span> and a radial highlight at the cursor. ~15 lines of JS, the gem feel.</p>
+        </div>
+        <div class="note-card">
+          <h4><span class="swatch" style="background:#e879f9"></span> Animated conic sheen</h4>
+          <p>A registered <span class="k">@property --gem-sheen</span> angle makes a <span class="k">conic-gradient</span> animatable — it sweeps around the facet on hover via <span class="k">mix-blend-mode:screen</span>. Idle gems stay static = cheap.</p>
+        </div>
+        <div class="note-card">
+          <h4><span class="swatch" style="background:#22c55e"></span> Hue-matched dark glow</h4>
+          <p>Stacked <span class="k">box-shadow</span> layers colored from each gem's own hue, blooming against the <span class="k">#08080d</span> surface. Layered grain adds the natural, non-digital texture.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GLOW KIT ============ -->
+  <section id="kit">
+    <div class="sec-title"><span class="a">GLOW</span> <span class="b">+ GRADIENT KIT</span></div>
+    <p class="sec-sub">Incremental wins for cards, badges and buttons everywhere else — driven by <code>color-mix()</code> from a single <code>--accent</code> so any entity color (team, league, gem) lights up in its own hue. Hover the cards and the bordered panel.</p>
+
+    <div class="kit">
+      <div class="glow-card c-sapphire"><span class="chip">Sapphire</span><h4>Lift + hue glow</h4><p>translateY on hover with a colored bloom derived from one accent var.</p></div>
+      <div class="glow-card c-emerald"><span class="chip">Emerald</span><h4>color-mix borders</h4><p>Ring + glow both computed from <span style="font-family:monospace;color:#22c55e">--accent</span>.</p></div>
+      <div class="glow-card c-ruby"><span class="chip">Ruby</span><h4>Per-entity color</h4><p>Same markup, different accent — works for any team color.</p></div>
+      <div class="spin-border c-neon" style="--accent:#22d3ee">
+        <div class="glow-card c-neon" style="border:0"><span class="chip">Neon</span><h4>Animated border</h4><p>Conic <span style="font-family:monospace;color:#22d3ee">@property</span> spin, hover to run it.</p></div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <button class="gbtn">Animated gradient button</button>
+      <span class="hint" style="margin:0">flowing background-position, GPU-cheap</span>
+    </div>
+  </section>
+
+  <footer>
+    Throwaway demo · <code>showcase/index.html</code> · not committed. Techniques port directly into <code>frontend/src/index.css</code> + a small <code>usePointerTilt</code> hook. Toggle <strong>Reduce motion</strong> (top right) to see the <code>prefers-reduced-motion</code> fallback.
+  </footer>
+</div>
+
+<!-- ======================= SHADER ======================= -->
+<script id="vert" type="x-shader/x-vertex">
+attribute vec2 a_pos;
+void main(){ gl_Position = vec4(a_pos,0.0,1.0); }
+</script>
+<script id="frag" type="x-shader/x-fragment">
+precision highp float;
+uniform vec2  u_res;
+uniform float u_time;
+uniform float u_speed;
+uniform float u_distort;
+uniform vec3  u_c0,u_c1,u_c2,u_c3;
+
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  float a=hash(i), b=hash(i+vec2(1.0,0.0)), c=hash(i+vec2(0.0,1.0)), d=hash(i+vec2(1.0,1.0));
+  vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+}
+float fbm(vec2 p){
+  float v=0.0, a=0.5;
+  for(int i=0;i<5;i++){ v+=a*noise(p); p=p*2.02; a*=0.5; }
+  return v;
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / u_res.xy;
+  vec2 p  = (uv - 0.5) * vec2(u_res.x/u_res.y, 1.0) * 2.4;
+  float t = u_time * u_speed;
+
+  // domain warp — flowing organic blobs
+  vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2,1.3) - t*0.6));
+  vec2 r = vec2(fbm(p + u_distort*q + vec2(1.7,9.2) + t*0.4),
+                fbm(p + u_distort*q + vec2(8.3,2.8) - t*0.3));
+  float n1 = fbm(p + u_distort*r);
+  float n2 = fbm(p*1.25 + u_distort*q + 3.0);
+
+  vec3 col = mix(u_c0, u_c1, smoothstep(0.12,0.88,n1));
+  col = mix(col, u_c2, smoothstep(0.18,0.92,n2));
+  col = mix(col, u_c3, smoothstep(0.30,1.0, n1*n2*1.7));
+
+  // inner luminance + edge falloff toward the dark base
+  col += 0.05 * pow(max(0.0,1.0-length(uv-0.5)), 3.0) * vec3(0.8,0.9,1.0);
+  float vig = smoothstep(1.25, 0.25, length((uv-0.5)*vec2(1.55,1.0)));
+  col = mix(vec3(0.025,0.025,0.045), col, vig);
+
+  // film grain
+  col += (hash(gl_FragCoord.xy + t) - 0.5) * 0.05;
+
+  gl_FragColor = vec4(col, 1.0);
+}
+</script>
+
+<script>
+/* ---------- palettes (deep -> light per gem) ---------- */
+const PALETTES = {
+  sapphire: ['#0b1e54','#1d4ed8','#3b82f6','#60a5fa'],
+  emerald:  ['#06301a','#15803d','#16a34a','#34d399'],
+  ruby:     ['#3f0710','#b91c1c','#ef4444','#fb7185'],
+};
+const hex2rgb = h => { h=h.replace('#',''); return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16)/255); };
+
+/* ---------- WebGL hero ---------- */
+const canvas = document.getElementById('shader');
+const gl = canvas.getContext('webgl', { antialias:false, alpha:false });
+let raf=null, t0=null, pausedMotion=false, current='sapphire', program;
+
+function compile(type, src){
+  const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+function initGL(){
+  if(!gl){ canvas.replaceWith(Object.assign(document.createElement('div'),{textContent:'WebGL unavailable',style:'color:#9499a8;padding:30px'})); return false; }
+  const v=compile(gl.VERTEX_SHADER, document.getElementById('vert').textContent);
+  const f=compile(gl.FRAGMENT_SHADER, document.getElementById('frag').textContent);
+  program=gl.createProgram(); gl.attachShader(program,v); gl.attachShader(program,f); gl.linkProgram(program);
+  gl.useProgram(program);
+  const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const loc=gl.getAttribLocation(program,'a_pos'); gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  gl.uniform1f(gl.getUniformLocation(program,'u_speed'), 0.22);
+  gl.uniform1f(gl.getUniformLocation(program,'u_distort'), 1.15);
+  return true;
+}
+function setPalette(name){
+  current=name;
+  const cols=PALETTES[name];
+  ['u_c0','u_c1','u_c2','u_c3'].forEach((u,i)=> gl.uniform3fv(gl.getUniformLocation(program,u), hex2rgb(cols[i])));
+}
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1, 1.5);
+  const r=canvas.getBoundingClientRect();
+  canvas.width=Math.max(1,r.width*dpr); canvas.height=Math.max(1,r.height*dpr);
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.uniform2f(gl.getUniformLocation(program,'u_res'), canvas.width, canvas.height);
+}
+function frame(ts){
+  if(t0==null) t0=ts;
+  gl.uniform1f(gl.getUniformLocation(program,'u_time'), (ts-t0)/1000);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  raf=requestAnimationFrame(frame);
+}
+function startGL(){ if(!raf && !pausedMotion) raf=requestAnimationFrame(frame); }
+function stopGL(){ if(raf){ cancelAnimationFrame(raf); raf=null; } }
+
+if(initGL()){
+  setPalette('sapphire'); resize();
+  // draw one static frame even if motion is off
+  gl.uniform1f(gl.getUniformLocation(program,'u_time'),0); gl.drawArrays(gl.TRIANGLES,0,3);
+  startGL();
+  window.addEventListener('resize', ()=>{ resize(); if(pausedMotion){ gl.drawArrays(gl.TRIANGLES,0,3); } });
+  document.querySelectorAll('.pal-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.pal-btn').forEach(x=>x.dataset.active='false');
+      b.dataset.active='true';
+      setPalette(b.dataset.pal);
+      const h1=document.querySelector('.hero h1');
+      h1.innerHTML = b.dataset.pal.toUpperCase()+' <span class="glow">LEAGUE</span>';
+      if(pausedMotion) gl.drawArrays(gl.TRIANGLES,0,3);
+    });
+  });
+}
+
+/* ---------- pointer-tracked gem tilt ---------- */
+document.querySelectorAll('.gem-wrapper').forEach(w=>{
+  const onMove=e=>{
+    const r=w.getBoundingClientRect();
+    w.style.setProperty('--mx', ((e.clientX-r.left)/r.width).toFixed(3));
+    w.style.setProperty('--my', ((e.clientY-r.top)/r.height).toFixed(3));
+    w.classList.add('tilt');
+  };
+  w.addEventListener('pointermove', onMove);
+  w.addEventListener('pointerleave', ()=>{
+    w.style.setProperty('--mx',.5); w.style.setProperty('--my',.5);
+    w.classList.remove('tilt');
+  });
+});
+
+/* ---------- toggles ---------- */
+const motionToggle=document.getElementById('motionToggle');
+function applyMotion(on){
+  pausedMotion=on; document.body.classList.toggle('motion-off', on);
+  motionToggle.dataset.on=on;
+  if(on){ stopGL(); if(gl&&program) gl.drawArrays(gl.TRIANGLES,0,3); } else { t0=null; startGL(); }
+}
+motionToggle.addEventListener('click', ()=>applyMotion(motionToggle.dataset.on!=='true'));
+if(window.matchMedia('(prefers-reduced-motion:reduce)').matches) applyMotion(true);
+
+const enhanceToggle=document.getElementById('enhanceToggle');
+enhanceToggle.addEventListener('click', ()=>{
+  const on=enhanceToggle.dataset.on!=='true';
+  enhanceToggle.dataset.on=on;
+  document.getElementById('sidebarMock').classList.toggle('enhanced', on);
+});
+</script>
+</body>
+</html>
