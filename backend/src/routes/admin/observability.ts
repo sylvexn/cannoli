@@ -529,30 +529,40 @@ export const observabilityRoutes = new Elysia()
     });
 
     // Slowest endpoints: top 10 server paths by p95 duration over the window.
-    // Client rows excluded (source != 'server'). Use the OFFSET p95 trick from
-    // misc.ts — one correlated subquery per path is acceptable for top-10.
-    type EndpointRow = { path: string; avgMs: number; p95Ms: number; count: number };
-    const slowestEndpoints = sqlite.query<EndpointRow, []>(`
-      SELECT
-        path,
-        CAST(AVG(duration_ms) AS INTEGER) AS avgMs,
-        (
-          SELECT duration_ms FROM request_logs r2
-          WHERE r2.path = r1.path
-            AND r2.source = 'server'
-            AND r2.timestamp >= datetime('now', '${intervalExpr}')
-          ORDER BY r2.duration_ms
-          LIMIT 1
-          OFFSET CAST(COUNT(*) * 0.95 AS INTEGER)
-        ) AS p95Ms,
-        COUNT(*) AS count
-      FROM request_logs r1
+    // Client rows excluded (source = 'server' only). We pull (path, duration_ms)
+    // and aggregate per path in JS — same approach as the per-bucket p95 above.
+    // The earlier SQL form put a bare `COUNT(*)` in the p95 subquery's OFFSET,
+    // which SQLite rejects ("misuse of aggregate function COUNT()"), 500ing the
+    // whole endpoint; computing in JS sidesteps the correlated-subquery limits.
+    type EndpointDurRow = { path: string; duration_ms: number };
+    const endpointDurRows = sqlite.query<EndpointDurRow, []>(`
+      SELECT path, duration_ms
+      FROM request_logs
       WHERE source = 'server'
         AND timestamp >= datetime('now', '${intervalExpr}')
-      GROUP BY path
-      ORDER BY p95Ms DESC
-      LIMIT 10
+      ORDER BY path ASC, duration_ms ASC
     `).all();
+
+    const byPath = new Map<string, number[]>();
+    for (const row of endpointDurRows) {
+      const arr = byPath.get(row.path) ?? [];
+      arr.push(row.duration_ms);
+      byPath.set(row.path, arr);
+    }
+
+    const slowestEndpoints = [...byPath.entries()]
+      .map(([path, durations]) => {
+        // durations is already sorted ascending (ORDER BY above).
+        const sum = durations.reduce((a, b) => a + b, 0);
+        return {
+          path,
+          avgMs: Math.round(sum / durations.length),
+          p95Ms: p95(durations),
+          count: durations.length,
+        };
+      })
+      .sort((a, b) => b.p95Ms - a.p95Ms)
+      .slice(0, 10);
 
     return { buckets, slowestEndpoints };
   }, { beforeHandle: requireDev })
