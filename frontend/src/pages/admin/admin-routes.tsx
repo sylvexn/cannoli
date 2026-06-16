@@ -32,12 +32,13 @@ import { Observability } from './observability';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
+import { AdminAnnouncements } from './admin-announcements';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
-  UsersRound,
+  UsersRound, Megaphone,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -135,6 +136,10 @@ export const AdminPinsRoute = () => (
   </AdminSection>
 );
 export const AdminPinsLegacyRedirect = () => <Navigate to="/admin/pins" replace />;
+
+export const AdminAnnouncementsRoute = () => (
+  <AdminSection icon={Megaphone} title="Announcements"><AdminAnnouncements /></AdminSection>
+);
 
 /**
  * Season Simulator route — mock-mode only.

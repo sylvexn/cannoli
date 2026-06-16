@@ -2,77 +2,164 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { EmptyState } from '@/components/empty-state';
-import { api } from '@/lib/api';
-import type { ApiFeedbackIssue } from '@/lib/api';
+import { api, type ApiFeedbackItem, type FeedbackCategory } from '@/lib/api';
+import { getErrorMessage } from '@/lib/errors';
 import { useFormatTime, useFormatDate } from '@/lib/format';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import {
-  ExternalLink, CircleDot, CircleCheck, ChevronDown, ChevronUp, RefreshCw,
+  ExternalLink, ChevronDown, ChevronUp, RefreshCw,
+  CircleDot, CircleCheck, Bell, Image as ImageIcon,
 } from 'lucide-react';
 
-type FilterState = 'open' | 'closed' | 'all';
+// ─── Filter types ─────────────────────────────────────────────────────────────
+
+type CategoryFilter = FeedbackCategory | 'all';
+type StatusFilter = 'open' | 'resolved' | 'all';
+
+const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+  all: 'All',
+  bug: 'Bug',
+  feature: 'Feature',
+  league: 'League',
+  general: 'General',
+};
+
+const CATEGORY_FILTERS: CategoryFilter[] = ['all', 'bug', 'feature', 'league', 'general'];
+const STATUS_FILTERS: StatusFilter[] = ['open', 'resolved', 'all'];
+
+// ─── Category accent styles ───────────────────────────────────────────────────
+
+function categoryClass(cat: FeedbackCategory): string {
+  switch (cat) {
+    case 'bug':     return 'border-loss/40 text-loss bg-loss/10';
+    case 'feature': return 'border-neon/40 text-neon bg-neon/10';
+    case 'league':  return 'border-cyan-500/40 text-cyan-400 bg-cyan-500/10';
+    case 'general': return 'border-border-default text-text-muted bg-surface-overlay/50';
+  }
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function AdminFeedback() {
-  const [issues, setIssues] = useState<ApiFeedbackIssue[]>([]);
+  const [items, setItems] = useState<ApiFeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterState>('open');
   const [error, setError] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
+  const [backfilling, setBackfilling] = useState(false);
 
-  const [unconfigured, setUnconfigured] = useState(false);
-
-  function load(state: FilterState) {
-    if (unconfigured) return;
+  function load() {
     setLoading(true);
     setError(null);
-    api.getFeedbackIssues(state)
-      .then(setIssues)
-      .catch(e => {
-        const msg = e.message || '';
-        if (msg.includes('not configured') || msg.includes('503')) {
-          setUnconfigured(true);
-        }
-        setError(msg);
-      })
+    api.getAdminFeedback({
+      category: categoryFilter !== 'all' ? categoryFilter : undefined,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+    })
+      .then(setItems)
+      .catch(e => setError(getErrorMessage(e, 'Failed to load feedback')))
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { load(filter); }, [filter]);
+  useEffect(() => { load(); }, [categoryFilter, statusFilter]);
 
-  const openCount = issues.filter(i => i.state === 'open').length;
-  const closedCount = issues.filter(i => i.state === 'closed').length;
+  async function handleBackfill() {
+    setBackfilling(true);
+    try {
+      const res = await api.backfillFeedbackNotifications();
+      if (res.unconfigured) {
+        toast.error('GitHub not configured — cannot backfill notifications');
+      } else {
+        toast.success(`Notified reporters: ${res.inserted} sent, ${res.skipped} already sent, ${res.noUser} no account`);
+      }
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'Backfill failed'));
+    } finally {
+      setBackfilling(false);
+    }
+  }
+
+  function handleResolved(id: number) {
+    setItems(prev => prev.map(item =>
+      item.id === id ? { ...item, status: 'resolved' } : item,
+    ));
+  }
+
+  const openCount = items.filter(i => i.status === 'open').length;
+  const resolvedCount = items.filter(i => i.status === 'resolved').length;
 
   return (
     <div className="space-y-4">
       {/* Header controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Category filter */}
         <div className="flex gap-1 rounded-md border border-border-default p-0.5">
-          {(['open', 'closed', 'all'] as FilterState[]).map(s => (
+          {CATEGORY_FILTERS.map(cat => (
             <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                filter === s
+              key={cat}
+              type="button"
+              onClick={() => setCategoryFilter(cat)}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded transition-colors',
+                categoryFilter === cat
                   ? 'bg-surface-overlay text-text-primary'
-                  : 'text-text-muted hover:text-text-secondary'
-              }`}
+                  : 'text-text-muted hover:text-text-secondary',
+              )}
             >
-              {s === 'open' ? 'Open' : s === 'closed' ? 'Closed' : 'All'}
+              {CATEGORY_LABELS[cat]}
             </button>
           ))}
         </div>
-        {filter === 'all' && (
+
+        {/* Status filter */}
+        <div className="flex gap-1 rounded-md border border-border-default p-0.5">
+          {STATUS_FILTERS.map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                'px-3 py-1 text-xs font-medium rounded capitalize transition-colors',
+                statusFilter === s
+                  ? 'bg-surface-overlay text-text-primary'
+                  : 'text-text-muted hover:text-text-secondary',
+              )}
+            >
+              {s === 'all' ? 'All' : s === 'open' ? 'Open' : 'Resolved'}
+            </button>
+          ))}
+        </div>
+
+        {statusFilter === 'all' && (
           <div className="flex gap-2 text-xs text-text-muted">
             <span className="text-win">{openCount} open</span>
             <span>/</span>
-            <span className="text-text-muted">{closedCount} closed</span>
+            <span className="text-text-muted">{resolvedCount} resolved</span>
           </div>
         )}
+
         <div className="flex-1" />
+
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => load(filter)}
+          onClick={handleBackfill}
+          disabled={backfilling}
+          className="h-7 text-text-muted"
+        >
+          {backfilling ? <RefreshCw size={12} className="animate-spin" /> : <Bell size={12} />}
+          Notify reporters
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={load}
           className="h-7 text-text-muted"
         >
           <RefreshCw size={12} />
@@ -82,27 +169,24 @@ export function AdminFeedback() {
 
       {error && (
         <div className="rounded-md border border-loss/30 bg-loss/5 px-4 py-3 text-sm text-loss">
-          {error === 'Feedback not configured'
-            ? 'GitHub integration not configured. Set GITHUB_TOKEN and GITHUB_REPO environment variables.'
-            : error}
+          {error}
         </div>
       )}
 
-      {/* Issue list */}
       <Card>
         <CardContent className="p-0 divide-y divide-border">
           {loading ? (
             <LoadingSprite />
-          ) : issues.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState
               variant="quiet"
-              title={`No ${filter !== 'all' ? filter + ' ' : ''}feedback issues.`}
+              title={`No ${statusFilter !== 'all' ? statusFilter + ' ' : ''}feedback.`}
               spriteSize="md"
               padding="sm"
             />
           ) : (
-            issues.map(issue => (
-              <IssueRow key={issue.number} issue={issue} />
+            items.map(item => (
+              <FeedbackRow key={item.id} item={item} onResolved={handleResolved} />
             ))
           )}
         </CardContent>
@@ -111,95 +195,212 @@ export function AdminFeedback() {
   );
 }
 
-function IssueRow({ issue }: { issue: ApiFeedbackIssue }) {
+// ─── Row ─────────────────────────────────────────────────────────────────────
+
+function FeedbackRow({
+  item,
+  onResolved,
+}: {
+  item: ApiFeedbackItem;
+  onResolved: (id: number) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [responding, setResponding] = useState(false);
+  const [response, setResponse] = useState('');
+  const [resolving, setResolving] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const fmtTime = useFormatTime();
   const fmtDate = useFormatDate();
-  const isOpen = issue.state === 'open';
 
-  const ts = new Date(issue.createdAt);
+  const ts = new Date(item.createdAt);
   const isToday = new Date().toDateString() === ts.toDateString();
   const timeStr = isToday ? fmtTime(ts) : fmtDate(ts, { year: 'hide' });
+  const isOpen = item.status === 'open';
 
-  // Parse reporter from body
-  const reporterMatch = issue.body?.match(/\*\*Reporter:\*\* (.+)/);
-  const reporter = reporterMatch?.[1] ?? null;
-  const pageMatch = issue.body?.match(/\*\*Page:\*\* (.+)/);
-  const page = pageMatch?.[1] ?? null;
-
-  // Get description (everything before the --- separator)
-  const descParts = issue.body?.split('\n---\n');
-  const desc = descParts?.[0]?.trim() ?? '';
+  async function handleResolve() {
+    setResolving(true);
+    try {
+      await api.resolveFeedback(item.id, response.trim() || undefined);
+      toast.success('Marked as resolved');
+      onResolved(item.id);
+      setResponding(false);
+      setResponse('');
+    } catch (e) {
+      toast.error(getErrorMessage(e, 'Failed to resolve'));
+    } finally {
+      setResolving(false);
+    }
+  }
 
   return (
     <div className="group">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/50 transition-colors text-left"
       >
-        {/* State icon */}
+        {/* Status icon */}
         {isOpen ? (
           <CircleDot size={16} className="shrink-0 text-win" />
         ) : (
           <CircleCheck size={16} className="shrink-0 text-text-muted" />
         )}
 
-        {/* Title + number */}
+        {/* Category badge */}
+        <span className={cn(
+          'shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium',
+          categoryClass(item.category),
+        )}>
+          {CATEGORY_LABELS[item.category]}
+        </span>
+
+        {/* Title + reporter */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary truncate">{issue.title}</span>
-            <span className="text-xs text-text-muted font-mono shrink-0">#{issue.number}</span>
+            <span className="text-sm font-medium text-text-primary truncate">{item.title}</span>
           </div>
-          {reporter && (
-            <span className="text-xs text-text-muted">{reporter}</span>
-          )}
+          <span className="text-xs text-text-muted">{item.reporter}</span>
         </div>
 
-        {/* Page badge */}
-        {page && (
+        {/* Page chip */}
+        {item.page && (
           <Badge variant="outline" className="shrink-0 text-[10px] border-border-default text-text-muted">
-            {page}
+            {item.page}
           </Badge>
         )}
-
-        {/* Labels */}
-        {issue.labels.filter(l => l && l !== 'feedback').map(label => (
-          <Badge key={label} variant="outline" className="shrink-0 text-[10px] border-neon/30 text-neon bg-neon/5">
-            {label}
-          </Badge>
-        ))}
 
         {/* Timestamp */}
         <span className="shrink-0 w-16 text-right text-xs text-text-muted font-mono tabular-nums">
           {timeStr}
         </span>
 
-        {expanded ? <ChevronUp size={14} className="shrink-0 text-text-muted" /> : <ChevronDown size={14} className="shrink-0 text-text-muted" />}
+        {expanded
+          ? <ChevronUp size={14} className="shrink-0 text-text-muted" />
+          : <ChevronDown size={14} className="shrink-0 text-text-muted" />
+        }
       </button>
 
       {/* Expanded body */}
       {expanded && (
-        <div className="px-4 pb-3 pt-0 pl-12">
+        <div className="px-4 pb-3 pt-0 pl-12 space-y-3">
+          {/* Body */}
           <div className="rounded-md bg-surface-overlay/50 border border-border-default p-3 text-sm text-text-secondary whitespace-pre-wrap">
-            {desc || 'No description'}
+            {item.body || 'No description'}
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <a
-              href={issue.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-neon hover:underline"
-            >
-              <ExternalLink size={12} />
-              View on GitHub
-            </a>
-            {issue.closedAt && (
+
+          {/* Meta row */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Error ref */}
+            {item.errorRef && (
+              <span className="font-mono text-[11px] text-text-muted bg-surface-overlay/50 border border-border-default px-1.5 py-0.5 rounded">
+                ref: {item.errorRef}
+              </span>
+            )}
+
+            {/* Screenshot */}
+            {item.screenshotUrl && (
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                className="inline-flex items-center gap-1 text-xs text-neon hover:underline"
+              >
+                <ImageIcon size={12} />
+                View screenshot
+              </button>
+            )}
+
+            {/* GitHub link */}
+            {item.githubIssueUrl && (
+              <a
+                href={item.githubIssueUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-neon hover:underline"
+              >
+                <ExternalLink size={12} />
+                View on GitHub {item.githubIssueNumber ? `#${item.githubIssueNumber}` : ''}
+              </a>
+            )}
+
+            {/* Resolved info */}
+            {!isOpen && item.resolvedAt && (
               <span className="text-xs text-text-muted">
-                Closed {fmtDate(issue.closedAt, { year: 'hide' })}
+                Resolved {fmtDate(item.resolvedAt, { year: 'hide' })}
               </span>
             )}
           </div>
+
+          {/* Admin response (if resolved with one) */}
+          {!isOpen && item.adminResponse && (
+            <div className="rounded-md border border-neon/20 bg-neon/5 px-3 py-2 text-xs text-text-secondary">
+              <span className="text-neon font-medium text-[10px] uppercase tracking-wide">Staff response</span>
+              <p className="mt-1 whitespace-pre-wrap">{item.adminResponse}</p>
+            </div>
+          )}
+
+          {/* Resolve action (only for open items) */}
+          {isOpen && (
+            <div className="space-y-2">
+              {responding ? (
+                <>
+                  <Textarea
+                    value={response}
+                    onChange={e => setResponse(e.target.value)}
+                    placeholder="Optional response to the reporter..."
+                    rows={3}
+                    className="text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleResolve}
+                      disabled={resolving}
+                      className="h-7 text-xs"
+                    >
+                      {resolving && <RefreshCw size={11} className="animate-spin mr-1" />}
+                      Mark resolved
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setResponding(false); setResponse(''); }}
+                      disabled={resolving}
+                      className="h-7 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setResponding(true)}
+                  className="h-7 text-xs text-text-muted"
+                >
+                  <CircleCheck size={12} />
+                  Resolve
+                </Button>
+              )}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Screenshot lightbox */}
+      {item.screenshotUrl && (
+        <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+          <DialogContent className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-sm font-medium">Screenshot — {item.title}</DialogTitle>
+            </DialogHeader>
+            <img
+              src={item.screenshotUrl}
+              alt="Feedback screenshot"
+              className="w-full rounded-md border border-border-default"
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

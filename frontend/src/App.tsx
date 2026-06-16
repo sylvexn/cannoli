@@ -31,6 +31,7 @@ import {
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
   AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
   AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute,
+  AdminAnnouncementsRoute,
 } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
 import { ArchiveHubPage } from '@/pages/archive/hub';
@@ -145,6 +146,7 @@ export default function App() {
                     <Route path="pins" element={<AdminPinsRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
                     <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
+                    <Route path="announcements" element={<AdminAnnouncementsRoute />} />
                     <Route path="settings" element={<AdminSiteSettingsRoute />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />

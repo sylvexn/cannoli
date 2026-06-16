@@ -732,17 +732,6 @@ export interface ApiPinRecent {
   metadata: Record<string, unknown> | null;
 }
 
-export interface ApiFeedbackIssue {
-  number: number;
-  title: string;
-  body: string | null;
-  state: string;
-  labels: (string | undefined)[];
-  createdAt: string;
-  closedAt: string | null;
-  url: string;
-}
-
 export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
 
 export interface ApiChangelogEntry {
@@ -752,6 +741,65 @@ export interface ApiChangelogEntry {
   category: ChangelogCategory;
   title: string;
   body?: string;
+}
+
+// ─── Feedback (DB-backed, all 4 categories) ──────────────────────────────────
+export type FeedbackCategory = 'bug' | 'feature' | 'league' | 'general';
+
+/** A feedback row as returned by the admin triage endpoint (joined to users). */
+export interface ApiFeedbackItem {
+  id: number;
+  category: FeedbackCategory;
+  title: string;
+  body: string;
+  page: string | null;
+  errorRef: string | null;
+  /** Ready to drop into <img src>; null when no screenshot was attached. */
+  screenshotUrl: string | null;
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
+  status: 'open' | 'resolved';
+  adminResponse: string | null;
+  reporter: string;
+  reporterRole: string;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+// ─── Notifications (unified pane: changelog + feedback + announcement + match) ─
+export type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
+
+export interface NotificationItem {
+  /** Prefixed composite id, e.g. 'changelog:<entryId>' | 'notif:<rowId>' | 'announcement:<rowId>' | 'match:<matchId>'. */
+  id: string;
+  source: NotificationSource;
+  title: string;
+  body: string | null;
+  /** Client route or absolute URL; null = no navigation. */
+  link: string | null;
+  /** Source-specific category driving icon + accent (changelog/announcement category). */
+  category: string | null;
+  createdAt: string;
+  read: boolean;
+}
+
+export interface NotificationsResponse {
+  items: NotificationItem[];
+  unreadCount: number;
+  unreadBySource: { changelog: number; feedback: number; announcement: number; match: number };
+}
+
+export type AnnouncementCategory = 'info' | 'feature' | 'event' | 'maintenance';
+
+export interface ApiAnnouncement {
+  id: number;
+  title: string;
+  body: string;
+  link: string | null;
+  category: AnnouncementCategory;
+  createdByUsername: string | null;
+  createdAt: string;
+  active: boolean;
 }
 
 export const api = {
@@ -1275,25 +1323,84 @@ export const api = {
   removeCoachTeam: (teamId: string) =>
     deleteJson<{ success: boolean }>(`/api/admin/membership/team/${teamId}`),
 
-  // Feedback
-  submitFeedback: (title: string, description: string, page?: string, errorRef?: string) =>
-    postJson<{ success: boolean; issueNumber: number | null; issueUrl: string | null }>('/api/feedback', { title, description, page, errorRef }),
+  // Feedback (multipart: a screenshot File may be attached)
+  submitFeedback: async (input: {
+    category: FeedbackCategory;
+    title: string;
+    description: string;
+    page?: string;
+    errorRef?: string;
+    screenshot?: File;
+  }) => {
+    const fd = new FormData();
+    fd.append('category', input.category);
+    fd.append('title', input.title);
+    fd.append('description', input.description);
+    if (input.page) fd.append('page', input.page);
+    if (input.errorRef) fd.append('errorRef', input.errorRef);
+    if (input.screenshot) fd.append('screenshot', input.screenshot);
+    const csrf = readCsrfToken();
+    const res = await fetch(`${API_BASE}/api/feedback`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `Failed: ${res.status}`);
+    }
+    return res.json() as Promise<{ success: boolean; id: number; issueNumber: number | null; issueUrl: string | null }>;
+  },
 
-  getFeedbackIssues: (state?: 'open' | 'closed' | 'all') =>
-    fetchJson<ApiFeedbackIssue[]>(`/api/admin/issues${state ? `?state=${state}` : ''}`),
+  // Admin feedback triage (reads from the feedback table)
+  getAdminFeedback: (params?: { category?: string; status?: string; hasGithub?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.category) q.set('category', params.category);
+    if (params?.status) q.set('status', params.status);
+    if (params?.hasGithub) q.set('hasGithub', params.hasGithub);
+    const qs = q.toString();
+    return fetchJson<ApiFeedbackItem[]>(`/api/admin/feedback${qs ? `?${qs}` : ''}`);
+  },
 
-  getFeedbackNotifications: () =>
-    fetchJson<{ issueNumber: number; title: string; issueUrl: string }[]>('/api/feedback/notifications'),
+  resolveFeedback: (id: number, response?: string) =>
+    postJson<{ success: boolean }>(`/api/admin/feedback/${id}/resolve`, { response }),
 
-  acknowledgeFeedback: (issueNumber: number) =>
-    postJson<{ success: boolean }>(`/api/feedback/${issueNumber}/acknowledge`),
+  // First-test + ongoing pattern: notify reporters of closed GitHub issues.
+  backfillFeedbackNotifications: (issues?: number[]) =>
+    postJson<{ inserted: number; skipped: number; noUser: number; unconfigured?: boolean }>(
+      '/api/admin/notifications/backfill-feedback', { issues }),
 
-  // Changelog ("What's New")
+  // Silent on-login sync: detects closed GitHub issues and routes resolutions to
+  // the notifications pane (no toast). Returns a count only.
+  syncFeedbackResolutions: () =>
+    fetchJson<{ notified: number }>('/api/feedback/notifications'),
+
+  // Changelog ("What's New") — still served standalone; the pane aggregates it.
   getChangelog: () =>
     fetchJson<{ entries: ApiChangelogEntry[]; lastSeenAt: string | null }>('/api/changelog'),
 
   markChangelogSeen: () =>
     postJson<{ success: boolean; seenAt: string }>('/api/changelog/seen'),
+
+  // ─── Unified notifications pane ──────────────────────────────────────────
+  getNotifications: () => fetchJson<NotificationsResponse>('/api/notifications'),
+
+  /** Mark everything seen on pane open (changelog + announcements + all directed rows). */
+  markNotificationsSeen: () => postJson<{ success: boolean }>('/api/notifications/seen'),
+
+  /** Mark specific directed notifications read (composite ids; non-directed ids ignored). */
+  markNotificationsRead: (ids: string[]) =>
+    postJson<{ success: boolean }>('/api/notifications/read', { ids }),
+
+  // ─── Admin announcement composer ─────────────────────────────────────────
+  listAnnouncements: () => fetchJson<ApiAnnouncement[]>('/api/admin/announcements'),
+
+  createAnnouncement: (a: { title: string; body: string; link?: string; category: AnnouncementCategory }) =>
+    postJson<{ id: number }>('/api/admin/announcements', a),
+
+  retractAnnouncement: (id: number) =>
+    deleteJson<{ success: boolean }>(`/api/admin/announcements/${id}`),
 
   // Match management
   getAdminMatches: (params?: { leagueId?: string; status?: string }) => {

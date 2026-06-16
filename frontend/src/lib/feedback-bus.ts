@@ -5,12 +5,18 @@
  * fire `openFeedback(prefill)`.
  */
 
+import type { FeedbackCategory } from '@/lib/api';
+
 export interface FeedbackPrefill {
   title?: string;
   description?: string;
   /** Correlation ref from a captured error — appended to the issue so the
    *  report ties back to a request_logs row. */
   errorId?: string;
+  /** Pre-select a feedback category. */
+  category?: FeedbackCategory;
+  /** When true, the dialog will capture a screenshot on submit. */
+  screenshot?: boolean;
 }
 
 type Listener = (prefill: FeedbackPrefill) => void;

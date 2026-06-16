@@ -58,6 +58,8 @@ export class PageErrorBoundary extends Component<Props, State> {
       title: 'Page crash',
       description: `The page crashed with:\n\n${message}\n\nWhat I was doing: `,
       errorId: this.state.errorId ?? undefined,
+      category: 'bug',
+      screenshot: true,
     });
   };
 
