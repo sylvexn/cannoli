@@ -58,7 +58,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDraftComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
-    userMaxAffordableCost, userConflictRoster,
+    userMaxAffordableCost, selfAffordCap, userConflictRoster,
     currentDrafterMaxAffordableCost, currentDrafterConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
@@ -369,6 +369,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
           onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
           totalCount={TIER_LIST.length}
           filteredCount={filteredPool.length}
+          showAffordableToggle={isDraftRunning && state.userTeamId != null}
+          affordCap={selfAffordCap}
         />
       </div>
 
@@ -474,6 +476,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
           isLiveMode={isDraftRunning}
           userTeamId={state.userTeamId}
           pointCap={state.pointCap}
+          rosterSize={league.season?.rosterSize ?? 10}
+          teraCaptainSlots={league.season?.teraCaptainSlots ?? 2}
           draftQueue={state.draftQueue}
           onQueueRemove={handleQueueRemove}
           autoDraftQueue={state.autoDraftQueue}

@@ -284,6 +284,11 @@ export interface ApiDraftState {
   picks: { teamId: string; pokemonName: string; tier: number; pickNumber: number }[];
   snakeOrder: ApiSnakePick[];
   teamPoints: Record<string, number>;
+  /** Per-team draft config — surfaced so the client doesn't hardcode 110.
+   *  Optional for backwards-compat with older endpoints that don't return it. */
+  pointCap?: number;
+  rosterSize?: number;
+  teraCaptainSlots?: number;
 }
 
 // ─── API functions ───────────────────────────────────────────────────────────

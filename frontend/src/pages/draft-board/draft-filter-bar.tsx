@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, X, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { Search, X, SlidersHorizontal, ChevronDown, Wallet } from 'lucide-react';
 import type { DraftFilters } from './types';
 
 
@@ -25,10 +25,17 @@ interface DraftFilterBarProps {
   onUpdate: (filters: Partial<DraftFilters>) => void;
   totalCount: number;
   filteredCount: number;
+  /** Show the "fits my budget" affordability toggle. Hidden outside an active draft. */
+  showAffordableToggle?: boolean;
+  /** Highest tier the user can afford right now — drives the toggle's hover hint. */
+  affordCap?: number;
 }
 
-export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }: DraftFilterBarProps) {
-  const hasActiveFilters = filters.search || filters.abilitySearch || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20;
+export function DraftFilterBar({
+  filters, onUpdate, totalCount, filteredCount,
+  showAffordableToggle, affordCap,
+}: DraftFilterBarProps) {
+  const hasActiveFilters = filters.search || filters.abilitySearch || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20 || filters.affordableOnly;
   const typesActive = filters.types.length > 0;
 
   return (
@@ -95,6 +102,34 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
       {/* Type filter — collapsed pill that expands into a popover */}
       <TypeFilterPill filters={filters} onUpdate={onUpdate} typesActive={typesActive} />
 
+      {/* Affordability toggle — only relevant during an active draft. */}
+      {showAffordableToggle && (
+        <button
+          type="button"
+          onClick={() => onUpdate({ affordableOnly: !filters.affordableOnly })}
+          aria-pressed={filters.affordableOnly}
+          title={
+            affordCap != null
+              ? `Show only Pokemon ≤ ${affordCap}pt (your effective budget after reserving for remaining picks)`
+              : 'Show only Pokemon you can afford right now'
+          }
+          className={cn(
+            'h-8 inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs transition-colors',
+            filters.affordableOnly
+              ? 'border-neon/40 bg-neon/10 text-neon shadow-[0_0_10px_rgba(34,211,238,0.20)]'
+              : 'border-border-default bg-surface-raised text-text-muted hover:text-text-secondary',
+          )}
+        >
+          <Wallet size={12} aria-hidden />
+          <span className="font-medium">Fits</span>
+          {affordCap != null && (
+            <span className="text-[10px] font-mono tabular-nums text-text-muted/70">
+              ≤{affordCap}pt
+            </span>
+          )}
+        </button>
+      )}
+
       {/* Ownership filter */}
       <Select
         value={filters.ownership}
@@ -138,6 +173,7 @@ export function DraftFilterBar({ filters, onUpdate, totalCount, filteredCount }:
             size="sm"
             onClick={() => onUpdate({
               search: '', abilitySearch: '', tierMin: 1, tierMax: 20, types: [], typeMode: 'or', ownership: 'all',
+              affordableOnly: false,
             })}
             className="h-7 text-xs text-text-muted hover:text-neon"
           >

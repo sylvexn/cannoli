@@ -98,6 +98,12 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
     ? captainHeadroomNeeded(userRoster, teraCaptainSlots)
     : 0;
   const captainBudgetWarning = captainReserve > 0 && remaining < captainReserve;
+  // Effective budget for the NEXT pick: raw remaining minus 1pt reserved for
+  // each MANDATORY remaining pick beyond the next one. Surfaces "max single-
+  // pick cost" so the coach sees why their effective ceiling is below
+  // `remaining`. Captain markup stays a separate soft warning row.
+  const reserveForFuturePicks = picksLeft > 1 ? picksLeft - 1 : 0;
+  const effectiveBudget = Math.max(0, remaining - reserveForFuturePicks);
 
   // Place user's team at the top during live mode
   const orderedTeams = isLiveMode && userTeamId
@@ -226,9 +232,19 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
                           : 'bg-surface-overlay/40 text-text-muted',
                       )}>
                         <span>~<span className="font-bold">{avgPerPick.toFixed(1)}</span>pt/pick</span>
-                        <span className="text-text-muted/60">{picksLeft} picks left</span>
+                        <span className="text-text-muted/60">{picksLeft} pick{picksLeft === 1 ? '' : 's'} left</span>
                         {avgPerPick <= 2 && <AlertTriangle size={10} aria-label="Low budget per pick" />}
                       </div>
+                      {reserveForFuturePicks > 0 && (
+                        <div className="mt-1 flex items-center justify-between px-2 py-1 rounded bg-surface-overlay/30 text-[10px] font-mono text-text-muted">
+                          <span title="Highest tier you can take right now after reserving 1pt for each remaining mandatory pick">
+                            max single pick: <span className="text-text-primary font-bold">{effectiveBudget}pt</span>
+                          </span>
+                          <span className="text-text-muted/60">
+                            reserve {reserveForFuturePicks}pt
+                          </span>
+                        </div>
+                      )}
                       {captainReserve > 0 && (
                         <div className={cn(
                           'mt-1 flex items-center justify-between px-2 py-1 rounded text-[10px] font-mono',

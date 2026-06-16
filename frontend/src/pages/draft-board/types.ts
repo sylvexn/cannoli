@@ -59,6 +59,10 @@ export interface DraftFilters {
   /** Filter by ability name (case-insensitive substring match) */
   abilitySearch: string;
   ownership: 'all' | 'owned' | 'free-agent';
+  /** When true (active draft only), hide Pokemon whose tier exceeds the user's
+   *  current effective budget (raw remaining minus min-cost reserve for
+   *  remaining picks). Captain markup is treated as a soft warning, not a filter. */
+  affordableOnly: boolean;
   sortBy: 'tier-desc' | 'tier-asc' | 'name-asc' | 'name-desc';
 }
 
@@ -70,6 +74,7 @@ export const DEFAULT_FILTERS: DraftFilters = {
   typeMode: 'or',
   abilitySearch: '',
   ownership: 'all',
+  affordableOnly: false,
   sortBy: 'tier-desc',
 };
 
