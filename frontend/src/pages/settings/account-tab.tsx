@@ -2,10 +2,12 @@ import { useAuth } from '@/lib/auth-context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { useFormatDate } from '@/lib/format';
 import { IdCard } from 'lucide-react';
 
 export function AccountTab() {
   const { user } = useAuth();
+  const fmtDate = useFormatDate();
 
   return (
     <Card>
@@ -34,7 +36,7 @@ export function AccountTab() {
           <div className="space-y-1">
             <label className="text-xs text-text-muted">Member since</label>
             <p className="text-xs text-text-primary font-mono">
-              {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
+              {user?.createdAt ? fmtDate(user.createdAt) : '—'}
             </p>
           </div>
         </div>

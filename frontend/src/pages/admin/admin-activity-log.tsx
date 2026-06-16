@@ -9,6 +9,7 @@ import {
 import { api } from '@/lib/api';
 import type { ApiActivityEvent } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
+import { useFormatTime, useFormatDate } from '@/lib/format';
 import type { EventCategory } from '@/lib/types';
 import { EmptyState } from '@/components/empty-state';
 
@@ -241,14 +242,14 @@ export function AdminActivityLog() {
 
 function EventRow({ event }: { event: ApiActivityEvent }) {
   const { leagues } = useAppData();
+  const fmtTime = useFormatTime();
+  const fmtDate = useFormatDate();
   const Icon = EVENT_ICONS[event.type] || Settings;
   const league = event.leagueId ? leagues.find(l => l.id === event.leagueId) : null;
 
   const ts = new Date(event.timestamp ?? Date.now());
   const isToday = new Date().toDateString() === ts.toDateString();
-  const timeStr = isToday
-    ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const timeStr = isToday ? fmtTime(ts) : fmtDate(ts, { year: 'hide' });
 
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-overlay/50 transition-colors group">
