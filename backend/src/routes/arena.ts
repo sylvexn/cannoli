@@ -198,22 +198,64 @@ function getUserTeam(userId: number): { teamId: string; leagueId: string } | nul
   return team ? { teamId: team.id, leagueId: team.leagueId } : null;
 }
 
-function getCurrentMatch(teamId: string, leagueId: string) {
+/**
+ * All of a team's playable matches across every week (not just the current
+ * one), sorted by week. "Playable" = regular phase, not yet completed. This
+ * is what lets coaches battle a match early or as a make-up — they can ready
+ * up any of these, not only the current-week fixture.
+ */
+function getPlayableMatches(teamId: string, leagueId: string) {
   const league = getLeague(leagueId);
-  if (!league) return null;
-  if (league.phase !== 'regular') return null;
+  if (!league) return [];
+  if (league.phase !== 'regular') return [];
 
-  // Find the match for this team in the current week
-  const match = db.select().from(schema.matches).where(
-    and(
-      eq(schema.matches.leagueId, leagueId),
-      eq(schema.matches.week, league.currentWeek),
-    ),
-  ).all().find(m =>
+  return db.select().from(schema.matches).where(
+    eq(schema.matches.leagueId, leagueId),
+  ).all().filter(m =>
     (m.homeTeamId === teamId || m.awayTeamId === teamId) &&
     (m.status === 'scheduled' || m.status === 'ready' || m.status === 'in_progress'),
-  );
-  return match ?? null;
+  ).sort((a, b) => a.week - b.week);
+}
+
+/** The team's fixture for the league's current week, if still playable. */
+function getCurrentMatch(teamId: string, leagueId: string) {
+  const league = getLeague(leagueId);
+  if (!league || league.phase !== 'regular') return null;
+  return getPlayableMatches(teamId, leagueId).find(m => m.week === league.currentWeek) ?? null;
+}
+
+/**
+ * Resolve which match a ready/unready action targets. When the client names
+ * a specific `matchId` (coach picked a week from the selector) we honor it —
+ * but only if it's one of THIS team's playable matches, so a client can't
+ * touch a row it doesn't own. With no `matchId` we fall back to the
+ * current-week fixture (legacy clients / default behavior).
+ */
+function resolveTargetMatch(teamId: string, leagueId: string, matchId?: string) {
+  if (matchId) {
+    return getPlayableMatches(teamId, leagueId).find(m => m.id === matchId) ?? null;
+  }
+  return getCurrentMatch(teamId, leagueId);
+}
+
+/** Shape a match row into the Arena client payload (adds team info + isHome). */
+function buildMatchPayload(matchId: string, teamId: string, currentWeek: number) {
+  const data = getMatchWithTeams(matchId);
+  if (!data) return null;
+  const { match, homeTeam, awayTeam } = data;
+  return {
+    matchId: match.id,
+    leagueId: match.leagueId,
+    week: match.week,
+    isCurrentWeek: match.week === currentWeek,
+    status: match.status,
+    readyHome: match.readyHome,
+    readyAway: match.readyAway,
+    homeTeam: homeTeam ? { id: homeTeam.id, name: homeTeam.teamName, abbrev: homeTeam.teamAbbrev, color: homeTeam.teamColor } : null,
+    awayTeam: awayTeam ? { id: awayTeam.id, name: awayTeam.teamName, abbrev: awayTeam.teamAbbrev, color: awayTeam.teamColor } : null,
+    isHome: match.homeTeamId === teamId,
+    psRoomId: match.psRoomId,
+  };
 }
 
 function getMatchWithTeams(matchId: string) {
@@ -291,28 +333,21 @@ export const arenaRoutes = new Elysia()
     const token = cookieHeader ? parseSessionToken(cookieHeader) : null;
     const user = token ? validateSession(token) : null;
 
+    // myMatches  — every playable fixture (any week) for the coach's team, so
+    //              the Arena can offer a week picker for early/make-up battles.
+    // myMatch    — the current-week fixture only (kept for the sticky
+    //              MatchBanner, which nudges about the week's match).
     let myMatch = null;
+    let myMatches: NonNullable<ReturnType<typeof buildMatchPayload>>[] = [];
     if (user) {
       const team = getUserTeam(parseInt(user.id));
       if (team) {
-        const match = getCurrentMatch(team.teamId, team.leagueId);
-        if (match) {
-          const data = getMatchWithTeams(match.id);
-          if (data) {
-            myMatch = {
-              matchId: match.id,
-              leagueId: match.leagueId,
-              week: match.week,
-              status: match.status,
-              readyHome: match.readyHome,
-              readyAway: match.readyAway,
-              homeTeam: data.homeTeam ? { id: data.homeTeam.id, name: data.homeTeam.teamName, abbrev: data.homeTeam.teamAbbrev, color: data.homeTeam.teamColor } : null,
-              awayTeam: data.awayTeam ? { id: data.awayTeam.id, name: data.awayTeam.teamName, abbrev: data.awayTeam.teamAbbrev, color: data.awayTeam.teamColor } : null,
-              isHome: data.match.homeTeamId === team.teamId,
-              psRoomId: match.psRoomId,
-            };
-          }
-        }
+        const league = getLeague(team.leagueId);
+        const currentWeek = league?.currentWeek ?? -1;
+        myMatches = getPlayableMatches(team.teamId, team.leagueId)
+          .map(m => buildMatchPayload(m.id, team.teamId, currentWeek))
+          .filter((m): m is NonNullable<typeof m> => m !== null);
+        myMatch = myMatches.find(m => m.isCurrentWeek) ?? null;
       }
     }
 
@@ -335,7 +370,7 @@ export const arenaRoutes = new Elysia()
       invitee: l.invitee, players: l.players, ready: l.ready, status: l.status,
     }));
 
-    return { myMatch, liveMatches, scrimLobbies: lobbies };
+    return { myMatch, myMatches, liveMatches, scrimLobbies: lobbies };
   })
 
   // ─── Arena WebSocket ────────────────────────────────────────────────
@@ -371,10 +406,10 @@ export const arenaRoutes = new Elysia()
           }
         }
 
-        // Subscribe to their match if they have one
+        // Subscribe to all of their playable matches (any week) so ready-state
+        // updates reach them whichever week they choose to battle.
         if (team) {
-          const match = getCurrentMatch(team.teamId, team.leagueId);
-          if (match) {
+          for (const match of getPlayableMatches(team.teamId, team.leagueId)) {
             ws.subscribe(`arena:match:${match.id}`);
             addSpectator(match.id, ws);
           }
@@ -409,8 +444,7 @@ export const arenaRoutes = new Elysia()
             arenaClients.set(wsKey(ws), client);
 
             if (team) {
-              const match = getCurrentMatch(team.teamId, team.leagueId);
-              if (match) {
+              for (const match of getPlayableMatches(team.teamId, team.leagueId)) {
                 ws.subscribe(`arena:match:${match.id}`);
                 addSpectator(match.id, ws);
               }
@@ -427,7 +461,7 @@ export const arenaRoutes = new Elysia()
               return;
             }
 
-            const match = getCurrentMatch(client.teamId, client.leagueId);
+            const match = resolveTargetMatch(client.teamId, client.leagueId, msg.matchId);
             if (!match) {
               ws.send(JSON.stringify({ type: 'error', message: 'No match found' }));
               return;
@@ -507,7 +541,7 @@ export const arenaRoutes = new Elysia()
             const client = arenaClients.get(wsKey(ws));
             if (!client?.teamId || !client.leagueId) return;
 
-            const match = getCurrentMatch(client.teamId, client.leagueId);
+            const match = resolveTargetMatch(client.teamId, client.leagueId, msg.matchId);
             if (!match || match.status === 'in_progress' || match.status === 'completed') return;
 
             const isHome = match.homeTeamId === client.teamId;
@@ -689,26 +723,28 @@ export const arenaRoutes = new Elysia()
 
         const handle = setTimeout(() => {
           pendingUnready.delete(key);
-          const match = getCurrentMatch(teamId, leagueId);
-          if (!match) return;
-          if (match.status !== 'scheduled' && match.status !== 'ready') return;
+          // The coach may have readied any week's match — clear their ready
+          // flag on every pre-battle fixture they're still marked ready on.
+          for (const match of getPlayableMatches(teamId, leagueId)) {
+            if (match.status !== 'scheduled' && match.status !== 'ready') continue;
 
-          const isHome = match.homeTeamId === teamId;
-          const wasReady = isHome ? match.readyHome : match.readyAway;
-          if (!wasReady) return;
+            const isHome = match.homeTeamId === teamId;
+            const wasReady = isHome ? match.readyHome : match.readyAway;
+            if (!wasReady) continue;
 
-          const updateField = isHome ? { readyHome: false } : { readyAway: false };
-          db.update(schema.matches)
-            .set({ ...updateField, status: 'scheduled' })
-            .where(eq(schema.matches.id, match.id)).run();
+            const updateField = isHome ? { readyHome: false } : { readyAway: false };
+            db.update(schema.matches)
+              .set({ ...updateField, status: 'scheduled' })
+              .where(eq(schema.matches.id, match.id)).run();
 
-          db.insert(schema.matchReadyLog).values({
-            matchId: match.id,
-            teamId,
-            event: 'disconnect',
-          }).run();
+            db.insert(schema.matchReadyLog).values({
+              matchId: match.id,
+              teamId,
+              event: 'disconnect',
+            }).run();
 
-          broadcastMatchState(match.id);
+            broadcastMatchState(match.id);
+          }
         }, UNREADY_GRACE_MS);
         pendingUnready.set(key, handle);
       }

@@ -1,5 +1,11 @@
 /**
- * OfficialMatchCard — your scheduled match for the current week.
+ * OfficialMatchCard — the coach's league battles, with a week picker.
+ *
+ * A coach normally plays the current week's fixture, but battles sometimes get
+ * played early or as make-ups (issue: availability / vacations). So instead of
+ * locking to the current week, this lists every still-playable fixture and lets
+ * the coach choose which week to battle, then ready up that specific match.
+ *
  * Extracted from arena-tab.tsx so it can render standalone inside the
  * Showdown footer.
  */
@@ -8,93 +14,183 @@ import { Swords, LogIn, Loader2, Zap } from 'lucide-react';
 import type { ArenaMatch } from '../use-arena-websocket';
 
 interface Props {
-  match: ArenaMatch | null;
+  matches: ArenaMatch[];
+  selected: ArenaMatch | null;
+  onSelect: (matchId: string) => void;
   user: any;
-  onReady: () => void;
-  onUnready: () => void;
+  onReady: (matchId: string) => void;
+  onUnready: (matchId: string) => void;
 }
 
-export function OfficialMatchCard({ match, user, onReady, onUnready }: Props) {
+export function OfficialMatchCard({ matches, selected, onSelect, user, onReady, onUnready }: Props) {
+  const currentWeek = matches.find(m => m.isCurrentWeek)?.week ?? null;
+
   return (
     <section className="rounded-lg border border-border-default bg-surface-raised p-5">
       <div className="flex items-center gap-2 mb-3">
         <Swords size={14} className="text-orange-400" />
         <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
-          This Week's Match
+          Your Matches
         </h2>
       </div>
 
       {!user ? (
         <div className="flex items-center gap-2 text-text-muted text-sm">
           <LogIn size={14} />
-          Log in to see your match.
+          Log in to see your matches.
         </div>
-      ) : !match ? (
+      ) : matches.length === 0 ? (
         <div className="text-text-muted text-sm">
-          No match scheduled this week.
+          No matches to play right now.
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <TeamDisplay team={match.homeTeam} isReady={match.readyHome} leagueId={match.leagueId} />
-            <span className="text-text-muted text-xs font-mono uppercase">vs</span>
-            <TeamDisplay team={match.awayTeam} isReady={match.readyAway} leagueId={match.leagueId} />
-          </div>
-
-          <div className="text-xs text-text-muted text-center">
-            Week {match.week} &middot; {match.leagueId.charAt(0).toUpperCase() + match.leagueId.slice(1)} League
-            {match.status === 'in_progress' && (
-              <span className="ml-2 text-green-400 font-medium">
-                <Zap size={10} className="inline" /> LIVE
-              </span>
-            )}
-          </div>
-
-          {(match.status === 'scheduled' || match.status === 'ready') && (
-            <div className="flex justify-center">
-              {(() => {
-                const myReady = match.isHome ? match.readyHome : match.readyAway;
-                const opponentReady = match.isHome ? match.readyAway : match.readyHome;
-
-                if (match.readyHome && match.readyAway) {
-                  return (
-                    <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
-                      <Loader2 size={14} className="animate-spin" />
-                      Both ready — starting match...
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="flex flex-col items-center gap-2">
-                    <button
-                      onClick={myReady ? onUnready : onReady}
-                      className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
-                        myReady
-                          ? 'bg-green-400/20 text-green-400 border border-green-400/30 hover:bg-red-400/20 hover:text-red-400 hover:border-red-400/30'
-                          : 'bg-orange-400/20 text-orange-400 border border-orange-400/30 hover:bg-orange-400/30'
-                      }`}
-                    >
-                      {myReady ? 'Ready ✓ (click to unready)' : 'Ready Up'}
-                    </button>
-                    {opponentReady && (
-                      <span className="text-xs text-green-400 animate-pulse">
-                        Opponent is ready!
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
+        <div className="space-y-4">
+          {/* Week picker — battle early, on time, or a make-up */}
+          {matches.length > 1 && (
+            <div>
+              <div className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5">
+                Choose a week to battle
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {matches.map(m => (
+                  <WeekPill
+                    key={m.matchId}
+                    match={m}
+                    active={selected?.matchId === m.matchId}
+                    onClick={() => onSelect(m.matchId)}
+                  />
+                ))}
+              </div>
             </div>
           )}
-          {match.status === 'in_progress' && (
-            <div className="text-center">
-              <span className="text-sm text-green-400 font-medium">Match in progress</span>
-            </div>
+
+          {selected && (
+            <SelectedMatch
+              match={selected}
+              currentWeek={currentWeek}
+              onReady={onReady}
+              onUnready={onUnready}
+            />
           )}
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Week picker pill ────────────────────────────────────────────────────────
+
+function WeekPill({ match, active, onClick }: { match: ArenaMatch; active: boolean; onClick: () => void }) {
+  const opponent = match.isHome ? match.awayTeam : match.homeTeam;
+  const dot =
+    match.status === 'in_progress' ? 'bg-green-400 animate-pulse'
+    : match.status === 'ready' ? 'bg-orange-400'
+    : match.status === 'completed' || match.status === 'disputed' ? 'bg-text-muted/40'
+    : 'bg-text-muted';
+
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+        active
+          ? 'bg-orange-400/15 text-orange-400 ring-1 ring-orange-400/40'
+          : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary'
+      }`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      <span className="font-mono">W{match.week}</span>
+      {match.isCurrentWeek && (
+        <span className="text-[9px] font-mono uppercase text-orange-400/80">now</span>
+      )}
+      <span className="text-text-muted">{opponent?.abbrev.toUpperCase() ?? 'TBD'}</span>
+    </button>
+  );
+}
+
+// ─── Selected match detail ───────────────────────────────────────────────────
+
+function SelectedMatch({
+  match, currentWeek, onReady, onUnready,
+}: {
+  match: ArenaMatch;
+  currentWeek: number | null;
+  onReady: (matchId: string) => void;
+  onUnready: (matchId: string) => void;
+}) {
+  const timing =
+    currentWeek === null || match.week === currentWeek ? null
+    : match.week > currentWeek ? 'Playing ahead of schedule'
+    : 'Make-up match';
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <TeamDisplay team={match.homeTeam} isReady={match.readyHome} leagueId={match.leagueId} />
+        <span className="text-text-muted text-xs font-mono uppercase">vs</span>
+        <TeamDisplay team={match.awayTeam} isReady={match.readyAway} leagueId={match.leagueId} />
+      </div>
+
+      <div className="text-xs text-text-muted text-center">
+        Week {match.week} &middot; {match.leagueId.charAt(0).toUpperCase() + match.leagueId.slice(1)} League
+        {match.status === 'in_progress' && (
+          <span className="ml-2 text-green-400 font-medium">
+            <Zap size={10} className="inline" /> LIVE
+          </span>
+        )}
+        {timing && match.status !== 'in_progress' && (
+          <span className="ml-2 text-amber-400/90">&middot; {timing}</span>
+        )}
+      </div>
+
+      {(match.status === 'scheduled' || match.status === 'ready') && (
+        <div className="flex justify-center">
+          {(() => {
+            const myReady = match.isHome ? match.readyHome : match.readyAway;
+            const opponentReady = match.isHome ? match.readyAway : match.readyHome;
+
+            if (match.readyHome && match.readyAway) {
+              return (
+                <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
+                  <Loader2 size={14} className="animate-spin" />
+                  Both ready — starting match...
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  onClick={() => (myReady ? onUnready(match.matchId) : onReady(match.matchId))}
+                  className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
+                    myReady
+                      ? 'bg-green-400/20 text-green-400 border border-green-400/30 hover:bg-red-400/20 hover:text-red-400 hover:border-red-400/30'
+                      : 'bg-orange-400/20 text-orange-400 border border-orange-400/30 hover:bg-orange-400/30'
+                  }`}
+                >
+                  {myReady ? 'Ready ✓ (click to unready)' : 'Ready Up'}
+                </button>
+                {opponentReady && (
+                  <span className="text-xs text-green-400 animate-pulse">
+                    Opponent is ready!
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+      {match.status === 'in_progress' && (
+        <div className="text-center">
+          <span className="text-sm text-green-400 font-medium">Match in progress</span>
+        </div>
+      )}
+      {(match.status === 'completed' || match.status === 'disputed') && (
+        <div className="text-center">
+          <span className="text-sm text-text-muted">This match is already finished.</span>
+        </div>
+      )}
+    </div>
   );
 }
 
