@@ -18,6 +18,8 @@ import { db, schema, sqlite } from '../../db';
 import { eq, desc, and, gte, lt, like, or, type SQL } from 'drizzle-orm';
 import { requireDev } from '../../lib/auth-guards';
 import { GIT_SHA } from '../../lib/version';
+import { computeFingerprint } from '../../lib/error-groups';
+import { genErrorId } from '../../lib/request-log';
 // heartbeat.ts is a future module — import will resolve once it is created.
 import { getHealthSnapshot } from '../../lib/heartbeat';
 
@@ -78,6 +80,156 @@ function loadSparks(fingerprints: string[]): Map<string, number[]> {
   }
 
   return result;
+}
+
+// ─── Demo error seeding (dev tooling) ─────────────────────────────────────────
+//
+// Injects realistic-looking fake faults so the Observability dashboard + API
+// Logs tab can be demonstrated/screenshotted without waiting for a real crash.
+// Distinct from real ingestion: writes straight to the tables and does NOT fire
+// Discord alerts. Each fault has fixed inputs so its fingerprint is deterministic
+// — that's how the matching "clear" pass finds and removes exactly these rows.
+
+type DemoFault = {
+  /** 'client' rows slot in as synthetic CLIENT/500 (mirrors logClientError);
+   *  'server' rows are real HTTP 500s with a method. */
+  source: 'client' | 'server';
+  /** Fingerprint kind — the browser hook for client faults, 'server' otherwise. */
+  kind: string;
+  method: string;
+  name: string;
+  message: string;
+  path: string;
+  stack: string;
+  /** Distinct users to attribute to the group (for the "affected" count). */
+  users: number;
+  /** Roughly how many occurrences to scatter across the last 24h. */
+  occurrences: number;
+};
+
+const DEMO_FAULTS: DemoFault[] = [
+  {
+    source: 'client', kind: 'render', method: 'CLIENT',
+    name: 'TypeError', path: '/leagues/ruby/draft',
+    message: "Cannot read properties of undefined (reading 'roster')",
+    stack:
+      "TypeError: Cannot read properties of undefined (reading 'roster')\n" +
+      '    at DraftBoard (src/pages/draft/draft-board.tsx:142:31)\n' +
+      '    at renderWithHooks (src/vendor/react-dom.js:16305:18)\n' +
+      '    at mountIndeterminateComponent (src/vendor/react-dom.js:20074:13)',
+    users: 4, occurrences: 17,
+  },
+  {
+    source: 'server', kind: 'server', method: 'GET',
+    name: 'SqliteError', path: '/api/leagues/ruby/standings',
+    message: 'database is locked',
+    stack:
+      'SqliteError: database is locked\n' +
+      '    at computeStandings (src/routes/standings.ts:88:14)\n' +
+      '    at handler (src/routes/standings.ts:31:20)',
+    users: 7, occurrences: 9,
+  },
+  {
+    source: 'client', kind: 'unhandledrejection', method: 'CLIENT',
+    name: 'TypeError', path: '/matchup',
+    message: 'Failed to fetch',
+    stack:
+      'TypeError: Failed to fetch\n' +
+      '    at loadMatchup (src/pages/matchup/use-matchup.ts:54:22)\n' +
+      '    at async MatchupCenter (src/pages/matchup/index.tsx:38:5)',
+    users: 2, occurrences: 3,
+  },
+];
+
+const DEMO_USERNAMES = ['ashketchum', 'mistyw', 'brockr', 'garyoak', 'coach_red', 'elite_lance', 'prof_oak'];
+
+/** Fingerprint for a demo fault — recomputed identically at seed + clear time. */
+function demoFingerprint(f: DemoFault): string {
+  return computeFingerprint({ kind: f.kind, name: f.name, message: f.message, stack: f.stack, path: f.path });
+}
+
+/** Delete every demo error group + its request_logs occurrences. Returns the
+ *  number of request_logs rows removed. Best-effort. */
+function clearDemoErrors(): number {
+  const fps = DEMO_FAULTS.map(demoFingerprint);
+  const placeholders = fps.map(() => '?').join(',');
+  const removed = sqlite
+    .query<{ n: number }, string[]>(`SELECT COUNT(*) AS n FROM request_logs WHERE fingerprint IN (${placeholders})`)
+    .get(...fps)?.n ?? 0;
+  sqlite.query(`DELETE FROM request_logs WHERE fingerprint IN (${placeholders})`).run(...fps);
+  sqlite.query(`DELETE FROM error_groups WHERE fingerprint IN (${placeholders})`).run(...fps);
+  return removed;
+}
+
+/**
+ * Seed (or re-seed) the demo faults. Wipes any prior demo rows first so the
+ * counts never run away on repeated clicks. Spreads occurrences across the last
+ * 24h with a recent burst on the first fault so its sparkline shows a spike.
+ */
+function seedDemoErrors(): { groups: number; occurrences: number } {
+  clearDemoErrors();
+  let occTotal = 0;
+
+  for (let fi = 0; fi < DEMO_FAULTS.length; fi++) {
+    const f = DEMO_FAULTS[fi]!;
+    const fp = demoFingerprint(f);
+
+    // Build minute-offsets (into the past). The first fault gets a tight recent
+    // cluster (a "spike"); the rest scatter evenly over the 24h window.
+    const offsets: number[] = [];
+    for (let i = 0; i < f.occurrences; i++) {
+      const recentBurst = fi === 0 && i >= f.occurrences - 6;
+      const mins = recentBurst
+        ? Math.floor(Math.random() * 18)                // last ~18 min
+        : Math.floor(Math.random() * 1440);             // anywhere in 24h
+      offsets.push(mins);
+    }
+    offsets.sort((a, b) => b - a); // oldest first
+
+    const isClient = f.source === 'client';
+    const rowErrorName = isClient ? `${f.name} (${f.kind})` : f.name;
+
+    for (let i = 0; i < offsets.length; i++) {
+      const mins = offsets[i]!;
+      const username = DEMO_USERNAMES[(fi * 3 + i) % DEMO_USERNAMES.length]!;
+      const userId = 9000 + ((fi * 3 + i) % f.users);
+      const durationMs = isClient ? 0 : 40 + Math.floor(Math.random() * 900);
+      sqlite
+        .query(
+          `INSERT INTO request_logs
+             (source, method, path, status, duration_ms, user_id, username, ip,
+              error_id, error_name, error_message, error_stack, fingerprint, request_id, timestamp)
+           VALUES (?, ?, ?, 500, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?))`,
+        )
+        .run(
+          f.source, f.method, f.path, durationMs, userId, username, '203.0.113.' + (10 + fi),
+          genErrorId(), rowErrorName, f.message, f.stack, fp, genErrorId(), `-${mins} minutes`,
+        );
+      occTotal++;
+    }
+
+    // Upsert the group row directly with realistic first/last-seen spans.
+    const oldest = offsets[0] ?? 0;
+    const newest = offsets[offsets.length - 1] ?? 0;
+    sqlite
+      .query(
+        `INSERT INTO error_groups
+           (fingerprint, kind, error_name, sample_message, sample_path, sample_stack,
+            count, affected_users, status, first_seen, last_seen, first_version, last_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open',
+                 datetime('now', ?), datetime('now', ?), ?, ?)
+         ON CONFLICT(fingerprint) DO UPDATE SET
+           count = excluded.count, affected_users = excluded.affected_users,
+           last_seen = excluded.last_seen, status = 'open',
+           resolved_at = NULL, resolved_version = NULL`,
+      )
+      .run(
+        fp, f.kind, f.name, f.message, f.path, f.stack,
+        f.occurrences, f.users, `-${oldest} minutes`, `-${newest} minutes`, GIT_SHA, GIT_SHA,
+      );
+  }
+
+  return { groups: DEMO_FAULTS.length, occurrences: occTotal };
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -465,6 +617,25 @@ export const observabilityRoutes = new Elysia()
     lastSeenMarkers.set(userId, now);
 
     return { success: true };
+  }, { beforeHandle: requireDev })
+
+  // ── 8. Seed demo errors (dev tooling) ─────────────────────────────────────
+  //
+  // Injects fake-but-realistic error groups + request_logs occurrences so the
+  // dashboard can be demonstrated/screenshotted. Re-seeding wipes the prior
+  // demo rows first. No Discord alerts are fired.
+
+  .post('/api/admin/observability/seed-demo', () => {
+    return { success: true, ...seedDemoErrors() };
+  }, { beforeHandle: requireDev })
+
+  // ── 9. Clear demo errors ──────────────────────────────────────────────────
+  //
+  // Removes exactly the demo groups + their occurrences (matched by the fixed
+  // demo fingerprints). Leaves all real errors untouched.
+
+  .post('/api/admin/observability/seed-demo/clear', () => {
+    return { success: true, cleared: clearDemoErrors() };
   }, { beforeHandle: requireDev })
 
 ;

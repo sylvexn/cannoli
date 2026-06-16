@@ -789,6 +789,11 @@ export const api = {
     fetchJson<{ unread: number }>('/api/admin/observability/unread'),
   markObservabilitySeen: () =>
     postJson<{ success: boolean }>('/api/admin/observability/seen'),
+  // Dev tooling: inject / remove fake error groups for demos + screenshots.
+  seedDemoErrors: () =>
+    postJson<{ success: boolean; groups: number; occurrences: number }>('/api/admin/observability/seed-demo'),
+  clearDemoErrors: () =>
+    postJson<{ success: boolean; cleared: number }>('/api/admin/observability/seed-demo/clear'),
 
   // Report a browser-side fault (error boundary / global handlers). Returns a
   // short ref the user can quote in feedback. Caller swallows failures.

@@ -23,8 +23,10 @@ import type { ApiRequestLog, ApiRequestLogResponse } from '@/lib/api';
 import { useFormatTime, useFormatDate } from '@/lib/format';
 import { EmptyState } from '@/components/empty-state';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
   Search, Filter, X, ChevronDown, ChevronRight, AlertTriangle, RefreshCw,
+  FlaskConical, Trash2, Zap,
 } from 'lucide-react';
 
 const PAGE_SIZE = 50;
@@ -75,6 +77,10 @@ export function AdminApiLogs() {
   const [methodFilter, setMethodFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [limit, setLimit] = useState(PAGE_SIZE);
+  const [seeding, setSeeding] = useState(false);
+  // When armed, the component throws on the next render to trip the app-level
+  // PageErrorBoundary — lets us screenshot the real user-facing crash page.
+  const [crash, setCrash] = useState(false);
 
   // Debounce the search box so we don't fire a request per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -122,6 +128,38 @@ export function AdminApiLogs() {
 
   function resetPaging() { setLimit(PAGE_SIZE); }
 
+  async function handleSeedDemo() {
+    setSeeding(true);
+    try {
+      const r = await api.seedDemoErrors();
+      toast.success(`Seeded ${r.groups} demo error groups (${r.occurrences} occurrences). Open the Observability tab to view them.`);
+      load();
+    } catch {
+      toast.error('Failed to seed demo errors');
+    } finally {
+      setSeeding(false);
+    }
+  }
+
+  async function handleClearDemo() {
+    try {
+      const r = await api.clearDemoErrors();
+      toast.success(`Removed demo errors (${r.cleared} log rows).`);
+      load();
+    } catch {
+      toast.error('Failed to clear demo errors');
+    }
+  }
+
+  // Throwing during render is caught by the app-level PageErrorBoundary, which
+  // renders the themed "Something went wrong" page (and reports a real client
+  // error, so the crash also lands in these logs).
+  if (crash) {
+    const err = new Error("Cannot read properties of undefined (reading 'roster')");
+    err.name = 'TypeError';
+    throw err;
+  }
+
   return (
     <div className="space-y-4">
       {/* Stats strip */}
@@ -154,13 +192,38 @@ export function AdminApiLogs() {
           <span className="text-text-muted">p95:</span>
           <span className="font-mono text-text-secondary tabular-nums">{stats?.p95Ms ?? 0}ms</span>
         </div>
-        <Button
-          variant="ghost" size="sm" onClick={load}
-          className="h-7 ml-auto text-text-muted hover:text-text-primary"
-          title="Refresh"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-        </Button>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost" size="sm" onClick={handleSeedDemo} disabled={seeding}
+            className="h-7 text-text-muted hover:text-neon"
+            title="Inject fake error groups + log rows (for demos / screenshots)"
+          >
+            <FlaskConical size={13} className={seeding ? 'animate-pulse' : ''} />
+            Seed demo
+          </Button>
+          <Button
+            variant="ghost" size="sm" onClick={handleClearDemo}
+            className="h-7 text-text-muted hover:text-text-primary"
+            title="Remove the seeded demo errors"
+          >
+            <Trash2 size={13} />
+          </Button>
+          <Button
+            variant="ghost" size="sm" onClick={() => setCrash(true)}
+            className="h-7 text-text-muted hover:text-loss"
+            title="Trigger the user-facing crash page (also reports a real client error)"
+          >
+            <Zap size={13} />
+            Crash page
+          </Button>
+          <Button
+            variant="ghost" size="sm" onClick={load}
+            className="h-7 text-text-muted hover:text-text-primary"
+            title="Refresh"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
