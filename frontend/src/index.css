@@ -414,7 +414,9 @@ aside {
   transition: none;
 }
 
-.gem-wrapper:hover .league-banner::before {
+/* Glint is the non-interactive treatment; enhanced .gem-3d gems use a
+   pointer-tracked specular instead (defined in the Gem 3D block below). */
+.gem-wrapper:not(.gem-3d):hover .league-banner::before {
   animation: glint 0.6s ease-out forwards;
 }
 
@@ -493,6 +495,72 @@ aside {
     0 1px 4px rgba(22, 163, 74, 0.4),
     inset 0 1px 1px rgba(187, 247, 208, 0.2),
     inset 0 -1px 1px rgba(5, 46, 22, 0.4);
+}
+
+/* ── Gem 3D interactive treatment (sidebar nav, opt-in via .gem-3d) ──
+   Pointer-tracked tilt + cursor specular + hue-matched glow. No conic sheen.
+   --mx/--my (0–1) are written by usePointerTilt on the .league-banner itself.
+   The glow uses filter: drop-shadow (not box-shadow) because the banner has a
+   clip-path, which would clip an outer box-shadow but not a drop-shadow. */
+.gem-3d {
+  perspective: 520px;
+}
+
+.gem-3d .league-banner {
+  transform-style: preserve-3d;
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.18s ease;
+  will-change: transform;
+}
+
+.gem-3d .league-banner.tilt {
+  transform:
+    rotateX(calc((var(--my, 0.5) - 0.5) * -10deg))
+    rotateY(calc((var(--mx, 0.5) - 0.5) * 16deg))
+    translateZ(8px) scale(1.04);
+}
+
+/* Pointer-tracked specular highlight — overrides the glint ::before for gems. */
+.gem-3d .league-banner::before {
+  inset: 0;
+  transform: none;
+  opacity: 0;
+  background: radial-gradient(
+    110px circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.1) 28%,
+    transparent 58%
+  );
+  mix-blend-mode: overlay;
+  transition: opacity 0.2s ease;
+  animation: none;
+}
+.gem-3d .league-banner:hover::before {
+  opacity: 1;
+}
+
+/* Hue-matched dark glow bloom on hover (clip-path-safe drop-shadows). */
+.gem-3d .league-banner-sapphire:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(37, 99, 235, 0.55))
+    drop-shadow(0 7px 22px rgba(37, 99, 235, 0.4));
+}
+.gem-3d .league-banner-ruby:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(220, 38, 38, 0.55))
+    drop-shadow(0 7px 22px rgba(220, 38, 38, 0.4));
+}
+.gem-3d .league-banner-emerald:hover {
+  filter: brightness(1.08)
+    drop-shadow(0 2px 9px rgba(22, 163, 74, 0.55))
+    drop-shadow(0 7px 22px rgba(22, 163, 74, 0.4));
+}
+
+@media (prefers-reduced-motion) {
+  .gem-3d .league-banner,
+  .gem-3d .league-banner.tilt {
+    transform: none;
+    transition: filter 0.18s ease;
+  }
 }
 
 /* ─── Neon Logo ─── */
