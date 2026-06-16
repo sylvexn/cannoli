@@ -274,6 +274,8 @@ export interface ApiUserPreferences {
   notifyTrades: boolean;
   notifyMatches: boolean;
   notifyAnnouncements: boolean;
+  /** IANA zone (e.g. "America/New_York"); null means use the browser zone. */
+  timezone: string | null;
   updatedAt: string | null;
 }
 
