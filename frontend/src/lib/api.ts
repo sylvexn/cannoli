@@ -1274,7 +1274,7 @@ export const api = {
   }) =>
     postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
 
-  importMatchBattle: (matchId: string, data: { roomId: string }) =>
+  importMatchBattle: (matchId: string, data: { roomId?: string; replay?: string }) =>
     postJson<{ success: boolean; homeScore: number; awayScore: number; winnerTeamId: string | null; pokemonCount: number }>(`/api/admin/matches/${matchId}/import-battle`, data),
 
   // Team logo
