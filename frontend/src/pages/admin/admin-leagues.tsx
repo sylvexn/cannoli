@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -14,6 +17,7 @@ import {
 } from 'lucide-react';
 import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
 import { getErrorMessage } from '@/lib/errors';
+import { ScheduleDatesStep } from './season/schedule-dates-step';
 
 interface LeagueSettings {
   pointCap: number;
@@ -73,6 +77,10 @@ export function AdminLeagues() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   // Per-league: { actual: total captains assigned, expected: teamCount * cap }
   const [captainStats, setCaptainStats] = useState<Record<string, { actual: number; expected: number }>>({});
+  // Week-dates editor: keyed by league id
+  const [weekDatesOpen, setWeekDatesOpen] = useState<Record<string, boolean>>({});
+  const [weekDatesEdit, setWeekDatesEdit] = useState<Record<string, Record<string, string>>>({});
+  const [weekDatesSaving, setWeekDatesSaving] = useState<Record<string, boolean>>({});
 
   // Surface drift between configured Tera Captain slots and the number of
   // captains actually flagged on team rosters. Pulls each league's teams +
@@ -151,6 +159,28 @@ export function AdminLeagues() {
       toast.error(getErrorMessage(err, 'Save failed'));
     } finally {
       setSaving(prev => ({ ...prev, [leagueId]: false }));
+    }
+  }
+
+  function openWeekDates(leagueId: string) {
+    const league = leagues.find(l => l.id === leagueId);
+    const existing = league?.season?.weekDates ?? {};
+    setWeekDatesEdit(prev => ({ ...prev, [leagueId]: { ...existing } }));
+    setWeekDatesOpen(prev => ({ ...prev, [leagueId]: true }));
+  }
+
+  async function saveWeekDates(leagueId: string) {
+    const dates = weekDatesEdit[leagueId] ?? {};
+    setWeekDatesSaving(prev => ({ ...prev, [leagueId]: true }));
+    try {
+      await api.updateLeague(leagueId, { weekDates: dates });
+      toast.success('Week dates saved');
+      refreshLeagues();
+      setWeekDatesOpen(prev => ({ ...prev, [leagueId]: false }));
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Save failed'));
+    } finally {
+      setWeekDatesSaving(prev => ({ ...prev, [leagueId]: false }));
     }
   }
 
@@ -335,10 +365,49 @@ export function AdminLeagues() {
                 </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
-                  <div className="text-xs text-text-muted">
-                    {league.playerCount} players registered
-                    {!league.hasData && ' · No data yet'}
-                    {league.season.archived && ' · ARCHIVED'}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-text-muted">
+                      {league.playerCount} players registered
+                      {!league.hasData && ' · No data yet'}
+                      {league.season.archived && ' · ARCHIVED'}
+                    </div>
+                    <Dialog
+                      open={!!weekDatesOpen[league.id]}
+                      onOpenChange={(open) => {
+                        if (open) openWeekDates(league.id);
+                        else setWeekDatesOpen(prev => ({ ...prev, [league.id]: false }));
+                      }}
+                    >
+                      <DialogTrigger render={
+                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                          <Calendar size={12} />
+                          Week Dates
+                        </Button>
+                      } />
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle className="text-sm">
+                            Week Dates — {league.name}
+                          </DialogTitle>
+                        </DialogHeader>
+                        <ScheduleDatesStep
+                          totalWeeks={league.season.totalWeeks}
+                          weekDates={weekDatesEdit[league.id] ?? {}}
+                          setWeekDates={(next) => setWeekDatesEdit(prev => ({ ...prev, [league.id]: next }))}
+                        />
+                        <div className="flex justify-end pt-2">
+                          <Button
+                            size="sm"
+                            onClick={() => saveWeekDates(league.id)}
+                            disabled={weekDatesSaving[league.id]}
+                            className="bg-neon text-surface-base hover:bg-neon/90"
+                          >
+                            <Save size={14} />
+                            {weekDatesSaving[league.id] ? 'Saving…' : 'Save Dates'}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                   <Button
                     size="sm"
