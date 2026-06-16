@@ -8,6 +8,23 @@ import type { ApiError } from './errors';
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 /**
+ * Build a full URL for an uploads path stored in the DB.
+ *
+ * - Returns '' for empty/null input.
+ * - Returns the value unchanged if it's already absolute (http/https/leading /).
+ * - Otherwise prepends `${API_BASE}/uploads/` so relative keys like
+ *   "user-avatars/123.png" resolve to the correct backend origin in all
+ *   environments (dev proxy, staging, production).
+ */
+export function buildUploadUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('/')) {
+    return path;
+  }
+  return `${API_BASE}/uploads/${path}`;
+}
+
+/**
  * Read the csrf_token cookie set by the backend on login + /me.
  * This is the JS-readable companion to the httpOnly session cookie; we echo
  * its value into the X-CSRF-Token header on writes so the backend can
@@ -1213,6 +1230,9 @@ export const api = {
     }
     return res.json() as Promise<{ success: boolean; path: string }>;
   },
+
+  // Remove avatar — resets avatarPath to null, best-effort deletes the file.
+  deleteAvatar: () => deleteJson<{ success: boolean }>('/api/users/me/avatar'),
 
   // Preferences
   getMyPreferences: () => fetchJson<ApiUserPreferences>('/api/users/me/preferences'),

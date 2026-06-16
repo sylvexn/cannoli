@@ -11,10 +11,11 @@
  */
 
 import { Elysia } from 'elysia';
+import { unlinkSync } from 'fs';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
-import { writeUpload } from '../lib/uploads';
+import { writeUpload, uploadsPath } from '../lib/uploads';
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_BIO = 280;
@@ -217,6 +218,29 @@ export const userRoutes = new Elysia()
     }).run();
 
     return { success: true, path: `/uploads/${relativePath}` };
+  })
+
+  // ─── DELETE /api/users/me/avatar ─────────────────────────────────────
+  .delete('/api/users/me/avatar', async ({ user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const row = db.select({ avatarPath: schema.users.avatarPath })
+      .from(schema.users)
+      .where(eq(schema.users.id, parseInt(user.id)))
+      .get();
+
+    if (row?.avatarPath) {
+      // Best-effort delete — ignore errors (file may already be gone).
+      try {
+        unlinkSync(uploadsPath(row.avatarPath));
+      } catch {
+        // ignore
+      }
+    }
+
+    db.update(schema.users).set({ avatarPath: null }).where(eq(schema.users.id, parseInt(user.id))).run();
+
+    return { success: true };
   })
 
   // ─── POST /api/users/me/banner ────────────────────────────────────────

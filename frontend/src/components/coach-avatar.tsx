@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { buildUploadUrl } from '@/lib/api';
 
 interface CoachAvatarProps {
   username: string;
@@ -87,6 +89,7 @@ export function CoachAvatar({
   const secondary = secondaryColor ?? FALLBACK_SECONDARY;
   const initial = (displayName?.trim() || username || '?').charAt(0).toUpperCase();
   const px = resolveSize(size);
+  const [imgError, setImgError] = useState(false);
 
   // Ring stack: outer slot is presence > ringColor (mutually exclusive —
   // presence is more time-sensitive than the identity-color flair). Inner
@@ -111,10 +114,11 @@ export function CoachAvatar({
     ...style,
   };
 
-  if (avatarPath) {
+  const resolvedSrc = buildUploadUrl(avatarPath);
+  if (resolvedSrc && !imgError) {
     return (
       <img
-        src={avatarPath}
+        src={resolvedSrc}
         alt={`${displayName ?? username} avatar`}
         loading="lazy"
         className={cn(
@@ -123,6 +127,7 @@ export function CoachAvatar({
         )}
         style={baseStyle}
         draggable={false}
+        onError={() => setImgError(true)}
       />
     );
   }

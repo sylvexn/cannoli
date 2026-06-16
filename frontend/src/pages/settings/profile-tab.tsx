@@ -6,9 +6,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { User as UserIcon, Palette, Camera } from 'lucide-react';
+import { User as UserIcon, Palette, Camera, X } from 'lucide-react';
 import { UserAccentScope } from '@/components/user-accent-scope';
 import { getErrorMessage } from '@/lib/errors';
+import { buildUploadUrl } from '@/lib/api';
 import {
   PROFILE_COLOR_SWATCHES,
   MAX_DISPLAY_NAME,
@@ -17,7 +18,6 @@ import {
 } from '@/lib/constants';
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
-const API_BASE = import.meta.env.VITE_API_URL || '';
 
 type ColorSlot = 'primary' | 'secondary' | 'tertiary';
 
@@ -140,15 +140,17 @@ function ColorPicker({
   );
 }
 
-function AvatarTile({ avatarPath, primaryColor, secondaryColor, initial, onUpload }: {
+function AvatarTile({ avatarPath, primaryColor, secondaryColor, initial, onUpload, onRemove }: {
   avatarPath: string | null | undefined;
   primaryColor: string | null;
   secondaryColor: string | null;
   initial: string;
   onUpload: (file: File) => Promise<void>;
+  onRemove: () => Promise<void>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -164,43 +166,68 @@ function AvatarTile({ avatarPath, primaryColor, secondaryColor, initial, onUploa
     }
   }
 
-  const src = avatarPath ? `${API_BASE}/uploads/${avatarPath}?t=${Date.now()}` : null;
+  async function handleRemove() {
+    setRemoving(true);
+    try {
+      await onRemove();
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  // Add a cache-buster so the browser re-fetches the freshly-uploaded image.
+  const [cacheBust] = useState(() => Date.now());
+  const src = avatarPath ? `${buildUploadUrl(avatarPath)}?t=${cacheBust}` : null;
 
   return (
-    <div className="group relative w-20 h-20 shrink-0">
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={uploading}
-        className="relative w-full h-full rounded-full overflow-hidden border-2 border-border-default hover:border-neon transition-colors"
-        style={{
-          backgroundColor: primaryColor ?? '#7dd3fc',
-          boxShadow: `0 0 0 2px ${secondaryColor ?? '#a78bfa'}`,
-        }}
-        aria-label="Upload avatar"
-      >
-        {src ? (
-          <img src={src} alt="" className="w-full h-full object-cover" />
-        ) : (
-          <span className="flex items-center justify-center w-full h-full text-2xl font-bold text-white">
-            {initial}
+    <div className="flex flex-col items-center gap-2 shrink-0">
+      <div className="group relative w-20 h-20">
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading || removing}
+          className="relative w-full h-full rounded-full overflow-hidden border-2 border-border-default hover:border-neon transition-colors"
+          style={{
+            backgroundColor: primaryColor ?? '#7dd3fc',
+            boxShadow: `0 0 0 2px ${secondaryColor ?? '#a78bfa'}`,
+          }}
+          aria-label="Upload avatar"
+        >
+          {src ? (
+            <img src={src} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <span className="flex items-center justify-center w-full h-full text-2xl font-bold text-white">
+              {initial}
+            </span>
+          )}
+          <span className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <Camera size={20} className="text-white" />
           </span>
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          className="hidden"
+        />
+        {(uploading || removing) && (
+          <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center text-[10px] text-white">
+            …
+          </div>
         )}
-        <span className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <Camera size={20} className="text-white" />
-        </span>
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFile}
-        className="hidden"
-      />
-      {uploading && (
-        <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center text-[10px] text-white">
-          …
-        </div>
+      </div>
+      {avatarPath && (
+        <button
+          type="button"
+          onClick={handleRemove}
+          disabled={removing || uploading}
+          className="flex items-center gap-1 text-[11px] text-text-muted hover:text-loss transition-colors disabled:opacity-40"
+          aria-label="Remove avatar"
+        >
+          <X size={11} />
+          Remove
+        </button>
       )}
     </div>
   );
@@ -272,6 +299,16 @@ export function ProfileTab() {
     }
   }
 
+  async function handleAvatarRemove() {
+    try {
+      await api.deleteAvatar();
+      await refreshUser();
+      toast.success('Avatar removed');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Remove failed'));
+    }
+  }
+
   const initial = (user?.displayName || user?.username || '?').charAt(0).toUpperCase();
 
   return (
@@ -292,6 +329,7 @@ export function ProfileTab() {
               secondaryColor={secondary}
               initial={initial}
               onUpload={handleAvatarUpload}
+              onRemove={handleAvatarRemove}
             />
             <div className="flex-1 min-w-0 space-y-3">
               <div className="space-y-1">
