@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-1-2026-06",
+    "date": "2026-06-16T20:00:00Z",
+    "category": "improvement",
+    "title": "Cannoli v1.0.1 — Market hub, notifications & announcements",
+    "body": "- Trade Block and Free Agents are now one Market hub — shared budget/deadline header, list or unlist mons on the block, and a single trade composer with a live legality meter (feature)\n- New notifications bell collecting announcements, What's New, and updates on feedback you reported (feature)\n- Announcements can post as a site-wide banner, in the notifications bell, or both — targetable by league or role, editable, with a full history of everything sent (feature)\n- Send categorized feedback with screenshots, and get notified when it's resolved (feature)\n- Collapsible sidebar — icon rail with league flyouts on desktop, slide-in drawer on mobile (feature)\n- The sim client now shows the live site announcement in its news pane (feature)\n- Sim battle rooms for every league self-heal and stay available after reseeds or restarts (fix)\n- Trade pickers show team names instead of internal ids (fix)\n- The What's New bell clears reliably, even for entries dated slightly ahead (fix)\n- Replay viewer scales the battle stage to fill the embed (improvement)"
+  },
+  {
     "id": "day1-patch-2026-06",
     "date": "2026-06-16T16:00:00Z",
     "category": "improvement",
