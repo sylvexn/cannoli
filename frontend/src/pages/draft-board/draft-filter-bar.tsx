@@ -1,7 +1,6 @@
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
 import { TYPE_COLORS } from '@/lib/constants';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { NumberInput } from '@/components/ui/number-input';
 import {
@@ -16,8 +15,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Search, X, SlidersHorizontal, ChevronDown, Wallet } from 'lucide-react';
+import { X, SlidersHorizontal, ChevronDown, Wallet } from 'lucide-react';
 import type { DraftFilters } from './types';
+import type { DraftFormat } from '@/data/pokemon-learnsets';
+import { DraftSearch } from './draft-search';
 
 
 interface DraftFilterBarProps {
@@ -25,6 +26,7 @@ interface DraftFilterBarProps {
   onUpdate: (filters: Partial<DraftFilters>) => void;
   totalCount: number;
   filteredCount: number;
+  format: DraftFormat;
   /** Show the "fits my budget" affordability toggle. Hidden outside an active draft. */
   showAffordableToggle?: boolean;
   /** Highest tier the user can afford right now — drives the toggle's hover hint. */
@@ -32,52 +34,21 @@ interface DraftFilterBarProps {
 }
 
 export function DraftFilterBar({
-  filters, onUpdate, totalCount, filteredCount,
+  filters, onUpdate, totalCount, filteredCount, format,
   showAffordableToggle, affordCap,
 }: DraftFilterBarProps) {
-  const hasActiveFilters = filters.search || filters.abilitySearch || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20 || filters.affordableOnly;
+  const hasActiveFilters = filters.search || filters.searchChips.length > 0 || filters.types.length > 0 || filters.ownership !== 'all' || filters.tierMin !== 1 || filters.tierMax !== 20 || filters.affordableOnly;
   const typesActive = filters.types.length > 0;
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[180px] max-w-[280px]">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" size={14} />
-        <Input
-          value={filters.search}
-          onChange={e => onUpdate({ search: e.target.value })}
-          placeholder="Search Pokemon..."
-          className="pl-8 h-8 text-sm bg-surface-raised border-border-default"
-        />
-        {filters.search && (
-          <button
-            onClick={() => onUpdate({ search: '' })}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-            aria-label="Clear search"
-          >
-            <X size={12} />
-          </button>
-        )}
-      </div>
-
-      {/* Ability search */}
-      <div className="relative min-w-[140px] max-w-[180px]">
-        <Input
-          value={filters.abilitySearch}
-          onChange={e => onUpdate({ abilitySearch: e.target.value })}
-          placeholder="Ability..."
-          className="h-8 text-sm bg-surface-raised border-border-default pl-2.5"
-        />
-        {filters.abilitySearch && (
-          <button
-            onClick={() => onUpdate({ abilitySearch: '' })}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-            aria-label="Clear ability filter"
-          >
-            <X size={12} />
-          </button>
-        )}
-      </div>
+      {/* Unified search */}
+      <DraftSearch
+        search={filters.search}
+        chips={filters.searchChips}
+        format={format}
+        onUpdate={onUpdate}
+      />
 
       {/* Tier range */}
       <div className="flex items-center gap-1.5">
@@ -172,7 +143,7 @@ export function DraftFilterBar({
             variant="ghost"
             size="sm"
             onClick={() => onUpdate({
-              search: '', abilitySearch: '', tierMin: 1, tierMax: 20, types: [], typeMode: 'or', ownership: 'all',
+              search: '', searchChips: [], tierMin: 1, tierMax: 20, types: [], typeMode: 'or', ownership: 'all',
               affordableOnly: false,
             })}
             className="h-7 text-xs text-text-muted hover:text-neon"
