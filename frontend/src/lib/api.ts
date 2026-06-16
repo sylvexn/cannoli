@@ -1113,21 +1113,6 @@ export const api = {
     return res.json() as Promise<{ success: boolean; path: string }>;
   },
 
-  // Who's online — used by the sidebar widget. 30s poll cadence on the
-  // frontend; no caching here since it's already cheap (single SELECT).
-  getOnlineUsers: () => fetchJson<{ users: Array<{
-    id: number;
-    username: string;
-    displayName: string | null;
-    avatarPath: string | null;
-    primaryColor: string | null;
-    secondaryColor: string | null;
-    tertiaryColor: string | null;
-    role: 'dev' | 'admin' | 'user' | 'bot';
-    statusMessage: string | null;
-    lastSeenAt: string | null;
-  }> }>('/api/online'),
-
   // User avatar upload
   uploadAvatar: async (file: File) => {
     const fd = new FormData();
