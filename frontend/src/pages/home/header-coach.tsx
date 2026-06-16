@@ -10,9 +10,10 @@ import { PHASE_COLORS, TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import {
   Calendar, ArrowLeftRight, UserPlus, Star, Hourglass, Swords, ChevronRight,
-  ExternalLink, Trophy, FlaskConical, BarChart3, LayoutDashboard, Lock,
+  Play, Trophy, FlaskConical, BarChart3, LayoutDashboard, Lock,
   Clock, AlertCircle,
 } from 'lucide-react';
+import { ReplayLink } from '@/components/replay-link';
 import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
 import type { League } from '@/lib/types';
 
@@ -673,15 +674,21 @@ function MatchupWidget({
       )}
       <div className="flex items-center gap-1 shrink-0">
         {display.replayUrl && (
-          <a
-            href={display.replayUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <ReplayLink
+            matchId={display.id}
+            context={{
+              homeLabel: team.teamAbbrev,
+              awayLabel: opponent?.teamAbbrev,
+              week: display.week,
+              playoffRound: display.playoffRound,
+              leagueName: league.name,
+              leagueColor: league.color,
+            }}
             className="p-1 rounded text-text-muted hover:text-neon transition-colors"
             title="Replay"
           >
-            <ExternalLink size={11} />
-          </a>
+            <Play size={11} />
+          </ReplayLink>
         )}
         {!completed && opponent && (
           <Link

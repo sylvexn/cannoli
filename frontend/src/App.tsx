@@ -37,6 +37,7 @@ import { ArchiveSeasonPage } from '@/pages/archive/season';
 import { ArchiveLeaguePage } from '@/pages/archive/league';
 import { ArchiveTeamPage } from '@/pages/archive/team';
 import { ReplaysPage } from '@/pages/replays';
+import { ReplayWatchPage } from '@/pages/replay-watch';
 import { StreamPage } from '@/pages/replays/stream';
 import { PokemonDetailPage } from '@/pages/pokemon-detail';
 import { ShowdownPage } from '@/pages/showdown';
@@ -98,6 +99,7 @@ export default function App() {
               <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
               <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
               <Route path="replays" element={<ReplaysPage />} />
+              <Route path="replay/:matchId" element={<ReplayWatchPage />} />
               <Route path="archive" element={<ArchiveLayout />}>
                 <Route index element={<ArchiveHubPage />} />
                 <Route path=":seasonId" element={<ArchiveSeasonPage />} />

@@ -3,7 +3,8 @@ import { Radio } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import type { ApiMatch, ApiReplaySummary } from '@/lib/api';
-import { useAppData } from '@/lib/app-data-context';
+import { mapLeagues } from '@/lib/app-data-context';
+import type { League } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
@@ -12,11 +13,22 @@ import type { ReplayEntry, TimeFilter } from './replays/replay-types';
 import { isReplayWeekEnded } from './replays/replay-types';
 import { ReplayViewerPanel } from './replays/replay-viewer-panel';
 import { ReplayFilters } from './replays/replay-filters';
+import type { SeasonOption } from './replays/replay-filters';
 import { ReplayCard } from './replays/replay-card';
 import { ReplayHeroCard } from './replays/replay-hero-card';
 
+/** Sensible default time filter when a season is selected: archived seasons
+ *  are browsed whole ("All-time"); the active season opens on "This Week". */
+function defaultTimeForSeason(archived: boolean | undefined): TimeFilter {
+  return archived ? 'all' : 'this-week';
+}
+
 export function ReplaysPage() {
-  const { leagues, loading: leaguesLoading } = useAppData();
+  // Gallery spans EVERY season (incl. archived S9/S10), so it pulls the
+  // all-seasons league list rather than the app-data context (current season
+  // only). The schedule/teams endpoints work for archived leagues too.
+  const [leagues, setLeagues] = useState<League[]>([]);
+  const [leaguesLoading, setLeaguesLoading] = useState(true);
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -25,27 +37,87 @@ export function ReplaysPage() {
   const [search, setSearch] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<Set<string>>(new Set());
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('this-week');
+  const [seasonFilter, setSeasonFilter] = useState<number | 'all'>('all');
+  const [seasonInitialized, setSeasonInitialized] = useState(false);
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
   const [theater, setTheater] = useState(false);
   const [summaries, setSummaries] = useState<Map<string, ApiReplaySummary>>(new Map());
 
-  // Pick the highest active currentWeek across leagues — the natural target
-  // for a "this-week stream". Falls back to the highest week with any
-  // available replay so the button still works mid-season.
+  useEffect(() => {
+    api.getLeagues(true)
+      .then(a => setLeagues(mapLeagues(a)))
+      .catch(() => setLeagues([]))
+      .finally(() => setLeaguesLoading(false));
+  }, []);
+
+  // Distinct seasons (desc) for the season-axis chips.
+  const seasons = useMemo<SeasonOption[]>(() => {
+    const m = new Map<number, boolean>();
+    for (const l of leagues) {
+      const n = l.season?.seasonNumber;
+      if (n == null || n === 0) continue;
+      m.set(n, !!l.season?.archived);
+    }
+    return [...m.entries()]
+      .map(([seasonNumber, archived]) => ({ seasonNumber, archived }))
+      .sort((a, b) => b.seasonNumber - a.seasonNumber);
+  }, [leagues]);
+
+  // Pick the highest active (non-archived) currentWeek — the natural target
+  // for a "this-week stream". Archived seasons sit at week 11 and must not
+  // hijack the stream button. Falls back to the highest week with a replay.
   const streamWeek = useMemo(() => {
-    const fromLeagues = leagues.reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
+    const active = leagues.filter(l => !l.season?.archived);
+    const fromLeagues = active.reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
     if (fromLeagues > 0) return fromLeagues;
     const fromReplays = entries.reduce((max, e) => Math.max(max, e.match.week), 0);
     return fromReplays > 0 ? fromReplays : 1;
   }, [leagues, entries]);
 
-  // Highest week with at least one replay — used for "This Week" / "Last Week"
-  // so the filters land on something meaningful even if currentWeek hasn't
-  // been bumped yet for the latest reported matches.
-  const latestReplayWeek = useMemo(
-    () => entries.reduce((max, e) => Math.max(max, e.match.week), 0),
-    [entries],
+  // Entries within the selected season — the base set for week-based filters.
+  const seasonEntries = useMemo(
+    () => seasonFilter === 'all'
+      ? entries
+      : entries.filter(e => e.league.season?.seasonNumber === seasonFilter),
+    [entries, seasonFilter],
   );
+
+  // Leagues belonging to the selected season — drives the league chips (empty
+  // for "All-time" so we don't render 9 chips with duplicate names).
+  const seasonLeagues = useMemo(
+    () => seasonFilter === 'all'
+      ? []
+      : leagues.filter(l => l.season?.seasonNumber === seasonFilter),
+    [leagues, seasonFilter],
+  );
+
+  // Highest week with at least one replay IN THE SELECTED SEASON — used for
+  // "This Week" / "Last Week" so they land on something meaningful.
+  const latestReplayWeek = useMemo(
+    () => seasonEntries.reduce((max, e) => Math.max(max, e.match.week), 0),
+    [seasonEntries],
+  );
+
+  // Open the season with the most recent replays by default (newest season
+  // that actually has any — so an empty week-1 S11 falls back to S10).
+  useEffect(() => {
+    if (seasonInitialized || entries.length === 0) return;
+    const maxSeason = entries.reduce((mx, e) => Math.max(mx, e.league.season?.seasonNumber ?? 0), 0);
+    if (maxSeason > 0) {
+      const archived = seasons.find(s => s.seasonNumber === maxSeason)?.archived;
+      setSeasonFilter(maxSeason);
+      setTimeFilter(defaultTimeForSeason(archived));
+      setSeasonInitialized(true);
+    }
+  }, [entries, seasons, seasonInitialized]);
+
+  function handleSeasonChange(s: number | 'all') {
+    setSeasonFilter(s);
+    setLeagueFilter(new Set());
+    setSeasonInitialized(true);
+    if (s === 'all') setTimeFilter('all');
+    else setTimeFilter(defaultTimeForSeason(seasons.find(x => x.seasonNumber === s)?.archived));
+  }
 
   // Fetch all schedules + teams across leagues
   useEffect(() => {
@@ -114,6 +186,8 @@ export function ReplaysPage() {
       setViewingReplay(found);
       // Make sure the row is actually visible in the grid below the viewer —
       // otherwise an active filter could hide the deep-linked match entirely.
+      setSeasonFilter('all');
+      setSeasonInitialized(true);
       setTimeFilter('all');
       setLeagueFilter(new Set());
       setSearch('');
@@ -123,7 +197,7 @@ export function ReplaysPage() {
   // Filter — sorted by week descending so the first item is "most recent"
   // (used as the hero card pick).
   const filtered = useMemo(() => {
-    let result = entries;
+    let result = seasonEntries;
 
     if (leagueFilter.size > 0) {
       result = result.filter(e => leagueFilter.has(e.league.id));
@@ -160,7 +234,7 @@ export function ReplaysPage() {
       if (b.match.week !== a.match.week) return b.match.week - a.match.week;
       return b.match.id.localeCompare(a.match.id);
     });
-  }, [entries, search, leagueFilter, timeFilter, latestReplayWeek, user]);
+  }, [seasonEntries, search, leagueFilter, timeFilter, latestReplayWeek, user]);
 
   // Hero pick = most recent in the current filtered set (filtered[0] after
   // descending sort). Rest of the cards fill the grid.
@@ -170,16 +244,16 @@ export function ReplaysPage() {
   // Stats — total + sweeps + blowouts. Lives inside the hero card now;
   // also reused as a fallback strip when no replays match the filters.
   const stats = useMemo(() => {
-    const total = entries.length;
+    const total = seasonEntries.length;
     // Categories are mutually exclusive: a sweep (6-0) is reported as a sweep,
     // and a blowout is a non-sweep margin >= 4 (6-1, 6-2). This keeps
     // total >= sweeps + blowouts and avoids double-counting a 6-0 in both.
-    const sweeps = entries.filter(e => {
+    const sweeps = seasonEntries.filter(e => {
       const home = e.match.homeScore ?? 0;
       const away = e.match.awayScore ?? 0;
       return (home === 6 && away === 0) || (away === 6 && home === 0);
     }).length;
-    const blowouts = entries.filter(e => {
+    const blowouts = seasonEntries.filter(e => {
       const home = e.match.homeScore ?? 0;
       const away = e.match.awayScore ?? 0;
       const isSweep = (home === 6 && away === 0) || (away === 6 && home === 0);
@@ -187,7 +261,7 @@ export function ReplaysPage() {
       return !isSweep && margin >= 4;
     }).length;
     return { total, sweeps, blowouts };
-  }, [entries]);
+  }, [seasonEntries]);
 
   function toggleLeagueFilter(id: string) {
     setLeagueFilter(prev => {
@@ -257,10 +331,13 @@ export function ReplaysPage() {
           onTimeFilterChange={setTimeFilter}
           search={search}
           onSearchChange={setSearch}
-          leagues={leagues}
+          leagues={seasonLeagues}
           leagueFilter={leagueFilter}
           onToggleLeagueFilter={toggleLeagueFilter}
           hasUser={!!user}
+          seasons={seasons}
+          seasonFilter={seasonFilter}
+          onSeasonChange={handleSeasonChange}
         />
       )}
 

@@ -3,7 +3,8 @@ import type { Player } from '@/lib/types';
 import type { Match } from '@/lib/types';
 import type { LeagueSeason } from '@/lib/types';
 import { TeamLogo } from '@/components/team-logo';
-import { ExternalLink, Swords, Calendar } from 'lucide-react';
+import { Play, Swords, Calendar } from 'lucide-react';
+import { ReplayLink } from '@/components/replay-link';
 import { cn } from '@/lib/utils';
 
 interface NextMatchBannerProps {
@@ -99,15 +100,19 @@ export function NextMatchBanner({
       )}
       <div className="flex items-center gap-1 shrink-0">
         {display.replayUrl && (
-          <a
-            href={display.replayUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+          <ReplayLink
+            matchId={display.id}
+            context={{
+              homeLabel: player.teamAbbrev,
+              awayLabel: opponent.teamAbbrev,
+              week: display.week,
+              playoffRound: display.playoffRound,
+            }}
             className="p-1 rounded text-text-muted hover:text-neon transition-colors"
             title="Replay"
           >
-            <ExternalLink size={11} />
-          </a>
+            <Play size={11} />
+          </ReplayLink>
         )}
         {!completed && (
           <Link

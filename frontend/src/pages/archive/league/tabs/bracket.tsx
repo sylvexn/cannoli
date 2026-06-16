@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Play, Trophy } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
 import { cn } from '@/lib/utils';
+import { ReplayLink } from '@/components/replay-link';
 import type { FullLeagueData, ScheduleMatch, TeamRow } from '../types';
 
 /** Playoff bracket tab. Lays out QF / SF / F columns side-by-side. */
@@ -32,7 +33,7 @@ export function BracketTab({ data }: { data: FullLeagueData }) {
               {r.label}
             </div>
             {r.matches.map(m => (
-              <BracketMatch key={m.id} match={m} teamMap={teamMap} isFinal={r.key === 'f'} />
+              <BracketMatch key={m.id} match={m} teamMap={teamMap} isFinal={r.key === 'f'} league={data.league} />
             ))}
           </div>
         );
@@ -42,11 +43,12 @@ export function BracketTab({ data }: { data: FullLeagueData }) {
 }
 
 function BracketMatch({
-  match, teamMap, isFinal,
+  match, teamMap, isFinal, league,
 }: {
   match: ScheduleMatch;
   teamMap: Map<string, TeamRow>;
   isFinal: boolean;
+  league: FullLeagueData['league'];
 }) {
   const home = teamMap.get(match.homeTeamId);
   const away = teamMap.get(match.awayTeamId);
@@ -80,14 +82,21 @@ function BracketMatch({
         leagueId={leagueId}
       />
       {match.replayUrl && (
-        <a
-          href={match.replayUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <ReplayLink
+          matchId={match.id}
+          context={{
+            homeLabel: home?.teamAbbrev,
+            awayLabel: away?.teamAbbrev,
+            week: match.week,
+            playoffRound: match.playoffRound,
+            leagueName: league.name,
+            leagueColor: league.color,
+          }}
+          stopPropagation={false}
           className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-purple-400 hover:bg-purple-400/10 transition-colors border-t border-border-subtle"
         >
           <Play size={9} /> Watch replay
-        </a>
+        </ReplayLink>
       )}
       {isFinal && hasResult && (homeWon || awayWon) && (
         <div className="px-2 py-1 bg-draw/10 border-t border-draw/30 flex items-center justify-center gap-1.5">
