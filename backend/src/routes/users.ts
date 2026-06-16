@@ -495,7 +495,7 @@ export const userRoutes = new Elysia()
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-function computeLifetimeStats(userId: number) {
+export function computeLifetimeStats(userId: number) {
   const userTeams = db.select({
     teamId: schema.teams.id,
     leagueId: schema.teams.leagueId,
