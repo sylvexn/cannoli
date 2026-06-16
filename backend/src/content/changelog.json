@@ -4,7 +4,7 @@
     "date": "2026-06-16T23:30:00Z",
     "category": "improvement",
     "title": "Cannoli v1.0.2 — Launch-week fixes",
-    "body": "- Theory-craft with taken Pokemon to preview future trades (feature)\n- Uneven trades — swap any number of Pokemon per side (feature)\n- Free agents: pick up and drop multiple Pokemon at once (feature)\n- Admins can set week dates on an active league (feature)\n- Profile pictures display everywhere, with a reset-to-default button (fix)\n- Future weeks no longer show Week 1's dates (fix)\n- Colorblind mode now covers the team page's defensive types (fix)\n- Team nicknames no longer hidden behind the cost badge (fix)\n- Readable Matchup Center team dropdown (fix)\n- No more blank line in replay Tera Captains (fix)\n- Animated sprites in replays (improvement)"
+    "body": "- Theory-craft with taken Pokemon to preview future trades (feature)\n- Uneven trades — swap any number of Pokemon per side (feature)\n- Free agents: pick up and drop multiple Pokemon at once (feature)\n- Admins can set week dates on an active league (feature)\n- Admins can attach a battle played outside the Arena to a scheduled match — records the result, stats, and replay (feature)\n- Profile pictures display everywhere, with a reset-to-default button (fix)\n- Future weeks no longer show Week 1's dates (fix)\n- Colorblind mode now covers the team page's defensive types (fix)\n- Team nicknames no longer hidden behind the cost badge (fix)\n- Readable Matchup Center team dropdown (fix)\n- No more blank line in replay Tera Captains (fix)\n- Animated sprites in replays (improvement)"
   },
   {
     "id": "v1-0-1-2026-06",
