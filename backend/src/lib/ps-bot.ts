@@ -533,7 +533,9 @@ function buildBattleFromLog(
     battle.parser.feedLine(line);
     if (line.startsWith('|win|')) {
       winnerUsername = line.slice('|win|'.length).split('|')[0].trim();
-    } else if (line.startsWith('|tie')) {
+    } else if (line === '|tie' || line.startsWith('|tie|')) {
+      // Match a real tie line only — the standard `|tier|...` battle-log line
+      // also starts with `|tie` and must NOT be read as a tie.
       isTie = true;
     } else if (line.startsWith('|player|')) {
       // |player|p1|USERNAME|... — captures usernames into battle.p1/p2 the
