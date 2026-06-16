@@ -128,6 +128,29 @@ RUN sed -i 's#<div class="newsentry">.*</div>#<div class="newsentry"><h4>Welcome
     && grep -q 'src="ps-news.js"' play.pokemonshowdown.com/testclient.html \
     && ! grep -q 'Welcome to the test client' play.pokemonshowdown.com/testclient.html
 
+# Showdex overlay injection. The standalone bundle is deployed to /showdex/ in
+# the final image (built in the `showdex` stage). Per Showdex's dev-zone embed
+# instructions: add its web fonts (Work Sans + Fira Code) to <head>, and load
+# the bundle after the PS client app exists.
+#
+# Showdex detects its host (classic vs preact client) the instant main.js runs,
+# and aborts with "Showdex attempted to start in an unsupported website" if
+# neither `window.app` (classic) nor `window.PS` (preact) is present yet. A plain
+# <script> at end-of-body runs during parse — BEFORE the classic client's jQuery
+# ready handler constructs `window.app` — so it loses that race and bails. Defer
+# the load: poll for `window.app`, then inject main.js (the README's documented
+# "timing issues" workaround, hardened with a poll + ~10s cap).
+#
+# The `\&` keeps sed from expanding the `&display=swap` query as the match. The
+# grep-guards fail the build if an anchor wasn't matched, so we never silently
+# ship the client without the overlay.
+RUN sed -i \
+        -e 's#</head>#<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900\&display=swap"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700\&display=swap"></head>#' \
+        -e 's#</body>#<script>(function(){function go(){var s=document.createElement("script");s.src="/showdex/main.js";document.body.appendChild(s);}var n=0,t=setInterval(function(){if(window.app||window.PS||n++>200){clearInterval(t);go();}},50);})();</script></body>#' \
+        play.pokemonshowdown.com/testclient.html \
+    && grep -q '/showdex/main.js' play.pokemonshowdown.com/testclient.html \
+    && grep -q 'family=Work+Sans' play.pokemonshowdown.com/testclient.html
+
 # Fail the build (rather than ship a broken client) if the entrypoint HTML the
 # nginx `index` directive serves wasn't produced — that's the symptom of the
 # php-less build silently dropping testclient.html.
@@ -150,10 +173,63 @@ RUN find play.pokemonshowdown.com -type l | while read -r link; do \
         fi; \
     done
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Showdex overlay (standalone build).
+#
+# Showdex (https://github.com/doshidak/showdex) is the Pokémon Showdown damage-
+# calculator extension. Its "standalone" BUILD_TARGET strips the WebExtension
+# APIs and emits a plain <script> bundle meant to be embedded into a self-hosted
+# pokemon-showdown-client (per its README "Developer Zone") — so every
+# sim.cannoli.live visitor gets Showdex with ZERO browser-extension install. The
+# bundle is deployed to /showdex/ (its default STANDALONE_RESOURCE_PREFIX) and
+# the <script> is injected into testclient.html in the build stage above.
+#
+# Needs node 24 + pnpm 10 (the client stage is node 20), so it builds separately.
+# Pinned to doshidak/showdex master == v1.3.0 for reproducibility — bump
+# deliberately (and re-verify the emit guard below still passes).
+FROM node:24-slim AS showdex
+WORKDIR /showdex
+ARG SHOWDEX_REPO=https://github.com/doshidak/showdex.git
+ARG SHOWDEX_REF=ac314a79dba06441e73c07855afb60229df1aeca
+# git to fetch; python3/make/g++ for any node-gyp native deps.
+RUN apt-get update && apt-get install -y git python3 make g++ ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN git init -q . \
+    && git remote add origin ${SHOWDEX_REPO} \
+    && git fetch --depth 1 origin ${SHOWDEX_REF} \
+    && git checkout -q FETCH_HEAD \
+    && rm -rf .git
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+RUN pnpm install --no-frozen-lockfile
+# v1.3.0 BUG: src/components/form/Composer statically imports five @lexical/*
+# subpackages that aren't declared as direct deps, so pnpm's strict layout never
+# links them at top level → webpack can't resolve them → the compile errors and
+# NoEmitOnErrorsPlugin suppresses ALL output. Worse, scripts/build.js only checks
+# webpack's fatal `err` (not stats.hasErrors()), so it prints "successful!" while
+# emitting nothing. Declare the missing siblings (lockstep-versioned with the
+# lexical core that IS declared, ^0.42.0) so the build actually produces a bundle.
+RUN pnpm add \
+      '@lexical/rich-text@^0.42.0' \
+      '@lexical/link@^0.42.0' \
+      '@lexical/list@^0.42.0' \
+      '@lexical/code@^0.42.0' \
+      '@lexical/markdown@^0.42.0'
+# `:fast` skips the bundle-size analyzer. Outputs to dist/standalone/.
+RUN pnpm build:standalone:fast
+# scripts/build.js lies about success (see above), so verify the entry actually
+# emitted. If a future SHOWDEX_REF reintroduces a silent-empty build, fail HERE
+# rather than ship a client whose <script src="/showdex/main.js"> 404s.
+RUN test -f dist/standalone/main.js \
+    || (echo "FATAL: showdex standalone build emitted no main.js (compile errors swallowed by scripts/build.js)" && exit 1)
+
 FROM nginx:alpine
 
 # Copy built client files
 COPY --from=build /client/play.pokemonshowdown.com /usr/share/nginx/html
+
+# Showdex standalone bundle → /showdex/ (its default resource prefix). nginx's
+# catch-all `location /` try_files serves these as static files; no routing
+# change needed. main.js is loaded by testclient.html (patched in the build stage).
+COPY --from=showdex /showdex/dist/standalone /usr/share/nginx/html/showdex
 
 # Also copy upstream replay viewer (PHP — currently non-functional under
 # nginx-only, kept for static asset companions like /replay/style/).
