@@ -44,8 +44,9 @@ const tag = `authguard-${Date.now()}`;
 const userIds: number[] = [];
 let staffSession: string;
 let userSession: string;
+let devSession: string;
 
-function mkUser(name: string, role: 'admin' | 'user'): string {
+function mkUser(name: string, role: 'dev' | 'admin' | 'user'): string {
   const u = db.insert(schema.users).values({
     username: `${tag}-${name}`, passwordHash: 'x', role, mustChangePassword: false, active: true,
   }).returning().get();
@@ -57,6 +58,7 @@ beforeAll(() => {
   app = buildApp();
   staffSession = mkUser('staff', 'admin');
   userSession = mkUser('coach', 'user');
+  devSession = mkUser('dev', 'dev');
 });
 
 afterAll(() => {
@@ -90,9 +92,15 @@ const SAMPLES: { method: string; path: string; body?: unknown }[] = [
   { method: 'GET', path: '/api/draft-templates' },                              // templates (staff read)
   { method: 'POST', path: '/api/users', body: {} },                             // users
   { method: 'GET', path: '/api/users' },                                        // users (staff read)
-  { method: 'GET', path: '/api/admin/bot-status' },                             // misc
-  { method: 'POST', path: '/api/admin/bot/reconnect' },                         // misc
+  { method: 'GET', path: '/api/admin/notifications/log' },                      // notifications (staff read)
   { method: 'GET', path: '/api/activity-log' },                                 // misc (staff read)
+];
+
+// Routes narrowed to dev-only (per-route requireDev below the group's
+// requireStaff) — an admin must be BLOCKED (403), only a dev may pass.
+const DEV_ONLY: { method: string; path: string; body?: unknown }[] = [
+  { method: 'GET', path: '/api/admin/bot-status' },                             // misc — PS bot tooling
+  { method: 'POST', path: '/api/admin/bot/reconnect' },                         // misc — PS bot tooling
 ];
 
 describe('admin auth guard — unauthenticated', () => {
@@ -119,6 +127,27 @@ describe('admin auth guard — staff passes the guard', () => {
   for (const s of SAMPLES) {
     test(`${s.method} ${s.path} is reachable (not 401/403)`, async () => {
       const res = await hit(s.method, s.path, `session=${staffSession}`, s.body);
+      expect(res.status).not.toBe(401);
+      expect(res.status).not.toBe(403);
+    });
+  }
+});
+
+describe('admin auth guard — dev-only routes', () => {
+  // These sit behind the group's requireStaff AND a per-route requireDev, so an
+  // admin (staff but not dev) must be blocked; only a dev passes the guard.
+  for (const s of DEV_ONLY) {
+    test(`${s.method} ${s.path} → 401 unauthenticated`, async () => {
+      expect((await hit(s.method, s.path, undefined, s.body)).status).toBe(401);
+    });
+    test(`${s.method} ${s.path} → 403 for non-staff`, async () => {
+      expect((await hit(s.method, s.path, `session=${userSession}`, s.body)).status).toBe(403);
+    });
+    test(`${s.method} ${s.path} → 403 for admin (narrowed to dev)`, async () => {
+      expect((await hit(s.method, s.path, `session=${staffSession}`, s.body)).status).toBe(403);
+    });
+    test(`${s.method} ${s.path} is reachable for dev (not 401/403)`, async () => {
+      const res = await hit(s.method, s.path, `session=${devSession}`, s.body);
       expect(res.status).not.toBe(401);
       expect(res.status).not.toBe(403);
     });
