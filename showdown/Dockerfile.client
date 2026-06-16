@@ -77,6 +77,10 @@ RUN sed -i "s|git pull|git checkout ${PS_SERVER_REF}|" build-tools/build-indexes
 # Build the client (generates data files, compiled JS)
 RUN node build full
 
+# Cannoli news overlay. Served from the client root and loaded by testclient.html
+# (patched in below). Copied AFTER the build so the build step can't clobber it.
+COPY showdown/ps-news.js play.pokemonshowdown.com/ps-news.js
+
 # Patch testclient.html and index.html so they load our local config instead of
 # Smogon's CDN (which would otherwise hard-code Config.server to sim3.psim.us
 # and Config.loginserver to play.pokemonshowdown.com — connecting users to the
@@ -108,6 +112,21 @@ RUN for f in testclient.html index.html; do \
                 "play.pokemonshowdown.com/$f"; \
         fi; \
     done
+
+# Cannoli news box. testclient.html bakes a static "Test client / Welcome to the
+# test client!" placeholder into the page (the legacy client never refreshes it
+# on load). Replace it with a Cannoli welcome — that's the fallback shown when no
+# site announcement is set — and load ps-news.js, which overlays the live
+# /admin/site-settings announcement when one exists (via the /news.json proxy).
+# Only testclient.html is patched: it's the served entrypoint (nginx index=
+# testclient.html); index.html is never served and its built-in news layout
+# differs. The greps fail the build if a sed missed (e.g. upstream changed the
+# placeholder markup) so we never silently re-ship the stale test-client message.
+RUN sed -i 's#<div class="newsentry">.*</div>#<div class="newsentry"><h4>Welcome to the Cannoli sim</h4><p>This server hosts our Pokemon draft tournament leagues. Coaches are auto-joined into their league chat room on login. Visit the league pages for standings, draft boards, and matchup tools.</p><p>-<strong>Cannoli</strong></p></div>#' play.pokemonshowdown.com/testclient.html \
+    && sed -i 's#</body>#<script src="ps-news.js"></script></body>#' play.pokemonshowdown.com/testclient.html \
+    && grep -q 'Welcome to the Cannoli sim' play.pokemonshowdown.com/testclient.html \
+    && grep -q 'src="ps-news.js"' play.pokemonshowdown.com/testclient.html \
+    && ! grep -q 'Welcome to the test client' play.pokemonshowdown.com/testclient.html
 
 # Fail the build (rather than ship a broken client) if the entrypoint HTML the
 # nginx `index` directive serves wasn't produced — that's the symptom of the
