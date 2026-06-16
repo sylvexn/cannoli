@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
-import { TIER_LIST } from '@/data/tier-list';
+import { getTierList, type CostFormat } from '@/data/tier-list';
+import { DEFAULT_FORMAT, type DraftFormat } from '@/data/pokemon-learnsets';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { Player, RosterPokemon } from '@/lib/types';
 import type { DraftState, PoolOwnership } from './types';
+import { matchRawQuery, matchChip, type MatchReason } from '@/lib/pool-search';
 
 interface UseDraftPoolOptions {
   /** Highest tier the user can take right now after reserves (raw budget minus
@@ -12,6 +14,10 @@ interface UseDraftPoolOptions {
    *  from current points used + picks-left so the toggle is useful even
    *  before downstream hooks resolve. */
   affordCap?: number;
+  /** Active league cost format — determines which tier list and ban list to use. */
+  format?: CostFormat;
+  /** Move-legality format for the pool's ability/move search (DraftFormat). */
+  draftFormat?: DraftFormat;
 }
 
 /**
@@ -22,7 +28,8 @@ interface UseDraftPoolOptions {
  * of `players` and several consumers (popovers, sidebars) want them too.
  */
 export function useDraftPool(state: DraftState, players: Player[], opts: UseDraftPoolOptions = {}) {
-  const { affordCap } = opts;
+  const { affordCap, format, draftFormat } = opts;
+  const resolvedDraftFormat: DraftFormat = draftFormat ?? DEFAULT_FORMAT;
   const rosterLookup = useMemo(() => {
     const map = new Map<string, RosterPokemon>();
     for (const player of players) {
@@ -74,15 +81,30 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     return map;
   }, [state.allPicks, state.trades, state.view]);
 
-  // Filtered pool ────────────────────────────────────────────────
-  const filteredPool = useMemo(() => {
-    let pool = TIER_LIST.filter(entry => {
+  // Filtered pool + match reasons ────────────────────────────────
+  const { filteredPool, matchReasons } = useMemo(() => {
+    const tierList = getTierList(format);
+    const reasons = new Map<string, MatchReason>();
+
+    let pool = tierList.filter(entry => {
       if (entry.tier < state.filters.tierMin || entry.tier > state.filters.tierMax) return false;
       if (state.filters.affordableOnly && affordCap != null && entry.tier > affordCap) return false;
+
+      const abilities = rosterLookup.get(entry.name)?.abilities ?? getPokemonData(entry.name)?.abilities ?? [];
+
+      // Broad-OR free text — name, ability, or move. Captures reason for badge.
+      let rawReason: MatchReason | null = null;
       if (state.filters.search) {
-        const q = state.filters.search.toLowerCase();
-        if (!entry.name.toLowerCase().includes(q)) return false;
+        const r = matchRawQuery(entry.name, state.filters.search, resolvedDraftFormat, abilities);
+        if (!r.matched) return false;
+        rawReason = r.reason;
       }
+
+      // Stacked exact chips — AND logic; all must pass.
+      for (const chip of state.filters.searchChips) {
+        if (!matchChip(entry.name, chip, resolvedDraftFormat, abilities)) return false;
+      }
+
       const owned = ownershipMap.has(entry.name);
       if (state.filters.ownership === 'owned' && !owned) return false;
       if (state.filters.ownership === 'free-agent' && owned) return false;
@@ -102,14 +124,22 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
           }
         }
       }
-      if (state.filters.abilitySearch) {
-        const q = state.filters.abilitySearch.toLowerCase();
-        const rosterMon = rosterLookup.get(entry.name);
-        const pokeData = getPokemonData(entry.name);
-        const abilities = rosterMon?.abilities ?? pokeData?.abilities ?? [];
-        const hasAbility = abilities.some(a => a.toLowerCase().includes(q));
-        if (!hasAbility) return false;
+
+      // Build match reason for this surviving entry using chip-precedence:
+      // 1. first move chip → move badge
+      // 2. else first ability chip → ability badge
+      // 3. else raw-search reason (if non-null)
+      // 4. else no badge (name-only match)
+      const moveChip = state.filters.searchChips.find(c => c.kind === 'move');
+      const abilChip = state.filters.searchChips.find(c => c.kind === 'ability');
+      if (moveChip) {
+        reasons.set(entry.name, { kind: 'move', label: moveChip.label });
+      } else if (abilChip) {
+        reasons.set(entry.name, { kind: 'ability', label: abilChip.label });
+      } else if (rawReason) {
+        reasons.set(entry.name, rawReason);
       }
+
       return true;
     });
 
@@ -127,8 +157,8 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
         pool = [...pool].sort((a, b) => b.name.localeCompare(a.name));
         break;
     }
-    return pool;
-  }, [state.filters, ownershipMap, rosterLookup, affordCap]);
+    return { filteredPool: pool, matchReasons: reasons };
+  }, [state.filters, ownershipMap, rosterLookup, affordCap, format, resolvedDraftFormat]);
 
   const poolByTier = useMemo(() => {
     const groups = new Map<number, typeof filteredPool>();
@@ -146,5 +176,6 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     ownershipMap,
     filteredPool,
     poolByTier,
+    matchReasons,
   };
 }

@@ -12,12 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowRightLeft, AlertTriangle } from 'lucide-react';
+import { ArrowRightLeft, AlertTriangle, Sparkles, Swords } from 'lucide-react';
 import type { TierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { findPickConflict, type ConflictInputRoster } from '@/lib/draft-rules';
+import type { MatchReason } from '@/lib/pool-search';
 
 interface DraftPoolTableProps {
   pool: TierEntry[];
@@ -35,6 +36,8 @@ interface DraftPoolTableProps {
   drafterConflictRoster?: ConflictInputRoster;
   /** Point cap (for conflict detection). */
   pointCap?: number;
+  /** Match reasons keyed by Pokemon name — surfaces "why matched" tags in rows. */
+  matchReasons?: Map<string, MatchReason>;
   onRowClick: (name: string) => void;
 }
 
@@ -49,6 +52,7 @@ export function DraftPoolTable({
   drafterMaxAffordableCost,
   drafterConflictRoster,
   pointCap = 110,
+  matchReasons,
   onRowClick,
 }: DraftPoolTableProps) {
   const affordCap = drafterMaxAffordableCost ?? userMaxAffordableCost;
@@ -138,6 +142,26 @@ export function DraftPoolTable({
                       {conflictKind === 'mega-cap' ? 'MEGA' : conflictKind === 'duplicate-species' ? 'DUP' : 'RESERVE'}
                     </span>
                   )}
+                  {(() => {
+                    const reason = matchReasons?.get(entry.name);
+                    if (!reason) return null;
+                    return (
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-0.5 px-1 h-3.5 rounded-sm text-[8px] font-mono uppercase max-w-[80px] truncate',
+                          reason.kind === 'ability'
+                            ? 'border border-draw/30 bg-draw/10 text-draw/90'
+                            : 'border border-neon/30 bg-neon/10 text-neon/90',
+                        )}
+                        title={`Matched via ${reason.kind}: ${reason.label}`}
+                      >
+                        {reason.kind === 'ability'
+                          ? <Sparkles size={8} aria-hidden />
+                          : <Swords size={8} aria-hidden />}
+                        <span className="truncate">{reason.label}</span>
+                      </span>
+                    );
+                  })()}
                 </div>
                 {mon?.nickname && (
                   <span className="block text-[10px] italic font-mono text-text-muted truncate max-w-[140px]" title={mon.nickname}>

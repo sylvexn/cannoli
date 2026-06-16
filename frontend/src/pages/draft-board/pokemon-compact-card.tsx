@@ -2,9 +2,10 @@ import { useRef, useCallback, useMemo, type CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite, useSpriteState } from '@/components/pokemon-sprite';
 import { typeColors } from '@/components/type-chip';
-import { ArrowRightLeft, Crown, Lock, Star, AlertTriangle } from 'lucide-react';
+import { ArrowRightLeft, Crown, Lock, Star, AlertTriangle, Sparkles, Swords } from 'lucide-react';
 import type { PokemonType } from '@/lib/pokemon';
 import type { Player } from '@/lib/types';
+import type { MatchReason } from '@/lib/pool-search';
 
 export type CardDensity = 'compact' | 'comfortable' | 'detailed';
 
@@ -40,6 +41,8 @@ interface PokemonCompactCardProps {
    * are mounted at once.
    */
   viewTransitionActive?: boolean;
+  /** When present, a small badge explaining why the card matched (ability or move search). */
+  matchReason?: MatchReason;
   onClick: (name: string) => void;
   onHoverStart: (name: string, rect: DOMRect) => void;
   onHoverEnd: () => void;
@@ -84,6 +87,7 @@ export function PokemonCompactCard({
   isCaptainEligible,
   density = 'comfortable',
   viewTransitionActive = false,
+  matchReason,
   onClick,
   onHoverStart,
   onHoverEnd,
@@ -314,6 +318,22 @@ export function PokemonCompactCard({
             {displayName}
           </span>
         )
+      )}
+
+      {/* Match reason badge — visible pill when the card matched via ability or move search */}
+      {matchReason && (
+        <span className={cn(
+          'flex items-center gap-0.5 px-0.5 rounded-sm mt-0.5',
+          'text-[9px] font-mono leading-none truncate max-w-full',
+          matchReason.kind === 'ability'
+            ? 'text-draw/90 bg-draw/10'
+            : 'text-neon/90 bg-neon/10',
+        )} title={`Matched via ${matchReason.kind}: ${matchReason.label}`}>
+          {matchReason.kind === 'ability'
+            ? <Sparkles size={7} aria-hidden />
+            : <Swords size={7} aria-hidden />}
+          <span className="truncate">{matchReason.label}</span>
+        </span>
       )}
 
       {/* Tiny types row — only in detailed density */}

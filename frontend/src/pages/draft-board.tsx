@@ -20,8 +20,7 @@ import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
 import { DraftTopBar } from './draft-board/draft-top-bar';
 import type { CardDensity } from './draft-board/pokemon-compact-card';
-import { TIER_LIST } from '@/data/tier-list';
-import { getTierEntry } from '@/data/tier-list';
+import { getTierList, getTierEntry } from '@/data/tier-list';
 import type { DraftSource } from './draft-board/types';
 
 const DENSITY_STORAGE_KEY = 'draft.density';
@@ -53,8 +52,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   const { muted, toggleMuted, hintShown, markHintShown } = useDraftMute();
   const {
     state, dispatch,
-    league, players,
-    ownershipMap, filteredPool, poolByTier,
+    league, format, players,
+    ownershipMap, filteredPool, poolByTier, matchReasons,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDraftComplete,
     draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
@@ -130,7 +129,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     // free agents (so the user can draft, queue, or read the conflict reason
     // inline). Open even if there's a conflict so the reason is readable.
     if (isDraftRunning && !ownershipMap.has(name)) {
-      const tierEntry = getTierEntry(name);
+      const tierEntry = getTierEntry(name, format);
       const fitsRawBudget = tierEntry && userBudgetRemaining != null && tierEntry.tier <= userBudgetRemaining;
       if (fitsRawBudget || !isUserTurn) {
         const rect = cardRectsRef.current.get(name) ?? popover?.rect;
@@ -143,7 +142,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     // Outside of an active draft (or for owned mons in any view) jump straight
     // to the detail sheet.
     withViewTransition(() => dispatch({ type: 'SET_DETAIL', name }));
-  }, [dispatch, isDraftRunning, isUserTurn, ownershipMap, userBudgetRemaining, popover]);
+  }, [dispatch, isDraftRunning, isUserTurn, ownershipMap, userBudgetRemaining, popover, format]);
 
   const handleCardHoverStart = useCallback((name: string, rect: DOMRect) => {
     cardRectsRef.current.set(name, rect);
@@ -165,7 +164,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     // 2pt is reserved for the remaining slot) is also blocked.
     const cap = userMaxAffordableCost ?? userBudgetRemaining;
     if (cap != null) {
-      const entry = TIER_LIST.find(e => e.name === name);
+      const entry = getTierEntry(name, format);
       if (entry && entry.tier > cap) {
         toast.error(`Can't queue ${name} — costs ${entry.tier}pt, only ${cap}pt available after reserving for remaining picks`);
         return;
@@ -173,7 +172,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     }
     dispatch({ type: 'QUEUE_ADD', name });
     toast.info(`${name} added to queue`);
-  }, [dispatch, userBudgetRemaining, userMaxAffordableCost]);
+  }, [dispatch, userBudgetRemaining, userMaxAffordableCost, format]);
 
   const handleQueueRemove = useCallback((name: string) => {
     dispatch({ type: 'QUEUE_REMOVE', name });
@@ -255,10 +254,10 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // Compute budget after pick for the popover when it's actionable.
   const popoverBudgetAfter = useMemo(() => {
     if (!popover || popover.mode === 'preview') return undefined;
-    const tierEntry = getTierEntry(popover.name);
+    const tierEntry = getTierEntry(popover.name, format);
     if (tierEntry && userBudgetRemaining != null) return userBudgetRemaining - tierEntry.tier;
     return undefined;
-  }, [popover, userBudgetRemaining]);
+  }, [popover, userBudgetRemaining, format]);
 
   // The Pokemon currently being celebrated by the animation queue. Threaded
   // into the pool grid (so the matching card stamps its VT name) and the
@@ -367,10 +366,11 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         <DraftFilterBar
           filters={state.filters}
           onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
-          totalCount={TIER_LIST.length}
+          totalCount={getTierList(format).length}
           filteredCount={filteredPool.length}
           showAffordableToggle={isDraftRunning && state.userTeamId != null}
           affordCap={selfAffordCap}
+          format={league.format ?? 'gen9natdex'}
         />
       </div>
 
@@ -428,6 +428,8 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               draftQueue={isDraftRunning ? state.draftQueue : undefined}
               density={density}
               animatingPokemonName={animatingPokemonName}
+              format={format}
+              matchReasons={matchReasons}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -445,6 +447,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
                 drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
                 drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
                 pointCap={state.pointCap}
+                matchReasons={matchReasons}
                 onRowClick={handleCardClick}
               />
             </div>
@@ -486,6 +489,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
           isUserTurn={isUserTurn}
           presence={presence}
           animatingPokemonName={animatingPokemonName}
+          format={format}
         />
       </div>
 
@@ -506,6 +510,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
         pointCap={state.pointCap}
         animatingPokemonName={animatingPokemonName}
+        format={format}
         onClose={handlePopoverClose}
         onModeChange={handlePopoverModeChange}
         onConfirmDraft={handleConfirmDraft}
@@ -523,6 +528,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         canDraft={isUserTurn && !!state.detailPokemon && !ownershipMap.has(state.detailPokemon)}
         onDraft={handleUserPick}
         animatingPokemonName={animatingPokemonName}
+        format={format}
       />
     </div>
     </UserAccentScope>

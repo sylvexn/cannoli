@@ -2,12 +2,13 @@ import { cn } from '@/lib/utils';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
 import { PokemonCompactCard, type CardDensity } from './pokemon-compact-card';
-import type { TierEntry } from '@/data/tier-list';
-import { TERA_BANNED } from '@/data/tier-list';
+import type { TierEntry, CostFormat } from '@/data/tier-list';
+import { getTeraBanned } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import { findPickConflict, isMegaForm, type ConflictInputRoster } from '@/lib/draft-rules';
+import type { MatchReason } from '@/lib/pool-search';
 
 interface DraftPoolGridProps {
   poolByTier: [number, TierEntry[]][];
@@ -46,6 +47,10 @@ interface DraftPoolGridProps {
    *  in the sidebar and morph the sprite. Only the matching card gets the
    *  name — duplicate VT names on the page would confuse the snapshotting. */
   animatingPokemonName?: string | null;
+  /** Active league cost format — drives tera-ban checks on cards. */
+  format?: CostFormat;
+  /** Match reasons keyed by Pokemon name — drives "why matched" badges on cards. */
+  matchReasons?: Map<string, MatchReason>;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -67,6 +72,8 @@ export function DraftPoolGrid({
   draftQueue = [],
   density = 'comfortable',
   animatingPokemonName,
+  format,
+  matchReasons,
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
@@ -156,7 +163,7 @@ export function DraftPoolGrid({
                 }
 
                 const isMega = isMegaForm(entry.name);
-                const isTeraBanned = TERA_BANNED.includes(entry.name);
+                const isTeraBanned = getTeraBanned(format).includes(entry.name);
                 const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9;
                 const isAnimating = animatingPokemonName === entry.name;
 
@@ -180,6 +187,7 @@ export function DraftPoolGrid({
                     isCaptainEligible={isCaptainEligible}
                     density={density}
                     viewTransitionActive={isAnimating}
+                    matchReason={matchReasons?.get(entry.name)}
                     onClick={onCardClick}
                     onHoverStart={onCardHoverStart}
                     onHoverEnd={onCardHoverEnd}

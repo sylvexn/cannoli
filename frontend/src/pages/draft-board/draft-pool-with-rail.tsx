@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronUp, Lock, Target } from 'lucide-react';
-import type { TierEntry } from '@/data/tier-list';
+import type { TierEntry, CostFormat } from '@/data/tier-list';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
 import type { ConflictInputRoster } from '@/lib/draft-rules';
 import { DraftPoolGrid } from './draft-pool-grid';
 import type { CardDensity } from './pokemon-compact-card';
+import type { MatchReason } from '@/lib/pool-search';
 
 interface DraftPoolWithRailProps {
   poolByTier: [number, TierEntry[]][];
@@ -29,8 +30,12 @@ interface DraftPoolWithRailProps {
   draftQueue?: string[];
   /** Card layout density — threaded through to DraftPoolGrid */
   density?: CardDensity;
+  /** Active league cost format — threaded through to DraftPoolGrid for tera-ban checks. */
+  format?: CostFormat;
   /** Pokemon currently mid-flight in the pick animation queue — threaded through */
   animatingPokemonName?: string | null;
+  /** Match reasons keyed by Pokemon name — threaded through to DraftPoolGrid */
+  matchReasons?: Map<string, MatchReason>;
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;

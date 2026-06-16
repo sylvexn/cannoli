@@ -1,6 +1,6 @@
 import { useReducer, useMemo, useEffect, useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { TIER_LIST, BANNED } from '@/data/tier-list';
+import { getTierList, getBanned, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import {
   findPickConflict, describeConflict, type ConflictInputRoster,
 } from '@/lib/draft-rules';
@@ -26,7 +26,6 @@ import { usePickAnimationQueue } from './use-pick-animation-queue';
 import { draftReducer, generateSnakeSlots } from './draft-reducer';
 
 const DEFAULT_TIMER = 30;
-const BANNED_SET = new Set(BANNED);
 
 // Re-export so existing callers (e.g. control bar) keep working.
 export { generateSnakeSlots };
@@ -48,6 +47,8 @@ interface UseDraftStateOptions {
  */
 export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) {
   const league = useLeague();
+  /** Cost format for this league — drives tier list, bans, and captain reserve. */
+  const format: CostFormat = league.costFormat ?? DEFAULT_FORMAT;
   const { players, standings, transactions } = useLeagueData();
   const { user } = useAuth();
 
@@ -136,14 +137,15 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   }, [state.userTeamId, state.view, state.allPicks, state.currentPickIndex, state.snakeOrder, state.pointCap]);
 
   // ─── Pool, ownership, lookups ────────────────────────────────────
-  const { rosterLookup, playerLookup, ownershipMap, filteredPool, poolByTier }
-    = useDraftPool(state, players, { affordCap: selfAffordCap });
+  const draftFormat = league.format;
+  const { rosterLookup, playerLookup, ownershipMap, filteredPool, poolByTier, matchReasons }
+    = useDraftPool(state, players, { affordCap: selfAffordCap, format, draftFormat });
 
   // ─── Team-derived data (rosters, points, picks-left, drafted set) ─
   const {
     draftedSet, demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
     teamRosters, teamPoints, draftOrder,
-  } = useDraftTeams(state, players, standings, ownershipMap);
+  } = useDraftTeams(state, players, standings, ownershipMap, format);
 
   // ─── Timer derive ────────────────────────────────────────────────
   const { displayTimerSeconds } = useDraftTimer(state, dispatch);
@@ -164,7 +166,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
     state, dispatch, draftedSet,
     demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
-    teraCaptainSlots, queueIdle,
+    teraCaptainSlots, queueIdle, format,
   });
 
   // ─── Enqueue new picks into the animation queue ──────────────────
@@ -283,12 +285,12 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
       toast.error(`${pokemonName} is already drafted`);
       return;
     }
-    if (BANNED_SET.has(pokemonName)) {
+    if (getBanned(format).includes(pokemonName)) {
       toast.error(`${pokemonName} is banned`);
       return;
     }
 
-    const entry = TIER_LIST.find(e => e.name === pokemonName);
+    const entry = getTierList(format).find(e => e.name === pokemonName);
     if (!entry) {
       toast.error(`${pokemonName} not found in tier list`);
       return;
@@ -385,10 +387,13 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     state,
     dispatch,
     league,
+    /** Cost format for this league — drives tier list, bans, and captain reserve. */
+    format,
     players,
     ownershipMap,
     filteredPool,
     poolByTier,
+    matchReasons,
     currentPick,
     teamRosters,
     teamPoints,
