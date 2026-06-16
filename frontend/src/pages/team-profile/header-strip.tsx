@@ -4,7 +4,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
 import { RecordDisplay } from '@/components/record-display';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FlaskConical, ArrowLeft } from 'lucide-react';
+import { FlaskConical, ArrowLeft, SlidersHorizontal } from 'lucide-react';
 import { RankBadge } from './rank-badge';
 
 interface HeaderStripProps {
@@ -14,6 +14,9 @@ interface HeaderStripProps {
   onToggleTheorycraft: () => void;
   teamKills: number;
   teamDeaths: number;
+  /** Viewer can take manager actions (owner OR staff) — gates the Manage button. */
+  canManage: boolean;
+  onManage: () => void;
 }
 
 /**
@@ -34,6 +37,8 @@ export function HeaderStrip({
   onToggleTheorycraft,
   teamKills,
   teamDeaths,
+  canManage,
+  onManage,
 }: HeaderStripProps) {
   return (
     <div
@@ -126,17 +131,28 @@ export function HeaderStrip({
             <span>{player.teamAbbrev}</span>
           </p>
         </div>
-        <button
-          onClick={onToggleTheorycraft}
-          className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all ${
-            theorycraftMode
-              ? 'bg-pink/10 text-pink border border-pink/25'
-              : 'bg-surface-overlay/50 text-text-muted border border-border-subtle hover:text-neon hover:border-neon/30'
-          }`}
-        >
-          <FlaskConical size={11} />
-          {theorycraftMode ? 'Exit' : 'Theorycraft'}
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          {canManage && (
+            <button
+              onClick={onManage}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all bg-surface-overlay/50 text-text-muted border border-border-subtle hover:text-neon hover:border-neon/30"
+            >
+              <SlidersHorizontal size={11} />
+              Manage
+            </button>
+          )}
+          <button
+            onClick={onToggleTheorycraft}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all ${
+              theorycraftMode
+                ? 'bg-pink/10 text-pink border border-pink/25'
+                : 'bg-surface-overlay/50 text-text-muted border border-border-subtle hover:text-neon hover:border-neon/30'
+            }`}
+          >
+            <FlaskConical size={11} />
+            {theorycraftMode ? 'Exit' : 'Theorycraft'}
+          </button>
+        </div>
       </div>
 
       {/* Stats strip */}

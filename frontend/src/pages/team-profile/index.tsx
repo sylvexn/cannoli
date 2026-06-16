@@ -18,13 +18,13 @@ import { ReplayLink } from '@/components/replay-link';
 
 import { useAuth } from '@/lib/auth-context';
 import { canManageTeam } from '@/lib/permissions';
-import { api } from '@/lib/api';
 import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RosterTable } from './roster-table';
 import { TypeCoverageGridInner } from './type-coverage-grid';
 import { HeaderStrip } from './header-strip';
 import { SpriteShowcase } from './sprite-showcase';
+import { ManageRosterModal } from './manage-roster-modal';
 import { NextMatchBanner } from './next-match-banner';
 import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
@@ -85,6 +85,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const [theorycraftMode, setTheorycraftMode] = useState(
     searchParams.get('theorycraft') === '1',
   );
+  const [manageOpen, setManageOpen] = useState(false);
   // Strip the param after consumption so refresh doesn't re-enter mode unintentionally
   useEffect(() => {
     if (searchParams.get('theorycraft') === '1') {
@@ -105,7 +106,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const spriteRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [rosterOrder, setRosterOrder] = useState<number[]>([]);
-  const [shinyOverrides, setShinyOverrides] = useState<Map<string, boolean>>(new Map());
   const [sortKey, setSortKey] = useState<'tier' | 'kills' | 'deaths' | 'kpg' | 'spe'>('tier');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const matches = useMemo(() => getTeamMatches(player.id), [player.id]);
@@ -180,25 +180,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   function handleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
     else { setSortKey(key); setSortDir('desc'); }
-  }
-
-  function isMonShiny(mon: RosterPokemon) {
-    return shinyOverrides.has(mon.name) ? shinyOverrides.get(mon.name)! : !!mon.isShiny;
-  }
-
-  async function handleToggleShiny(mon: RosterPokemon) {
-    const newShiny = !isMonShiny(mon);
-    setShinyOverrides(prev => new Map(prev).set(mon.name, newShiny));
-    try {
-      await api.toggleShiny(player.id, mon.name, newShiny);
-    } catch {
-      // Revert on failure
-      setShinyOverrides(prev => {
-        const next = new Map(prev);
-        next.delete(mon.name);
-        return next;
-      });
-    }
   }
 
   function handleSwap(index: number, replacement: RosterPokemon) {
@@ -378,7 +359,22 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         onToggleTheorycraft={() => { setTheorycraftMode(!theorycraftMode); if (theorycraftMode) handleResetAll(); }}
         teamKills={teamKills}
         teamDeaths={teamDeaths}
+        canManage={canManage}
+        onManage={() => setManageOpen(true)}
       />
+
+      {/* ═══ MANAGE ROSTER MODAL (nicknames + shiny + tera, owner/staff) ═══ */}
+      {canManage && (
+        <ManageRosterModal
+          open={manageOpen}
+          onOpenChange={setManageOpen}
+          player={player}
+          config={config}
+          costFormat={costFormat}
+          season={season}
+          onSaved={refresh}
+        />
+      )}
 
       {/* ═══ NEXT-MATCH BANNER (regular/playoffs) ═══ */}
       {season && (
@@ -408,8 +404,6 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         pointsDelta={pointsDelta}
         captainCount={captainCount}
         theorycraftMode={theorycraftMode}
-        canManage={canManage}
-        user={user}
         season={season}
         swappingIndex={swappingIndex}
         addingMode={addingMode}
@@ -419,14 +413,12 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         dragOverIndex={dragOverIndex}
         dragPos={dragPos}
         spriteRefs={spriteRefs}
-        isMonShiny={isMonShiny}
         onPointerDownSprite={handlePositionPointerDown}
         onSetSwappingIndex={setSwappingIndex}
         onSetAddingMode={setAddingMode}
         onSetTeraEditingIndex={setTeraEditingIndex}
         onRevertSwap={handleRevertSwap}
         onRemoveMon={handleRemoveMon}
-        onToggleShiny={handleToggleShiny}
         onSwap={handleSwap}
         onAddMon={handleAddMon}
         onToggleCaptain={handleToggleCaptain}
@@ -450,7 +442,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             onSort={handleSort}
             onResetAll={handleResetAll}
             teamId={player.id}
-            canEditNickname={!theorycraftMode && canManageTeam(user, player)}
+            canEditNickname={false}
             onNicknameSaved={() => { void refresh(); }}
           />
         </div>

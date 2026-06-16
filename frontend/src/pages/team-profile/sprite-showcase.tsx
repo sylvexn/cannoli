@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import type { Player, RosterPokemon, LeagueConfig, LeagueSeason, User } from '@/lib/types';
+import type { Player, RosterPokemon, LeagueConfig, LeagueSeason } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import { getTermCost } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -8,7 +8,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { PointCapBarLarge } from '@/components/point-cap-bar';
 import { Card } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { RotateCcw, X, ArrowRightLeft, Plus, Sparkles } from 'lucide-react';
+import { RotateCcw, X, ArrowRightLeft, Plus } from 'lucide-react';
 import { SwapPicker, AddPicker } from './theorycraft-mode';
 import { TeraCaptainStrip } from './tera-captain-strip';
 import type { SwapEntry, TeraEdit } from './utils';
@@ -24,9 +24,6 @@ interface SpriteShowcaseProps {
   pointsDelta: number;
   captainCount: number;
   theorycraftMode: boolean;
-  /** True if the viewer can take manager actions on this team (owner OR staff). */
-  canManage: boolean;
-  user: User | null;
   season: LeagueSeason | null | undefined;
 
   // sprite-row interactive state
@@ -38,9 +35,8 @@ interface SpriteShowcaseProps {
   dragOverIndex: number | null;
   dragPos: { x: number; y: number } | null;
 
-  // refs / shiny
+  // refs
   spriteRefs: React.MutableRefObject<Map<number, HTMLDivElement>>;
-  isMonShiny: (mon: RosterPokemon) => boolean;
 
   // handlers
   onPointerDownSprite: (index: number, e: React.PointerEvent) => void;
@@ -49,7 +45,6 @@ interface SpriteShowcaseProps {
   onSetTeraEditingIndex: (i: number | null) => void;
   onRevertSwap: (index: number) => void;
   onRemoveMon: (displayIndex: number) => void;
-  onToggleShiny: (mon: RosterPokemon) => void;
   onSwap: (index: number, replacement: RosterPokemon) => void;
   onAddMon: (mon: RosterPokemon) => void;
   onToggleCaptain: (index: number) => void;
@@ -68,8 +63,6 @@ export function SpriteShowcase({
   pointsDelta,
   captainCount,
   theorycraftMode,
-  canManage,
-  user,
   season,
   swappingIndex,
   addingMode,
@@ -79,14 +72,12 @@ export function SpriteShowcase({
   dragOverIndex,
   dragPos,
   spriteRefs,
-  isMonShiny,
   onPointerDownSprite,
   onSetSwappingIndex,
   onSetAddingMode,
   onSetTeraEditingIndex,
   onRevertSwap,
   onRemoveMon,
-  onToggleShiny,
   onSwap,
   onAddMon,
   onToggleCaptain,
@@ -127,7 +118,7 @@ export function SpriteShowcase({
                       } ${beingDragged ? 'opacity-30 scale-95' : 'hover:bg-surface-overlay/60'
                       }`}
                     >
-                      <PokemonSprite name={mon.name} size="xl" shiny={isMonShiny(mon)} className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
+                      <PokemonSprite name={mon.name} size="xl" shiny={!!mon.isShiny} className={`transition-transform duration-200 ${!beingDragged ? 'group-hover:scale-110' : ''}`} />
                       {mon.isTeraCaptain && (
                         <svg
                           width="27"
@@ -166,25 +157,8 @@ export function SpriteShowcase({
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="bg-surface-overlay border-border-default text-xs">
                     <span className="font-semibold text-text-primary">{mon.name}</span>
-                    {mon.nickname && (
-                      <span className="italic text-text-muted ml-2 font-mono">"{mon.nickname}"</span>
-                    )}
-                    <span className="text-text-muted ml-2">{effectiveCost}pt{mon.isTeraCaptain ? ` (base ${mon.tier})` : ''}</span>
                   </TooltipContent>
                 </Tooltip>
-                {/* Shiny toggle button — any authenticated user (backend checks ownership) */}
-                {user && !theorycraftMode && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onToggleShiny(mon); }}
-                    className={`absolute bottom-7 left-1 z-10 transition-all p-1 rounded-md ${
-                      isMonShiny(mon)
-                        ? 'opacity-100 bg-yellow-500/20 text-yellow-400'
-                        : 'opacity-0 group-hover:opacity-100 bg-surface/80 text-text-muted hover:text-yellow-400 hover:bg-yellow-500/10'
-                    }`}
-                  >
-                    <Sparkles size={13} />
-                  </button>
-                )}
                 {/* Remove button */}
                 {theorycraftMode && (
                   <button
@@ -261,7 +235,7 @@ export function SpriteShowcase({
           captainCount={captainCount}
           config={config}
           theorycraftMode={theorycraftMode}
-          canEdit={theorycraftMode || canManage}
+          canEdit={theorycraftMode}
           seasonPhase={season?.phase ?? null}
           teraEdits={teraEdits}
           teraEditingIndex={teraEditingIndex}
