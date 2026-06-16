@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Trophy, Pencil, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Trophy, Pencil, ChevronRight, Globe, ArrowUpRight } from 'lucide-react';
 import { TeamColorChip, RoleChip, FinishBadge } from './chips';
 import { api, type ApiPublicProfile, type ApiPin, type ApiActivityEvent } from '@/lib/api';
 import { CoachAvatar } from '@/components/coach-avatar';
@@ -234,13 +234,23 @@ export function CoachProfilePage() {
         pastTeams={profile.pastTeams ?? []}
       />
 
-      {/* Recent highlights — top 1-3 events as larger cards. Sits above
-          the long-tail wall so the most recent moments read as portraits
-          rather than ledger entries. */}
-      <RecentHighlights events={activity} accent={primary} />
+      {/* Dev accounts (just `syl`) don't surface an activity wall — it's all
+          staff/admin actions, which the public wall is meant to hide. In its
+          place we show an external-links card (GitHub + portfolio). Everyone
+          else gets the normal highlights + wall. */}
+      {profile.role === 'dev' ? (
+        <DevLinks accent={primary} />
+      ) : (
+        <>
+          {/* Recent highlights — top 1-3 events as larger cards. Sits above
+              the long-tail wall so the most recent moments read as portraits
+              rather than ledger entries. */}
+          <RecentHighlights events={activity} accent={primary} />
 
-      {/* Wall (long tail) */}
-      <RecentMoments activity={activity} />
+          {/* Wall (long tail) */}
+          <RecentMoments activity={activity} />
+        </>
+      )}
     </div>
   );
 }
@@ -535,6 +545,66 @@ function PastTeamCard({
   );
 }
 
+
+/** External-links card shown in place of the activity wall on dev profiles.
+ *  `syl` is the only dev account; the links are intentionally hard-coded
+ *  rather than driven off a profile field — adding a schema column for a
+ *  single account isn't worth it. */
+function DevLinks({ accent }: { accent: string }) {
+  const links = [
+    {
+      href: 'https://github.com/sylvexn',
+      label: 'GitHub',
+      sub: 'github.com/sylvexn',
+      icon: (
+        <svg viewBox="0 0 16 16" width={16} height={16} fill="currentColor" aria-hidden>
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+        </svg>
+      ),
+    },
+    {
+      href: 'https://syl.rest',
+      label: 'Portfolio',
+      sub: 'syl.rest',
+      icon: <Globe size={16} />,
+    },
+  ];
+
+  return (
+    <div className="rounded-xl border border-border-default bg-surface-raised p-4">
+      <h2 className="text-[11px] font-heading font-semibold uppercase tracking-[0.18em] text-text-muted mb-3">
+        Links
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {links.map(link => (
+          <a
+            key={link.href}
+            href={link.href}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="card-interactive group flex items-center gap-3 rounded-lg border border-border-default bg-surface-overlay/40 px-3 py-2.5 hover:border-neon/40 transition-colors"
+            style={{ ['--card-accent' as never]: accent }}
+          >
+            <span
+              className="shrink-0 text-text-muted group-hover:text-neon transition-colors"
+              style={{ color: accent }}
+            >
+              {link.icon}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-text-primary leading-tight">{link.label}</div>
+              <div className="text-[11px] font-mono text-text-muted truncate">{link.sub}</div>
+            </div>
+            <ArrowUpRight
+              size={14}
+              className="shrink-0 text-text-muted group-hover:text-neon group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all"
+            />
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
   return (
