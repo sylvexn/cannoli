@@ -62,6 +62,15 @@ exports.pokemonshowdowncom = false; // We're not smogon
 exports.crashguard = true;
 exports.watchdog = true;
 
+// Disable the debug REPL. Upstream config-example.js defaults `repl = true`,
+// and PS's config loader merges those defaults under our config, so it'd be on
+// unless we explicitly turn it off here. The REPL opens a Unix socket at
+// logs/repl/app (logs/ is a persistent volume, so the socket survives restarts);
+// when a client connects and then drops, PS writes the REPL prompt to the dead
+// socket and the synchronous `write EPIPE` crashes the whole process. We never
+// use the REPL in production — turn it off.
+exports.repl = false;
+
 // ─── Cannoli league rooms (startup hook) ────────────────────────────────────
 //
 // On boot, fetch active leagues from the Cannoli backend and ensure a chat
