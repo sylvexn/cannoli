@@ -101,7 +101,7 @@ export interface ApiCoachOwner {
   primaryColor: string | null;
   secondaryColor: string | null;
   tertiaryColor: string | null;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
 }
 
 export interface ApiTeam {
@@ -293,7 +293,7 @@ export interface ApiDraftState {
 export interface ApiAuthUser {
   id: string;
   username: string;
-  role: 'dev' | 'admin' | 'user';
+  role: 'dev' | 'admin' | 'user' | 'bot';
   mustChangePassword: boolean;
   active: boolean;
   createdAt: string | null;
@@ -352,7 +352,7 @@ export interface ApiPublicProfile {
   /** User's role — surfaced on the profile page as an ADMIN chip when
    *  applicable. Only set on backends that include it (older deploys may
    *  omit it; treat undefined as `'user'`). */
-  role?: 'dev' | 'admin' | 'user' | null;
+  role?: 'dev' | 'admin' | 'user' | 'bot' | null;
   currentTeams: Array<{
     teamId: string;
     leagueId: string;
@@ -1106,7 +1106,7 @@ export const api = {
     primaryColor: string | null;
     secondaryColor: string | null;
     tertiaryColor: string | null;
-    role: 'dev' | 'admin' | 'user';
+    role: 'dev' | 'admin' | 'user' | 'bot';
     statusMessage: string | null;
     lastSeenAt: string | null;
   }> }>('/api/online'),

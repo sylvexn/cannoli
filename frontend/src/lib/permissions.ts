@@ -24,9 +24,11 @@ type RoledUser = Pick<User, 'role'> | { role: string };
 /** Anything with a userId is enough — Player, Team, Coach tenure rows… */
 type OwnedTeam = { userId?: number | string | null };
 
-/** True for users with the dev or admin role (staff override). */
+/** True for users with the dev, admin, or bot role (staff override). The `bot`
+ *  automation role (root + CannoliBot) shares staff power; it's only kept out
+ *  of the admin/"elite 4" filter in the users panel, not from access. */
 export function isStaff(user: RoledUser | null | undefined): boolean {
-  return !!user && (user.role === 'dev' || user.role === 'admin');
+  return !!user && (user.role === 'dev' || user.role === 'admin' || user.role === 'bot');
 }
 
 /**

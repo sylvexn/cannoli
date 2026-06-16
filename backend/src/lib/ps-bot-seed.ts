@@ -14,11 +14,37 @@
  */
 
 import { db, schema } from '../db';
-import { eq } from 'drizzle-orm';
+import { eq, and, ne, sql } from 'drizzle-orm';
 import { hashPassword } from './auth';
 
 const BOT_USERNAME = process.env.BOT_USERNAME || 'CannoliBot';
 const BOT_PASSWORD = process.env.BOT_PASSWORD || 'cannolibot';
+
+/** System accounts that carry the automation `bot` role: the `root` system
+ *  account and the configured PS bot. `bot` is staff (full override power) but
+ *  is excluded from the admin/"elite 4" filter in the users panel. */
+const SYSTEM_BOT_USERNAMES = ['root', BOT_USERNAME];
+
+/**
+ * Promote the system bot accounts (root + the PS bot) to the `bot` role.
+ *
+ * Idempotent and runs on every boot so the live DB self-heals to the intended
+ * role for these accounts (the existing rows predate the role and were seeded
+ * as `admin` / `user`). Matched case-insensitively because PS canonicalizes the
+ * bot username; only flips rows that aren't already `bot` to avoid needless
+ * writes. Safe when an account is absent (affects 0 rows).
+ */
+export function reconcileBotRoles(): void {
+  for (const name of SYSTEM_BOT_USERNAMES) {
+    db.update(schema.users)
+      .set({ role: 'bot' })
+      .where(and(
+        eq(sql`lower(${schema.users.username})`, name.toLowerCase()),
+        ne(schema.users.role, 'bot'),
+      ))
+      .run();
+  }
+}
 
 /**
  * Insert the `cannolibot` user if missing. Safe to call on every boot — repeated
@@ -49,7 +75,7 @@ export function ensureBotUser(): {
   const inserted = db.insert(schema.users).values({
     username: BOT_USERNAME,
     passwordHash: hashPassword(BOT_PASSWORD),
-    role: 'user',
+    role: 'bot',
     mustChangePassword: false,
     active: true,
   }).returning().get();

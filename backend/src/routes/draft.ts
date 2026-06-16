@@ -30,7 +30,7 @@ function wsKey(ws: any): object {
 interface DraftPresence {
   teamId: string | null; // null = spectator/admin
   username: string;
-  role: 'dev' | 'admin' | 'user' | 'spectator';
+  role: 'dev' | 'admin' | 'user' | 'bot' | 'spectator';
   /** User ID from session — used for league-isolation auth on WS messages. */
   userId: number | null;
 }

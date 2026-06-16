@@ -45,7 +45,7 @@ export function validateSession(token: string) {
   return {
     id: String(user.id),
     username: user.username,
-    role: user.role as 'dev' | 'admin' | 'user',
+    role: user.role as 'dev' | 'admin' | 'user' | 'bot',
     mustChangePassword: user.mustChangePassword,
     active: user.active,
     createdAt: user.createdAt,
@@ -93,9 +93,11 @@ export function clearSessionCookieString(): string {
   return parts.join('; ');
 }
 
-/** Check if a user has staff privileges (dev or admin — both have full override power) */
+/** Check if a user has staff privileges (dev, admin, or bot — all have full
+ *  override power). `bot` is the automation account role (root + CannoliBot);
+ *  it shares staff power but is kept out of the admin/"elite 4" filter in the UI. */
 export function isStaff(user: { role: string } | null | undefined): boolean {
-  return !!user && (user.role === 'dev' || user.role === 'admin');
+  return !!user && (user.role === 'dev' || user.role === 'admin' || user.role === 'bot');
 }
 
 /** True only for the `dev` role — for tooling that admins shouldn't see

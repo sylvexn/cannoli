@@ -23,7 +23,7 @@ import { psInternalRoutes } from './routes/ps-internal';
 import { pinRoutes } from './routes/pins';
 import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
-import { ensureBotUser } from './lib/ps-bot-seed';
+import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
 import { startSchedulers } from './lib/scheduler';
 import { markRequestStart, captureRequestError, logRequest, logServerFault, getRequestId } from './lib/request-log';
 import { startHeartbeat } from './lib/heartbeat';
@@ -235,6 +235,10 @@ const app = new Elysia()
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
 console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);
+
+// Self-heal the system bot accounts (root + CannoliBot) to the `bot` role on
+// every boot, independent of whether the PS bot is configured.
+reconcileBotRoles();
 
 // Start PS Monitor Bot if configured
 if (process.env.PS_SERVER_WS_URL) {

@@ -10,7 +10,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { db, schema } from '../src/db';
 import { eq } from 'drizzle-orm';
-import { ensureBotUser } from '../src/lib/ps-bot-seed';
+import { ensureBotUser, reconcileBotRoles } from '../src/lib/ps-bot-seed';
 
 const BOT_USERNAME = process.env.BOT_USERNAME || 'CannoliBot';
 
@@ -45,16 +45,61 @@ describe('ensureBotUser', () => {
     expect(countBotRows()).toBe(1);
   });
 
-  test('the seeded user has mustChangePassword=false and role=user', () => {
+  test('the seeded user has mustChangePassword=false and role=bot', () => {
     const row = db.select().from(schema.users)
       .where(eq(schema.users.username, BOT_USERNAME))
       .get();
     expect(row).toBeTruthy();
     expect(row!.mustChangePassword).toBe(false);
-    expect(row!.role).toBe('user');
+    expect(row!.role).toBe('bot');
     expect(row!.active).toBe(true);
     // Hash should be a non-trivial bcrypt-style string, not the plaintext.
     expect(row!.passwordHash.length).toBeGreaterThan(20);
     expect(row!.passwordHash).not.toBe(process.env.BOT_PASSWORD || 'cannolibot');
+  });
+});
+
+describe('reconcileBotRoles', () => {
+  const OTHER = 'zzz_reconcile_nonbot_test';
+
+  beforeAll(() => {
+    db.delete(schema.users).where(eq(schema.users.username, BOT_USERNAME)).run();
+    db.delete(schema.users).where(eq(schema.users.username, OTHER)).run();
+    // Legacy bot row predating the role: seeded as a plain user.
+    db.insert(schema.users).values({
+      username: BOT_USERNAME, passwordHash: 'x'.repeat(30), role: 'user',
+      mustChangePassword: false, active: true,
+    }).run();
+    // A non-system user the reconciler must leave untouched.
+    db.insert(schema.users).values({
+      username: OTHER, passwordHash: 'x'.repeat(30), role: 'user',
+      mustChangePassword: false, active: true,
+    }).run();
+  });
+
+  afterAll(() => {
+    db.delete(schema.users).where(eq(schema.users.username, BOT_USERNAME)).run();
+    db.delete(schema.users).where(eq(schema.users.username, OTHER)).run();
+  });
+
+  test('promotes the legacy bot account to role=bot', () => {
+    reconcileBotRoles();
+    const row = db.select().from(schema.users)
+      .where(eq(schema.users.username, BOT_USERNAME)).get();
+    expect(row!.role).toBe('bot');
+  });
+
+  test('leaves non-system users untouched', () => {
+    const row = db.select().from(schema.users)
+      .where(eq(schema.users.username, OTHER)).get();
+    expect(row!.role).toBe('user');
+  });
+
+  test('is idempotent', () => {
+    reconcileBotRoles();
+    reconcileBotRoles();
+    const row = db.select().from(schema.users)
+      .where(eq(schema.users.username, BOT_USERNAME)).get();
+    expect(row!.role).toBe('bot');
   });
 });

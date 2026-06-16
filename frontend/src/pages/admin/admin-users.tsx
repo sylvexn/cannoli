@@ -28,7 +28,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState<ApiAuthUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user' | 'bot'>('all');
   const [sortBy, setSortBy] = useState<'username' | 'role' | 'status' | 'created'>('username');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [createOpen, setCreateOpen] = useState(false);
@@ -132,7 +132,7 @@ export function AdminUsers() {
       {/* Header: role filter + search + create */}
       <div className="flex items-center gap-3">
         <div className="flex gap-0.5 rounded-md border border-border-subtle overflow-hidden">
-          {(['all', 'admin', 'user'] as const).map(r => (
+          {(['all', 'admin', 'user', 'bot'] as const).map(r => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}
@@ -206,9 +206,11 @@ export function AdminUsers() {
               variant="outline"
               className={cn(
                 'text-[10px] px-1.5 py-0 h-4 w-[60px] justify-center',
-                (user.role === 'admin' || user.role === 'dev')
-                  ? 'bg-neon/10 text-neon border-neon/30'
-                  : 'text-text-muted border-border-subtle',
+                user.role === 'bot'
+                  ? 'bg-violet-400/10 text-violet-400 border-violet-400/30'
+                  : (user.role === 'admin' || user.role === 'dev')
+                    ? 'bg-neon/10 text-neon border-neon/30'
+                    : 'text-text-muted border-border-subtle',
               )}
             >
               {user.role === 'admin' ? 'elder' : user.role}
@@ -244,12 +246,14 @@ export function AdminUsers() {
                   <KeyRound size={14} />
                   Reset Password
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleToggleRole(user.id)}>
-                  {user.role === 'admin'
-                    ? <><ShieldOff size={14} /> Demote to User</>
-                    : <><ShieldCheck size={14} /> Promote to Admin</>
-                  }
-                </DropdownMenuItem>
+                {user.role !== 'bot' && (
+                  <DropdownMenuItem onClick={() => handleToggleRole(user.id)}>
+                    {user.role === 'admin'
+                      ? <><ShieldOff size={14} /> Demote to User</>
+                      : <><ShieldCheck size={14} /> Promote to Admin</>
+                    }
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => handleToggleActive(user.id)}

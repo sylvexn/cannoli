@@ -148,7 +148,7 @@ export function CoachProfilePage() {
             >
               {display}
             </h1>
-            {(profile.role === 'admin' || profile.role === 'dev') && (
+            {(profile.role === 'admin' || profile.role === 'dev' || profile.role === 'bot') && (
               <RoleChip role={profile.role} />
             )}
             {heroTeam && (

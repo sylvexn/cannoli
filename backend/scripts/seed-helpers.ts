@@ -17,7 +17,7 @@ type DB = ReturnType<typeof drizzle<typeof schema>>;
 
 // ─── System accounts ────────────────────────────────────────────────────────
 
-/** Seed the syl (dev) + root (admin) system accounts. Idempotent. */
+/** Seed the syl (dev) + root (bot) system accounts. Idempotent. */
 export function seedSystemAccounts(sqlite: Database, db: DB): void {
   const existing = sqlite
     .prepare('SELECT COUNT(*) as c FROM users WHERE username IN (?, ?)')
@@ -38,12 +38,12 @@ export function seedSystemAccounts(sqlite: Database, db: DB): void {
   db.insert(schema.users).values({
     username: 'root',
     passwordHash: hashSync('root', 10),
-    role: 'admin',
+    role: 'bot',
     mustChangePassword: true,
     active: true,
   }).run();
 
-  console.log('  Created: syl (dev), root (admin)');
+  console.log('  Created: syl (dev), root (bot)');
 }
 
 // ─── Site settings ──────────────────────────────────────────────────────────

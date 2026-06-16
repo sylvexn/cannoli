@@ -8,7 +8,7 @@ import { Pin } from '@/components/pin';
 import { formatRecord, formatTenure } from '@/lib/format';
 import { blendHex, readableOnDark } from '@/lib/color';
 import { cn } from '@/lib/utils';
-import { ChevronRight, Shield, Code2 } from 'lucide-react';
+import { ChevronRight, Shield, Code2, Bot } from 'lucide-react';
 
 /** Named avatar size scale shared with CoachAvatar. Re-exported for callers
  *  that want to align with the design tokens without importing two files. */
@@ -25,7 +25,7 @@ export interface CoachRef {
   secondaryColor?: string | null;
   tertiaryColor?: string | null;
   avatarPath?: string | null;
-  role?: 'dev' | 'admin' | 'user' | null;
+  role?: 'dev' | 'admin' | 'user' | 'bot' | null;
 }
 
 interface CoachLinkProps {
@@ -85,7 +85,7 @@ export function CoachLink({
   // is legible at a glance — gradient names = staff, solid = coach/user.
   // The solid color is lifted to a lightness floor so very dark team
   // colors (#530000 etc.) still read on the near-black site background.
-  const isStaff = coach.role === 'dev' || coach.role === 'admin';
+  const isStaff = coach.role === 'dev' || coach.role === 'admin' || coach.role === 'bot';
   const nameStyle: CSSProperties = isStaff
     ? {
         backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
@@ -139,6 +139,15 @@ export function CoachLink({
           title="Elder"
         >
           <Shield size={8} />
+        </span>
+      )}
+      {coach.role === 'bot' && (
+        <span
+          aria-label="Bot"
+          className="inline-flex items-center justify-center rounded-full px-1.5 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-violet-400/15 text-violet-400 ring-1 ring-violet-400/30"
+          title="Bot"
+        >
+          <Bot size={8} />
         </span>
       )}
       {trailing}
@@ -217,7 +226,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
   const secondary = merged.secondaryColor ?? FALLBACK_SECONDARY;
   const tertiary = merged.tertiaryColor ?? blendHex(primary, secondary);
 
-  const isStaff = coach.role === 'dev' || coach.role === 'admin';
+  const isStaff = coach.role === 'dev' || coach.role === 'admin' || coach.role === 'bot';
   const nameStyle: CSSProperties = isStaff
     ? {
         backgroundImage: `linear-gradient(90deg, ${primary} 0%, ${secondary} 100%)`,
@@ -289,6 +298,11 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
             {coach.role === 'admin' && (
               <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 px-1.5 py-px rounded-full ring-1 ring-amber-400/30 shrink-0">
                 Elder
+              </span>
+            )}
+            {coach.role === 'bot' && (
+              <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-violet-400/15 text-violet-400 px-1.5 py-px rounded-full ring-1 ring-violet-400/30 shrink-0">
+                Bot
               </span>
             )}
           </div>

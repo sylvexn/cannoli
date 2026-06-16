@@ -7,7 +7,7 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: ['dev', 'admin', 'user'] }).notNull().default('user'),
+  role: text('role', { enum: ['dev', 'admin', 'user', 'bot'] }).notNull().default('user'),
   mustChangePassword: integer('must_change_password', { mode: 'boolean' }).notNull().default(true),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
