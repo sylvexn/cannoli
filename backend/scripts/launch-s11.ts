@@ -142,3 +142,9 @@ console.log(`  teams still on placeholder logo: ${logos.placeholder.length} [${l
 
 sqlite.close();
 console.log('\nDone.');
+console.log(
+  '\nNEXT: run `bun run scripts/apply-s11-costs.ts` against this DB. The XLSX ' +
+    'import sets costs from each league sheet (old NatDex — legendaries banned); ' +
+    'apply-s11-costs overwrites them with the NatDex+ S11 costs and confirms the ' +
+    'admin-review / top-8 league settings.',
+);

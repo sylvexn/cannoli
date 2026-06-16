@@ -143,6 +143,10 @@ interface SeasonConfig {
   phase?: 'draft' | 'regular' | 'playoffs' | 'offseason';
   currentWeek?: number;
   totalWeeks?: number;
+  /** Per-league forfeit handling. Omitted → schema default ('double_forfeit'). */
+  forfeitPolicy?: 'double_forfeit' | 'admin_review';
+  /** Teams that make the playoff bracket. Omitted → schema default (6). */
+  playoffTeamCount?: number;
 }
 
 export const S10_CONFIG: SeasonConfig = {
@@ -169,6 +173,11 @@ export const S11_CONFIG: SeasonConfig = {
   phase: 'regular',
   currentWeek: 1,
   totalWeeks: 11,
+  // S11 ruleset: forfeits are adjudicated case-by-case by admins (not auto
+  // double-forfeit), and the playoff bracket is top 8. Costs (NatDex+) land
+  // separately via `apply-s11-costs.ts` / `gen-tier-list.ts`.
+  forfeitPolicy: 'admin_review',
+  playoffTeamCount: 8,
   // League IDs are season-scoped and must be unique across the whole DB. S10
   // already owns the bare `sapphire`/`ruby`/`emerald` ids, and S9 uses `s9-*`,
   // so S11 takes `s11-*`. The current season is whichever has the highest
@@ -387,6 +396,8 @@ export function importSeason(
       currentWeek: leagueCurrentWeek,
       totalWeeks: leagueTotalWeeks,
       tradeDeadlineWeek: 7,
+      ...(config.forfeitPolicy ? { forfeitPolicy: config.forfeitPolicy } : {}),
+      ...(config.playoffTeamCount ? { playoffTeamCount: config.playoffTeamCount } : {}),
     }).run();
 
     // ─── Teams from Standings sheet ──────────────────────────────────────
