@@ -139,7 +139,7 @@ export function SpriteShowcase({
                           <path d="M9 3 L9 7.5" stroke="white" strokeWidth="0.6" opacity="0.35" />
                         </svg>
                       )}
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+                      <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2">
                         <TierBadge points={effectiveCost} />
                       </div>
                       {/* Swap button on hover (theorycraft mode only) */}
@@ -171,7 +171,7 @@ export function SpriteShowcase({
                 {/* Nickname under sprite */}
                 {mon.nickname && (
                   <div
-                    className="max-w-[88px] truncate text-center text-[9px] italic font-mono text-text-muted leading-tight -mt-0.5"
+                    className="max-w-full truncate text-center text-[11px] italic font-mono text-text-muted leading-tight mt-1.5"
                     title={mon.nickname}
                   >
                     "{mon.nickname}"

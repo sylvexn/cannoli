@@ -21,6 +21,35 @@ export const TYPE_COLORS: Record<PokemonType, string> = {
   steel: '#b7b7ce', fairy: '#d685ad',
 };
 
+/** Deuteranopia/protanopia-safe variant — shifts red/green/brown so all 18
+ *  types remain mutually distinct without relying on red-vs-green hue.
+ *  Use via `getTypeColors(colorblindMode)` rather than directly. */
+export const TYPE_COLORS_CB: Record<PokemonType, string> = {
+  normal:   '#A8A878', // neutral gray — unchanged
+  fire:     '#E87820', // shift red → orange
+  water:    '#6890F0', // blue — unchanged
+  electric: '#F8D030', // yellow — unchanged
+  grass:    '#40C080', // shift green → teal-green
+  ice:      '#98D8D8', // cyan — unchanged
+  fighting: '#C03028', // dark red — distinct from Fire orange
+  poison:   '#A848A8', // shift to pure purple
+  ground:   '#E0C068', // tan — unchanged
+  flying:   '#A890F0', // lavender — unchanged
+  psychic:  '#F85888', // pink — distinct from Fighting dark red
+  bug:      '#A8B820', // yellow-green — distinct from Grass teal
+  rock:     '#B8A038', // dark gold — unchanged
+  ghost:    '#705898', // dark purple — distinct from Poison bright purple
+  dragon:   '#7038F8', // blue-violet — unchanged
+  dark:     '#705848', // dark brown — unchanged
+  steel:    '#B8B8D0', // silver — unchanged
+  fairy:    '#EE99AC', // pink — unchanged
+};
+
+/** Returns the deuteranopia-safe type color palette when `cb` is true. */
+export function getTypeColors(cb: boolean): Record<PokemonType, string> {
+  return cb ? TYPE_COLORS_CB : TYPE_COLORS;
+}
+
 /** Three-letter Pokemon type labels for chips/badges */
 export const TYPE_LABELS: Record<PokemonType, string> = {
   normal: 'NOR', fire: 'FIR', water: 'WAT', electric: 'ELE', grass: 'GRA',

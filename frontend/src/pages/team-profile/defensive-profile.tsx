@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import type { PokemonType } from '@/lib/pokemon';
-import { TYPE_COLORS } from '@/lib/constants';
+import { getTypeColors } from '@/lib/constants';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/lib/auth-context';
 
 // ─── Multiplier styles ───────────────────────────────────────────
 export const MULT_STYLES: Record<string, { bg: string; hover: string; border: string; text: string; label: string; textCls: string }> = {
@@ -50,6 +51,8 @@ export function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'm
 // ─── DefSegment ──────────────────────────────────────────────────
 export function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pct: number; types: PokemonType[] }) {
   const s = MULT_STYLES[getMultKey(mult)];
+  const { colorblindMode } = useAuth();
+  const typeColors = getTypeColors(colorblindMode);
 
   const matchups = useMemo(() => {
     const raw = getDefensiveMatchups(types);
@@ -91,7 +94,7 @@ export function DefSegment({ name, mult, pct, types }: { name: string; mult: num
           <MultChip mult={mult} />
           <div className="ml-auto flex gap-0.5">
             {types.map(t => (
-              <span key={t} className="text-[8px] font-bold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[t] }}>
+              <span key={t} className="text-[8px] font-bold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: typeColors[t] }}>
                 {t.slice(0, 3)}
               </span>
             ))}
@@ -108,7 +111,7 @@ export function DefSegment({ name, mult, pct, types }: { name: string; mult: num
                 </span>
                 <div className="flex flex-wrap gap-px">
                   {entries.map(({ type }) => (
-                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: TYPE_COLORS[type] }}>
+                    <span key={type} className="text-[8px] font-semibold uppercase px-1 py-px rounded text-white" style={{ backgroundColor: typeColors[type] }}>
                       {type.slice(0, 3)}
                     </span>
                   ))}

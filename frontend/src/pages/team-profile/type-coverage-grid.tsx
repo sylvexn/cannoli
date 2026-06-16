@@ -1,13 +1,17 @@
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
-import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
+import { getTypeColors, TYPE_ABBR } from '@/lib/constants';
 import type { TypeProfileEntry } from './utils';
 import { DefSegment, MultChip } from './defensive-profile';
+import { useAuth } from '@/lib/auth-context';
 
 export function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
   profile: Record<PokemonType, TypeProfileEntry>;
   pokemonTypesMap: Map<string, PokemonType[]>;
 }) {
+  const { colorblindMode } = useAuth();
+  const typeColors = getTypeColors(colorblindMode);
+
   const maxCount = Math.max(
     ...POKEMON_TYPES.map(t => {
       const p = profile[t];
@@ -29,7 +33,7 @@ export function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
           <div key={type} className="flex items-center gap-0 flex-1 min-h-[18px] group/row">
             <span
               className="text-[8px] font-bold uppercase w-[30px] text-center rounded-l-full text-white shrink-0 leading-none flex items-center justify-center self-stretch"
-              style={{ backgroundColor: TYPE_COLORS[type] }}
+              style={{ backgroundColor: typeColors[type] }}
             >
               {TYPE_ABBR[type]}
             </span>
