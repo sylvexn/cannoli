@@ -1,5 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollText, Swords, Star, ShieldOff } from 'lucide-react';
+// Sourced from the generated tier list (backend/imports/Costs.xlsx, NatDex+) so
+// the published ban list always matches what the draft board enforces.
+import { TERA_BANNED } from '@/data/tier-list';
 
 const DRAFT_RULES: string[] = [
   'You have up to 110 points with which to draft 10–12 Pokémon. Costs are listed on the draft board. You do not have to spend your full budget.',
@@ -21,6 +24,8 @@ const BATTLE_RULES: string[] = [
   'Either coach can turn the timer on without asking the other coach (Sapphire & Ruby).',
   'All Pokémon must be Level 100 and you must bring a team of 6 Pokémon to battle.',
   'Battles are done with Tera Preview, meaning the Tera Types of both teams are posted in the battle\'s chat box when choosing your lead Pokémon.',
+  'The top 8 teams in each league qualify for the playoff bracket.',
+  'Forfeits are handled case-by-case by admin review — there is no automatic double-forfeit. If a match cannot be completed by the week\'s deadline, contact staff and the result will be adjudicated.',
 ];
 
 const CLAUSES: { name: string; description: string }[] = [
@@ -44,11 +49,6 @@ const BANNED_ITEMS = ['Bright Powder', 'Lax Incense', 'Razor Fang', "King's Rock
 const BANNED_MOVES = [
   'Acupressure', 'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
   'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail', 'Swagger',
-];
-
-const TERA_BANNED = [
-  'Alcremie', 'Blastoise', 'Cetitan', 'Kingdra', 'Linoone', 'Lokix',
-  'Polteageist', 'Reuniclus', 'Sinistcha', 'Swellow', 'Toxtricity', 'Venomoth',
 ];
 
 export function RulesPage() {
