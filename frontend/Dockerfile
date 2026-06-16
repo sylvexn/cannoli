@@ -11,8 +11,12 @@ RUN bun install --frozen-lockfile
 
 COPY frontend/ frontend/
 
-ARG COMMIT_HASH=unknown
-ENV COMMIT_HASH=$COMMIT_HASH
+# Coolify injects SOURCE_COMMIT as a build arg; feed it to COMMIT_HASH, which
+# vite.config.ts bakes into __COMMIT_HASH__ (used as the client error-report
+# version in lib/breadcrumbs.ts). The in-Docker `git rev-parse` can't see .git,
+# so this build arg is the real source of the SHA. Falls back to 'unknown'.
+ARG SOURCE_COMMIT=unknown
+ENV COMMIT_HASH=$SOURCE_COMMIT
 
 RUN cd frontend && bun run build
 
