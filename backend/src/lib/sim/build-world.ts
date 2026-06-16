@@ -306,10 +306,16 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
 
   // ── Base data ─────────────────────────────────────────────────────────────
   seedSystemAccounts(sqlite, db);
-  seedSiteSettings(sqlite, db, {
-    mock: true,
-    announcement: 'Welcome to the Cannoli season simulator — every coach, team, and result here is fictional.',
-  });
+  seedSiteSettings(sqlite, db);
+  // Sim-only welcome notice, now an announcement (site_settings.announcement
+  // was retired when the announcement systems unified). 'both' surface → shows
+  // as the site-wide banner and in the notifications bell.
+  db.insert(schema.announcements).values({
+    title: 'Welcome to the simulator',
+    body: 'Welcome to the Cannoli season simulator — every coach, team, and result here is fictional.',
+    category: 'info',
+    surface: 'both',
+  }).run();
   seedPinDefinitions(sqlite, db);
   seedMoveCategories(sqlite, db);
 

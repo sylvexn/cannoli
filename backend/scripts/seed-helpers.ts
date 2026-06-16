@@ -49,7 +49,7 @@ export function seedSystemAccounts(sqlite: Database, db: DB): void {
 // ─── Site settings ──────────────────────────────────────────────────────────
 
 /** Seed the single site_settings row. Idempotent. */
-export function seedSiteSettings(sqlite: Database, db: DB, opts: { mock?: boolean; announcement?: string } = {}): void {
+export function seedSiteSettings(sqlite: Database, db: DB): void {
   const existing = sqlite.prepare('SELECT COUNT(*) as c FROM site_settings').get() as { c: number };
   if (existing.c > 0) {
     console.log('Site settings already exist, skipping.');
