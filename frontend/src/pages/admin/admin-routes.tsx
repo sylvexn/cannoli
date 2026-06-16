@@ -89,10 +89,10 @@ export const AdminActivityRoute = () => {
   );
 };
 /**
- * Route guard for dev-only admin tabs (API Logs, Feedback). Admins are staff
- * and can reach /admin, but these tabs are dev-tooling — redirect non-dev to
- * the admin landing tab. Mirrors the server-side requireDev guard so a
- * hand-typed URL can't render the tab.
+ * Route guard for dev-only admin tabs (Observability, API Logs, PS Bot).
+ * Admins are staff and can reach /admin, but these tabs are dev-tooling —
+ * redirect non-dev to the admin landing tab. Mirrors the server-side
+ * requireDev guard so a hand-typed URL can't render the tab.
  */
 function DevOnly({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -109,9 +109,7 @@ export const AdminApiLogsRoute = () => (
   </DevOnly>
 );
 export const AdminFeedbackRoute = () => (
-  <DevOnly>
-    <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
-  </DevOnly>
+  <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
 );
 export const AdminObservabilityRoute = () => {
   // Mark the dev's observability view as "seen" on mount so the nav unread
@@ -124,7 +122,9 @@ export const AdminObservabilityRoute = () => {
   );
 };
 export const AdminBotRoute = () => (
-  <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>
+  <DevOnly>
+    <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>
+  </DevOnly>
 );
 
 /** Single-tab pins admin (was Definitions / Award; merged into one

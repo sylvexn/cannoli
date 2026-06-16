@@ -74,10 +74,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { slug: 'activity', label: 'Activity Log', icon: ScrollText },
+      { slug: 'feedback', label: 'Feedback',     icon: MessageSquare },
       { slug: 'observability', label: 'Observability', icon: Gauge, devOnly: true },
       { slug: 'api-logs', label: 'API Logs',     icon: Activity, devOnly: true },
-      { slug: 'bot',      label: 'PS Bot',       icon: Bot },
-      { slug: 'feedback', label: 'Feedback',     icon: MessageSquare, devOnly: true },
+      { slug: 'bot',      label: 'PS Bot',       icon: Bot, devOnly: true },
     ],
   },
 ];
@@ -115,8 +115,8 @@ export function AdminPage() {
   }, [isDev]);
 
   // Append the mock-only Simulator tab to the System group when the backend
-  // reports mock mode, then drop any dev-only tabs (API Logs, Feedback) for
-  // non-dev staff. Route-level guards back this up server-side.
+  // reports mock mode, then drop any dev-only tabs (Observability, API Logs,
+  // PS Bot) for non-dev staff. Route-level guards back this up server-side.
   const navGroups: NavGroup[] = (mode === 'mock'
     ? NAV_GROUPS.map(g =>
         g.label === 'System' ? { ...g, items: [...g.items, SIM_NAV_ITEM] } : g,

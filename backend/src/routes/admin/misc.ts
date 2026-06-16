@@ -13,10 +13,13 @@ export const miscRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
   // ─── PS Bot Status ──────────────────────────────────────────────────
+  //
+  // DEV-ONLY: the per-route requireDev guard narrows these below the group's
+  // requireStaff — PS Bot monitoring/control is dev tooling, not for admins.
 
   .get('/api/admin/bot-status', () => {
     return getBotStatus();
-  })
+  }, { beforeHandle: requireDev })
 
   // Force-reconnect the PS Monitor Bot. Closes the current WS and immediately
   // reopens — used when the bot is wedged or after credential rotations.
@@ -31,7 +34,7 @@ export const miscRoutes = new Elysia()
       metadata: '{}',
     }).run();
     return { success: true };
-  })
+  }, { beforeHandle: requireDev })
 
   // Backfill pin_awarded activity-log entries for pins missing them.
   // Idempotent — safe to re-run; returns how many rows were emitted.
