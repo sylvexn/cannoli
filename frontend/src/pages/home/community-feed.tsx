@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/empty-state';
 import { ActivityFeed } from '@/components/activity-feed';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
-import { Megaphone, Users, Swords, ArrowLeftRight, Trophy } from 'lucide-react';
+import { Users, Swords, ArrowLeftRight, Trophy } from 'lucide-react';
 import type { ApiTeam, ApiActivityEvent } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { HeadlinesStrip } from './headlines-strip';
@@ -41,7 +41,6 @@ export function CommunityFeed({
   tradesCount,
   totalMatches,
   tradesLoading,
-  announcement,
 }: {
   leagues: League[];
   teamsPerLeague: Record<string, ApiTeam[]>;
@@ -53,14 +52,9 @@ export function CommunityFeed({
   tradesCount: number;
   totalMatches: number;
   tradesLoading: boolean;
-  announcement: { enabled: boolean; text: string; type: 'info' | 'warning' | 'success' };
 }) {
   return (
     <div className="space-y-6">
-      {announcement.enabled && (
-        <AnnouncementBanner text={announcement.text} type={announcement.type} />
-      )}
-
       <HeadlinesStrip headlines={headlines} />
 
       {/* Horizontal stats strip — was vertical inside the right rail; moved
@@ -209,16 +203,3 @@ function DenseLeagueCard({
   );
 }
 
-function AnnouncementBanner({ text, type }: { text: string; type: 'info' | 'warning' | 'success' }) {
-  const tone =
-    type === 'warning' ? 'bg-yellow-400/10 border-yellow-400/30 text-yellow-300' :
-    type === 'success' ? 'bg-win/10 border-win/30 text-win' :
-    'bg-neon/10 border-neon/30 text-neon';
-
-  return (
-    <div className={cn('flex items-start gap-2 px-4 py-2.5 rounded-lg border', tone)}>
-      <Megaphone size={14} className="mt-0.5 shrink-0" />
-      <p className="text-sm">{text}</p>
-    </div>
-  );
-}

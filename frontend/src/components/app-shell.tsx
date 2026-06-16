@@ -25,6 +25,7 @@ import { SidebarNavItem } from './app-shell/sidebar-nav-item';
 import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
+import { AnnouncementBanners } from './announcement-banners';
 
 // Routes that need full-width layout (no max-w constraint)
 const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
@@ -203,6 +204,8 @@ export function AppShell() {
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Site-wide simulator banner — only renders on mock.cannoli.live */}
       <SimBanner />
+      {/* Announcement banners — fetched from /api/banners */}
+      <AnnouncementBanners />
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Mobile hamburger — only when the sidebar is an off-canvas drawer */}
       {!isDesktop && !drawerOpen && (

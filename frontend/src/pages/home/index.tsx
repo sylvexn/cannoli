@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import type {
-  ApiTeam, ApiTrade, ApiSchedule, ApiActivityEvent, ApiSiteSettings,
+  ApiTeam, ApiTrade, ApiSchedule, ApiActivityEvent,
 } from '@/lib/api';
 import { deriveHeadlines } from './headlines';
 import { HeaderGuest } from './header-guest';
@@ -36,7 +36,6 @@ export function HomePage() {
   const [tradesLoading, setTradesLoading] = useState(true);
   const [schedulePerLeague, setSchedulePerLeague] = useState<Record<string, ApiSchedule>>({});
   const [activity, setActivity] = useState<ApiActivityEvent[]>([]);
-  const [siteSettings, setSiteSettings] = useState<ApiSiteSettings | null>(null);
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -71,7 +70,6 @@ export function HomePage() {
         setActivity(events.filter(e => FEED_CATEGORIES.has(e.category)).slice(0, 24));
       })
       .catch(() => {});
-    api.getSiteSettings().then(setSiteSettings).catch(() => {});
   }, []);
 
   // Schedule fetch — only for the coach view. Skipping for guests/members
@@ -143,12 +141,6 @@ export function HomePage() {
     activity,
   }), [leagues, teamsPerLeague, tradesPerLeague, activity]);
 
-  const announcement = siteSettings?.announcement ? {
-    enabled: true,
-    text: siteSettings.announcement,
-    type: (siteSettings.announcementType || 'info') as 'info' | 'warning' | 'success',
-  } : { enabled: false, text: '', type: 'info' as const };
-
   if (leaguesLoading) {
     return (
       <div className="flex items-center justify-center py-20 text-text-muted text-sm">
@@ -198,7 +190,6 @@ export function HomePage() {
         tradesCount={tradesCount}
         totalMatches={totalMatches}
         tradesLoading={tradesLoading}
-        announcement={announcement}
       />
     </div>
   );

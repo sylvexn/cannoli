@@ -63,6 +63,10 @@ async function deleteJson<T>(path: string): Promise<T> {
   return mutateJson('DELETE', path, undefined);
 }
 
+async function patchJson<T>(path: string, body?: unknown): Promise<T> {
+  return mutateJson('PATCH', path, body);
+}
+
 // ─── Types (matching backend response shapes) ────────────────────────────────
 
 export interface ApiLeague {
@@ -522,8 +526,6 @@ export interface ApiObservabilityHealth {
 }
 
 export interface ApiSiteSettings {
-  announcement: string | null;
-  announcementType: string | null;
   defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
@@ -790,6 +792,7 @@ export interface NotificationsResponse {
 }
 
 export type AnnouncementCategory = 'info' | 'feature' | 'event' | 'maintenance';
+export type AnnouncementSurface = 'bell' | 'banner' | 'both';
 
 export interface ApiAnnouncement {
   id: number;
@@ -800,6 +803,38 @@ export interface ApiAnnouncement {
   createdByUsername: string | null;
   createdAt: string;
   active: boolean;
+  surface: AnnouncementSurface;
+  leagueId: string | null;
+  targetRole: 'admin' | 'user' | null;
+  updatedAt: string | null;
+}
+
+export interface ApiBanner {
+  id: number;
+  title: string;
+  body: string;
+  link: string | null;
+  category: AnnouncementCategory;
+  createdAt: string;
+}
+
+export interface AdminNotificationLogEntry {
+  id: string;
+  kind: 'announcement' | 'directed';
+  title: string;
+  body: string;
+  category: string | null;
+  surface: string | null;
+  leagueId: string | null;
+  targetRole: string | null;
+  recipientUsername: string | null;
+  retracted: boolean;
+  createdAt: string;
+}
+
+export interface AdminNotificationLog {
+  items: AdminNotificationLogEntry[];
+  nextBefore: string | null;
 }
 
 export const api = {
@@ -1396,11 +1431,43 @@ export const api = {
   // ─── Admin announcement composer ─────────────────────────────────────────
   listAnnouncements: () => fetchJson<ApiAnnouncement[]>('/api/admin/announcements'),
 
-  createAnnouncement: (a: { title: string; body: string; link?: string; category: AnnouncementCategory }) =>
+  createAnnouncement: (a: {
+    title: string;
+    body: string;
+    link?: string;
+    category: AnnouncementCategory;
+    surface?: AnnouncementSurface;
+    leagueId?: string | null;
+    targetRole?: 'admin' | 'user' | null;
+  }) =>
     postJson<{ id: number }>('/api/admin/announcements', a),
+
+  updateAnnouncement: (id: number, fields: Partial<{
+    title: string;
+    body: string;
+    link: string | null;
+    category: AnnouncementCategory;
+    surface: AnnouncementSurface;
+    leagueId: string | null;
+    targetRole: 'admin' | 'user' | null;
+  }>) =>
+    patchJson<{ success: boolean }>(`/api/admin/announcements/${id}`, fields),
 
   retractAnnouncement: (id: number) =>
     deleteJson<{ success: boolean }>(`/api/admin/announcements/${id}`),
+
+  getBanners: () => fetchJson<ApiBanner[]>('/api/banners'),
+
+  dismissAnnouncement: (id: number) =>
+    postJson<{ success: boolean }>(`/api/announcements/${id}/dismiss`),
+
+  getAdminNotificationLog: (params?: { before?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.before) q.set('before', params.before);
+    if (params?.limit != null) q.set('limit', String(params.limit));
+    const qs = q.toString();
+    return fetchJson<AdminNotificationLog>(`/api/admin/notifications/log${qs ? `?${qs}` : ''}`);
+  },
 
   // Match management
   getAdminMatches: (params?: { leagueId?: string; status?: string }) => {

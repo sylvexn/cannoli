@@ -1,41 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { getErrorMessage } from '@/lib/errors';
 import {
-  Save, Megaphone, Settings,
+  Save, Settings,
   Zap, Loader2,
 } from 'lucide-react';
 
 interface AllSettings {
-  announcementEnabled: boolean;
-  announcementText: string;
-  announcementType: 'info' | 'warning' | 'success';
   defaultUserPassword: string;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
 }
 
 const INITIAL: AllSettings = {
-  announcementEnabled: false,
-  announcementText: '',
-  announcementType: 'info',
   defaultUserPassword: 'password',
   draftTimerEnabled: true,
   draftDemoVisible: true,
 };
-
-const announcementTypes = [
-  { value: 'info', label: 'Info', color: 'text-neon border-neon/30 bg-neon/10' },
-  { value: 'warning', label: 'Warning', color: 'text-draw border-draw/30 bg-draw/10' },
-  { value: 'success', label: 'Success', color: 'text-win border-win/30 bg-win/10' },
-] as const;
 
 export function AdminSiteSettings() {
   const [settings, setSettings] = useState<AllSettings>(INITIAL);
@@ -46,9 +32,6 @@ export function AdminSiteSettings() {
     api.getSiteSettings()
       .then(s => {
         setSettings({
-          announcementEnabled: !!s.announcement,
-          announcementText: s.announcement ?? '',
-          announcementType: (s.announcementType as AllSettings['announcementType']) ?? 'info',
           defaultUserPassword: s.defaultUserPassword ?? 'password',
           draftTimerEnabled: s.draftTimerEnabled ?? true,
           draftDemoVisible: s.draftDemoVisible ?? true,
@@ -94,60 +77,6 @@ export function AdminSiteSettings() {
             />
           </Field>
         </div>
-      </div>
-
-      {/* ─── Announcement ─────────────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between">
-          <SubHeader icon={Megaphone} label="Announcement Banner" />
-          <Switch
-            checked={settings.announcementEnabled}
-            onCheckedChange={v => update('announcementEnabled', v)}
-          />
-        </div>
-        {settings.announcementEnabled && (
-          <div className="space-y-4 mt-3">
-            <Field label="Message">
-              <Input
-                value={settings.announcementText}
-                onChange={e => update('announcementText', e.target.value)}
-                placeholder="e.g. Draft night is Saturday at 7pm EST!"
-              />
-            </Field>
-            <Field label="Type">
-              <div className="flex gap-2">
-                {announcementTypes.map(t => (
-                  <button key={t.value} onClick={() => update('announcementType', t.value)} className="outline-none">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'cursor-pointer transition-colors',
-                        settings.announcementType === t.value
-                          ? `${t.color} ring-1 ring-current`
-                          : 'text-text-muted border-border',
-                      )}
-                    >
-                      {t.label}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-            </Field>
-            {settings.announcementText && (
-              <Field label="Preview">
-                <div className={cn(
-                  'rounded-lg border px-4 py-2.5 text-sm',
-                  settings.announcementType === 'info' ? 'border-neon/30 bg-neon/5 text-neon'
-                    : settings.announcementType === 'warning' ? 'border-draw/30 bg-draw/5 text-draw'
-                    : 'border-win/30 bg-win/5 text-win',
-                )}>
-                  <Megaphone size={14} className="inline-block mr-2 -mt-0.5" />
-                  {settings.announcementText}
-                </div>
-              </Field>
-            )}
-          </div>
-        )}
       </div>
 
       {/* ─── Draft ────────────────────────────────────────────── */}

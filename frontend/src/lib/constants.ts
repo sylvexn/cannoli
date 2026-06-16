@@ -1,4 +1,7 @@
 import type { PokemonType } from './pokemon';
+import type { LucideIcon } from 'lucide-react';
+import { Info, Zap, CalendarDays, AlertTriangle } from 'lucide-react';
+import type { AnnouncementCategory } from './api';
 
 /**
  * Gem identity for a league id, used to pick its `.league-banner-<gem>` styling.
@@ -163,3 +166,22 @@ export const DEFAULT_LANDING_OPTIONS: Array<{ value: string; label: string }> = 
   { value: '/', label: 'Home' },
   { value: '/replays', label: 'Replays' },
 ];
+
+// ─── Announcement category display metadata ───────────────────────────────────
+
+export interface AnnouncementCategoryMeta {
+  label: string;
+  Icon: LucideIcon;
+  color: string;
+  badgeClass: string;
+  bannerClass: string;
+}
+
+export const ANNOUNCEMENT_CATEGORY_META: Record<AnnouncementCategory, AnnouncementCategoryMeta> = {
+  info:        { label: 'Info',        Icon: Info,          color: 'var(--color-cyan-300, #67e8f9)',   badgeClass: 'text-cyan-300 border-cyan-300/30 bg-cyan-300/10',       bannerClass: 'border-cyan-300/30 bg-cyan-300/10 text-cyan-300' },
+  feature:     { label: 'Feature',     Icon: Zap,           color: 'var(--color-neon, #34d399)',       badgeClass: 'text-neon border-neon/30 bg-neon/10',                   bannerClass: 'border-neon/30 bg-neon/10 text-neon' },
+  event:       { label: 'Event',       Icon: CalendarDays,  color: 'var(--color-purple-400, #c084fc)', badgeClass: 'text-purple-400 border-purple-400/30 bg-purple-400/10', bannerClass: 'border-purple-400/30 bg-purple-400/10 text-purple-400' },
+  maintenance: { label: 'Maintenance', Icon: AlertTriangle, color: 'var(--color-amber-400, #fbbf24)',  badgeClass: 'text-amber-400 border-amber-400/30 bg-amber-400/10',    bannerClass: 'border-amber-400/30 bg-amber-400/10 text-amber-400' },
+};
+
+export const ANNOUNCEMENT_CATEGORIES: AnnouncementCategory[] = ['info', 'feature', 'event', 'maintenance'];

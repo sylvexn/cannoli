@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, Sparkles, Wrench, Bug, CheckCircle2, Megaphone, Swords,
-  Info, Zap, CalendarDays, AlertTriangle,
 } from 'lucide-react';
 import {
   Popover,
@@ -16,6 +15,7 @@ import {
   type AnnouncementCategory,
 } from '@/lib/api';
 import type { ChangelogCategory } from '@/lib/api';
+import { ANNOUNCEMENT_CATEGORY_META } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { formatRelativeTime } from '@/lib/format';
@@ -27,13 +27,6 @@ const CHANGELOG_META: Record<ChangelogCategory, { label: string; color: string; 
   feature:     { label: 'New',      color: 'var(--color-neon, #34d399)',      Icon: Sparkles },
   improvement: { label: 'Improved', color: 'var(--color-cyan-300, #67e8f9)',  Icon: Wrench },
   fix:         { label: 'Fixed',    color: 'var(--color-amber-400, #fbbf24)', Icon: Bug },
-};
-
-const ANNOUNCEMENT_META: Record<AnnouncementCategory, { color: string; Icon: typeof Megaphone }> = {
-  info:        { color: 'var(--color-cyan-300, #67e8f9)',  Icon: Info },
-  feature:     { color: 'var(--color-neon, #34d399)',      Icon: Zap },
-  event:       { color: 'var(--color-purple-400, #c084fc)', Icon: CalendarDays },
-  maintenance: { color: 'var(--color-amber-400, #fbbf24)', Icon: AlertTriangle },
 };
 
 const SOURCE_DEFAULTS: Record<NotificationSource, { color: string; Icon: typeof Bell }> = {
@@ -49,13 +42,71 @@ function getItemMeta(item: NotificationItem) {
     return CHANGELOG_META[item.category as ChangelogCategory] ?? CHANGELOG_META.improvement;
   }
   if (item.source === 'announcement' && item.category) {
-    const ann = ANNOUNCEMENT_META[item.category as AnnouncementCategory];
-    if (ann) return ann;
+    const ann = ANNOUNCEMENT_CATEGORY_META[item.category as AnnouncementCategory];
+    if (ann) return { color: ann.color, Icon: ann.Icon };
   }
   return SOURCE_DEFAULTS[item.source];
 }
 
 // ─── Notification row ─────────────────────────────────────────────────────────
+
+// Exported for use by admin preview surfaces.
+export function NotificationRowView({
+  source,
+  title,
+  body,
+  category,
+  createdAt,
+  read = true,
+  expanded = false,
+}: {
+  source: NotificationSource;
+  title: string;
+  body: string | null;
+  category: string | null;
+  createdAt: string;
+  read?: boolean;
+  expanded?: boolean;
+}) {
+  // Build a minimal fake item to reuse the same meta resolver.
+  const fakeItem = { source, category } as NotificationItem;
+  const meta = getItemMeta(fakeItem);
+  const { Icon } = meta;
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <span
+          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide shrink-0"
+          style={{ color: meta.color, backgroundColor: `${meta.color}1f` }}
+        >
+          <Icon size={9} />
+          {source === 'changelog'
+            ? ((meta as (typeof CHANGELOG_META)[ChangelogCategory]).label ?? source)
+            : source}
+        </span>
+        {!read && (
+          <span className="h-1.5 w-1.5 rounded-full bg-neon shrink-0" title="Unread" />
+        )}
+        <span className="ml-auto text-[10px] text-text-muted tabular-nums shrink-0">
+          {formatRelativeTime(createdAt)}
+        </span>
+      </div>
+
+      <div className="mt-1 text-sm font-medium text-text-primary">{title}</div>
+
+      {/* Body: always show for changelog; toggle for announcements; collapse for others */}
+      {body && (source === 'changelog' || source === 'feedback' || expanded) && (
+        <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-text-muted">
+          {body}
+        </div>
+      )}
+      {source === 'announcement' && body && !expanded && (
+        <div className="mt-0.5 text-[10px] text-text-muted/60">Tap to expand</div>
+      )}
+    </>
+  );
+}
 
 interface NotificationRowProps {
   item: NotificationItem;
@@ -67,9 +118,6 @@ interface NotificationRowProps {
 }
 
 function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }: NotificationRowProps) {
-  const meta = getItemMeta(item);
-  const { Icon } = meta;
-
   // Announcements expand inline; match/changelog/feedback navigate or do nothing.
   const isClickable = item.source !== 'announcement';
   const hasLink = Boolean(item.link);
@@ -85,7 +133,7 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
   return (
     <div
       role={isClickable && hasLink ? 'button' : item.source === 'announcement' ? 'button' : 'listitem'}
-      tabIndex={isClickable && hasLink || item.source === 'announcement' ? 0 : -1}
+      tabIndex={(isClickable && hasLink) || item.source === 'announcement' ? 0 : -1}
       onClick={handleClick}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
       className={cn(
@@ -95,35 +143,15 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
           : 'hover:bg-surface-overlay/20',
       )}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide shrink-0"
-          style={{ color: meta.color, backgroundColor: `${meta.color}1f` }}
-        >
-          <Icon size={9} />
-          {item.source === 'changelog'
-            ? ((meta as typeof CHANGELOG_META[ChangelogCategory]).label ?? item.source)
-            : item.source}
-        </span>
-        {!isRead && (
-          <span className="h-1.5 w-1.5 rounded-full bg-neon shrink-0" title="Unread" />
-        )}
-        <span className="ml-auto text-[10px] text-text-muted tabular-nums shrink-0">
-          {formatRelativeTime(item.createdAt)}
-        </span>
-      </div>
-
-      <div className="mt-1 text-sm font-medium text-text-primary">{item.title}</div>
-
-      {/* Body: always show for changelog; toggle for announcements; collapse for others */}
-      {item.body && (item.source === 'changelog' || item.source === 'feedback' || expanded) && (
-        <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-text-muted">
-          {item.body}
-        </div>
-      )}
-      {item.source === 'announcement' && item.body && !expanded && (
-        <div className="mt-0.5 text-[10px] text-text-muted/60">Tap to expand</div>
-      )}
+      <NotificationRowView
+        source={item.source}
+        title={item.title}
+        body={item.body}
+        category={item.category}
+        createdAt={item.createdAt}
+        read={isRead}
+        expanded={expanded}
+      />
     </div>
   );
 }
