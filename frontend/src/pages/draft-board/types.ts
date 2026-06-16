@@ -1,4 +1,5 @@
 import type { PokemonType } from '@/lib/pokemon';
+import type { SearchChip } from '@/lib/pool-search';
 
 /** Acquisition method for a Pokemon on a team's roster */
 export type AcquisitionMethod = 'drafted' | 'traded' | 'free-agent';
@@ -50,14 +51,17 @@ export interface PoolOwnership {
 
 /** Filter state for the pool */
 export interface DraftFilters {
+  /** Broad-OR free text — matches Pokemon name, ability, or learned move. */
   search: string;
   tierMin: number;
   tierMax: number;
   types: PokemonType[];
   /** When multiple types selected: 'or' = has either type, 'and' = has both types */
   typeMode: 'or' | 'and';
-  /** Filter by ability name (case-insensitive substring match) */
-  abilitySearch: string;
+  /** Refine chips: stacked exact filters (AND) for a specific Pokemon, ability,
+   *  or move chosen from the unified search dropdown. Layered on top of the
+   *  broad-OR `search` free text. */
+  searchChips: SearchChip[];
   ownership: 'all' | 'owned' | 'free-agent';
   /** When true (active draft only), hide Pokemon whose tier exceeds the user's
    *  current effective budget (raw remaining minus min-cost reserve for
@@ -72,7 +76,7 @@ export const DEFAULT_FILTERS: DraftFilters = {
   tierMax: 20,
   types: [],
   typeMode: 'or',
-  abilitySearch: '',
+  searchChips: [],
   ownership: 'all',
   affordableOnly: false,
   sortBy: 'tier-desc',
