@@ -134,9 +134,9 @@ export function CoachLink({
       )}
       {coach.role === 'admin' && (
         <span
-          aria-label="Elder"
+          aria-label="Elite 4"
           className="inline-flex items-center justify-center rounded-full px-1.5 py-px text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
-          title="Elder"
+          title="Elite 4"
         >
           <Shield size={8} />
         </span>
@@ -297,7 +297,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
             )}
             {coach.role === 'admin' && (
               <span className="text-[8px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400 px-1.5 py-px rounded-full ring-1 ring-amber-400/30 shrink-0">
-                Elder
+                Elite 4
               </span>
             )}
             {coach.role === 'bot' && (

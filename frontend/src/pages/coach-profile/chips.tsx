@@ -53,12 +53,12 @@ export function RoleChip({ role }: { role: 'admin' | 'dev' | 'bot' }) {
   }
   return (
     <span
-      aria-label="Elder"
+      aria-label="Elite 4"
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider shrink-0 bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
-      title="Elder"
+      title="Elite 4"
     >
       <Shield size={9} />
-      Elder
+      Elite 4
     </span>
   );
 }
