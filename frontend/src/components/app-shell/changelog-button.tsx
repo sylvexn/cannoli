@@ -124,7 +124,7 @@ export function ChangelogButton() {
                 </div>
                 <div className="mt-1 text-sm font-medium text-text-primary">{entry.title}</div>
                 {entry.body && (
-                  <div className="mt-0.5 text-xs leading-relaxed text-text-muted">{entry.body}</div>
+                  <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-text-muted">{entry.body}</div>
                 )}
               </div>
             );
