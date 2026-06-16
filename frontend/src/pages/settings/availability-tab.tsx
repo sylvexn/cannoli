@@ -20,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { getWeekDays, formatWeekDay, weekHasDates } from '@/lib/schedule-utils';
 
 type AvailStatus = 'available' | 'unavailable' | 'maybe';
 
@@ -51,29 +52,6 @@ const STATUS_STYLES: Record<AvailStatus, { bg: string; text: string; label: stri
 };
 
 const CYCLE: AvailStatus[] = ['available', 'maybe', 'unavailable'];
-
-function getMonday(d: Date): Date {
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
-}
-
-function getWeekDays(weekDate?: string): string[] {
-  const start = weekDate ? new Date(weekDate + 'T00:00:00') : getMonday(new Date());
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
-}
-
-function formatDay(iso: string): { short: string; date: string } {
-  const d = new Date(iso + 'T00:00:00');
-  return {
-    short: d.toLocaleDateString('en-US', { weekday: 'short' }),
-    date: d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-  };
-}
 
 export function AvailabilityTab() {
   const { user } = useAuth();
@@ -138,30 +116,34 @@ export function AvailabilityTab() {
 
   const weekDays = useMemo(() => {
     if (!activeTeam || selectedWeek == null) return [];
-    const dateStr = activeTeam.weekDates?.[String(selectedWeek)];
-    return getWeekDays(dateStr);
+    return getWeekDays(activeTeam.weekDates, selectedWeek);
   }, [activeTeam, selectedWeek]);
 
-  function getStatus(day: string): AvailStatus | null {
+  const hasDates = useMemo(
+    () => activeTeam != null && selectedWeek != null && weekHasDates(activeTeam.weekDates, selectedWeek),
+    [activeTeam, selectedWeek],
+  );
+
+  function getStatus(dayKey: string): AvailStatus | null {
     if (!activeTeam || selectedWeek == null) return null;
-    const entry = entries.find(e => e.teamId === activeTeam.teamId && e.week === selectedWeek && e.day === day);
+    const entry = entries.find(e => e.teamId === activeTeam.teamId && e.week === selectedWeek && e.day === dayKey);
     return entry ? entry.status as AvailStatus : null;
   }
 
-  async function cycleStatus(day: string) {
+  async function cycleStatus(dayKey: string) {
     if (!activeTeam || selectedWeek == null) return;
-    const current = getStatus(day);
+    const current = getStatus(dayKey);
     const idx = current ? CYCLE.indexOf(current) : -1;
     const next = CYCLE[(idx + 1) % CYCLE.length];
     if (!next) return;
 
     // Optimistic
     setEntries(prev => {
-      const filtered = prev.filter(e => !(e.teamId === activeTeam.teamId && e.week === selectedWeek && e.day === day));
-      return [...filtered, { teamId: activeTeam.teamId, leagueId: activeTeam.leagueId, week: selectedWeek, day, status: next, note: null }];
+      const filtered = prev.filter(e => !(e.teamId === activeTeam.teamId && e.week === selectedWeek && e.day === dayKey));
+      return [...filtered, { teamId: activeTeam.teamId, leagueId: activeTeam.leagueId, week: selectedWeek, day: dayKey, status: next, note: null }];
     });
     try {
-      await api.setAvailability(activeTeam.leagueId, { teamId: activeTeam.teamId, week: selectedWeek, day, status: next });
+      await api.setAvailability(activeTeam.leagueId, { teamId: activeTeam.teamId, week: selectedWeek, day: dayKey, status: next });
     } catch {
       toast.error('Failed to update availability');
       api.getAvailability(activeTeam.leagueId).then(setEntries).catch(() => {});
@@ -249,6 +231,11 @@ export function AvailabilityTab() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
+        {!hasDates && activeTeam && selectedWeek != null && (
+          <p className="text-[11px] text-text-muted/70 italic">
+            Dates TBD — calendar dates haven't been set for this week yet.
+          </p>
+        )}
         {activeTeam && selectedWeek != null ? (
           <div className="rounded-lg border border-border-default overflow-hidden">
             {/* Header row — days */}
@@ -257,11 +244,13 @@ export function AvailabilityTab() {
               style={{ gridTemplateColumns: `repeat(${weekDays.length}, 1fr)` }}
             >
               {weekDays.map(day => {
-                const { short, date } = formatDay(day);
+                const { short, date } = formatWeekDay(day);
                 return (
-                  <div key={day} className="px-1 py-2 text-center">
+                  <div key={day.key} className="px-1 py-2 text-center">
                     <div className="text-[11px] font-semibold text-text-secondary">{short}</div>
-                    <div className="text-[10px] text-text-muted tabular-nums">{date}</div>
+                    {date && (
+                      <div className="text-[10px] text-text-muted tabular-nums">{date}</div>
+                    )}
                   </div>
                 );
               })}
@@ -273,12 +262,12 @@ export function AvailabilityTab() {
               style={{ gridTemplateColumns: `repeat(${weekDays.length}, 1fr)` }}
             >
               {weekDays.map(day => {
-                const status = getStatus(day);
+                const status = getStatus(day.key);
                 const style = status ? STATUS_STYLES[status] : null;
                 return (
-                  <div key={day} className="px-1 py-2 flex items-center justify-center">
+                  <div key={day.key} className="px-1 py-2 flex items-center justify-center">
                     <button
-                      onClick={() => cycleStatus(day)}
+                      onClick={() => cycleStatus(day.key)}
                       className={cn(
                         'w-full h-9 rounded text-[11px] font-semibold border transition-all',
                         style

@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { getWeekDays, formatWeekDay, weekHasDates } from '@/lib/schedule-utils';
 
 type AvailStatus = 'available' | 'unavailable' | 'maybe';
 
@@ -33,29 +34,6 @@ const STATUS_STYLES: Record<AvailStatus, { bar: string; label: string; dot: stri
   unavailable: { bar: 'bg-loss/70', label: 'Busy',    dot: 'bg-loss' },
 };
 
-function getMonday(d: Date): Date {
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
-}
-
-function getWeekDays(weekDate?: string): string[] {
-  const start = weekDate ? new Date(weekDate + 'T00:00:00') : getMonday(new Date());
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
-}
-
-function formatDay(iso: string): { short: string; date: string } {
-  const d = new Date(iso + 'T00:00:00');
-  return {
-    short: d.toLocaleDateString('en-US', { weekday: 'short' }),
-    date: d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-  };
-}
-
 interface AvailabilityAggregateProps {
   selectedWeek: number;
 }
@@ -69,10 +47,15 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
     api.getAvailability(league.id).then(setEntries).catch(() => setEntries([]));
   }, [league.id]);
 
-  const weekDays = useMemo(() => {
-    const dateStr = league.season?.weekDates?.[String(selectedWeek)];
-    return getWeekDays(dateStr);
-  }, [selectedWeek, league.season?.weekDates]);
+  const weekDays = useMemo(
+    () => getWeekDays(league.season?.weekDates, selectedWeek),
+    [selectedWeek, league.season?.weekDates],
+  );
+
+  const hasDates = useMemo(
+    () => weekHasDates(league.season?.weekDates, selectedWeek),
+    [selectedWeek, league.season?.weekDates],
+  );
 
   const weekEntries = useMemo(
     () => entries.filter(e => e.week === selectedWeek),
@@ -81,14 +64,14 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
 
   // Per-day overlap counts for the summary bar at the top.
   const overlapCounts = useMemo(() => weekDays.map(day => {
-    const a = weekEntries.filter(e => e.day === day && e.status === 'available').length;
-    const m = weekEntries.filter(e => e.day === day && e.status === 'maybe').length;
-    const b = weekEntries.filter(e => e.day === day && e.status === 'unavailable').length;
+    const a = weekEntries.filter(e => e.day === day.key && e.status === 'available').length;
+    const m = weekEntries.filter(e => e.day === day.key && e.status === 'maybe').length;
+    const b = weekEntries.filter(e => e.day === day.key && e.status === 'unavailable').length;
     return { day, available: a, maybe: m, busy: b };
   }), [weekDays, weekEntries]);
 
-  function getEntry(teamId: string, day: string): AvailEntry | null {
-    return weekEntries.find(e => e.teamId === teamId && e.day === day) ?? null;
+  function getEntry(teamId: string, dayKey: string): AvailEntry | null {
+    return weekEntries.find(e => e.teamId === teamId && e.day === dayKey) ?? null;
   }
 
   if (players.length === 0) return null;
@@ -102,9 +85,14 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
         <h3 className="text-xs font-heading font-semibold text-text-secondary uppercase tracking-wider">
           Week {selectedWeek} Availability
         </h3>
-        <span className="text-[10px] text-text-muted">
-          Edit yours in <span className="font-mono">/settings → Availability</span>
-        </span>
+        <div className="flex items-center gap-3">
+          {!hasDates && (
+            <span className="text-[10px] text-text-muted/70 italic">Dates TBD</span>
+          )}
+          <span className="text-[10px] text-text-muted">
+            Edit yours in <span className="font-mono">/settings → Availability</span>
+          </span>
+        </div>
       </div>
 
       {isEmpty ? (
@@ -120,11 +108,13 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
           >
             <div className="px-2 py-1.5 text-[10px] text-text-muted font-medium">Team</div>
             {overlapCounts.map(({ day, available }) => {
-              const { short, date } = formatDay(day);
+              const { short, date } = formatWeekDay(day);
               return (
-                <div key={day} className="px-1 py-1.5 text-center">
+                <div key={day.key} className="px-1 py-1.5 text-center">
                   <div className="text-[10px] font-medium text-text-secondary">{short}</div>
-                  <div className="text-[9px] text-text-muted tabular-nums">{date}</div>
+                  {date && (
+                    <div className="text-[9px] text-text-muted tabular-nums">{date}</div>
+                  )}
                   <div className="mt-0.5 text-[9px] tabular-nums text-win">
                     {available}/{totalTeams}
                   </div>
@@ -145,11 +135,11 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
                 <span className="text-[11px] text-text-secondary font-medium truncate">{player.teamAbbrev}</span>
               </div>
               {weekDays.map(day => {
-                const entry = getEntry(player.id, day);
+                const entry = getEntry(player.id, day.key);
                 const status = entry ? entry.status as AvailStatus : null;
                 const style = status ? STATUS_STYLES[status] : null;
                 return (
-                  <div key={day} className="px-1 py-1.5 flex items-center justify-center">
+                  <div key={day.key} className="px-1 py-1.5 flex items-center justify-center">
                     {style ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
