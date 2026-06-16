@@ -71,23 +71,26 @@ exports.watchdog = true;
 // use the REPL in production — turn it off.
 exports.repl = false;
 
-// ─── Cannoli league rooms (startup hook) ────────────────────────────────────
+// ─── Cannoli league rooms (startup + periodic sync) ─────────────────────────
 //
-// On boot, fetch active leagues from the Cannoli backend and ensure a chat
-// room exists for each one. The backend returns slug/name/displayName/phase/
-// currentWeek; we materialise rooms named after the slug so the
-// `cannoli-roles` plugin can autojoin coaches by slug. Idempotent — existing
-// rooms have their title + intro updated in place rather than recreated.
+// Fetch active leagues from the Cannoli backend and ensure a chat room exists
+// for each one. The backend returns slug/name/displayName/phase/currentWeek; we
+// materialise rooms named after the slug so the `cannoli-roles` plugin can
+// autojoin coaches by slug. Idempotent — existing rooms have their title + intro
+// updated in place rather than recreated.
 //
 // Required env (set in Coolify on the cannoli-ps-server app):
 //   CANNOLI_BACKEND_URL  - e.g. http://cannoli-backend-mock:3001 (internal alias)
 //                          or http://host.docker.internal:3001 in dev compose
 //   PS_INTERNAL_SECRET   - shared with the Cannoli backend; gates /api/internal/ps/*
 //
-// If either is missing OR the backend is unreachable, log loudly and continue
-// booting — PS still works, the league rooms just won't materialise until a
-// later restart catches them. We never crash on startup.
-exports.startuphook = function () {
+// If either is missing OR the backend is unreachable, log loudly and continue —
+// PS still works, the league rooms just won't materialise this pass. We never
+// crash. Because PS only creates rooms when asked, this runs both at startup
+// AND on an interval (see startuphook below): a server that booted before the
+// backend/DB seed was ready, or a mock reseed that adds leagues, self-heals on
+// the next pass instead of needing a manual restart.
+function materialiseLeagueRooms() {
 	const backendUrl = process.env.CANNOLI_BACKEND_URL;
 	const secret = process.env.PS_INTERNAL_SECRET;
 	if (!backendUrl || !secret) {
@@ -163,6 +166,15 @@ exports.startuphook = function () {
 		})
 		.catch(err => {
 			clearTimeout(timer);
-			console.error(`[cannoli] startup hook failed (${err && err.message ? err.message : err}) — continuing without league rooms`);
+			console.error(`[cannoli] league room sync failed (${err && err.message ? err.message : err}) — continuing without league rooms`);
 		});
+}
+
+// Sync once on boot, then on a 5-minute heartbeat. The sync is idempotent, so
+// the heartbeat is cheap insurance: it recovers the common "PS booted before the
+// backend or its DB seed was ready" case (rooms would otherwise never appear
+// until a manual restart) and picks up leagues added by a mock reseed.
+exports.startuphook = function () {
+	materialiseLeagueRooms();
+	setInterval(materialiseLeagueRooms, 5 * 60 * 1000);
 };
