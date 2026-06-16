@@ -15,6 +15,7 @@ import { draftRoutes } from './routes/draft';
 import { tradeRoutes } from './routes/trades';
 import { matchRoutes } from './routes/matches';
 import { feedbackRoutes } from './routes/feedback';
+import { changelogRoutes } from './routes/changelog';
 import { clientErrorRoutes } from './routes/client-errors';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
@@ -224,6 +225,7 @@ const app = new Elysia()
   .use(tradeRoutes)
   .use(matchRoutes)
   .use(feedbackRoutes)
+  .use(changelogRoutes)
   .use(clientErrorRoutes)
   .use(arenaRoutes)
   .use(psLoginRoutes)

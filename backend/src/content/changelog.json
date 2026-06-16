@@ -1,0 +1,44 @@
+[
+  {
+    "id": "visual-fx-2026-06",
+    "date": "2026-06-15T18:00:00Z",
+    "category": "improvement",
+    "title": "A fresh coat of paint",
+    "body": "Animated backgrounds on the login and replay pages, plus subtle 3D tilt and glow on the sidebar league gems. Effects scale back automatically on lower-powered devices."
+  },
+  {
+    "id": "s11-live-2026-06",
+    "date": "2026-06-15T16:00:00Z",
+    "category": "feature",
+    "title": "Season 11 is here",
+    "body": "The tier list and draft costs have been rebuilt on the new National Dex+ scaling, and the rules page is synced to match. Jet Punch is now unbanned on Palafin."
+  },
+  {
+    "id": "matchup-public-2026-06",
+    "date": "2026-06-15T15:00:00Z",
+    "category": "improvement",
+    "title": "Matchup Center is now public",
+    "body": "Scout matchups without signing in. Playing on Showdown still requires a login."
+  },
+  {
+    "id": "captain-editing-2026-06",
+    "date": "2026-06-14T20:00:00Z",
+    "category": "fix",
+    "title": "Edit tera captains any time",
+    "body": "Change your tera captains and their tera types at any point during the season, not just before it starts."
+  },
+  {
+    "id": "team-logos-2026-06",
+    "date": "2026-06-14T18:00:00Z",
+    "category": "feature",
+    "title": "Upload your own team logo",
+    "body": "Team owners can now upload a custom logo straight from their team page."
+  },
+  {
+    "id": "reliability-2026-06",
+    "date": "2026-06-14T12:00:00Z",
+    "category": "improvement",
+    "title": "Smoother updates",
+    "body": "The site now recovers gracefully right after an update instead of showing a stale-page error, with new behind-the-scenes error tracking so issues get caught faster."
+  }
+]

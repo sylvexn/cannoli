@@ -512,6 +512,10 @@ export const userPreferences = sqliteTable('user_preferences', {
   timezone: text('timezone'),
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
   colorblindMode: integer('colorblind_mode', { mode: 'boolean' }).notNull().default(false),
+  /** ISO timestamp the user last opened the "What's New" changelog panel.
+   *  Entries dated after this are "unread" and pulse the sidebar bell. Null =
+   *  never opened (everything unread). */
+  changelogSeenAt: text('changelog_seen_at'),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 

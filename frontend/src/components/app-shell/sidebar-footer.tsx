@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { FeedbackDialog } from '../feedback-dialog';
+import { ChangelogButton } from './changelog-button';
 import { UserAccentScope } from '../user-accent-scope';
 import { CoachAvatar } from '../coach-avatar';
 import { cn } from '@/lib/utils';
@@ -71,6 +72,8 @@ export function SidebarFooter({
           Ctrl+K
         </kbd>
       </button>
+
+      <ChangelogButton />
 
       {user && <FeedbackDialog />}
 
