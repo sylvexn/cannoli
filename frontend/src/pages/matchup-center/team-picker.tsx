@@ -6,6 +6,16 @@ import type { RosterPokemon } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
 import { CustomTeamBuilder } from './custom-team-builder';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface TeamPickerProps {
   source: TeamSource | null;
@@ -43,76 +53,74 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
     );
   }
 
+  const borderColor = side === 'a' ? '#3b82f6' : '#ef4444';
+
+  function handleValueChange(val: string) {
+    if (!val) return;
+    if (val === '__custom__') {
+      setShowCustom(true);
+      return;
+    }
+    const [leagueId, teamId] = val.split(':');
+    const league = leagues.find(l => l.id === leagueId);
+    const teams = teamsPerLeague[leagueId] || [];
+    const team = teams.find(t => t.id === teamId);
+    if (league && team) {
+      const roster: RosterPokemon[] = team.roster.map(r => ({
+        name: r.name,
+        types: r.types as PokemonType[],
+        tier: r.tier,
+        isTeraCaptain: r.isTeraCaptain,
+        teraTypes: r.teraTypes as PokemonType[] | undefined,
+        stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+        abilities: r.abilities,
+        seasonStats: r.seasonStats,
+      }));
+      onSelect(roster, {
+        type: 'league',
+        leagueId,
+        teamId,
+        label: `${team.teamName} (${league.name.replace(' League', '')})`,
+      });
+    }
+  }
+
   return (
-    <div className="relative">
-      <select
-        value={selectValue}
-        onChange={e => {
-          const val = e.target.value;
-          if (!val) return;
-          if (val === '__custom__') {
-            setShowCustom(true);
-            return;
-          }
-          const [leagueId, teamId] = val.split(':');
-          const league = leagues.find(l => l.id === leagueId);
-          const teams = teamsPerLeague[leagueId] || [];
-          const team = teams.find(t => t.id === teamId);
-          if (league && team) {
-            const roster: RosterPokemon[] = team.roster.map(r => ({
-              name: r.name,
-              types: r.types as PokemonType[],
-              tier: r.tier,
-              isTeraCaptain: r.isTeraCaptain,
-              teraTypes: r.teraTypes as PokemonType[] | undefined,
-              stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-              abilities: r.abilities,
-              seasonStats: r.seasonStats,
-            }));
-            onSelect(roster, {
-              type: 'league',
-              leagueId,
-              teamId,
-              label: `${team.teamName} (${league.name.replace(' League', '')})`,
-            });
-          }
-        }}
-        className={`w-full h-8 rounded-lg border bg-transparent px-2.5 text-sm text-text-primary outline-none cursor-pointer appearance-none
-          focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50
-          dark:bg-input/30 dark:hover:bg-input/50
-          ${side === 'a' ? 'border-[#3b82f6]/30' : 'border-[#ef4444]/30'}`}
+    <Select value={selectValue} onValueChange={handleValueChange}>
+      <SelectTrigger
+        className="w-full"
+        style={{ borderColor: `color-mix(in srgb, ${borderColor} 30%, transparent)` }}
       >
-        <option value="" disabled>
-          {side === 'a' ? 'Select your team...' : 'Select opponent...'}
-        </option>
-        <option value="__custom__">
-          Custom Team...
-        </option>
+        <SelectValue
+          placeholder={side === 'a' ? 'Select your team...' : 'Select opponent...'}
+        />
+      </SelectTrigger>
+      <SelectContent align="start">
+        <SelectItem value="__custom__">Custom Team...</SelectItem>
+        <SelectSeparator />
         {leagues.map(league => {
           const teams = teamsPerLeague[league.id] || [];
           return (
-            <optgroup key={league.id} label={league.name}>
+            <SelectGroup key={league.id}>
+              <SelectLabel>{league.name}</SelectLabel>
               {teams.length > 0 ? (
                 teams.map(team => (
-                  <option
+                  <SelectItem
                     key={`${league.id}:${team.id}`}
                     value={`${league.id}:${team.id}`}
                   >
                     {team.teamName} ({team.record.wins}-{team.record.losses})
-                  </option>
+                  </SelectItem>
                 ))
               ) : (
-                <option disabled>Loading...</option>
+                <SelectItem value={`${league.id}:__loading__`} disabled>
+                  Loading...
+                </SelectItem>
               )}
-            </optgroup>
+            </SelectGroup>
           );
         })}
-      </select>
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    </div>
+      </SelectContent>
+    </Select>
   );
 }
