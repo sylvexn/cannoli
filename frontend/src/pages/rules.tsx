@@ -41,7 +41,6 @@ const CLAUSES: { name: string; description: string }[] = [
 
 const POKEMON_BANS: { pokemon: string; move: string }[] = [
   { pokemon: 'Mega Alakazam', move: 'Nasty Plot' },
-  { pokemon: 'Palafin', move: 'Jet Punch' },
 ];
 
 const BANNED_ABILITIES = ['Shadow Tag', 'Arena Trap', 'Moody'];
