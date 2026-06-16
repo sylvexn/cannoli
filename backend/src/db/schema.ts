@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -513,6 +513,9 @@ export const scrims = sqliteTable('scrims', {
 });
 
 // ─── Feedback Submissions (tracks who submitted which GitHub issues) ───────
+// DEPRECATED: superseded by the `feedback` table (full in-app storage) + the
+// `notifications` system. Still read by the legacy GitHub-close polling path
+// until that is retired; new submissions no longer write here. Do not drop yet.
 
 export const feedbackSubmissions = sqliteTable('feedback_submissions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -543,6 +546,10 @@ export const userPreferences = sqliteTable('user_preferences', {
    *  Entries dated after this are "unread" and pulse the sidebar bell. Null =
    *  never opened (everything unread). */
   changelogSeenAt: text('changelog_seen_at'),
+  /** ISO timestamp the user last opened the notifications pane. Announcements
+   *  created after this are "unread" — mirrors changelogSeenAt for the broadcast
+   *  announcements feed (see notifications table + announcements table). */
+  announcementsSeenAt: text('announcements_seen_at'),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 
@@ -731,4 +738,82 @@ export const scrimPokemon = sqliteTable('scrim_pokemon', {
   deaths: integer('deaths').notNull().default(0),
   teraUsed: integer('tera_used', { mode: 'boolean' }).notNull().default(false),
   teraType: text('tera_type'),
+});
+
+// ─── Feedback (every submission across all 4 categories) ───────────────────
+// Replaces the GitHub-only feedback flow. EVERY submission lands here; bug and
+// feature additionally mirror to a GitHub issue (github_issue_* set). league
+// and general are in-app only. Admin triage reads from this table; the resolve
+// action emits a notification to the reporter (see notifications + notify.ts).
+
+export const feedback = sqliteTable('feedback', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id),
+  category: text('category', { enum: ['bug', 'feature', 'league', 'general'] }).notNull(),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  /** Pathname the dialog was opened from (e.g. '/draft/sapphire'). */
+  page: text('page'),
+  /** Correlation ref from a captured crash; ties back to request_logs error id. */
+  errorRef: text('error_ref'),
+  /** Relative uploads key (e.g. 'feedback-screenshots/<uuid>.png') OR absolute R2 URL. Null = none. */
+  screenshotPath: text('screenshot_path'),
+  /** Set only for bug/feature when GitHub is configured and issue creation succeeds. */
+  githubIssueNumber: integer('github_issue_number'),
+  githubIssueUrl: text('github_issue_url'),
+  status: text('status', { enum: ['open', 'resolved'] }).notNull().default('open'),
+  /** Admin's optional reply, surfaced to the reporter via notification. */
+  adminResponse: text('admin_response'),
+  resolvedByUserId: integer('resolved_by_user_id').references(() => users.id),
+  resolvedAt: text('resolved_at'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+}, (t) => ({
+  statusIdx: index('feedback_status_idx').on(t.status),
+  categoryIdx: index('feedback_category_idx').on(t.category),
+  userIdx: index('feedback_user_idx').on(t.userId),
+}));
+
+// ─── Notifications (DIRECTED — one row per recipient) ──────────────────────
+// Persisted per-user events with independent read state. `type` is open-ended
+// so future directed events reuse this table. `dedupeKey` + UNIQUE(user_id,
+// dedupe_key) makes inserts idempotent: re-running the issue-close detector or
+// the backfill never double-notifies. Nullable dedupeKey = always-distinct
+// NULLs in SQLite, so free-form notifications are never blocked.
+
+export const notifications = sqliteTable('notifications', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type', { enum: ['feedback', 'system'] }).notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  /** Client route or absolute URL the item links to (e.g. a GitHub issue). */
+  link: text('link'),
+  /** Free-form JSON for type-specific data (e.g. { issueNumber: 14 }). */
+  metadata: text('metadata'),
+  /** Idempotency key, e.g. 'feedback:issue:14'. Unique per user. */
+  dedupeKey: text('dedupe_key'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  /** ISO timestamp when the user read this item; null = unread. */
+  readAt: text('read_at'),
+}, (t) => ({
+  userIdx: index('notifications_user_idx').on(t.userId),
+  dedupeIdx: uniqueIndex('notifications_user_dedupe_idx').on(t.userId, t.dedupeKey),
+}));
+
+// ─── Announcements (BROADCAST — one global row, seen via a per-user stamp) ──
+// Admin-authored site-wide broadcasts. NOT the same as site_settings.announcement
+// (that is the single persistent home-page banner). Unread per user = rows with
+// created_at > user_preferences.announcements_seen_at. Future signups see all
+// active announcements as unread automatically — no per-user write on publish.
+
+export const announcements = sqliteTable('announcements', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  link: text('link'),
+  category: text('category', { enum: ['info', 'feature', 'event', 'maintenance'] }).notNull().default('info'),
+  createdBy: integer('created_by').references(() => users.id),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  /** Soft-delete / retract without losing the audit trail. */
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
 });
