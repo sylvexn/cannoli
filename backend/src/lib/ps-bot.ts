@@ -367,12 +367,59 @@ export function formatFromRoomId(roomId: string): string | null {
 }
 
 /**
- * Look for a saved replay log on disk. PS autosaves to:
- *   {PS_LOGS_DIR}/{format}/{YYYY-MM-DD}/{roomId}.log.json
+ * Parse a single `{roomId}.log.json` file and return its `log: string[]`,
+ * or null if the file is missing / unreadable / has no log array.
+ */
+function parseReplayLogFile(path: string): string[] | null {
+  try {
+    const raw = readFileSync(path, 'utf-8');
+    const parsed = JSON.parse(raw) as { log?: string[] };
+    if (Array.isArray(parsed.log)) return parsed.log;
+  } catch (err) {
+    console.warn(`[PS Bot] Failed to read replay ${path}:`, err);
+  }
+  return null;
+}
+
+/**
+ * Bounded recursive search for a file literally named `{roomId}.log.json`
+ * under `dir`. Used as a safety net when the deterministic scan misses (e.g.
+ * a non-standard layout). `maxDepth` caps the descent so we never walk the
+ * whole PS logs tree — a stray giant directory can't hang the request.
+ * Returns the first matching path found, or null.
+ */
+function findReplayFileRecursive(dir: string, fileName: string, maxDepth: number): string | null {
+  if (maxDepth < 0) return null;
+  let entries: import('fs').Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  // Files first — a hit at this level wins before we descend.
+  for (const e of entries) {
+    if (e.isFile() && e.name === fileName) return join(dir, e.name);
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      const hit = findReplayFileRecursive(join(dir, e.name), fileName, maxDepth - 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+/**
+ * Look for a saved replay log on disk. PS autosaves every battle's protocol
+ * log to:
+ *   {PS_LOGS_DIR}/{YYYY-MM}/{tier}/{YYYY-MM-DD}/{roomId}.log.json
+ * where `tier` is the format id (e.g. `gen9natdexdraft`). Confirmed in
+ * showdown/server/server/room-battle.ts and showdown/monitor.ts.
  *
  * We don't know the date a-priori (a match could span midnight or have been
- * abandoned days ago), so we walk the format dir looking for the file. The
- * dirs are date-named so this is bounded — a few dozen entries at most.
+ * abandoned days ago), so we walk the year-month and day dirs looking for the
+ * file. Both segments are date-named so this is bounded — newest-first so the
+ * common case (a recent match) hits almost immediately.
  *
  * Returns the parsed `log: string[]` from the JSON, or null if not found /
  * unreadable.
@@ -381,39 +428,50 @@ export function readReplayLogFromDisk(
   roomId: string,
   rootDir: string = PS_LOGS_DIR,
 ): string[] | null {
-  const format = formatFromRoomId(roomId);
-  if (!format) return null;
+  const tier = formatFromRoomId(roomId);
+  if (!tier) return null;
 
   if (!existsSync(rootDir)) {
     console.warn(`[PS Bot] PS_LOGS_DIR not found: ${rootDir} — disk-replay fallback disabled`);
     return null;
   }
 
-  const formatDir = join(rootDir, format);
-  if (!existsSync(formatDir)) return null;
+  const fileName = `${roomId}.log.json`;
 
-  // Scan date dirs in reverse (newest first — most matches will be recent).
-  let dateDirs: string[];
+  // ── Deterministic scan: {YYYY-MM}/{tier}/{YYYY-MM-DD}/{roomId}.log.json ──
+  // List year-month dirs, newest first.
+  let monthDirs: string[];
   try {
-    dateDirs = readdirSync(formatDir).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
+    monthDirs = readdirSync(rootDir).filter(d => /^\d{4}-\d{2}$/.test(d)).sort().reverse();
   } catch (err) {
-    console.warn(`[PS Bot] Failed to scan ${formatDir}:`, err);
-    return null;
+    console.warn(`[PS Bot] Failed to scan ${rootDir}:`, err);
+    monthDirs = [];
   }
 
-  for (const date of dateDirs) {
-    const candidate = join(formatDir, date, `${roomId}.log.json`);
-    if (!existsSync(candidate)) continue;
+  for (const month of monthDirs) {
+    const tierDir = join(rootDir, month, tier);
+    if (!existsSync(tierDir)) continue;
 
+    // Day dirs under this month/tier, newest first.
+    let dayDirs: string[];
     try {
-      const raw = readFileSync(candidate, 'utf-8');
-      const parsed = JSON.parse(raw) as { log?: string[] };
-      if (Array.isArray(parsed.log)) return parsed.log;
+      dayDirs = readdirSync(tierDir).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
     } catch (err) {
-      console.warn(`[PS Bot] Failed to read replay ${candidate}:`, err);
+      console.warn(`[PS Bot] Failed to scan ${tierDir}:`, err);
+      continue;
     }
-    return null;
+
+    for (const day of dayDirs) {
+      const candidate = join(tierDir, day, fileName);
+      if (existsSync(candidate)) return parseReplayLogFile(candidate);
+    }
   }
+
+  // ── Safety fallback: bounded recursive search for the named file. ──
+  // Catches non-standard layouts the deterministic scan can't anticipate.
+  // Depth 4 covers {YYYY-MM}/{tier}/{YYYY-MM-DD}/{file} plus a little slack.
+  const hit = findReplayFileRecursive(rootDir, fileName, 4);
+  if (hit) return parseReplayLogFile(hit);
 
   return null;
 }
@@ -430,13 +488,24 @@ export function readReplayLogFromDisk(
  * handleMatchEnd guards on `battle.matchId` and our caller filters on
  * `status='in_progress'`.
  */
-function replayFromDisk(match: { id: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null }): boolean {
-  const roomId = match.psRoomId;
-  if (!roomId) return false;
-
-  const lines = readReplayLogFromDisk(roomId);
-  if (!lines || lines.length === 0) return false;
-
+/**
+ * Synthesize a MonitoredBattle from a match row + the raw protocol lines of a
+ * saved replay, feeding every line through the parser. Captures |player| lines
+ * to populate battle.p1/p2, |win|/|tie| to determine the result, and resolves
+ * battle.homeSide so handleMatchEnd attributes home/away correctly.
+ *
+ * Returns the synthesized battle plus the resolved result. `winnerUsername` is
+ * null on a tie; `hasResult` is false when the log never reached |win|/|tie|
+ * (abandoned mid-game) — callers should NOT record such a battle.
+ *
+ * Shared by replayFromDisk (offline recovery) and importBattleForMatch (admin
+ * import of a played battle).
+ */
+function buildBattleFromLog(
+  match: { id: string; homeTeamId: string | null; awayTeamId: string | null },
+  roomId: string,
+  lines: string[],
+): { battle: MonitoredBattle; winnerUsername: string | null; hasResult: boolean } {
   const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
   const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
   const p1Userid = teamPsUserid(homeTeam);
@@ -477,22 +546,116 @@ function replayFromDisk(match: { id: string; homeTeamId: string | null; awayTeam
     }
   }
 
-  if (!winnerUsername && !isTie) {
-    // Replay was saved but never reached |win|/|tie| — match was abandoned
-    // mid-game on the PS server. Don't auto-complete; leave for admin review.
-    console.log(`[PS Bot] Disk replay for ${match.id} has no |win|/|tie| — skipping`);
-    return false;
-  }
-
   // Resolve orientation now that |player| lines have populated battle.p1/p2.
   battle.homeSide =
     useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1'
       : useridToTeam.get(battle.p2)?.teamId === match.homeTeamId ? 'p2'
         : null;
 
+  return { battle, winnerUsername, hasResult: !!winnerUsername || isTie };
+}
+
+function replayFromDisk(match: { id: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null }): boolean {
+  const roomId = match.psRoomId;
+  if (!roomId) return false;
+
+  const lines = readReplayLogFromDisk(roomId);
+  if (!lines || lines.length === 0) return false;
+
+  const { battle, winnerUsername, hasResult } = buildBattleFromLog(match, roomId, lines);
+
+  if (!hasResult) {
+    // Replay was saved but never reached |win|/|tie| — match was abandoned
+    // mid-game on the PS server. Don't auto-complete; leave for admin review.
+    console.log(`[PS Bot] Disk replay for ${match.id} has no |win|/|tie| — skipping`);
+    return false;
+  }
+
   console.log(`[PS Bot] Recovering ${match.id} from disk replay (${roomId})`);
   handleMatchEnd(battle, winnerUsername);
   return true;
+}
+
+/**
+ * Normalize a possibly-messy room id into a bare `battle-...` room id.
+ * Accepts a full URL (`https://sim.cannoli.live/battle-gen9natdexdraft-12345`),
+ * a leading-slash path (`/battle-...`), or an already-bare id — strips
+ * scheme/host/leading slash and trims whitespace.
+ */
+export function normalizeRoomId(raw: string): string {
+  let id = (raw ?? '').trim();
+  // Strip scheme + host if a full URL was pasted.
+  const urlMatch = /^[a-z]+:\/\/[^/]+\/(.+)$/i.exec(id);
+  if (urlMatch) id = urlMatch[1];
+  // Strip any leading slashes (path form).
+  id = id.replace(/^\/+/, '').trim();
+  return id;
+}
+
+/**
+ * Result of an admin "import battle" attempt. `ok: false` carries an HTTP
+ * status the route maps onto `set.status`.
+ */
+export type ImportBattleResult =
+  | { ok: true; homeScore: number; awayScore: number; winnerTeamId: string | null; status: string; pokemonCount: number }
+  | { ok: false; error: string; status: number };
+
+/**
+ * Import a finished battle (played outside the normal Arena flow) into a
+ * scheduled match: read its saved replay from disk and route it through the
+ * regular completion path (handleMatchEnd writes scores, winnerTeamId,
+ * replayLog/Url, per-Pokemon K/D, validation, and awards).
+ *
+ * Modeled on replayFromDisk but takes an EXPLICIT matchId + a (possibly URL/
+ * messy) roomId, and returns a structured result for the admin route. Will not
+ * overwrite an already-finalized match (v1 — use force-result for that).
+ */
+export function importBattleForMatch(matchId: string, roomId: string): ImportBattleResult {
+  const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  if (!match) return { ok: false, error: 'Match not found', status: 404 };
+
+  // Don't clobber a finalized match — mirrors handleMatchEnd's no-clobber
+  // guard (which would otherwise silently no-op). Overwrite is out of scope.
+  if (match.status === 'completed' || match.status === 'disputed' || (match.status as string) === 'cancelled') {
+    return { ok: false, error: `Match already ${match.status}; use force-result to override`, status: 409 };
+  }
+
+  const normalizedRoomId = normalizeRoomId(roomId);
+  const lines = readReplayLogFromDisk(normalizedRoomId);
+  if (!lines || lines.length === 0) {
+    return { ok: false, error: 'No saved replay found for that room id', status: 404 };
+  }
+
+  const { battle, winnerUsername, hasResult } = buildBattleFromLog(match, normalizedRoomId, lines);
+
+  if (!hasResult) {
+    return {
+      ok: false,
+      error: 'Replay has no result (|win|/|tie|) — battle may be unfinished/abandoned',
+      status: 422,
+    };
+  }
+
+  console.log(`[PS Bot] Importing battle ${normalizedRoomId} into match ${matchId}`);
+  // handleMatchEnd does all recording; the match isn't completed so its
+  // no-clobber guard passes.
+  handleMatchEnd(battle, winnerUsername);
+
+  // Re-read the now-recorded match for the authoritative scores/winner/status
+  // (handleMatchEnd may have flipped status to 'disputed' on validation warnings).
+  const updated = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  const pokemonCount = db.select().from(schema.matchPokemon)
+    .where(eq(schema.matchPokemon.matchId, matchId))
+    .all().length;
+
+  return {
+    ok: true,
+    homeScore: updated?.homeScore ?? 0,
+    awayScore: updated?.awayScore ?? 0,
+    winnerTeamId: updated?.winnerTeamId ?? null,
+    status: updated?.status ?? 'completed',
+    pokemonCount,
+  };
 }
 
 /**

@@ -15,10 +15,26 @@ import { toast } from 'sonner';
 import { NumberInput } from '@/components/ui/number-input';
 import {
   AlertTriangle, Trash2, MoreVertical,
-  Eraser, ArrowRightLeft, Gavel,
+  Eraser, ArrowRightLeft, Gavel, Swords,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
 import { getErrorMessage } from '@/lib/errors';
+
+/**
+ * Best-effort client-side normalisation of a battle reference into a bare
+ * `battle-...` room id. Accepts either a raw room id or a full replay/room URL
+ * (e.g. `https://sim.cannoli.live/battle-gen9natdexdraft-12345?foo=1`). The
+ * backend normalises too, so this only needs to be best-effort.
+ */
+function normalizeRoomId(raw: string): string {
+  let v = raw.trim();
+  // Strip query/hash first so a trailing `?turn=...` doesn't survive.
+  v = v.split(/[?#]/)[0];
+  // Drop scheme + host if a URL was pasted, keeping the final path segment.
+  const slash = v.lastIndexOf('/');
+  if (slash !== -1) v = v.slice(slash + 1);
+  return v.trim();
+}
 
 export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResult }: {
   match: ApiAdminMatch;
@@ -33,12 +49,19 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveWeek, setMoveWeek] = useState(match.week);
   const [moveDeadline, setMoveDeadline] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRoom, setImportRoom] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   function openMove() {
     setMoveWeek(match.week);
     setMoveDeadline('');
     setMoveOpen(true);
+  }
+
+  function openImport() {
+    setImportRoom('');
+    setImportOpen(true);
   }
 
   async function executeVoid() {
@@ -101,6 +124,25 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
     }
   }
 
+  async function executeImport() {
+    const roomId = normalizeRoomId(importRoom);
+    if (!roomId) {
+      toast.error('Enter a battle room ID or replay link');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await api.importMatchBattle(match.id, { roomId });
+      toast.success(`Recorded ${res.homeScore}–${res.awayScore}, ${res.pokemonCount} Pokemon`);
+      setImportOpen(false);
+      onChanged();
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const voidDisabled = match.homeScore === null && match.awayScore === null && match.status === 'scheduled';
 
   return (
@@ -126,6 +168,12 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
           >
             <Gavel size={12} />
             Force Result
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={openImport}
+          >
+            <Swords size={12} />
+            Attach Played Battle
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setVoidOpen(true)}
@@ -235,6 +283,44 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
               onClick={executeMove}
             >
               {submitting ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Attach Played Battle */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Swords size={16} className="text-neon" />
+              Attach Played Battle
+            </DialogTitle>
+            <DialogDescription>
+              {`Read the saved replay for a Showdown battle and record it as ${homeName} vs ${awayName} (W${match.week}). Score and per-Pokemon stats are filled in automatically.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+              Battle room ID or replay link
+            </label>
+            <Input
+              value={importRoom}
+              onChange={e => setImportRoom(e.target.value)}
+              placeholder="battle-gen9natdexdraft-12345"
+              className="h-8 text-xs bg-surface-overlay font-mono"
+              onKeyDown={e => { if (e.key === 'Enter' && !submitting) executeImport(); }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+            <Button
+              disabled={submitting || !importRoom.trim()}
+              className="bg-neon text-surface-base hover:bg-neon/90"
+              onClick={executeImport}
+            >
+              {submitting ? 'Attaching...' : 'Attach as this match'}
             </Button>
           </DialogFooter>
         </DialogContent>
