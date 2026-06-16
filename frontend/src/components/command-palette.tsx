@@ -51,7 +51,7 @@ const LEAGUE_PAGES = [
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
-  { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
+  { path: '/market', label: 'Market', icon: ArrowLeftRight },
 ];
 
 const GLOBAL_PAGES = [

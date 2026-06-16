@@ -1,18 +1,13 @@
 import { test, expect, describe } from 'bun:test';
-import { validateTrade, pointDelta } from './validation';
+import { validateTrade, pointDelta, tradePointSummary } from './trade-validation';
 import type { Player, RosterPokemon } from '@/lib/types';
 
 /**
  * Pure-logic coverage for the shared trade validator. This is the client-side
- * pre-flight that drives the inline "would exceed point cap / max 1 mega /
- * duplicate species" feedback in both the quick-propose dialog and the trade
- * wizard, and disables the Send button. The backend re-verifies, but a
- * regression here means the UI lies to the user about legality.
- *
- * NOTE: trade-block/trade-propose-dialog.tsx currently ships its OWN private
- * copy of validateTrade rather than importing this module (see code-quality
- * findings). These tests pin the canonical shared implementation; if the
- * dialog's copy drifts, that's the bug to fix.
+ * pre-flight that drives the inline "even swap / point cap / max 1 mega /
+ * duplicate species" feedback in the trade composer and disables the Send
+ * button. The backend re-verifies, but a regression here means the UI lies to
+ * the user about legality.
  *
  * Run: `bun test` from frontend/.
  */
@@ -62,6 +57,17 @@ describe('validateTrade', () => {
     expect(issues).toEqual([]);
   });
 
+  test('flags an uneven (2-for-1) swap on the count side', () => {
+    const a = team('a', 'AAA', [mon('Gengar', 16), mon('Pikachu', 4)]);
+    const b = team('b', 'BBB', [mon('Garchomp', 16)]);
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Gengar', 'Pikachu']), requesting: new Set(['Garchomp']),
+      pointCap: cap,
+    });
+    expect(issues.some(i => i.side === 'count' && /even/i.test(i.message))).toBe(true);
+  });
+
   test('flags a side that would exceed the point cap', () => {
     // proposer already at 108, gives away a 4pt and receives a 18pt → 122 > 110.
     const a = team('a', 'AAA', [mon('Spare', 4), mon('Filler', 104)]);
@@ -98,7 +104,7 @@ describe('validateTrade', () => {
   });
 
   test('reports issues per affected side independently', () => {
-    // Both teams overload: each receives a heavy mon while at the cap.
+    // Even swap of equal-cost mons stays in budget → legal.
     const a = team('a', 'AAA', [mon('A4', 4), mon('AFill', 104)]);
     const b = team('b', 'BBB', [mon('B4', 4), mon('BFill', 104)]);
     const issues = validateTrade({
@@ -106,7 +112,6 @@ describe('validateTrade', () => {
       offering: new Set(['A4']), requesting: new Set(['B4']),
       pointCap: cap,
     });
-    // Even swap of equal-cost mons stays in budget → legal.
     expect(issues).toEqual([]);
   });
 });
@@ -117,5 +122,27 @@ describe('pointDelta', () => {
     expect(pointDelta(a, new Set(['Gengar', 'Snorlax']))).toBe(24);
     expect(pointDelta(a, new Set())).toBe(0);
     expect(pointDelta(a, new Set(['Nonexistent']))).toBe(0);
+  });
+});
+
+describe('tradePointSummary', () => {
+  test('computes before/after/delta/over per side for an even swap', () => {
+    const a = team('a', 'AAA', [mon('Gengar', 16), mon('Pikachu', 4)]);  // before 20
+    const b = team('b', 'BBB', [mon('Garchomp', 18), mon('Snorlax', 4)]); // before 22
+    const s = tradePointSummary(a, b, new Set(['Gengar']), new Set(['Garchomp']), 110);
+    expect(s.proposer.before).toBe(20);
+    expect(s.proposer.after).toBe(22);   // -16 +18
+    expect(s.proposer.delta).toBe(2);
+    expect(s.proposer.over).toBe(false);
+    expect(s.recipient.after).toBe(20);  // -18 +16
+    expect(s.recipient.delta).toBe(-2);
+  });
+
+  test('flags over-cap on the side that breaches', () => {
+    const a = team('a', 'AAA', [mon('Spare', 4), mon('Filler', 104)]); // before 108
+    const b = team('b', 'BBB', [mon('Garchomp', 18)]);
+    const s = tradePointSummary(a, b, new Set(['Spare']), new Set(['Garchomp']), 110);
+    expect(s.proposer.after).toBe(122);
+    expect(s.proposer.over).toBe(true);
   });
 });

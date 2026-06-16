@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { isStaff, isTeamOwner } from '@/lib/permissions';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useAppData } from '@/lib/app-data-context';
+import { useMarket } from '@/pages/market';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getEffectiveCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { leagueGem } from '@/lib/constants';
-import type { Player, RosterPokemon, League } from '@/lib/types';
+import type { RosterPokemon, League } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +24,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { withViewTransition } from '@/lib/view-transition';
-import { BudgetBar, EmptyState } from './budget-bar';
+import { EmptyState } from './budget-bar';
 import { getErrorMessage } from '@/lib/errors';
 
 interface FreeAgent {
@@ -48,35 +48,15 @@ function teamPointsUsed(roster: RosterPokemon[], format?: CostFormat): number {
 export function FreeAgentsPage() {
   const { user } = useAuth();
   const league = useLeague();
-  const { players, refresh } = useLeagueData();
+  const { refresh } = useLeagueData();
   const { openSideCard } = usePokemonSideCard();
+  // Acting team is resolved once by the Market hub (owned team, or the staff
+  // "acting as" picker) and handed down via outlet context.
+  const { actingTeam: myTeam } = useMarket();
 
   const phase = league.season.phase;
   const pointCap = league.season.pointCap;
   const costFormat = league.costFormat ?? DEFAULT_FORMAT;
-  const userIsStaff = isStaff(user);
-
-  // Owner's team in this league (if any). Used as the default acting team
-  // for the page; staff override via the team picker below.
-  const ownedTeam: Player | undefined = useMemo(() => {
-    if (!user) return undefined;
-    return players.find(p => isTeamOwner(user, p));
-  }, [players, user]);
-
-  // Staff team picker — staff can manage FA pickups for any team. Default
-  // to the owned team if they have one in this league, else the first team.
-  const [actingTeamId, setActingTeamId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!userIsStaff) return;
-    if (actingTeamId && players.some(p => p.id === actingTeamId)) return;
-    setActingTeamId(ownedTeam?.id ?? players[0]?.id ?? null);
-  }, [userIsStaff, players, ownedTeam, actingTeamId]);
-
-  // Resolved acting team: staff use the picker, owners use their team.
-  const myTeam: Player | undefined = useMemo(() => {
-    if (userIsStaff) return players.find(p => p.id === actingTeamId) ?? ownedTeam;
-    return ownedTeam;
-  }, [userIsStaff, players, actingTeamId, ownedTeam]);
 
   // Free agents fetched from backend
   const [freeAgents, setFreeAgents] = useState<FreeAgent[]>([]);
@@ -224,66 +204,11 @@ export function FreeAgentsPage() {
   }
 
   if (!myTeam) {
-    // Staff with no managed team in *this* league still shouldn't hit the
-    // redirect — they can act on any team via the picker. Only fall through
-    // when there are literally no teams at all.
-    if (userIsStaff && players.length > 0) {
-      // No-op: actingTeamId effect will populate; but avoid render loop.
-    } else {
-      return <NotAManagerRedirect currentLeagueId={league.id} currentLeagueName={league.name} />;
-    }
-  }
-  if (!myTeam) {
-    return null;
+    return <NotAManagerRedirect currentLeagueId={league.id} currentLeagueName={league.name} />;
   }
 
   return (
     <div className="flex flex-col gap-3 h-full min-h-0">
-      {/* Page title */}
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-base font-mono uppercase tracking-wider">
-          <span style={{ color: league.color }}>FREE</span>{' '}
-          <span className="text-text-primary">AGENTS</span>
-        </h1>
-        <span className="text-[10px] text-text-muted">
-          {league.name} · Week {league.season.currentWeek}
-        </span>
-      </div>
-
-      {/* Staff team picker — staff can manage any team's free-agent pickups.
-          Hidden for owners (who only see their own team). */}
-      {userIsStaff && players.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted font-mono">
-            Acting as
-          </span>
-          <Select
-            value={myTeam.id}
-            onValueChange={v => { setActingTeamId(v); setSelected(null); }}
-          >
-            <SelectTrigger className="h-7 w-[260px] text-xs bg-surface border-border-subtle">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {players.map(p => (
-                <SelectItem key={p.id} value={p.id} className="text-xs">
-                  {p.teamAbbrev} — {p.teamName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Budget bar */}
-      <BudgetBar
-        used={pointsUsed}
-        cap={pointCap}
-        projected={selected ? projectedAfter : null}
-        teamColor={myTeam.teamColor}
-        teamName={myTeam.teamName}
-      />
-
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 flex-1 min-h-0">
         {/* ─── FA list (left) ───────────────────────────────────────── */}
         <Card className="flex flex-col min-h-0">
@@ -697,7 +622,7 @@ function NotAManagerRedirect({
         {managedLeagues.map(l => (
           <Link
             key={l.id}
-            to={`/league/${l.id}/free-agents`}
+            to={`/league/${l.id}/market/free-agents`}
             className="gem-wrapper w-full flex items-center gap-1.5 py-1 px-1 transition-all duration-150"
           >
             <div className={`league-banner league-banner-${leagueGem(l.id)} flex-1 min-w-0`}>

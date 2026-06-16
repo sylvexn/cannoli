@@ -91,7 +91,7 @@ function PendingTradesCard({
             return (
               <Link
                 key={trade.id}
-                to={`/league/${leagueId}/trades`}
+                to={`/league/${leagueId}/market/trades`}
                 className="block px-2 py-1.5 rounded-md hover:bg-surface-overlay/60 transition-colors group"
               >
                 <div className="flex items-center gap-2 text-xs">
@@ -169,7 +169,7 @@ function ActionItemList({
         icon: <ArrowLeftRight size={11} className="text-purple-400" />,
         label: 'Review trade proposal',
         detail: `+${trade.offering.join(', ')} / -${trade.requesting.join(', ')}`,
-        to: `/league/${leagueId}/trades`,
+        to: `/league/${leagueId}/market/trades`,
         tone: 'urgent',
       });
     }
@@ -270,7 +270,7 @@ function ActionItemList({
               icon: <Clock size={11} className="text-text-muted" />,
               label: weeksLeft === 1 ? 'Trade deadline next week' : `${weeksLeft} weeks until trade deadline`,
               detail: `Through W${tdw}.`,
-              to: `/league/${league.id}/trades`,
+              to: `/league/${league.id}/market/trades`,
               tone: weeksLeft <= 1 ? 'warn' : 'neutral',
             });
           } else if (cw === tdw) {
@@ -281,7 +281,7 @@ function ActionItemList({
               leagueLabel: league.name.replace(' League', ''),
               icon: <AlertCircle size={11} className="text-loss" />,
               label: 'Trade deadline this week',
-              to: `/league/${league.id}/trades`,
+              to: `/league/${league.id}/market/trades`,
               tone: 'urgent',
             });
           }
@@ -539,8 +539,8 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
             Theorycraft
           </QuickLink>
           <QuickLink to={`/league/${league.id}/schedule`} icon={<Calendar size={10} />}>Schedule</QuickLink>
-          <QuickLink to={`/league/${league.id}/trades`} icon={<ArrowLeftRight size={10} />}>Trades</QuickLink>
-          <QuickLink to={`/league/${league.id}/free-agents`} icon={<UserPlus size={10} />}>Free Agents</QuickLink>
+          <QuickLink to={`/league/${league.id}/market/trades`} icon={<ArrowLeftRight size={10} />}>Trades</QuickLink>
+          <QuickLink to={`/league/${league.id}/market/free-agents`} icon={<UserPlus size={10} />}>Free Agents</QuickLink>
           <QuickLink to={`/league/${league.id}/stats`} icon={<BarChart3 size={10} />}>Stats</QuickLink>
           <QuickLink to={`/league/${league.id}/draft`} icon={<LayoutDashboard size={10} />}>Draft Board</QuickLink>
           <QuickLink

@@ -84,7 +84,7 @@ function HeadlineCard({ headline }: { headline: Headline }) {
   // trade
   return (
     <Link
-      to={`/league/${headline.leagueId}/trades`}
+      to={`/league/${headline.leagueId}/market/trades`}
       viewTransition
       className="shrink-0 group flex items-center gap-2 px-3 py-1.5 rounded-md border border-border-default bg-surface-overlay/40 hover:bg-surface-overlay hover:border-pink/40 transition-colors"
     >

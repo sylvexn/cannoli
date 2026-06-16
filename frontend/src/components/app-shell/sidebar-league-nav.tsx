@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, BarChart3, Calendar, ArrowLeftRight,
-  LayoutDashboard, ChevronDown, UserPlus,
+  LayoutDashboard, ChevronDown,
 } from 'lucide-react';
 import { PHASE_COLORS, leagueGem } from '@/lib/constants';
 import { usePointerTilt } from '@/lib/use-pointer-tilt';
@@ -15,8 +15,7 @@ export const leaguePages = [
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
-  { path: '/trades', label: 'Trade Block', icon: ArrowLeftRight },
-  { path: '/free-agents', label: 'Free Agents', icon: UserPlus },
+  { path: '/market', label: 'Market', icon: ArrowLeftRight },
 ];
 
 interface SidebarLeagueNavProps {
@@ -75,7 +74,7 @@ export function SidebarLeagueNav({ leagues, openLeagueId, onToggle, pendingByLea
                 <div className="pl-4 space-y-0.5 py-1">
                   {leaguePages.map(({ path, label, icon: Icon }) => {
                     const to = `/league/${league.id}${path}`;
-                    const tradeBadge = path === '/trades' ? (pendingByLeague[league.id] ?? 0) : 0;
+                    const tradeBadge = path === '/market' ? (pendingByLeague[league.id] ?? 0) : 0;
                     return (
                       <NavLink viewTransition
                         key={path}

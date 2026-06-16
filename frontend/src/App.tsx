@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazyWithReload } from '@/lib/lazy-with-reload';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
@@ -19,7 +19,8 @@ import { TierListPage } from '@/pages/tier-list';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
-import { TradeBlockPage } from '@/pages/trade-block';
+import { MarketLayout } from '@/pages/market';
+import { TradeDeskPage } from '@/pages/market/trade-desk';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
@@ -50,6 +51,12 @@ const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').the
 const MatchupCenterPage = lazyWithReload(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazyWithReload(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
 const SpeedTiersPage = lazyWithReload(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
+
+/** Forwards the old /league/:id/trades and /free-agents paths to the Market hub tabs. */
+function MarketRedirect({ tab }: { tab: 'trades' | 'free-agents' }) {
+  const { leagueId } = useParams();
+  return <Navigate to={`/league/${leagueId}/market/${tab}`} replace />;
+}
 
 export default function App() {
   return (
@@ -89,8 +96,15 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route path="draft" element={<Suspense fallback={<PageLoadingSpinner />}><DraftBoardPage /></Suspense>} />
                   <Route path="draft/practice" element={<Suspense fallback={<PageLoadingSpinner />}><DraftPracticePage /></Suspense>} />
-                  <Route path="trades" element={<TradeBlockPage />} />
-                  <Route path="free-agents" element={<FreeAgentsPage />} />
+                  {/* Market hub — Trade Block + Free Agents under one shell */}
+                  <Route path="market" element={<MarketLayout />}>
+                    <Route index element={<Navigate to="trades" replace />} />
+                    <Route path="trades" element={<TradeDeskPage />} />
+                    <Route path="free-agents" element={<FreeAgentsPage />} />
+                  </Route>
+                  {/* Back-compat redirects from the old standalone paths */}
+                  <Route path="trades" element={<MarketRedirect tab="trades" />} />
+                  <Route path="free-agents" element={<MarketRedirect tab="free-agents" />} />
                 </Route>
               </Route>
 
