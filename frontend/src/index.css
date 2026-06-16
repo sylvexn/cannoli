@@ -243,6 +243,12 @@
   inherits: true;
   initial-value: #22d3ee;
 }
+/* Animatable conic angle for the .spin-border glow-kit utility. */
+@property --border-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
 
 /* ─── Background texture ─── */
 body::before {
@@ -1133,3 +1139,71 @@ aside {
 [data-colorblind='true'] .bg-\[\#2e1515\]         { background-color: #3b240a; }
 [data-colorblind='true'] .bg-\[\#3b1515\]         { background-color: #4a2c0a; }
 [data-colorblind='true'] .bg-\[\#5c1a1a\]         { background-color: #6b3410; }
+
+/* ─── Glow + gradient kit ───
+   color-mix-driven glows already live on .card-interactive / .identity-glow.
+   These add the two continuous-gradient pieces from the FX showcase. Both are
+   gated below on prefers-reduced-motion AND GPU tier. */
+
+/* Animated conic gradient border — spins only on hover (low duty cycle).
+   Wrap a solid-bg child; the 1.5px padding reveals the conic as a border ring.
+   Set --spin-accent to tint it (e.g. a league color). */
+.spin-border {
+  position: relative;
+  padding: 1.5px;
+  border-radius: inherit;
+  isolation: isolate;
+}
+.spin-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--border-spin),
+    transparent 0deg,
+    var(--spin-accent, var(--color-neon, #22d3ee)) 70deg,
+    transparent 150deg,
+    transparent 360deg
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.spin-border:hover::before {
+  opacity: 1;
+  animation: border-spin 3s linear infinite;
+}
+@keyframes border-spin { to { --border-spin: 360deg; } }
+
+/* Flowing multi-color gradient button background. */
+.btn-gradient {
+  background: linear-gradient(110deg, #22d3ee, #3b82f6, #e879f9, #22d3ee);
+  background-size: 300% 100%;
+  animation: btn-flow 6s linear infinite;
+}
+.btn-gradient:hover { filter: brightness(1.08); }
+@keyframes btn-flow { to { background-position: 300% 0; } }
+
+/* ─── Performance gate: no hardware acceleration → freeze continuous FX ───
+   Keyed on the GPU tier set once at boot by gpu-capability.ts. Mirrors the set
+   of continuous animations that the reduced-motion blocks already neutralize.
+   Hover-only / discrete effects (gem tilt, card glow, gradient buttons' static
+   look) keep working — they cost nothing when idle, so gating them would only
+   degrade the experience for no benefit. */
+:root[data-gpu='software'] .btn-gradient,
+:root[data-gpu='none'] .btn-gradient,
+:root[data-gpu='software'] .spin-border:hover::before,
+:root[data-gpu='none'] .spin-border:hover::before,
+:root[data-gpu='software'] .animate-shimmer,
+:root[data-gpu='none'] .animate-shimmer,
+:root[data-gpu='software'] .animate-breathe,
+:root[data-gpu='none'] .animate-breathe,
+:root[data-gpu='software'] .pulse-glow,
+:root[data-gpu='none'] .pulse-glow,
+:root[data-gpu='software'] .neon-spark,
+:root[data-gpu='none'] .neon-spark,
+:root[data-gpu='software'] .neon-glow-layer,
+:root[data-gpu='none'] .neon-glow-layer {
+  animation: none !important;
+}

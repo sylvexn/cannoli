@@ -161,7 +161,7 @@ export function LoginPage() {
           <Button
             type="submit"
             disabled={loading || !username || !password}
-            className="w-full bg-neon text-surface-base hover:bg-neon/90"
+            className="btn-gradient w-full text-surface-base font-semibold border-0 disabled:opacity-60"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>

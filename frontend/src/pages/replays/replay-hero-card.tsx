@@ -47,8 +47,9 @@ export function ReplayHeroCard({
   const heroPalette = gemPaletteFor(leagueGem(league.id));
 
   return (
+    <div className="spin-border rounded-xl mb-5" style={{ ['--spin-accent' as never]: league.color }}>
     <div
-      className="relative rounded-xl border border-border-default bg-surface-raised overflow-hidden mb-5"
+      className="relative rounded-xl border border-border-default bg-surface-raised overflow-hidden"
       style={{
         ['--card-accent' as never]: league.color,
         background: `linear-gradient(120deg, ${league.color}12 0%, var(--color-surface-raised, #161821) 55%)`,
@@ -211,6 +212,7 @@ export function ReplayHeroCard({
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
