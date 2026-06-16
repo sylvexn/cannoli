@@ -28,8 +28,12 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - name: Typecheck (frontend)
-        run: bun run check
+      # Run the REAL build (tsc -b && vite build) — the exact command the prod
+      # Dockerfile runs. `bun run check` (tsc --noEmit, root tsconfig) does NOT
+      # catch what `tsc -b` (project refs, tsconfig.app.json) does, so a green
+      # check could still fail the deploy build. Gate on the real thing.
+      - name: Build frontend
+        run: bun run build
       - name: Lint (frontend)
         run: bun run lint
       # Known flake: tests/ps-bot-seed.test.ts races with live-DB tests under

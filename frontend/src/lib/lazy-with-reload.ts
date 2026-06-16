@@ -62,7 +62,12 @@ export function installChunkReloadHandler(): void {
   });
 }
 
-export function lazyWithReload<T extends ComponentType<unknown>>(
+// `ComponentType<any>` (not `<unknown>`) mirrors React's own `lazy` signature —
+// it's required so routes whose component takes specific props (e.g. DraftBoardPage's
+// optional DraftBoardPageProps) still satisfy the constraint. With `<unknown>`,
+// inference collapses to a `{ default: never }` union and fails the prod `tsc -b` build.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function lazyWithReload<T extends ComponentType<any>>(
   factory: () => Promise<{ default: T }>,
 ): React.LazyExoticComponent<T> {
   return lazy(async () => {
