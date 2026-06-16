@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   Swords, Gamepad2,
   Archive, Film, ScrollText, ListTree, Home, Gauge,
+  PanelLeftClose, PanelLeftOpen, Menu, X,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -18,7 +19,9 @@ import { CommandPalette } from './command-palette';
 import { MatchBanner } from './match-banner';
 import { useFeedbackNotifications } from '@/lib/use-feedback-notifications';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
+import { SidebarNavItem } from './app-shell/sidebar-nav-item';
 import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
@@ -186,17 +189,68 @@ export function AppShell() {
     setOpenLeagueId(prev => prev === id ? null : id);
   }
 
+  // Sidebar layout mode. At >=1024px the sidebar is docked and the user can
+  // collapse it to an icon rail (persisted). Below that it becomes an
+  // off-canvas drawer toggled by a hamburger, auto-closing on navigation.
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const [collapsed, setCollapsed] = useLocalStorageState('cannoli:sidebarCollapsed', false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const collapsedRail = isDesktop && collapsed;
+
+  useEffect(() => { setDrawerOpen(false); }, [pathname]);
+
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       {/* Site-wide simulator banner — only renders on mock.cannoli.live */}
       <SimBanner />
       <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Mobile hamburger — only when the sidebar is an off-canvas drawer */}
+      {!isDesktop && !drawerOpen && (
+        <button
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open navigation"
+          className="fixed top-3 left-3 z-30 flex items-center justify-center h-9 w-9 rounded-md bg-surface-raised border border-border-default text-text-secondary hover:text-text-primary shadow-lg"
+        >
+          <Menu size={18} />
+        </button>
+      )}
+
+      {/* Backdrop behind the open drawer */}
+      {!isDesktop && drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          aria-hidden
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-surface-raised border-r border-border-default flex flex-col">
+      <aside className={cn(
+        'bg-surface-raised border-r border-border-default flex flex-col z-50',
+        isDesktop
+          ? cn('flex-shrink-0 transition-[width] duration-200 ease-out', collapsedRail ? 'w-[60px]' : 'w-56')
+          : cn('fixed inset-y-0 left-0 w-60 transition-transform duration-200 ease-out',
+              drawerOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'),
+      )}>
         {/* Logo */}
-        <div className="px-3 pt-3 pb-3 border-b border-border-default">
-          <NeonLogo className="w-full h-auto" />
-          <div className="flex items-center justify-center gap-2 mt-1">
+        <div className={cn('border-b border-border-default', collapsedRail ? 'px-2 py-3' : 'px-3 pt-3 pb-3')}>
+          {collapsedRail ? (
+            <img src="/favicon.svg" alt="cannoli" className="h-8 w-8 mx-auto" />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <NeonLogo className="w-full h-auto" />
+                {!isDesktop && (
+                  <button
+                    onClick={() => setDrawerOpen(false)}
+                    aria-label="Close navigation"
+                    className="shrink-0 text-text-muted hover:text-text-primary p-1 -mr-1"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center justify-center gap-2 mt-1">
             {seasonBadge && (
               <>
                 <span className="inline-flex items-center rounded-full border border-loss/40 bg-surface-base px-2 py-0.5 text-[10px] font-mono text-loss leading-tight transition-all duration-200 hover:bg-loss/10 hover:border-loss/70 hover:shadow-[0_0_8px_rgba(239,68,68,0.3)] cursor-default">
@@ -223,11 +277,27 @@ export function AppShell() {
                 <span className="font-mono text-[10px]">{__COMMIT_HASH__}</span>
               </TooltipContent>
             </Tooltip>
-          </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Live match indicator */}
         {liveMatches.length > 0 && (
+          collapsedRail ? (
+            <div className="px-2 pt-2 pb-1 flex justify-center">
+              <button
+                onClick={() => { if (liveMatches.length === 1) navigate(`/league/${liveMatches[0].leagueId}/schedule`); }}
+                title={`${liveMatches.length} live match${liveMatches.length > 1 ? 'es' : ''}`}
+                className="relative flex h-9 w-9 items-center justify-center rounded-md bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors"
+              >
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-loss" />
+                </span>
+              </button>
+            </div>
+          ) : (
           <div className="px-3 pt-2 pb-1">
             <Tooltip>
               <TooltipTrigger>
@@ -268,134 +338,52 @@ export function AppShell() {
               </TooltipContent>
             </Tooltip>
           </div>
+          )
         )}
 
-        {/* Nav */}
+        {/* Nav. Home + global pages use SidebarNavItem (icon+label, or an
+            icon-only rail when collapsed); the league sections render their
+            own accordion / flyout. */}
         <nav className="flex-1 py-2 px-2 space-y-1 overflow-y-auto">
-          {/* Home — unified landing for everyone (guest/member/coach/admin).
-              The page renders a different top-half shape per role; the
-              sidebar item itself stays the same regardless. */}
-          <NavLink viewTransition
-            to="/"
-            end
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Home size={16} />
-            Home
-          </NavLink>
+          <SidebarNavItem to="/" end icon={Home} label="Home" collapsed={collapsedRail} />
 
-          {/* League sections */}
           <SidebarLeagueNav
             leagues={leagues}
             openLeagueId={openLeagueId}
             onToggle={toggleLeague}
             pendingByLeague={pendingByLeague}
+            collapsed={collapsedRail}
           />
 
-          {/* Separator */}
           <div className="h-px bg-border-subtle mx-2 my-1" />
 
-          {/* League-independent pages */}
-          <NavLink viewTransition
-            to="/matchup"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Swords size={16} />
-            Matchup Center
-          </NavLink>
+          <SidebarNavItem to="/matchup" icon={Swords} label="Matchup Center" collapsed={collapsedRail} />
+          <SidebarNavItem to="/showdown" icon={Gamepad2} label="Showdown" activeClass="bg-orange-400/10 text-orange-400" collapsed={collapsedRail} />
+          <SidebarNavItem to="/replays" icon={Film} label="Replays" collapsed={collapsedRail} />
+          <SidebarNavItem to="/archive" icon={Archive} label="Season Archive" activeClass="bg-purple-400/10 text-purple-400" collapsed={collapsedRail} />
 
-          <NavLink viewTransition
-            to="/showdown"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-orange-400/10 text-orange-400'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Gamepad2 size={16} />
-            Showdown
-          </NavLink>
-
-          <NavLink viewTransition
-            to="/replays"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Film size={16} />
-            Replays
-          </NavLink>
-
-          <NavLink viewTransition
-            to="/archive"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-purple-400/10 text-purple-400'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Archive size={16} />
-            Season Archive
-          </NavLink>
-
-          {/* Help / reference */}
           <div className="h-px bg-border-subtle mx-2 my-1" />
 
-          <NavLink
-            to="/tiers"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-neon/10 text-neon'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <ListTree size={16} />
-            Tier List
-          </NavLink>
-
-          <NavLink viewTransition
-            to="/speed-tiers"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-cyan-300/10 text-cyan-300'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <Gauge size={16} />
-            Speed Tiers
-          </NavLink>
-
-          <NavLink
-            to="/rules"
-            className={({ isActive }) => cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-pink/10 text-pink'
-                : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
-            )}
-          >
-            <ScrollText size={16} />
-            Rules
-          </NavLink>
-
+          <SidebarNavItem to="/tiers" icon={ListTree} label="Tier List" collapsed={collapsedRail} />
+          <SidebarNavItem to="/speed-tiers" icon={Gauge} label="Speed Tiers" activeClass="bg-cyan-300/10 text-cyan-300" collapsed={collapsedRail} />
+          <SidebarNavItem to="/rules" icon={ScrollText} label="Rules" activeClass="bg-pink/10 text-pink" collapsed={collapsedRail} />
         </nav>
+
+        {/* Collapse toggle — docked mode only (the drawer has its own close). */}
+        {isDesktop && (
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className={cn(
+              'flex items-center text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors border-t border-border-default',
+              collapsedRail ? 'justify-center py-2.5' : 'gap-2 px-4 py-2 text-xs',
+            )}
+          >
+            {collapsed
+              ? <PanelLeftOpen size={16} className="shrink-0" />
+              : <><PanelLeftClose size={16} className="shrink-0" /><span>Collapse</span></>}
+          </button>
+        )}
 
         {/* Footer — My Team + user dropdown (or login for guests) */}
         <SidebarFooter
@@ -406,6 +394,7 @@ export function AppShell() {
           pendingTradeCount={pendingTradeCount}
           onOpenCommand={() => setCmdOpen(true)}
           onLogout={logout}
+          collapsed={collapsedRail}
         />
       </aside>
 
@@ -416,7 +405,10 @@ export function AppShell() {
           instead of ~320px), and never exceeds that ceiling on 1440p+ where
           the original 1280 column already reads well. */}
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
-        <div className={isWide ? 'p-4 h-full overflow-hidden flex flex-col' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6'}>
+        <div className={cn(
+          isWide ? 'p-4 h-full overflow-hidden flex flex-col' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6',
+          !isDesktop && 'pt-14',
+        )}>
           {/* Show a return-to-league pill on global routes if we know which
               league the user was last in. Skip on Home where it would just
               be noise (the home page already surfaces league chips). */}

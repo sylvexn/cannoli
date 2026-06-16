@@ -32,12 +32,102 @@ interface SidebarFooterProps {
   pendingTradeCount: number;
   onOpenCommand: () => void;
   onLogout: () => void;
+  /** Icon-only rail mode. */
+  collapsed?: boolean;
 }
 
+const purpleDot =
+  'absolute -top-1 -right-1 w-2 h-2 rounded-full bg-purple-400 ring-2 ring-surface-raised';
+
 export function SidebarFooter({
-  user, isAdmin, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout,
+  user, isAdmin, myTeams, leagues, pendingTradeCount, onOpenCommand, onLogout, collapsed,
 }: SidebarFooterProps) {
   const navigate = useNavigate();
+
+  if (collapsed) {
+    const firstTeam = myTeams[0];
+    return (
+      <div className="p-2 border-t border-border-default flex flex-col items-center gap-2">
+        {user && firstTeam && (
+          <NavLink
+            to={`/league/${firstTeam.leagueId}/teams/${firstTeam.teamId}`}
+            title={myTeams.length > 1 ? 'My Teams' : firstTeam.teamAbbrev}
+            className={({ isActive }) => cn(
+              'relative flex items-center justify-center h-9 w-9 rounded-md transition-colors',
+              isActive ? 'bg-neon/10 text-neon' : 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary',
+            )}
+          >
+            <User size={16} />
+            {pendingTradeCount > 0 && <span className={purpleDot} title="Pending trade proposals" />}
+          </NavLink>
+        )}
+
+        {user && isAdmin && (
+          <NavLink
+            to="/admin"
+            title="Admin"
+            className={({ isActive }) => cn(
+              'flex items-center justify-center h-9 w-9 rounded-md transition-colors',
+              isActive ? 'bg-neon/10 text-neon' : 'text-text-muted hover:bg-surface-overlay hover:text-text-secondary',
+            )}
+          >
+            <Shield size={16} />
+          </NavLink>
+        )}
+
+        <button
+          onClick={onOpenCommand}
+          title="Search (Ctrl+K)"
+          className="flex items-center justify-center h-9 w-9 rounded-md text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors"
+        >
+          <Search size={16} />
+        </button>
+
+        {user ? (
+          <UserAccentScope user={user}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                title={user.username}
+                className="rounded-full outline-none hover:ring-2 hover:ring-neon/40 transition-all cursor-pointer"
+              >
+                <CoachAvatar
+                  username={user.username}
+                  displayName={user.displayName ?? null}
+                  avatarPath={user.avatarPath ?? null}
+                  primaryColor={user.primaryColor ?? null}
+                  secondaryColor={user.secondaryColor ?? null}
+                  size="md"
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" sideOffset={8}>
+                <DropdownMenuItem onClick={() => navigate(`/coach/${user.username}`)}>
+                  <UserCircle size={14} />
+                  View profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                  <Settings size={14} />
+                  Settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { onLogout(); navigate('/login'); }}>
+                  <LogOut size={14} />
+                  Log Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </UserAccentScope>
+        ) : (
+          <button
+            onClick={() => navigate('/login')}
+            title="Log In"
+            className="flex items-center justify-center h-9 w-9 rounded-md text-neon hover:bg-neon/10 transition-colors"
+          >
+            <LogIn size={16} />
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 border-t border-border-default space-y-2">
