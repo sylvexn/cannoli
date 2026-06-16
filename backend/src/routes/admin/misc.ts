@@ -2,7 +2,7 @@ import { Elysia } from 'elysia';
 import { db, schema, sqlite } from '../../db';
 import { eq, desc, and, gte, lt, like, or, type SQL } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
-import { getBotStatus, restartBot, importBattleForMatch } from '../../lib/ps-bot';
+import { getBotStatus, restartBot, importBattleForMatch, importBattleFromReplay } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
 import { checkMatchArchived } from '../../lib/archive-guard';
@@ -167,21 +167,35 @@ export const miscRoutes = new Elysia()
   // ─── Import a played battle into a scheduled match ──────────────────
   //
   // Attaches a finished PS battle (e.g. one played outside the Arena flow) to
-  // a scheduled match, reading its saved replay off disk and recording it
-  // through the regular completion path (result + per-Pokemon K/D + replay
-  // URL). v1 refuses to overwrite an already-finalized match.
+  // a scheduled match and records it through the regular completion path
+  // (result + per-Pokemon K/D + replay URL). Two sources:
+  //   - `replay`: the replay itself — a downloaded PS `.html`, a `.log.json`,
+  //     or raw protocol text. Used for league battles that never touched this
+  //     backend's disk.
+  //   - `roomId`: read a PS autosave off this backend's disk (legacy/sim path).
+  // `replay` wins when both are present. v1 refuses to overwrite a finalized
+  // match. A full `.html` is tens of KB — Bun's default body limit handles it
+  // and the app sets no custom maxBody, so no special config is needed.
 
   .post('/api/admin/matches/:matchId/import-battle', ({ params, query, body, user, set }) => {
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { roomId } = (body ?? {}) as { roomId?: string };
-    if (!roomId || !roomId.trim()) {
+    const { roomId, replay } = (body ?? {}) as { roomId?: string; replay?: string };
+
+    let result;
+    let source: string;
+    if (replay && replay.trim()) {
+      result = importBattleFromReplay(params.matchId, replay);
+      source = 'replay';
+    } else if (roomId && roomId.trim()) {
+      result = importBattleForMatch(params.matchId, roomId);
+      source = 'disk';
+    } else {
       set.status = 422;
-      return { error: 'roomId required' };
+      return { error: 'Provide a replay or a roomId' };
     }
 
-    const result = importBattleForMatch(params.matchId, roomId);
     if (!result.ok) {
       set.status = result.status;
       return { error: result.error };
@@ -194,10 +208,11 @@ export const miscRoutes = new Elysia()
       category: 'match',
       actor: user.username,
       leagueId: match?.leagueId ?? null,
-      description: `Imported battle into ${params.matchId}: ${result.homeScore}-${result.awayScore} (${result.pokemonCount} Pokemon, status ${result.status})`,
+      description: `Imported battle (${source}) into ${params.matchId}: ${result.homeScore}-${result.awayScore} (${result.pokemonCount} Pokemon, status ${result.status})`,
       metadata: JSON.stringify({
         matchId: params.matchId,
-        roomId,
+        source,
+        roomId: source === 'disk' ? roomId : null,
         homeScore: result.homeScore,
         awayScore: result.awayScore,
         winnerTeamId: result.winnerTeamId,

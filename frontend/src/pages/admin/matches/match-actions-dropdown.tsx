@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -16,6 +17,7 @@ import { NumberInput } from '@/components/ui/number-input';
 import {
   AlertTriangle, Trash2, MoreVertical,
   Eraser, ArrowRightLeft, Gavel, Swords,
+  Upload, FileText,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
 import { getErrorMessage } from '@/lib/errors';
@@ -51,7 +53,10 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
   const [moveDeadline, setMoveDeadline] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importRoom, setImportRoom] = useState('');
+  const [importReplay, setImportReplay] = useState('');
+  const [importFileName, setImportFileName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function openMove() {
     setMoveWeek(match.week);
@@ -61,7 +66,21 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
 
   function openImport() {
     setImportRoom('');
+    setImportReplay('');
+    setImportFileName('');
     setImportOpen(true);
+  }
+
+  async function handleReplayFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setImportReplay(text);
+      setImportFileName(file.name);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    }
   }
 
   async function executeVoid() {
@@ -125,14 +144,18 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
   }
 
   async function executeImport() {
+    const replay = importReplay.trim();
     const roomId = normalizeRoomId(importRoom);
-    if (!roomId) {
-      toast.error('Enter a battle room ID or replay link');
+    if (!replay && !roomId) {
+      toast.error('Upload or paste a replay (or enter a room ID)');
       return;
     }
     setSubmitting(true);
     try {
-      const res = await api.importMatchBattle(match.id, { roomId });
+      const res = await api.importMatchBattle(
+        match.id,
+        replay ? { replay } : { roomId },
+      );
       toast.success(`Recorded ${res.homeScore}–${res.awayScore}, ${res.pokemonCount} Pokemon`);
       setImportOpen(false);
       onChanged();
@@ -142,6 +165,8 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
       setSubmitting(false);
     }
   }
+
+  const importDisabled = submitting || (!importReplay.trim() && !importRoom.trim());
 
   const voidDisabled = match.homeScore === null && match.awayScore === null && match.status === 'scheduled';
 
@@ -297,26 +322,68 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
               Attach Played Battle
             </DialogTitle>
             <DialogDescription>
-              {`Read the saved replay for a Showdown battle and record it as ${homeName} vs ${awayName} (W${match.week}). Score and per-Pokemon stats are filled in automatically.`}
+              {`Upload a coach's downloaded Showdown replay and record it as ${homeName} vs ${awayName} (W${match.week}). Score and per-Pokemon stats are filled in automatically.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1">
-            <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
-              Battle room ID or replay link
-            </label>
-            <Input
-              value={importRoom}
-              onChange={e => setImportRoom(e.target.value)}
-              placeholder="battle-gen9natdexdraft-12345"
-              className="h-8 text-xs bg-surface-overlay font-mono"
-              onKeyDown={e => { if (e.key === 'Enter' && !submitting) executeImport(); }}
-              autoFocus
-            />
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                Replay file (.html download)
+              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".html,.htm,.json,.txt,.log"
+                className="hidden"
+                onChange={handleReplayFile}
+              />
+              <Button
+                variant="outline"
+                className="w-full h-8 text-xs justify-start gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload size={12} />
+                {importFileName || 'Choose replay file...'}
+              </Button>
+              {importFileName && (
+                <p className="flex items-center gap-1 text-[10px] text-text-muted">
+                  <FileText size={10} />
+                  {`Loaded ${importFileName} (${importReplay.length.toLocaleString()} chars)`}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                Or paste replay content
+              </label>
+              <Textarea
+                value={importReplay}
+                onChange={e => { setImportReplay(e.target.value); setImportFileName(''); }}
+                placeholder={'<!DOCTYPE html>... or |player|p1|... protocol log'}
+                className="min-h-[80px] max-h-[160px] text-xs bg-surface-overlay font-mono"
+              />
+            </div>
+            <details className="group">
+              <summary className="text-[10px] font-mono uppercase tracking-wider text-text-muted cursor-pointer select-none hover:text-text-primary">
+                Advanced: room ID (legacy)
+              </summary>
+              <div className="mt-2 space-y-1">
+                <Input
+                  value={importRoom}
+                  onChange={e => setImportRoom(e.target.value)}
+                  placeholder="battle-gen9natdexdraft-12345"
+                  className="h-8 text-xs bg-surface-overlay font-mono"
+                />
+                <p className="text-[10px] text-text-muted">
+                  Reads a server-side saved replay by room ID. Only works for battles still on disk.
+                </p>
+              </div>
+            </details>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
             <Button
-              disabled={submitting || !importRoom.trim()}
+              disabled={importDisabled}
               className="bg-neon text-surface-base hover:bg-neon/90"
               onClick={executeImport}
             >

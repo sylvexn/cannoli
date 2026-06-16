@@ -661,6 +661,119 @@ export function importBattleForMatch(matchId: string, roomId: string): ImportBat
 }
 
 /**
+ * Pull the raw PS protocol lines out of a user-supplied "replay" blob. League
+ * battles aren't on the backend's disk, so an admin pastes/uploads the replay
+ * itself. We accept the three shapes a replay realistically arrives in, tried
+ * in order:
+ *   1. A downloaded PS replay `.html` — the protocol log lives in the inner
+ *      text of `<script type="text/plain" class="battle-log-data"> … </script>`.
+ *   2. JSON with a `log` field (e.g. `{roomId}.log.json`) — `log` is either a
+ *      single newline-joined string or an array of lines.
+ *   3. Raw protocol text — the lines pasted straight out of a battle room.
+ *
+ * Returns the protocol lines (split on `\n`), or null if nothing that looks
+ * like a PS log (a line starting with `|`) can be found.
+ */
+export function extractReplayLogLines(replay: string): string[] | null {
+  const raw = (replay ?? '').trim();
+  if (!raw) return null;
+
+  let lines: string[] | null = null;
+
+  // ── 1. PS replay HTML ──
+  const htmlMatch = /<script[^>]*class="battle-log-data"[^>]*>([\s\S]*?)<\/script>/.exec(raw);
+  if (htmlMatch) {
+    lines = htmlMatch[1].split('\n');
+  }
+
+  // ── 2. JSON with a `log` field ──
+  if (!lines) {
+    try {
+      const parsed = JSON.parse(raw) as { log?: unknown };
+      if (typeof parsed.log === 'string') {
+        lines = parsed.log.split('\n');
+      } else if (Array.isArray(parsed.log)) {
+        lines = parsed.log.map(l => String(l));
+      }
+    } catch {
+      // not JSON — fall through to raw-protocol handling
+    }
+  }
+
+  // ── 3. Raw protocol text ──
+  if (!lines && raw.split('\n').some(l => l.startsWith('|'))) {
+    lines = raw.split('\n');
+  }
+
+  if (!lines) return null;
+
+  // Trim a stray trailing `</script>` (or other closing tag) off the last
+  // protocol line — pasted/over-matched HTML can leave one dangling.
+  if (lines.length > 0) {
+    const last = lines.length - 1;
+    lines[last] = lines[last].replace(/<\/?[a-z][^>]*>\s*$/i, '').trimEnd();
+  }
+
+  // A real PS log always contains at least one `|`-prefixed line.
+  if (!lines.some(l => l.startsWith('|'))) return null;
+
+  return lines;
+}
+
+/**
+ * Import a finished battle into a scheduled match from a REPLAY the admin
+ * supplies (downloaded `.html`, a `.log.json`, or raw protocol text), rather
+ * than from a disk autosave. Mirrors importBattleForMatch but sources its
+ * lines via extractReplayLogLines. Used for league battles that never touched
+ * this backend's disk.
+ */
+export function importBattleFromReplay(matchId: string, replay: string): ImportBattleResult {
+  const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  if (!match) return { ok: false, error: 'Match not found', status: 404 };
+
+  // Don't clobber a finalized match — same guard as importBattleForMatch.
+  if (match.status === 'completed' || match.status === 'disputed' || (match.status as string) === 'cancelled') {
+    return { ok: false, error: `Match already ${match.status}; use force-result to override`, status: 409 };
+  }
+
+  const lines = extractReplayLogLines(replay);
+  if (!lines || lines.length === 0) {
+    return { ok: false, error: 'Could not find a battle log in that replay', status: 422 };
+  }
+
+  const { battle, winnerUsername, hasResult } = buildBattleFromLog(match, 'imported-replay', lines);
+
+  if (!hasResult) {
+    return {
+      ok: false,
+      error: 'Replay has no result (|win|/|tie|) — battle may be unfinished',
+      status: 422,
+    };
+  }
+
+  console.log(`[PS Bot] Importing replay into match ${matchId} (${lines.length} lines)`);
+  // handleMatchEnd does all recording; the match isn't finalized so its
+  // no-clobber guard passes.
+  handleMatchEnd(battle, winnerUsername);
+
+  // Re-read the now-recorded match for authoritative scores/winner/status
+  // (handleMatchEnd may have flipped status to 'disputed' on validation warnings).
+  const updated = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  const pokemonCount = db.select().from(schema.matchPokemon)
+    .where(eq(schema.matchPokemon.matchId, matchId))
+    .all().length;
+
+  return {
+    ok: true,
+    homeScore: updated?.homeScore ?? 0,
+    awayScore: updated?.awayScore ?? 0,
+    winnerTeamId: updated?.winnerTeamId ?? null,
+    status: updated?.status ?? 'completed',
+    pokemonCount,
+  };
+}
+
+/**
  * On bot reconnect, re-join any battle rooms we were observing before the
  * disconnect. Matches stuck in `in_progress` with a known psRoomId can be
  * rescued; matches in `ready` without a psRoomId have to time out and retry.
@@ -998,8 +1111,12 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           // Build an absolute URL that resolves to the public sim host's
           // replay viewer. PS exposes battle rooms at `https://{host}/{roomId}`
           // — this works whether or not the room was explicitly /savereplay'd
-          // because the live battle URL persists for spectators.
-          replayUrl: `${PS_PUBLIC_HOST}/${battle.roomId}`,
+          // because the live battle URL persists for spectators. For an
+          // imported replay there is no live room id, so leave replayUrl null
+          // rather than minting a bogus `/{imported-replay}` link.
+          replayUrl: battle.roomId === 'imported-replay'
+            ? null
+            : `${PS_PUBLIC_HOST}/${battle.roomId}`,
         })
         .where(eq(schema.matches.id, battle.matchId))
         .run();
