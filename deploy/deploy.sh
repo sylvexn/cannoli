@@ -100,38 +100,69 @@ for e in "${PLAN[@]}"; do log "  - ${e%%|*}"; done
 
 if [ "$DRY_RUN" = 1 ]; then log ""; log "DRY_RUN=1 — not triggering Coolify."; exit 0; fi
 
-# ── 3. Health probes ────────────────────────────────────────────────────────
-wait_for_version() {   # backend: poll /api/health until version == SHORT
-  local url="$1" deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) got
-  log "Waiting for $url to report version=$SHORT ..."
+# ── 3. Probes ────────────────────────────────────────────────────────────────
+api() { curl -sf --max-time 15 -H "Authorization: Bearer $COOLIFY_TOKEN" "$COOLIFY_URL$1" 2>/dev/null; }
+
+# The PRIMARY gate: poll the Coolify deployment itself. This catches BUILD
+# failures — without it, a failed frontend build still serves HTTP 200 from the
+# OLD bundle and a naive probe reports a false success. (That bug shipped once:
+# frontend-live builds failed silently for days while /api 200 looked fine.)
+wait_for_coolify() {   # $1 = deployment_uuid
+  local dep="$1" deadline=$(( $(date +%s) + HEALTH_TIMEOUT )) status
+  log "Waiting for Coolify build/deploy ($dep) ..."
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    status="$(api "/api/v1/deployments/$dep" | python3 -c "import sys,json
+try: print(json.load(sys.stdin).get('status',''))
+except Exception: print('')" 2>/dev/null)"
+    case "$status" in
+      finished)              log "  Coolify: finished"; return 0 ;;
+      failed|error|cancelled*) log "  Coolify: $status"; return 1 ;;
+      *) log "  Coolify: ${status:-<pending>} — retrying in ${POLL_INTERVAL}s"; sleep "$POLL_INTERVAL" ;;
+    esac
+  done
+  log "  Coolify: TIMEOUT after ${HEALTH_TIMEOUT}s"; return 1
+}
+
+dump_build_log() {     # $1 = deployment_uuid — print the tail to surface the build error
+  api "/api/v1/deployments/$1" | python3 -c "import sys,json
+d=json.load(sys.stdin); l=d.get('logs')
+try:
+  arr=json.loads(l) if l else []
+  [print(e.get('output','')) for e in arr[-20:]]
+except Exception: print((l or '')[-1500:])" 2>/dev/null | tail -20
+}
+
+wait_for_version() {   # backend SECONDARY confirm: /api/health version == SHORT
+  local url="$1" deadline=$(( $(date +%s) + 180 )) got
+  log "Confirming $url reports version=$SHORT ..."
   while [ "$(date +%s)" -lt "$deadline" ]; do
     got="$(curl -sf --max-time 10 "$url" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4)"
     if [ "$got" = "$SHORT" ]; then log "  up: version=$got"; return 0; fi
-    log "  current=${got:-<none>} want=$SHORT — retrying in ${POLL_INTERVAL}s"
-    sleep "$POLL_INTERVAL"
+    log "  current=${got:-<none>} want=$SHORT — retrying in ${POLL_INTERVAL}s"; sleep "$POLL_INTERVAL"
   done
   return 1
 }
 
-wait_for_200() {       # frontend: settle, then poll root for 200
-  local url="$1" deadline code
-  log "Settling ${WEB_SETTLE}s before probing $url ..."; sleep "$WEB_SETTLE"
-  deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
+wait_for_200() {       # frontend SECONDARY confirm: root returns 200
+  local url="$1" deadline=$(( $(date +%s) + 180 )) code
+  log "Confirming $url returns 200 ..."
   while [ "$(date +%s)" -lt "$deadline" ]; do
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null)"
     if [ "$code" = "200" ]; then log "  up: HTTP 200"; return 0; fi
-    log "  code=${code:-<none>} — retrying in ${POLL_INTERVAL}s"
-    sleep "$POLL_INTERVAL"
+    log "  code=${code:-<none>} — retrying in ${POLL_INTERVAL}s"; sleep "$POLL_INTERVAL"
   done
   return 1
 }
 
 # ── 4. Trigger + verify, one at a time ──────────────────────────────────────
-trigger() {            # POST Coolify deploy for one app uuid
+trigger() {            # POST Coolify deploy; echo the deployment_uuid (empty on failure)
   local uuid="$1"
-  curl -sf --max-time 30 -X POST \
-    -H "Authorization: Bearer $COOLIFY_TOKEN" \
-    "$COOLIFY_URL/api/v1/deploy?uuid=$uuid" >/dev/null
+  curl -sf --max-time 30 -X POST -H "Authorization: Bearer $COOLIFY_TOKEN" \
+    "$COOLIFY_URL/api/v1/deploy?uuid=$uuid" 2>/dev/null | python3 -c "import sys,json
+try:
+  ds=(json.load(sys.stdin).get('deployments') or [])
+  print(ds[0].get('deployment_uuid','') if ds else '')
+except Exception: print('')" 2>/dev/null
 }
 
 failed=()
@@ -139,24 +170,27 @@ for entry in "${PLAN[@]}"; do
   IFS='|' read -r name uuid kind url <<< "$entry"
   group "Deploy $name"
   log "Triggering Coolify deploy ($uuid)"
-  if ! trigger "$uuid"; then
-    log "ERROR: deploy trigger failed for $name"
+  dep="$(trigger "$uuid")"
+  if [ -z "$dep" ]; then
+    log "ERROR: deploy trigger failed for $name (no deployment_uuid returned)"
     failed+=("$name (trigger)"); endgroup; continue
   fi
+  log "deployment_uuid: $dep"
 
   ok=0
-  case "$kind" in
-    backend)  wait_for_version "$url" && ok=1 ;;
-    web)      wait_for_200 "$url" && ok=1 ;;
-    internal) log "No public health endpoint; settling ${WEB_SETTLE}s"; sleep "$WEB_SETTLE"; ok=1 ;;
-  esac
-
-  if [ "$ok" = 1 ]; then
-    log "OK: $name is live on $SHORT"
+  if wait_for_coolify "$dep"; then
+    # Coolify built + swapped the container; confirm it actually serves.
+    case "$kind" in
+      backend)  wait_for_version "$url" && ok=1 || log "ERROR: $name built but /api/health never reported $SHORT" ;;
+      web)      wait_for_200 "$url" && ok=1 || log "ERROR: $name built but root never returned 200" ;;
+      internal) ok=1 ;;
+    esac
   else
-    log "ERROR: $name did not come up healthy within ${HEALTH_TIMEOUT}s"
-    failed+=("$name (health)")
+    log "ERROR: $name Coolify deploy did not finish (build failed?). Last build log lines:"
+    dump_build_log "$dep"
   fi
+
+  if [ "$ok" = 1 ]; then log "OK: $name is live on $SHORT"; else failed+=("$name"); fi
   endgroup
 done
 
