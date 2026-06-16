@@ -101,7 +101,8 @@ const leagueId = `${tag}-lg`;
 const homeTid = `${tag}-home`;
 const awayTid = `${tag}-away`;
 const matchId = `${tag}-w1m1`;
-const matchId2 = `${tag}-w3m1`; // same two teams, a later week (early/make-up battle)
+const matchId2 = `${tag}-w3m1`; // same two teams, a later week (within the 2-week lookahead)
+const matchId3 = `${tag}-w5m1`; // beyond the lookahead window — must be hidden / unreadyable
 let seasonId: number;
 let homeSession: string;
 let awaySession: string;
@@ -142,11 +143,15 @@ beforeAll(() => {
   db.insert(schema.matches).values({
     id: matchId2, leagueId, week: 3, homeTeamId: homeTid, awayTeamId: awayTid, status: 'scheduled',
   }).run();
+  db.insert(schema.matches).values({
+    id: matchId3, leagueId, week: 5, homeTeamId: homeTid, awayTeamId: awayTid, status: 'scheduled',
+  }).run();
 });
 
 function cleanupFixture() {
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId)).run();
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId2)).run();
+  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId3)).run();
   db.delete(schema.matches).where(eq(schema.matches.leagueId, leagueId)).run();
   db.delete(schema.teams).where(eq(schema.teams.leagueId, leagueId)).run();
   for (const id of userIds) {
@@ -171,6 +176,7 @@ function resetBoth() {
     .where(eq(schema.matches.leagueId, leagueId)).run();
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId)).run();
   db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId2)).run();
+  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.matchId, matchId3)).run();
 }
 
 const cookie = (s: string) => `session=${s}`;
@@ -407,13 +413,15 @@ describe('topic isolation', () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('pick battle week', () => {
-  test('GET /api/arena/state lists every playable week, current week flagged', async () => {
+  test('GET /api/arena/state lists weeks within the lookahead, current week flagged', async () => {
     resetBoth();
     const res = await fetch(`http://localhost:${port}/api/arena/state`, { headers: { cookie: cookie(homeSession) } });
     const data = await res.json();
 
+    // currentWeek=1, lookahead=2 → weeks 1 and 3 are offered; week 5 is capped out.
     const weeks = data.myMatches.map((m: any) => m.week).sort((a: number, b: number) => a - b);
     expect(weeks).toEqual([1, 3]);
+    expect(data.myMatches.some((m: any) => m.week === 5)).toBe(false);
 
     expect(data.myMatches.find((m: any) => m.week === 1).isCurrentWeek).toBe(true);
     expect(data.myMatches.find((m: any) => m.week === 3).isCurrentWeek).toBe(false);
@@ -465,6 +473,24 @@ describe('pick battle week', () => {
 
     home.close();
     away.close();
+    await sleep(50);
+  });
+
+  test('match_ready for a match beyond the lookahead window is rejected', async () => {
+    resetBoth();
+    const home = await connect(cookie(homeSession));
+    await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+
+    // Week 5 is > currentWeek(1) + lookahead(2): the server must refuse it even
+    // if a stale/crafted client names the matchId directly.
+    send(home, { type: 'match_ready', matchId: matchId3 });
+    const errored = await waitFor(home, (m) => m.some((x) => x.type === 'error' && /no match/i.test(x.message)));
+    expect(errored).toBe(true);
+
+    const w5 = db.select().from(schema.matches).where(eq(schema.matches.id, matchId3)).get()!;
+    expect(w5.readyHome).toBe(false);
+
+    home.close();
     await sleep(50);
   });
 

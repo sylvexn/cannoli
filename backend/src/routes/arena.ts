@@ -199,22 +199,34 @@ function getUserTeam(userId: number): { teamId: string; leagueId: string } | nul
 }
 
 /**
- * All of a team's playable matches across every week (not just the current
- * one), sorted by week. "Playable" = regular phase, not yet completed. This
- * is what lets coaches battle a match early or as a make-up — they can ready
- * up any of these, not only the current-week fixture.
+ * How many weeks ahead of the current week a coach may battle early. Past
+ * (overdue) and current-week fixtures are always playable — this only caps the
+ * forward window so coaches can't, on day one, play a late-season match with a
+ * roster that trades will reshape before then.
+ */
+const BATTLE_LOOKAHEAD_WEEKS = 2;
+
+/**
+ * All of a team's playable matches, sorted by week. "Playable" = regular phase,
+ * not yet completed, and within the battle window: any current/overdue fixture,
+ * plus up to BATTLE_LOOKAHEAD_WEEKS ahead (and any in-progress battle, never
+ * hidden). This is what lets coaches battle a match early or as a make-up
+ * rather than being locked to the current-week fixture.
  */
 function getPlayableMatches(teamId: string, leagueId: string) {
   const league = getLeague(leagueId);
   if (!league) return [];
   if (league.phase !== 'regular') return [];
 
+  const maxWeek = league.currentWeek + BATTLE_LOOKAHEAD_WEEKS;
   return db.select().from(schema.matches).where(
     eq(schema.matches.leagueId, leagueId),
-  ).all().filter(m =>
-    (m.homeTeamId === teamId || m.awayTeamId === teamId) &&
-    (m.status === 'scheduled' || m.status === 'ready' || m.status === 'in_progress'),
-  ).sort((a, b) => a.week - b.week);
+  ).all().filter(m => {
+    if (m.homeTeamId !== teamId && m.awayTeamId !== teamId) return false;
+    if (m.status === 'in_progress') return true; // never hide a live battle
+    if (m.status !== 'scheduled' && m.status !== 'ready') return false;
+    return m.week <= maxWeek; // current week, overdue make-ups, and the lookahead window
+  }).sort((a, b) => a.week - b.week);
 }
 
 /** The team's fixture for the league's current week, if still playable. */
