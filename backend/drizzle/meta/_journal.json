@@ -351,6 +351,13 @@
       "when": 1782100000000,
       "tag": "0049_feedback_table",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1782200000000,
+      "tag": "0050_unify_announcements",
+      "breakpoints": true
     }
   ]
 }

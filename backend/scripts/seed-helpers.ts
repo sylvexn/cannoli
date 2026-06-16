@@ -56,16 +56,7 @@ export function seedSiteSettings(sqlite: Database, db: DB, opts: { mock?: boolea
     return;
   }
 
-  if (opts.mock) {
-    db.insert(schema.siteSettings).values({
-      id: 1,
-      siteName: 'Cannoli',
-      announcement: opts.announcement ?? 'Welcome to Cannoli — Season 10 mock data for demo purposes.',
-      announcementType: 'info',
-    }).run();
-  } else {
-    db.insert(schema.siteSettings).values({ id: 1 }).run();
-  }
+  db.insert(schema.siteSettings).values({ id: 1, siteName: 'Cannoli' }).run();
   console.log('Site settings seeded.');
 }
 

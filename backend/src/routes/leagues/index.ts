@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and, isNull, inArray } from 'drizzle-orm';
 import { standingsRoutes } from './standings';
 import { teamRoutes } from './teams';
 import { pokemonRoutes } from './pokemon';
@@ -95,43 +95,61 @@ export const leagueRoutes = new Elysia()
   //
   // Pokemon Showdown's "Latest News" pseudo-PM expects an array of
   // `{ id, title, summaryHTML, author, date }` (date in unix seconds) at
-  // `https://<routes.root>/news.json`. We surface Cannoli's site-wide
-  // announcement banner here so sim.cannoli.live shows the same message
-  // admins post in the Cannoli admin panel instead of stale upstream PS news.
+  // `https://<routes.root>/news.json`. We surface the most recent active
+  // banner-or-both, global (no league/role targeting) announcement here so
+  // sim.cannoli.live shows the same message admins post in the Cannoli admin
+  // panel instead of stale upstream PS news.
   //
   // Public + unauthenticated — the PS client has no Cannoli session.
-  // The id is derived from the announcement type so changing severity
-  // marks the entry unread again in PS's read-tracker.
+  // The id is hashed over category|title|body so changing content marks the
+  // entry unread again in PS's read-tracker.
   .get('/news.json', () => {
-    const row = db.select().from(schema.siteSettings).get();
-    if (!row || !row.announcement) return [];
+    const ann = db.select().from(schema.announcements)
+      .where(and(
+        sql`${schema.announcements.active} = 1`,
+        sql`${schema.announcements.surface} IN ('banner', 'both')`,
+        isNull(schema.announcements.leagueId),
+        isNull(schema.announcements.targetRole),
+      ))
+      .orderBy(desc(schema.announcements.createdAt))
+      .limit(1)
+      .get();
 
-    const type = (row.announcementType ?? 'info') as string;
-    const typeLabel = type === 'warning' ? 'Warning'
-      : type === 'success' ? 'Update'
+    if (!ann) return [];
+
+    const category = ann.category as string;
+    const typeLabel = category === 'maintenance' ? 'Warning'
+      : category === 'feature' ? 'Update'
+      : category === 'event' ? 'Event'
       : 'Announcement';
-    // Bump id when the message body changes so PS marks it unread again.
+
+    // Bump id when the message content changes so PS marks it unread again.
     // Storage.prefs('readnews') compares this id as a string.
     let hash = 0;
-    const src = `${type}|${row.announcement}`;
+    const src = `${category}|${ann.title}|${ann.body}`;
     for (let i = 0; i < src.length; i++) {
       hash = ((hash << 5) - hash + src.charCodeAt(i)) | 0;
     }
     const id = Math.abs(hash);
 
     // PS escapes nothing in summaryHTML, so we hand back HTML — escape the
-    // raw announcement text first to be safe (admins type plain strings).
-    const escaped = row.announcement
+    // raw text first to be safe (admins type plain strings).
+    const escapeHtml = (s: string) => s
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
+    const isGenericTitle = ann.title === 'Announcement';
+    const summaryHTML = isGenericTitle
+      ? escapeHtml(ann.body)
+      : `<strong>${escapeHtml(ann.title)}</strong> — ${escapeHtml(ann.body)}`;
+
     return [{
       id,
       title: typeLabel,
-      summaryHTML: escaped,
+      summaryHTML,
       author: 'Cannoli',
       date: Math.floor(Date.now() / 1000),
     }];
@@ -148,13 +166,9 @@ export const leagueRoutes = new Elysia()
     const isMock = (process.env.CANNOLI_MODE || 'mock') === 'mock';
     const row = db.select().from(schema.siteSettings).get();
     if (!row) return {
-      announcement: null,
-      announcementType: 'info',
       draftDemoVisible: isMock,
     };
     return {
-      announcement: row.announcement,
-      announcementType: row.announcementType,
       defaultUserPassword: row.defaultUserPassword,
       draftTimerEnabled: row.draftTimerEnabled ?? true,
       draftDemoVisible: row.draftDemoVisible ?? isMock,

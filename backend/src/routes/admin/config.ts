@@ -17,8 +17,6 @@ export const configRoutes = new Elysia()
     const s = body as Record<string, unknown>;
 
     db.update(schema.siteSettings).set({
-      announcement: s.announcementEnabled ? ((s.announcementText as string) ?? null) : null,
-      announcementType: ((s.announcementType as string) ?? 'info') as 'info' | 'warning' | 'success',
       defaultUserPassword: (s.defaultUserPassword as string) ?? 'password',
       tradeExpiryDays: (s.tradeExpiryDays as number) ?? 7,
       draftTimerEnabled: s.draftTimerEnabled !== undefined ? !!s.draftTimerEnabled : true,

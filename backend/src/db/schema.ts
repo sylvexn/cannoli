@@ -418,8 +418,6 @@ export const tradeBlockListings = sqliteTable('trade_block_listings', {
 export const siteSettings = sqliteTable('site_settings', {
   id: integer('id').primaryKey().default(1),
   siteName: text('site_name').default('Cannoli'),
-  announcement: text('announcement'),
-  announcementType: text('announcement_type', { enum: ['info', 'warning', 'success'] }).default('info'),
   defaultPointCap: integer('default_point_cap').default(110),
   defaultTeraCaptainSlots: integer('default_tera_captain_slots').default(2),
   defaultTradeDeadlineWeek: integer('default_trade_deadline_week').default(7),
@@ -816,4 +814,19 @@ export const announcements = sqliteTable('announcements', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   /** Soft-delete / retract without losing the audit trail. */
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
-});
+  /** Where this announcement surfaces: bell feed, banner strip, or both. */
+  surface: text('surface', { enum: ['bell', 'banner', 'both'] }).notNull().default('bell'),
+  /** When set, announcement is scoped to members of this league. Null = all leagues. */
+  leagueId: text('league_id').references(() => leagues.id),
+  /** When set, restricts to this role. Null = all roles. */
+  targetRole: text('target_role', { enum: ['admin', 'user'] }),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (t) => ({
+  activeIdx: index('announcements_active_idx').on(t.active),
+}));
+
+export const announcementDismissals = sqliteTable('announcement_dismissals', {
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  announcementId: integer('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
+  dismissedAt: text('dismissed_at').default(sql`(datetime('now'))`),
+}, (t) => ({ pk: primaryKey({ columns: [t.userId, t.announcementId] }) }));
