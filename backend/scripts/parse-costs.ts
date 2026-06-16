@@ -14,13 +14,20 @@
  * encodes two facts per species:
  *   - base "Pts" (col B): the draft cost. `99` is the sentinel for "banned"
  *     (not draftable).
- *   - a sibling "<name> (T)" row whose Pts is the cost AS a tera captain. `133`
- *     is the sentinel for "cannot be a tera captain". A "Tera Banned" mark (col
- *     C, value "TB") on the base row means the same thing.
+ *   - a "Tera Banned" mark (col C, value "TB") on the base row: the species is
+ *     draftable but may NOT be designated a tera captain.
  *
  * So a species is tera-captain-banned iff it is draftable (base ≤ 20, not 99),
- * captain-eligible by tier (≤ 9), and either TB-marked or its (T) cost is the
- * 133 sentinel (or the (T) row is missing entirely).
+ * captain-eligible by tier (≤ 9), and explicitly **TB-marked** in col C.
+ *
+ * NOTE: the sheet also carries "<name> (T)" rows whose Pts is the cost AS a tera
+ * captain, and many of those read `133` (a leftover "no captain" sentinel).
+ * That sentinel is NOT authoritative — it disagrees with both the per-league
+ * Pokémon sheets (which give every captain-eligible species its normal markup
+ * cost: 9→12, 7→9, …) and the actual S11 drafts (e.g. Brute Bonnet and Virizion
+ * were legally drafted as tera captains at cost 12). The captain markup is
+ * applied in code from a fixed schedule, so the (T) rows are ignored here; the
+ * TB column is the sole tera-ban authority and matches the league rule sheets.
  */
 
 import XLSX from 'xlsx';
@@ -30,8 +37,6 @@ export const COSTS_XLSX = resolve(import.meta.dir, '../imports/Costs.xlsx');
 
 /** Point value used in the sheet to mean "not draftable". */
 const BANNED_PTS = 99;
-/** Captain (T) cost used in the sheet to mean "cannot be a tera captain". */
-const NO_CAPTAIN_PTS = 133;
 /** Captains are capped at tier 9 and below (league rule). */
 const MAX_CAPTAIN_TIER = 9;
 
@@ -56,7 +61,6 @@ export interface ParsedCosts {
   teraBanned: string[];
 }
 
-const stripTera = (name: string): string => name.replace(/\s*\(T\)\s*$/, '').trim();
 const isTeraRow = (name: string): boolean => /\(T\)\s*$/.test(name);
 
 export function parseCosts(xlsxPath: string = COSTS_XLSX): ParsedCosts {
@@ -67,7 +71,6 @@ export function parseCosts(xlsxPath: string = COSTS_XLSX): ParsedCosts {
 
   const basePts = new Map<string, number>();
   const tbMark = new Set<string>();
-  const captainPts = new Map<string, number>();
 
   // Row 0 = sheet title, row 1 = column headers; data starts at row 2.
   for (let i = 2; i < rows.length; i++) {
@@ -75,14 +78,14 @@ export function parseCosts(xlsxPath: string = COSTS_XLSX): ParsedCosts {
     if (!r || !r[0] || typeof r[0] !== 'string') continue;
     const raw = r[0].trim();
     if (!raw) continue;
+    // "<name> (T)" rows carry a leftover/unreliable captain-cost sentinel and
+    // are not authoritative — skip them (see header note). The TB column on the
+    // base row is the only tera-ban signal.
+    if (isTeraRow(raw)) continue;
     const pts = parseInt(r[1], 10);
     if (!Number.isFinite(pts)) continue;
-    if (isTeraRow(raw)) {
-      captainPts.set(stripTera(raw), pts);
-    } else {
-      basePts.set(raw, pts);
-      if (String(r[2] ?? '').trim() === 'TB') tbMark.add(raw);
-    }
+    basePts.set(raw, pts);
+    if (String(r[2] ?? '').trim() === 'TB') tbMark.add(raw);
   }
 
   const byName = new Map<string, CostEntry>();
@@ -96,10 +99,7 @@ export function parseCosts(xlsxPath: string = COSTS_XLSX): ParsedCosts {
       continue;
     }
     const captainEligibleByTier = pts <= MAX_CAPTAIN_TIER;
-    const captainCost = captainPts.get(name);
-    const cannotCaptain =
-      tbMark.has(name) || captainCost === NO_CAPTAIN_PTS || captainCost === undefined;
-    const isTeraBanned = captainEligibleByTier && cannotCaptain;
+    const isTeraBanned = captainEligibleByTier && tbMark.has(name);
 
     byName.set(name, { name, tier: pts, banned: false, teraBanned: isTeraBanned });
     if (!tiers.has(pts)) tiers.set(pts, []);

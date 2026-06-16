@@ -31,7 +31,7 @@ export const BANNED: string[] = [
 
 // ─── Tera Banned (can be drafted, cannot be tera captain) ────────
 export const TERA_BANNED: string[] = [
-  'Alcremie','Articuno','Articuno-Galar','Brute Bonnet','Calyrex','Cetitan','Cosmoem','Cosmog','Diancie','Fezandipiti','Glastrier','Hoopa','Iron Thorns','Kubfu','Linoone','Mudsdale','Phione','Polteageist','Regice','Regieleki','Regigigas','Regirock','Registeel','Reuniclus','Sinistcha','Toxtricity','Virizion','Wo-Chien',
+  'Alcremie','Cetitan','Diancie','Glastrier','Hoopa','Iron Thorns','Linoone','Mudsdale','Polteageist','Regieleki','Registeel','Reuniclus','Sinistcha','Toxtricity','Wo-Chien',
 ];
 
 // ─── Full tier list (20pt → 1pt) ────────────────────────────────

@@ -49,6 +49,7 @@ const BANNED_ITEMS = ['Bright Powder', 'Lax Incense', 'Razor Fang', "King's Rock
 const BANNED_MOVES = [
   'Acupressure', 'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
   'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail', 'Swagger',
+  'Take Heart',
 ];
 
 export function RulesPage() {
