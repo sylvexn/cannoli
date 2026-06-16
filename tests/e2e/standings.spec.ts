@@ -47,15 +47,17 @@ test.describe('League Hub — standings', () => {
     const rowButton = page.locator('main').getByRole('button', { name: /^\s*1\b/ }).first();
     await expect(rowButton).toBeVisible();
 
-    // Count sprites before expanding so we can prove the roster detail mounts.
-    const spritesBefore = await page.locator('main img[alt]').count();
+    // The roster detail is always mounted but height-clipped via a
+    // grid-rows-[0fr]→[1fr] reveal (the project's always-mounted + CSS-transition
+    // pattern), so the roster sprites sit in the DOM even while collapsed —
+    // counting <img>s never changes on expand. Instead assert the row's rendered
+    // height grows once the detail unclips.
+    const row = rowButton.locator('xpath=..');
+    const collapsedHeight = (await row.boundingBox())?.height ?? 0;
     await rowButton.click();
-
-    // After expanding, the roster detail mounts: PokemonSprite renders <img>
-    // elements (alt = species). Assert more sprites are visible than before.
     await expect(async () => {
-      const sprites = await page.locator('main img[alt]').count();
-      expect(sprites).toBeGreaterThan(spritesBefore);
+      const h = (await row.boundingBox())?.height ?? 0;
+      expect(h).toBeGreaterThan(collapsedHeight);
     }).toPass({ timeout: 5_000 });
 
     expect(errors, 'no runtime errors on the standings page').toEqual([]);
