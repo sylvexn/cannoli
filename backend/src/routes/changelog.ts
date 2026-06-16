@@ -62,16 +62,21 @@ export const changelogRoutes = new Elysia()
   .post('/api/changelog/seen', ({ user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const userId = parseInt(user.id);
+    // Stamp to the newest entry date when it's ahead of wall-clock (ENTRIES is
+    // sorted newest-first), so a future-dated entry can't stay permanently
+    // unread after the user opens the panel.
     const now = new Date().toISOString();
+    const newest = ENTRIES[0]?.date;
+    const seenAt = newest && newest > now ? newest : now;
     const existing = db.select({ userId: schema.userPreferences.userId })
       .from(schema.userPreferences)
       .where(eq(schema.userPreferences.userId, userId))
       .get();
     if (existing) {
-      db.update(schema.userPreferences).set({ changelogSeenAt: now })
+      db.update(schema.userPreferences).set({ changelogSeenAt: seenAt })
         .where(eq(schema.userPreferences.userId, userId)).run();
     } else {
-      db.insert(schema.userPreferences).values({ userId, changelogSeenAt: now }).run();
+      db.insert(schema.userPreferences).values({ userId, changelogSeenAt: seenAt }).run();
     }
-    return { success: true, seenAt: now };
+    return { success: true, seenAt };
   });

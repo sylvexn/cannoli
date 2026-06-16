@@ -63,14 +63,19 @@ export function ChangelogButton() {
   // stamp local state optimistically so the badge disappears immediately, then
   // persist (server for members, localStorage for guests).
   const markSeen = useCallback(() => {
-    const now = new Date().toISOString();
+    // Stamp to the newest entry's date (or now, whichever is later). Entries can
+    // be dated slightly ahead of wall-clock; stamping plain `now` would leave a
+    // future-dated entry permanently "unread" — opening could never clear it.
+    // Comparing against the newest entry date means opening always clears the
+    // pulse, and only a genuinely newer entry re-triggers it.
+    const seenAt = entries.reduce((max, e) => (e.date > max ? e.date : max), new Date().toISOString());
     if (user) {
-      setServerSeen(now);
+      setServerSeen(seenAt);
       api.markChangelogSeen().catch(() => { /* best-effort */ });
     } else {
-      setGuestSeen(now);
+      setGuestSeen(seenAt);
     }
-  }, [user, setGuestSeen]);
+  }, [user, setGuestSeen, entries]);
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
