@@ -32,8 +32,16 @@ exports.loginserverkeyalgo = 'RSA-SHA1';
 
 // ─── Replays ────────────────────────────────────────────────────────────────
 
-// Auto-save all replays to disk (public)
+// Auto-upload every finished battle's replay (to the replay route, if configured).
 exports.autosavereplays = true;
+
+// Write the full battle log to disk for UNRATED battles too. League games are
+// unrated challenges, so without this PS discards their log on battle end
+// (room-battle.ts `end()` → `this.logData = null`) and nothing is recoverable.
+// With it on, every battle (incl. invite-player challenges) is saved to
+// {logsdir}/{YYYY-MM}/{tier}/{YYYY-MM-DD}/{roomId}.log.json — the path the
+// Cannoli backend reads for replay parsing / match import / offline recovery.
+exports.logchallenges = true;
 
 // ─── Routes / Domains ───────────────────────────────────────────────────────
 
