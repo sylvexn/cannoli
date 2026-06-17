@@ -13,7 +13,7 @@
  * match — no empty box on the dashboard.
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Swords, ChevronRight, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -77,6 +77,7 @@ export function YourMatchesCard() {
 }
 
 function MatchRow({ match }: { match: ArenaMatch }) {
+  const navigate = useNavigate();
   const opponent = match.isHome ? match.awayTeam : match.homeTeam;
   const live = match.status === 'in_progress';
   const dot =
@@ -84,10 +85,22 @@ function MatchRow({ match }: { match: ArenaMatch }) {
     : match.status === 'ready' ? 'bg-orange-400'
     : 'bg-text-muted';
 
+  // The row itself is a button (not an <a>) so the opponent name can stay a
+  // real <Link> without nesting anchors. Keyboard: Enter/Space activate it.
+  const goToArena = () => navigate('/showdown?tab=arena');
+
   return (
-    <Link
-      to="/showdown?tab=arena"
-      className="block px-2 py-1.5 rounded-md hover:bg-surface-overlay/60 transition-colors group"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={goToArena}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          goToArena();
+        }
+      }}
+      className="block px-2 py-1.5 rounded-md hover:bg-surface-overlay/60 transition-colors group cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-neon/50"
     >
       <div className="flex items-center gap-2 text-xs">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
@@ -111,7 +124,7 @@ function MatchRow({ match }: { match: ArenaMatch }) {
           className={`${live ? '' : 'ml-auto'} text-text-muted/40 group-hover:text-neon transition-colors shrink-0`}
         />
       </div>
-    </Link>
+    </div>
   );
 }
 

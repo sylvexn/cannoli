@@ -89,6 +89,14 @@ export function StandingsPage() {
     currentSeason.archived === true ||
     currentSeason.currentWeek > currentSeason.totalWeeks;
 
+  // Before the season starts (predraft/draft) every record is 0-0 and the
+  // ordering is meaningless, so the qualify line and the per-row narrative
+  // chips are noise. They only carry meaning once regular play begins.
+  const standingsAreRanked =
+    currentSeason.phase === 'regular' ||
+    currentSeason.phase === 'playoffs' ||
+    currentSeason.phase === 'offseason';
+
   function findPlayer(id: string) {
     return players.find(p => p.id === id);
   }
@@ -186,13 +194,16 @@ export function StandingsPage() {
                 standings={standings}
                 season={currentSeason}
                 playoffCount={league.playoffTeamCount}
-                isQualifyLine={i + 1 === league.playoffTeamCount}
+                isQualifyLine={standingsAreRanked && i + 1 === league.playoffTeamCount}
                 leagueId={league.id}
                 spoilerWeek={recentWeek}
+                showNarrative={standingsAreRanked}
               />
             ))}
             <div className="px-4 py-1.5 text-[10px] text-text-muted uppercase tracking-wider border-t border-border-subtle">
-              Top {league.playoffTeamCount} qualify for playoffs
+              {standingsAreRanked
+                ? `Top ${league.playoffTeamCount} qualify for playoffs`
+                : 'Standings begin once the season starts'}
             </div>
           </CardContent>
         </Card>
@@ -398,7 +409,7 @@ function PlayoffsFinalView() {
 
 function StandingsRow({
   player, rank, index, leagueUrl, standings, season, playoffCount, isQualifyLine,
-  leagueId, spoilerWeek,
+  leagueId, spoilerWeek, showNarrative,
 }: {
   player: Player;
   rank: number;
@@ -412,6 +423,9 @@ function StandingsRow({
    *  spoiler veil (revealed once the viewer reveals through this week). */
   leagueId: string;
   spoilerWeek: number;
+  /** Whether the season has progressed far enough for the ordering (and thus
+   *  the per-row narrative chip) to be meaningful. False pre-regular. */
+  showNarrative: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { getTeamTrades, getTeamMatches } = useLeagueData();
@@ -506,8 +520,9 @@ function StandingsRow({
           </Spoiler>
         </div>
 
-        {/* Narrative chip — at most one, only when meaningful */}
-        {narrativeChip && (
+        {/* Narrative chip — at most one, only when meaningful and once the
+            season has actually started (ordering is moot pre-regular). */}
+        {showNarrative && narrativeChip && (
           <span
             className={cn(
               'shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',

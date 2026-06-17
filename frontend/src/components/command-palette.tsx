@@ -25,6 +25,7 @@ import {
   ArrowLeftRight, Swords, Archive, Shield, Settings,
   Users, CalendarCog, List, ScrollText, MessageSquare,
   Trophy as TrophyIcon, Award, Bot as BotIcon,
+  Film, Gauge, ListTree, Gamepad2,
 } from 'lucide-react';
 
 // ─── Admin tab definitions (mirrored from admin/index.tsx) ───────
@@ -51,13 +52,19 @@ const LEAGUE_PAGES = [
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
   { path: '/schedule', label: 'Schedule', icon: Calendar },
   { path: '/stats', label: 'Pokemon Stats', icon: BarChart3 },
-  { path: '/market', label: 'Market', icon: ArrowLeftRight },
+  // /market is a redirect-only shell — link the real default tab.
+  { path: '/market/trades', label: 'Market', icon: ArrowLeftRight },
 ];
 
 const GLOBAL_PAGES = [
   { path: '/', label: 'League Overview', icon: Globe },
   { path: '/matchup', label: 'Matchup Center', icon: Swords },
+  { path: '/showdown', label: 'Showdown', icon: Gamepad2 },
+  { path: '/replays', label: 'Replays', icon: Film },
   { path: '/archive', label: 'Season Archive', icon: Archive },
+  { path: '/tiers', label: 'Tier List', icon: ListTree },
+  { path: '/speed-tiers', label: 'Speed Tiers', icon: Gauge },
+  { path: '/rules', label: 'Rules', icon: ScrollText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
