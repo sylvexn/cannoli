@@ -25,9 +25,9 @@ import { pinRoutes } from './routes/pins';
 import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
-import { startSchedulers } from './lib/scheduler';
+import { startSchedulers, stopSchedulers } from './lib/scheduler';
 import { markRequestStart, captureRequestError, logRequest, logServerFault, getRequestId } from './lib/request-log';
-import { startHeartbeat } from './lib/heartbeat';
+import { startHeartbeat, stopHeartbeat } from './lib/heartbeat';
 import { GIT_SHA } from './lib/version';
 import { sqlite } from './db';
 
@@ -123,6 +123,20 @@ const app = new Elysia()
     const status = mapped ??
       (typeof set.status === 'number' && set.status >= 400 ? set.status : 500);
     logRequest({ request, status, user });
+
+    // For unhandled/unexpected server errors (5xx), return a generic shaped body
+    // so raw Error.message and internal details are never leaked to the client.
+    // 4xx codes (VALIDATION, NOT_FOUND, PARSE, INVALID_COOKIE_SIGNATURE) and
+    // errors that already have an explicit <500 status set by the handler are
+    // left alone — they return their own shaped bodies via the normal flow.
+    const is4xx = mapped != null ? mapped < 500 : (typeof set.status === 'number' && set.status >= 400 && set.status < 500);
+    if (!is4xx && status >= 500) {
+      set.status = status;
+      return {
+        error: 'Internal error',
+        requestId: getRequestId(request),
+      };
+    }
   })
   .onAfterResponse(({ request, set, user }) => {
     const status = typeof set.status === 'number' ? set.status : 200;
@@ -237,6 +251,19 @@ const app = new Elysia()
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
 console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);
+
+// Graceful shutdown — registered only when the server actually starts listening
+// (this block is outside the app definition, so test imports that don't reach
+// .listen() never register these handlers and won't close the DB under tests).
+function shutdown(signal: string) {
+  console.log(`[shutdown] received ${signal}, stopping schedulers and closing DB...`);
+  stopSchedulers();
+  stopHeartbeat();
+  try { sqlite.close(); } catch { /* best-effort */ }
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Self-heal the system bot accounts (root + CannoliBot) to the `bot` role on
 // every boot, independent of whether the PS bot is configured.
