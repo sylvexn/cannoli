@@ -152,6 +152,9 @@ export const standingsRoutes = new Elysia()
         homeScore: m.homeScore,
         awayScore: m.awayScore,
         replayUrl: m.replayUrl,
+        // True when a battle log is stored, even if there's no live PS room
+        // URL (imported replays). The in-site viewer plays by match id.
+        hasReplay: m.replayLog != null,
         status: m.status,
         phase: m.phase,
         playoffRound: m.playoffRound,

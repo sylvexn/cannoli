@@ -213,6 +213,9 @@ export interface ApiMatch {
   homeScore: number | null;
   awayScore: number | null;
   replayUrl: string | null;
+  /** A battle log is stored for this match — playable in the in-site viewer
+   *  even when replayUrl is null (imported replays). */
+  hasReplay?: boolean;
   status: 'scheduled' | 'ready' | 'in_progress' | 'completed' | 'disputed';
   phase: string;
   playoffRound: string | null;
@@ -250,6 +253,9 @@ export interface ApiAdminMatch {
   awayScore: number | null;
   status: string;
   replayUrl: string | null;
+  /** A battle log is stored for this match — playable in the in-site viewer
+   *  even when replayUrl is null (imported replays). */
+  hasReplay?: boolean;
   warnings: MatchWarning[];
   phase: string;
   playoffRound: string | null;

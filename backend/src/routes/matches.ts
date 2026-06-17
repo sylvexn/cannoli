@@ -257,6 +257,10 @@ export const matchRoutes = new Elysia()
       awayScore: m.awayScore,
       status: m.status,
       replayUrl: m.replayUrl,
+      // Imported replays have a stored log but no live PS room URL. The
+      // in-site viewer plays by match id off replayLog, so surface a flag
+      // the UI can gate the "watch replay" affordance on independently of url.
+      hasReplay: m.replayLog != null,
       warnings: m.warnings ? JSON.parse(m.warnings) : [],
       phase: m.phase,
       playoffRound: m.playoffRound,

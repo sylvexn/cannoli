@@ -11,6 +11,7 @@ import type { ApiAdminMatch, MatchWarning } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { useTeamNames } from '@/lib/use-team-names';
 import { TeamLink } from '@/components/team-link';
+import { ReplayLink } from '@/components/replay-link';
 import { useFormatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -272,11 +273,15 @@ export function AdminMatches() {
                               {match.psRoomId && <div>PS Room: <span className="text-text-secondary font-mono">{match.psRoomId}</span></div>}
                               {match.startedAt && <div>Started: <span className="text-text-secondary">{fmtDateTime(match.startedAt)}</span></div>}
                               {match.completedAt && <div>Completed: <span className="text-text-secondary">{fmtDateTime(match.completedAt)}</span></div>}
-                              {match.replayUrl && (
+                              {match.replayUrl ? (
                                 <div>
                                   Replay: <a href={match.replayUrl} target="_blank" rel="noopener" className="text-neon hover:underline">{match.replayUrl}</a>
                                 </div>
-                              )}
+                              ) : match.hasReplay ? (
+                                <div>
+                                  Replay: <ReplayLink matchId={match.id} className="text-neon hover:underline">Watch in-site</ReplayLink>
+                                </div>
+                              ) : null}
                             </div>
 
                             {/* Warnings */}

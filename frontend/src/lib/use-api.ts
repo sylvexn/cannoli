@@ -166,6 +166,7 @@ function toMatch(a: ApiMatch): Match {
     homeScore: a.homeScore ?? undefined,
     awayScore: a.awayScore ?? undefined,
     replayUrl: a.replayUrl ?? undefined,
+    hasReplay: a.hasReplay ?? undefined,
   };
 }
 

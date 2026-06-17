@@ -160,7 +160,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
           >
             <Swords className="w-3.5 h-3.5" />
           </Link>
-          {isCompleted && match.replayUrl && match.replayUrl !== '#' && (
+          {isCompleted && ((match.replayUrl && match.replayUrl !== '#') || match.hasReplay) && (
             <ReplayLink
               matchId={match.id}
               context={{

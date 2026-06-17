@@ -134,7 +134,7 @@ export function ReplaysPage() {
         const teamMap = new Map(teams.map(t => [t.id, t]));
 
         return schedule.matches
-          .filter(m => m.replayUrl && m.replayUrl !== '#')
+          .filter(m => (m.replayUrl && m.replayUrl !== '#') || m.hasReplay)
           .map(m => ({
             match: m,
             league,

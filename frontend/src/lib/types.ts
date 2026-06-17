@@ -102,6 +102,9 @@ export interface Match {
   homeScore?: number;
   awayScore?: number;
   replayUrl?: string;
+  /** A battle log is stored — playable in the in-site viewer even when
+   *  replayUrl is null (imported replays). */
+  hasReplay?: boolean;
   phase?: 'regular' | 'playoffs';
   playoffRound?: string | null;
   homeSeed?: number | null;
