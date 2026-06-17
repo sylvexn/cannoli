@@ -4,7 +4,7 @@
     "date": "2026-06-17T03:00:00Z",
     "category": "feature",
     "title": "Cannoli v1.0.3 — Spoiler-free mode",
-    "body": "- Spoiler-free mode — hide match results (scores, winners, MVP/sweep/tera badges) on the standings and replays pages behind a click-to-reveal blur. Team names stay visible so you can still browse. Toggle it from the page header or Settings → Preferences (feature)\n- Arena matches no longer disappear after an admin corrects a league's week dates — match deadlines and auto-forfeits now follow the live schedule instead of a date baked in when the schedule was first created (fix)"
+    "body": "- Spoiler-free mode — hide match results (scores, winners, MVP/sweep/tera badges) on the standings and replays pages behind a click-to-reveal blur. Team names stay visible so you can still browse. Toggle it from the page header or Settings → Preferences (feature)\n- Arena matches no longer disappear after an admin sets a league's week dates — a week's matches are now due at the end of that week (when the next week starts), instead of being treated as overdue on the week's start date (fix)"
   },
   {
     "id": "v1-0-2-2026-06",

@@ -11,43 +11,45 @@
 import { describe, expect, test } from 'bun:test';
 import { effectiveMatchDeadline, endOfDayInZone } from '../src/lib/jobs/auto-forfeit';
 
+// weekDates[w] is the date week w BEGINS; a week-w match is due at the END of
+// its week — end-of-day the day before week w+1 starts, in the league TZ.
+const SCHED = '{"1":"2026-06-15","2":"2026-06-22","3":"2026-06-29"}';
+
 describe('effectiveMatchDeadline', () => {
-  test('schedule wins over a stale baked deadline when the week is scheduled', () => {
-    // A literal date baked onto the row at creation time must NOT drive the
-    // cutoff once the schedule says otherwise — this is the regression that
-    // forfeited live matches after the dates were corrected. 2026-04-21 is EDT
-    // (UTC-4), so local 23:59:59 == 03:59:59 UTC the next day.
-    const stale = '2020-01-01T00:00:00.000Z';
-    expect(effectiveMatchDeadline({ deadline: stale, week: 1 }, '{"1":"2026-04-21"}'))
-      .toBe('2026-04-22T03:59:59.000Z');
+  test('deadline is the end of the week, not its start date (the regression)', () => {
+    // Week 1 starts Mon 06-15, week 2 starts Mon 06-22 → week-1 matches are due
+    // end of Sun 06-21 (EDT, UTC-4) == 06-22T03:59:59Z. Anchoring to the week's
+    // OWN start (06-15) is what forfeited live matches the day the season began.
+    expect(effectiveMatchDeadline({ deadline: null, week: 1 }, SCHED))
+      .toBe('2026-06-22T03:59:59.000Z');
   });
 
-  test('falls back to weekDates entry as end-of-day in the league TZ (TZ-DEADLINE)', () => {
-    // weekDates is a YYYY-MM-DD per week; the helper resolves 23:59:59 IN the
-    // league's timezone. Default is America/New_York; 2026-04-21 is EDT (UTC-4),
-    // so local 23:59:59 == 03:59:59 UTC the NEXT day.
-    const out = effectiveMatchDeadline(
-      { deadline: null, week: 3 },
-      '{"3":"2026-04-21"}',
-    );
-    expect(out).toBe('2026-04-22T03:59:59.000Z');
+  test('schedule wins over a stale baked deadline', () => {
+    // A literal date baked onto the row must NOT drive the cutoff — the live
+    // schedule does. Week 2 → end of Sun 06-28 == 06-29T03:59:59Z.
+    const stale = '2020-01-01T00:00:00.000Z';
+    expect(effectiveMatchDeadline({ deadline: stale, week: 2 }, SCHED))
+      .toBe('2026-06-29T03:59:59.000Z');
+  });
+
+  test('final scheduled week infers its length from the previous gap (default 7)', () => {
+    // Week 3 has no week 4 → full week from its start: end of (06-29 + 6) = Sun
+    // 07-05 == 07-06T03:59:59Z. Gap inferred from weeks 2→3 (7 days).
+    expect(effectiveMatchDeadline({ deadline: null, week: 3 }, SCHED))
+      .toBe('2026-07-06T03:59:59.000Z');
   });
 
   test('honors an explicit league timezone for the cutoff', () => {
-    // Los Angeles is PDT (UTC-7) on this date → local 23:59:59 == 06:59:59 UTC next day.
-    const la = effectiveMatchDeadline(
-      { deadline: null, week: 3 },
-      '{"3":"2026-04-21"}',
-      'America/Los_Angeles',
-    );
-    expect(la).toBe('2026-04-22T06:59:59.000Z');
-    // UTC zone is a no-op offset.
-    const utc = effectiveMatchDeadline({ deadline: null, week: 3 }, '{"3":"2026-04-21"}', 'UTC');
-    expect(utc).toBe('2026-04-21T23:59:59.000Z');
+    // Los Angeles is PDT (UTC-7) → local 23:59:59 == 06:59:59 UTC next day.
+    expect(effectiveMatchDeadline({ deadline: null, week: 1 }, SCHED, 'America/Los_Angeles'))
+      .toBe('2026-06-22T06:59:59.000Z');
+    // UTC zone is a no-op offset (end of Sun 06-21).
+    expect(effectiveMatchDeadline({ deadline: null, week: 1 }, SCHED, 'UTC'))
+      .toBe('2026-06-21T23:59:59.000Z');
   });
 
   test('returns null when deadline is null AND week not in weekDates', () => {
-    expect(effectiveMatchDeadline({ deadline: null, week: 99 }, '{"1":"2026-04-21"}'))
+    expect(effectiveMatchDeadline({ deadline: null, week: 99 }, SCHED))
       .toBeNull();
   });
 
@@ -61,14 +63,11 @@ describe('effectiveMatchDeadline', () => {
   });
 
   test('schedule (weekDates) wins over the stored deadline when the week is scheduled', () => {
-    // Even with a stored deadline present, a week that appears in the live
-    // schedule resolves to the schedule date — so editing weekDates moves it.
+    // Even with a stored deadline present, a scheduled week resolves to the
+    // schedule — so editing weekDates moves it. Week 1 → end of Sun 06-21.
     const stored = '2026-04-15T12:00:00.000Z';
-    const out = effectiveMatchDeadline(
-      { deadline: stored, week: 3 },
-      '{"3":"2026-04-21"}',
-    );
-    expect(out).toBe('2026-04-22T03:59:59.000Z');
+    expect(effectiveMatchDeadline({ deadline: stored, week: 1 }, SCHED))
+      .toBe('2026-06-22T03:59:59.000Z');
   });
 
   test('falls back to the stored deadline when the week is NOT in the schedule (playoff/manual)', () => {
