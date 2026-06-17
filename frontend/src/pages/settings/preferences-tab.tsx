@@ -23,6 +23,7 @@ const DEFAULTS: ApiUserPreferences = {
   defaultLandingPath: '/',
   timezone: null,
   colorblindMode: false,
+  spoilerFreeMode: false,
   updatedAt: null,
 };
 
@@ -53,7 +54,8 @@ export function PreferencesTab() {
     draft.density !== server.density ||
     draft.defaultLandingPath !== server.defaultLandingPath ||
     draft.timezone !== server.timezone ||
-    draft.colorblindMode !== server.colorblindMode;
+    draft.colorblindMode !== server.colorblindMode ||
+    draft.spoilerFreeMode !== server.spoilerFreeMode;
 
   function patch<K extends keyof ApiUserPreferences>(key: K, value: ApiUserPreferences[K]) {
     setDraft(d => ({ ...d, [key]: value }));
@@ -68,6 +70,7 @@ export function PreferencesTab() {
         defaultLandingPath: draft.defaultLandingPath,
         timezone: draft.timezone,
         colorblindMode: draft.colorblindMode,
+        spoilerFreeMode: draft.spoilerFreeMode,
       });
       setServer(draft);
       toast.success('Preferences saved');
@@ -158,6 +161,21 @@ export function PreferencesTab() {
             <Switch
               checked={draft.colorblindMode}
               onCheckedChange={(v) => patch('colorblindMode', v)}
+              disabled={loading}
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4 pt-2 border-t border-border-subtle">
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-text-primary">Spoiler-free mode</div>
+              <div className="text-[11px] text-text-muted">
+                Hides match results — scores, winners, and result badges — on the standings and
+                replays pages behind a click-to-reveal blur. Reveal resets each visit.
+              </div>
+            </div>
+            <Switch
+              checked={draft.spoilerFreeMode}
+              onCheckedChange={(v) => patch('spoilerFreeMode', v)}
               disabled={loading}
             />
           </div>

@@ -28,6 +28,8 @@ import { TeamCoach } from '@/components/team-coach';
 import { PokemonNickname } from '@/components/pokemon-nickname';
 import { PlayoffBracket } from './schedule/playoff-bracket';
 import { TiebreakerBadge, TradeHistoryRow } from './standings-parts';
+import { Spoiler } from '@/components/spoiler';
+import { SpoilerToggle } from '@/components/spoiler-toggle';
 
 type StandingsView = 'standings' | 'playoffs';
 
@@ -35,6 +37,7 @@ export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
   const { players, standings, getWeekMatches, matches, loading } = useLeagueData();
+  const { spoilerFreeMode } = useAuth();
   const currentSeason = league.season;
 
   // Playoffs-final view: when the league has actually generated a playoff
@@ -126,37 +129,41 @@ export function StandingsPage() {
           </p>
         </div>
 
-        {/* View toggle — only when playoff bracket exists. Defaults to the
-         *  playoffs view in playoff/offseason phase; falls back to the regular
-         *  standings table otherwise. */}
-        {hasPlayoffs && (
-          <div className="flex rounded-lg border border-border-default overflow-hidden">
-            <button
-              onClick={() => setView('standings')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                view === 'standings'
-                  ? 'bg-surface-overlay text-text-primary'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-              )}
-            >
-              <ListOrdered size={13} />
-              Standings
-            </button>
-            <button
-              onClick={() => setView('playoffs')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                view === 'playoffs'
-                  ? 'bg-pink/10 text-pink'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-              )}
-            >
-              <Trophy size={13} />
-              Playoffs
-            </button>
-          </div>
-        )}
+        {/* Header controls — spoiler-free toggle always available; the view
+         *  toggle only when a playoff bracket exists. Defaults to the playoffs
+         *  view in playoff/offseason phase; falls back to the regular standings
+         *  table otherwise. */}
+        <div className="flex items-center gap-2">
+          <SpoilerToggle />
+          {hasPlayoffs && (
+            <div className="flex rounded-lg border border-border-default overflow-hidden">
+              <button
+                onClick={() => setView('standings')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                  view === 'standings'
+                    ? 'bg-surface-overlay text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                )}
+              >
+                <ListOrdered size={13} />
+                Standings
+              </button>
+              <button
+                onClick={() => setView('playoffs')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                  view === 'playoffs'
+                    ? 'bg-pink/10 text-pink'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                )}
+              >
+                <Trophy size={13} />
+                Playoffs
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {view === 'playoffs' && hasPlayoffs ? (
@@ -291,27 +298,33 @@ export function StandingsPage() {
                         size="sm"
                         static
                       />
-                      <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
+                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
-                      <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
-                        {homeWon ? 'W' : 'L'}
-                      </span>
+                      <Spoiler>
+                        <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
+                          {homeWon ? 'W' : 'L'}
+                        </span>
+                      </Spoiler>
                     </Link>
-                    <div className="flex items-center gap-2 px-3">
-                      <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
-                        {match.homeScore}
+                    <Spoiler>
+                      <span className="flex items-center gap-2 px-3">
+                        <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
+                          {match.homeScore}
+                        </span>
+                        <span className="text-[10px] text-text-muted">—</span>
+                        <span className={`text-sm tabular-nums font-bold ${!homeWon ? 'text-win' : 'text-text-muted'}`}>
+                          {match.awayScore}
+                        </span>
                       </span>
-                      <span className="text-[10px] text-text-muted">—</span>
-                      <span className={`text-sm tabular-nums font-bold ${!homeWon ? 'text-win' : 'text-text-muted'}`}>
-                        {match.awayScore}
-                      </span>
-                    </div>
+                    </Spoiler>
                     <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
-                      <span className={`text-[10px] font-mono font-bold tabular-nums ${!homeWon ? 'text-win' : 'text-loss'}`}>
-                        {!homeWon ? 'W' : 'L'}
-                      </span>
-                      <span className={`text-sm font-medium transition-colors ${!homeWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
+                      <Spoiler>
+                        <span className={`text-[10px] font-mono font-bold tabular-nums ${!homeWon ? 'text-win' : 'text-loss'}`}>
+                          {!homeWon ? 'W' : 'L'}
+                        </span>
+                      </Spoiler>
+                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && !homeWon) ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
                       <TeamLogoSwap
@@ -451,12 +464,14 @@ function StandingsRow({
 
         {/* Record */}
         <div className="shrink-0">
-          <RecordDisplay
-            wins={player.record.wins}
-            losses={player.record.losses}
-            differential={player.record.differential}
-            className="text-xs"
-          />
+          <Spoiler>
+            <RecordDisplay
+              wins={player.record.wins}
+              losses={player.record.losses}
+              differential={player.record.differential}
+              className="text-xs"
+            />
+          </Spoiler>
         </div>
 
         {/* Narrative chip — at most one, only when meaningful */}
@@ -492,7 +507,9 @@ function StandingsRow({
           <div className="px-4 pb-4 pt-1 ml-9">
             {/* Stats + Point cap bar */}
             <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle/20">
-              <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
+              <Spoiler>
+                <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
+              </Spoiler>
               <PointCapBar used={points} className="flex-1 max-w-[200px]" />
               {completedTrades.length > 0 && (
                 <span className="flex items-center gap-1 text-[10px] text-text-muted">
@@ -523,11 +540,13 @@ function StandingsRow({
                   </div>
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />
-                  <span className="tabular-nums text-[10px] shrink-0 w-12 text-right">
-                    <span className="text-win">{mon.seasonStats.kills}</span>
-                    <span className="text-text-muted">/</span>
-                    <span className="text-loss">{mon.seasonStats.deaths}</span>
-                  </span>
+                  <Spoiler className="shrink-0 w-12 justify-end">
+                    <span className="tabular-nums text-[10px] text-right">
+                      <span className="text-win">{mon.seasonStats.kills}</span>
+                      <span className="text-text-muted">/</span>
+                      <span className="text-loss">{mon.seasonStats.deaths}</span>
+                    </span>
+                  </Spoiler>
                 </div>
               ))}
             </div>

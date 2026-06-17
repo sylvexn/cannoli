@@ -358,6 +358,9 @@ export interface ApiUserPreferences {
   timezone: string | null;
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
   colorblindMode: boolean;
+  /** Spoiler-free mode — blurs match results (scores/winners/badges) on the
+   *  standings and replays pages behind a click-to-reveal veil. */
+  spoilerFreeMode: boolean;
   updatedAt: string | null;
 }
 

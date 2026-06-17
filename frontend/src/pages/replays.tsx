@@ -8,6 +8,7 @@ import type { League } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/empty-state';
+import { SpoilerToggle } from '@/components/spoiler-toggle';
 import { toast } from 'sonner';
 import type { ReplayEntry, TimeFilter } from './replays/replay-types';
 import { isReplayWeekEnded } from './replays/replay-types';
@@ -301,16 +302,20 @@ export function ReplaysPage() {
           <span className="text-text-primary">Gallery</span>
         </h1>
 
-        {isAdmin && (
-          <button
-            onClick={() => navigate(`/replays/stream/${streamWeek}`)}
-            title={`Open broadcast cockpit for week ${streamWeek}`}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/5 text-neon text-[11px] font-mono uppercase tracking-widest hover:bg-neon/10 transition-colors shrink-0"
-          >
-            <Radio size={14} />
-            Start Week {streamWeek} Stream
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <SpoilerToggle />
+
+          {isAdmin && (
+            <button
+              onClick={() => navigate(`/replays/stream/${streamWeek}`)}
+              title={`Open broadcast cockpit for week ${streamWeek}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-neon/40 bg-neon/5 text-neon text-[11px] font-mono uppercase tracking-widest hover:bg-neon/10 transition-colors shrink-0"
+            >
+              <Radio size={14} />
+              Start Week {streamWeek} Stream
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Replay viewer panel */}

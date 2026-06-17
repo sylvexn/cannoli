@@ -2,7 +2,9 @@ import { Suspense } from 'react';
 import { Play, Image as ImageIcon, Link2, Flame, Zap, Trophy, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
+import { Spoiler } from '@/components/spoiler';
 import { leagueGem } from '@/lib/constants';
 import { buildGradientCss, gemPaletteFor } from '@/lib/shader-gradient';
 import { ShaderField } from '@/components/shader-field-lazy';
@@ -36,6 +38,7 @@ export function ReplayHeroCard({
   onToggleViewing,
   onCopyShareLink,
 }: ReplayHeroCardProps) {
+  const { spoilerFreeMode } = useAuth();
   const { match, league, homeTeam, awayTeam } = entry;
   const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
@@ -87,7 +90,7 @@ export function ReplayHeroCard({
           </span>
 
           {(sweep || teraHeavy || hasMvp) && (
-            <div className="z-10 absolute top-3 right-3 flex items-center gap-1.5">
+            <Spoiler as="div" className="z-10 absolute top-3 right-3 flex items-center gap-1.5">
               {hasMvp && (
                 <span
                   className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -112,7 +115,7 @@ export function ReplayHeroCard({
                   {summary!.teraCount}
                 </span>
               )}
-            </div>
+            </Spoiler>
           )}
         </div>
 
@@ -140,22 +143,22 @@ export function ReplayHeroCard({
               viewTransition
               className={cn(
                 'hover:text-neon transition-colors truncate',
-                homeWon ? 'text-win' : 'text-text-primary',
+                (!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-primary',
               )}
             >
               {homeTeam?.teamAbbrev ?? match.homePlayer}
             </Link>
-            <span className="text-base font-mono tabular-nums text-text-muted shrink-0">
+            <Spoiler className="text-base font-mono tabular-nums text-text-muted shrink-0">
               <span className={homeWon ? 'text-win' : ''}>{match.homeScore ?? 0}</span>
               {' - '}
               <span className={awayWon ? 'text-win' : ''}>{match.awayScore ?? 0}</span>
-            </span>
+            </Spoiler>
             <Link
               to={`/league/${league.id}/teams/${awayTeam?.id}`}
               viewTransition
               className={cn(
                 'hover:text-neon transition-colors truncate',
-                awayWon ? 'text-win' : 'text-text-primary',
+                (!spoilerFreeMode && awayWon) ? 'text-win' : 'text-text-primary',
               )}
             >
               {awayTeam?.teamAbbrev ?? match.awayPlayer}
