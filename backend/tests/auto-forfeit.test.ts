@@ -1,19 +1,25 @@
 /**
  * Tests for the auto-forfeit job's deadline-resolution helper.
  *
- * The full job is exercised via integration but the deadline-fallback logic
- * is the load-bearing piece for "regular-season `scheduled` matches at
- * week-end" — without it, matches whose `deadline` column is null (older
- * data, manual inserts) silently slip past the forfeit policy.
+ * Deadlines are SCHEDULE-FIRST: the cutoff for a match comes from the league's
+ * live `weekDates` (end-of-day in the league timezone), NOT from a literal date
+ * baked onto the match row at creation time. Correcting the schedule must move
+ * the cutoff, and a stale baked value must never drive a forfeit. The stored
+ * `match.deadline` is only a fallback for weeks the schedule doesn't cover —
+ * playoff weeks and manually-created fixtures.
  */
 import { describe, expect, test } from 'bun:test';
 import { effectiveMatchDeadline, endOfDayInZone } from '../src/lib/jobs/auto-forfeit';
 
 describe('effectiveMatchDeadline', () => {
-  test('uses match.deadline when set (round-trips ISO)', () => {
-    const iso = '2026-04-15T03:00:00.000Z';
-    expect(effectiveMatchDeadline({ deadline: iso, week: 1 }, '{"1":"2026-01-01"}'))
-      .toBe(iso);
+  test('schedule wins over a stale baked deadline when the week is scheduled', () => {
+    // A literal date baked onto the row at creation time must NOT drive the
+    // cutoff once the schedule says otherwise — this is the regression that
+    // forfeited live matches after the dates were corrected. 2026-04-21 is EDT
+    // (UTC-4), so local 23:59:59 == 03:59:59 UTC the next day.
+    const stale = '2020-01-01T00:00:00.000Z';
+    expect(effectiveMatchDeadline({ deadline: stale, week: 1 }, '{"1":"2026-04-21"}'))
+      .toBe('2026-04-22T03:59:59.000Z');
   });
 
   test('falls back to weekDates entry as end-of-day in the league TZ (TZ-DEADLINE)', () => {
@@ -54,13 +60,23 @@ describe('effectiveMatchDeadline', () => {
       .toBeNull();
   });
 
-  test('explicit deadline wins even when weekDates also has the week', () => {
-    const explicit = '2026-04-15T12:00:00.000Z';
+  test('schedule (weekDates) wins over the stored deadline when the week is scheduled', () => {
+    // Even with a stored deadline present, a week that appears in the live
+    // schedule resolves to the schedule date — so editing weekDates moves it.
+    const stored = '2026-04-15T12:00:00.000Z';
     const out = effectiveMatchDeadline(
-      { deadline: explicit, week: 3 },
-      '{"3":"2026-12-31"}',
+      { deadline: stored, week: 3 },
+      '{"3":"2026-04-21"}',
     );
-    expect(out).toBe(explicit);
+    expect(out).toBe('2026-04-22T03:59:59.000Z');
+  });
+
+  test('falls back to the stored deadline when the week is NOT in the schedule (playoff/manual)', () => {
+    // Playoff weeks live past the regular schedule; their cutoff comes from the
+    // deadline set on the row (manually or by the bracket), not from weekDates.
+    const stored = '2026-07-15T03:59:59.000Z';
+    expect(effectiveMatchDeadline({ deadline: stored, week: 99 }, '{"1":"2026-04-21"}'))
+      .toBe(stored);
   });
 });
 

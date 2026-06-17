@@ -9,6 +9,7 @@ import { mintArchivePins } from '../../lib/pins/archive-mint';
 import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
+import { scheduleDeadline } from '../../lib/deadline';
 
 export const leagueAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -111,6 +112,32 @@ export const leagueAdminRoutes = new Elysia()
       if (Object.keys(leagueUpdates).length > 0) {
         db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
       }
+
+      // Schedule edited → resync the stored deadline on each not-yet-completed
+      // regular fixture so admin views (and the playoff/manual fallback) match
+      // the live schedule. The auto-forfeit job already derives the cutoff from
+      // weekDates directly; this just keeps the denormalized column from holding
+      // a stale literal date after the dates are corrected.
+      if (weekDates !== undefined) {
+        const map: Record<string, string> = leagueUpdates.weekDates
+          ? JSON.parse(leagueUpdates.weekDates as string)
+          : {};
+        const regularMatches = db.select({ id: schema.matches.id, week: schema.matches.week })
+          .from(schema.matches)
+          .where(and(
+            eq(schema.matches.leagueId, params.leagueId),
+            eq(schema.matches.phase, 'regular'),
+            sql`(${schema.matches.status} = 'scheduled' OR ${schema.matches.status} = 'ready')`,
+          ))
+          .all();
+        for (const m of regularMatches) {
+          db.update(schema.matches)
+            .set({ deadline: scheduleDeadline(map, m.week, league.timezone) })
+            .where(eq(schema.matches.id, m.id))
+            .run();
+        }
+      }
+
       if (Object.keys(seasonUpdates).length > 0) {
         db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
       }

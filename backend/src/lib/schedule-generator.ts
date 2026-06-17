@@ -15,6 +15,7 @@
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
 import { tx } from './tx';
+import { scheduleDeadline } from './deadline';
 
 const BYE_SENTINEL = '__BYE__';
 
@@ -123,6 +124,9 @@ export function generateLeagueSchedule(leagueId: string): { success: boolean; ma
     // Insert new matches; populate deadline from THIS league's weekDates.
     // (weekDates moved off `seasons` so regenerating one league's schedule
     // no longer overwrites totalWeeks/weekDates for sibling leagues.)
+    // Deadline = end-of-day in the league timezone (via scheduleDeadline), NOT
+    // a hard-coded UTC cutoff — and the auto-forfeit job re-derives it from the
+    // live schedule anyway, so this stored value is just a convenience snapshot.
     const weekDates: Record<string, string> = league.weekDates ? JSON.parse(league.weekDates) : {};
 
     const matchCountPerWeek = new Map<number, number>();
@@ -130,8 +134,7 @@ export function generateLeagueSchedule(leagueId: string): { success: boolean; ma
       const matchNum = (matchCountPerWeek.get(f.week) ?? 0) + 1;
       matchCountPerWeek.set(f.week, matchNum);
       const matchId = `${leagueId}-w${f.week}m${matchNum}`;
-      const deadlineDate = weekDates[String(f.week)];
-      const deadline = deadlineDate ? new Date(deadlineDate + 'T23:59:59Z').toISOString() : null;
+      const deadline = scheduleDeadline(weekDates, f.week, league.timezone);
       db.insert(schema.matches).values({
         id: matchId,
         leagueId,

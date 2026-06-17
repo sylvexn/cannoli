@@ -26,74 +26,12 @@ import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
 import { getArenaBroadcaster } from '../../routes/arena';
 import { advancePlayoffWinner, decidePlayoffForfeit } from '../playoff-advance';
+import { effectiveMatchDeadline } from '../deadline';
 
-/**
- * Resolve "end of day (23:59:59) on `dateStr` (YYYY-MM-DD) in IANA `timeZone`"
- * to a UTC ISO timestamp. We can't just append 'T23:59:59Z' (that's UTC
- * midnight-minus-1s, not the league's local end-of-day) nor a fixed offset
- * (DST changes it). Instead we ask Intl what wall-clock time the zone shows
- * for a candidate UTC instant, derive the zone's offset for that date, and
- * back the UTC instant out of the desired local time. One iteration is enough
- * for the once-a-day boundary we care about.
- */
-export function endOfDayInZone(dateStr: string, timeZone: string): string {
-  // Desired local wall-clock: dateStr 23:59:59.
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const desiredLocalMs = Date.UTC(y, m - 1, d, 23, 59, 59);
-
-  // Offset (minutes) the zone is ahead of UTC, computed at the candidate
-  // instant. tzOffset = localWallClock - utc.
-  function offsetMinutes(utcMs: number): number {
-    const dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-    });
-    const parts = dtf.formatToParts(new Date(utcMs));
-    const get = (t: string) => Number(parts.find(p => p.type === t)!.value);
-    let hour = get('hour');
-    if (hour === 24) hour = 0; // some engines render midnight as 24
-    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), hour, get('minute'), get('second'));
-    return Math.round((asUtc - utcMs) / 60000);
-  }
-
-  // First guess: treat the desired local time as if it were UTC, find the
-  // zone's offset there, then correct. Re-derive the offset at the corrected
-  // instant to handle the rare case the first guess straddled a DST change.
-  let utcMs = desiredLocalMs - offsetMinutes(desiredLocalMs) * 60000;
-  utcMs = desiredLocalMs - offsetMinutes(utcMs) * 60000;
-  return new Date(utcMs).toISOString();
-}
-
-/**
- * Compute the effective deadline for a match. Schedule generator populates
- * `match.deadline` from `league.weekDates[week]` at create time, but matches
- * that pre-date that column or were inserted manually may have a null
- * deadline. In that case fall back to the live league.weekDates so the
- * forfeit policy still kicks in at week-end.
- *
- * The week-end fallback is computed as 23:59:59 IN THE LEAGUE'S timezone
- * (TZ-DEADLINE), so the enforced cutoff matches what coaches see rather than
- * hard-coded UTC.
- *
- * Returns an ISO timestamp or null if no deadline can be derived.
- */
-export function effectiveMatchDeadline(
-  match: { deadline: string | null; week: number },
-  weekDatesJson: string | null,
-  timeZone: string = 'America/New_York',
-): string | null {
-  if (match.deadline) return match.deadline;
-  if (!weekDatesJson) return null;
-  try {
-    const map = JSON.parse(weekDatesJson) as Record<string, string>;
-    const dateStr = map[String(match.week)];
-    if (!dateStr) return null;
-    return endOfDayInZone(dateStr, timeZone);
-  } catch {
-    return null;
-  }
-}
+// Deadline derivation now lives in ../deadline (schedule-first: the league's
+// live weekDates drive the cutoff, so a stale date baked onto a match row can't
+// trigger a forfeit). Re-exported here for back-compat with existing importers.
+export { endOfDayInZone, effectiveMatchDeadline } from '../deadline';
 
 export function runAutoForfeit() {
   const now = new Date().toISOString();
