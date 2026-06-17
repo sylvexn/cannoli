@@ -14,6 +14,7 @@ import {
   Clock, AlertCircle,
 } from 'lucide-react';
 import { ReplayLink } from '@/components/replay-link';
+import { YourMatchesCard } from '@/components/your-matches-card';
 import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
 import type { League } from '@/lib/types';
 
@@ -54,6 +55,7 @@ export function HeaderCoach({
       </div>
 
       <div className="space-y-3">
+        <YourMatchesCard />
         <PendingTradesCard pendingTradesForMe={pendingTradesForMe} leagues={leagues} />
         <ActionItemsCard myTeams={myTeams} pendingTradesForMe={pendingTradesForMe} />
       </div>
