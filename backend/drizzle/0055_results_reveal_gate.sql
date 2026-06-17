@@ -1,0 +1,11 @@
+-- Admin-controlled "results reveal gate" per league.
+--
+-- results_revealed_through is nullable:
+--   NULL = gate OFF — results fully visible (only per-user spoiler-free veil
+--          applies). This is the default for every existing league, so nothing
+--          changes until an admin opts in.
+--   N    = gate ON — completed results for weeks > N are hidden for everyone,
+--          and standings/records are computed only through week N. 0 hides all.
+--
+-- No backfill: existing rows get NULL, preserving current behavior.
+ALTER TABLE `leagues` ADD COLUMN `results_revealed_through` INTEGER;

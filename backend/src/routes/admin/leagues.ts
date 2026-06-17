@@ -384,6 +384,52 @@ export const leagueAdminRoutes = new Elysia()
     return { success: true, week: newWeek };
   })
 
+  // ─── Results Reveal Gate ────────────────────────────────────────────
+  //
+  // Admin-controlled per-league gate that hides completed results (and freezes
+  // standings/records) for weeks beyond `revealedThrough` for EVERYONE.
+  //   null → gate OFF: results fully visible (the per-user spoiler-free veil is
+  //          a separate, independent preference).
+  //   N    → hide results for weeks > N; standings computed only through week N.
+  //          0 hides every week.
+  .post('/api/admin/leagues/:leagueId/results-reveal', ({ params, body, user, set }) => {
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const { revealedThrough } = (body ?? {}) as { revealedThrough?: unknown };
+
+    // Validate: either null (gate off) or an integer in [0, currentWeek].
+    let value: number | null;
+    if (revealedThrough === null) {
+      value = null;
+    } else if (typeof revealedThrough === 'number' && Number.isInteger(revealedThrough)) {
+      if (revealedThrough < 0 || revealedThrough > league.currentWeek) {
+        set.status = 400;
+        return { error: `revealedThrough must be between 0 and ${league.currentWeek} (the current week)`, code: 'reveal_out_of_range' };
+      }
+      value = revealedThrough;
+    } else {
+      set.status = 400;
+      return { error: 'revealedThrough must be null or an integer week number' };
+    }
+
+    tx(() => {
+      db.update(schema.leagues).set({ resultsRevealedThrough: value }).where(eq(schema.leagues.id, params.leagueId)).run();
+      db.insert(schema.activityLog).values({
+        type: 'results_reveal_set',
+        category: 'config',
+        actor: user.username,
+        leagueId: params.leagueId,
+        description: value == null
+          ? `Results reveal gate turned OFF for ${league.name}`
+          : `Results revealed through week ${value} for ${league.name}`,
+        metadata: JSON.stringify({ from: league.resultsRevealedThrough ?? null, to: value }),
+      }).run();
+    });
+
+    return { success: true, resultsRevealedThrough: value };
+  })
+
   .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
     const { order } = body as { order: string[] };
 

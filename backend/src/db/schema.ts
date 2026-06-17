@@ -115,6 +115,14 @@ export const leagues = sqliteTable('leagues', {
    *  cost sheet lives in `formatCosts`. Default 'natdexplus' mirrors the historic
    *  single global tier list. See lib/league-costs.ts for resolution. */
   costFormat: text('cost_format').notNull().default('natdexplus'),
+  /** Admin-controlled "results reveal gate" for THIS league.
+   *  NULL = gate OFF — results fully visible (the only per-user veil is the
+   *  separate spoiler-free preference). This is the default for every league,
+   *  so nothing changes until an admin opts in.
+   *  An integer N = gate ON — completed results for weeks > N are hidden for
+   *  EVERYONE, and standings/records are computed only through week N. 0 hides
+   *  every week's results. Set via POST /api/admin/leagues/:id/results-reveal. */
+  resultsRevealedThrough: integer('results_revealed_through'),
 });
 
 // ─── Format Costs (per-cost-format Pokemon prices / bans) ───────────────────
