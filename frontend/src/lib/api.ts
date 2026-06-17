@@ -366,8 +366,11 @@ export interface ApiUserPreferences {
   spoilerFreeMode: boolean;
   /** Per-league spoiler reveal high-water marks: { [leagueId]: highestRevealedWeek }.
    *  Revealing week N reveals weeks 1..N, so a result for week W shows once
-   *  W <= spoilerRevealedThrough[leagueId]. */
+   *  W <= spoilerRevealedThrough[leagueId]. (Legacy per-week mode — unused now.) */
   spoilerRevealedThrough: Record<string, number>;
+  /** Per-match spoiler reveals: stable match ids the user has peeked. A match
+   *  shows plainly once its id is in this set, persisted across reloads. */
+  spoilerRevealedMatches?: string[];
   updatedAt: string | null;
 }
 
@@ -1276,10 +1279,15 @@ export const api = {
   updateMyPreferences: (prefs: Partial<Omit<ApiUserPreferences, 'updatedAt'>>) =>
     putJson<{ success: boolean }>('/api/users/me/preferences', prefs),
   /** Reveal a league's results through `week` (catch-up: reveals weeks 1..week).
-   *  Returns the updated per-league high-water-mark map. */
+   *  Returns the updated per-league high-water-mark map. (Legacy — unused now.) */
   revealSpoilerWeek: (leagueId: string, week: number) =>
     postJson<{ spoilerRevealedThrough: Record<string, number> }>(
       '/api/users/me/spoiler-reveal', { leagueId, week }),
+  /** Reveal a single match by its stable id. Persists per user across reloads.
+   *  Returns the updated set of revealed match ids. */
+  revealSpoilerMatch: (matchId: string) =>
+    postJson<{ success: true; spoilerRevealedMatches: string[] }>(
+      '/api/users/me/spoiler-reveal-match', { matchId }),
 
   // Lifetime stats + public profile
   getLifetimeStats: () => fetchJson<ApiLifetimeStats>('/api/users/me/lifetime-stats'),

@@ -197,10 +197,11 @@ export interface League {
    *  for backwards compat (treated as 'natdexplus' when missing). */
   costFormat?: import('@/data/tier-list').CostFormat;
   season: LeagueSeason;
-  /** Admin results-reveal gate. `null` = gate OFF (all results visible);
-   *  integer N = results for weeks > N are hidden for everyone and standings/
-   *  records are computed server-side only through week N. Drives the HARD
-   *  (non-bypassable) `<Spoiler adminRevealedThrough>` veil. */
+  /** Admin results-reveal (publish) gate. `null` = gate OFF (all results
+   *  visible); integer N = results for weeks > N are hidden for everyone and
+   *  standings/records/stats are computed SERVER-SIDE only through week N.
+   *  Enforced entirely on the backend now — drives the staff publish control,
+   *  not any client-side veil. */
   resultsRevealedThrough: number | null;
   players: Player[];
   /** Registered-team (== coach) count, from `/api/leagues`. The `players`

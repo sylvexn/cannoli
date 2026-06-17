@@ -31,11 +31,19 @@ interface AuthContextValue {
    * Per-league spoiler reveal high-water marks: { [leagueId]: highestRevealedWeek }.
    * A result for week W is revealed once W <= spoilerRevealedThrough[leagueId]
    * (revealing week N reveals weeks 1..N — the catch-up model).
+   * Legacy per-week mode — no longer wired into any page.
    */
   spoilerRevealedThrough: Record<string, number>;
   /** Reveal a league's results through `week` (and all earlier weeks). Persists
-   *  server-side and updates local state optimistically. */
+   *  server-side and updates local state optimistically. (Legacy — unused.) */
   revealWeek: (leagueId: string, week: number) => void;
+  /**
+   * Stable match ids the user has revealed. A per-match <Spoiler matchId> shows
+   * plainly once its id is in this set; persisted server-side across reloads.
+   */
+  spoilerRevealedMatches: string[];
+  /** Reveal a single match by id. Optimistic local add, then persists. */
+  revealMatch: (matchId: string) => void;
   refreshTimezone: () => Promise<void>;
   /** Re-fetch preferences after a settings save. Updates timezone + colorblind + spoiler. */
   refreshPreferences: () => Promise<void>;
@@ -56,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // never flash results before we know the viewer's preference.
   const [spoilerFreeMode, setSpoilerFreeMode] = useState(true);
   const [spoilerRevealedThrough, setSpoilerRevealedThrough] = useState<Record<string, number>>({});
+  const [spoilerRevealedMatches, setSpoilerRevealedMatches] = useState<string[]>([]);
 
   const loadPreferences = useCallback(async () => {
     try {
@@ -64,11 +73,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setColorblindMode(!!prefs.colorblindMode);
       setSpoilerFreeMode(!!prefs.spoilerFreeMode);
       setSpoilerRevealedThrough(prefs.spoilerRevealedThrough ?? {});
+      setSpoilerRevealedMatches(prefs.spoilerRevealedMatches ?? []);
     } catch {
       setUserTimezone(null);
       setColorblindMode(false);
       setSpoilerFreeMode(true);
       setSpoilerRevealedThrough({});
+      setSpoilerRevealedMatches([]);
     }
   }, []);
 
@@ -79,6 +90,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSpoilerRevealedThrough(m =>
       (m[leagueId] ?? 0) >= week ? m : { ...m, [leagueId]: week });
     api.revealSpoilerWeek(leagueId, week).catch(() => {});
+  }, []);
+
+  // Reveal a single match. Optimistic local add (deduped), then persist; the
+  // server returns the authoritative set but the optimistic add keeps the UI
+  // instant and survives reloads via the next preferences load.
+  const revealMatch = useCallback((matchId: string) => {
+    setSpoilerRevealedMatches(s => s.includes(matchId) ? s : [...s, matchId]);
+    api.revealSpoilerMatch(matchId).catch(() => {});
   }, []);
 
   // Apply <html data-colorblind="true"> so the CSS override block in index.css
@@ -125,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Logged-out (public) browsing has no per-user veil state to honor.
     setSpoilerFreeMode(false);
     setSpoilerRevealedThrough({});
+    setSpoilerRevealedMatches([]);
   }, []);
 
   const changePassword = useCallback(async (current: string, next: string) => {
@@ -156,13 +176,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     spoilerFreeMode,
     spoilerRevealedThrough,
     revealWeek,
+    spoilerRevealedMatches,
+    revealMatch,
     refreshTimezone: loadPreferences,
     refreshPreferences: loadPreferences,
     login,
     logout,
     changePassword,
     refreshUser,
-  }), [user, isLoading, userTimezone, colorblindMode, spoilerFreeMode, spoilerRevealedThrough, revealWeek, loadPreferences, login, logout, changePassword, refreshUser]);
+  }), [user, isLoading, userTimezone, colorblindMode, spoilerFreeMode, spoilerRevealedThrough, revealWeek, spoilerRevealedMatches, revealMatch, loadPreferences, login, logout, changePassword, refreshUser]);
 
   return (
     <AuthContext.Provider value={value}>
