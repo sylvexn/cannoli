@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-5-2026-06",
+    "date": "2026-06-17T18:30:00Z",
+    "category": "feature",
+    "title": "Cannoli v1.0.5 — Results publishing & spoiler tags",
+    "body": "- Admins publish each league's results — standings, stats, and player/Pokemon records stay frozen until you publish that week, and each league publishes separately (feature)\n- Schedule and replays now use per-match spoiler tags — reveal just the battles you want to know about, and they stay revealed (feature)\n- Matchup Center type chart adds a team summary row showing which types you best resist and are most weak to (feature)"
+  },
+  {
     "id": "v1-0-4-2026-06",
     "date": "2026-06-17T16:00:00Z",
     "category": "fix",
