@@ -8,8 +8,9 @@
  * arena.ts re-imports and re-exports them so its behavior is unchanged.
  */
 import { db, schema } from '../db';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getLeague } from './queries';
+import { createBattle } from './ps-bot';
 
 // ─── Team resolution ─────────────────────────────────────────────────────────
 
@@ -57,6 +58,66 @@ export function getCurrentMatch(teamId: string, leagueId: string) {
   const league = getLeague(leagueId);
   if (!league || league.phase !== 'regular') return null;
   return getPlayableMatches(teamId, leagueId).find(m => m.week === league.currentWeek) ?? null;
+}
+
+// ─── PS battle creation for ready matches ──────────────────────────────────────
+
+/**
+ * Resolve the PS-account username a team plays under. PS battles are created
+ * against the owning user's account username (what they log in as via SSO).
+ * Falls back to coachName, then the teamId, then a side label, so we always
+ * pass *something* even for unowned/placeholder teams.
+ */
+function resolveTeamPsUsername(teamId: string | null, sideLabel: 'home' | 'away'): string {
+  const team = teamId
+    ? db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get()
+    : null;
+  const user = team?.userId
+    ? db.select({ username: schema.users.username })
+        .from(schema.users)
+        .where(eq(schema.users.id, team.userId))
+        .get()
+    : null;
+  return user?.username || team?.coachName || teamId || sideLabel;
+}
+
+/**
+ * Ask the PS bot to create the battle for a both-ready match. Resolves p1/p2
+ * usernames (owning user → coachName → teamId fallback) exactly as the
+ * match_ready handler used to inline. Shared by the ready-up handler and the
+ * bot-reconnect auto-resume path so the resolution logic lives in one place.
+ */
+export function createBattleForReadyMatch(match: {
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+}) {
+  const p1Name = resolveTeamPsUsername(match.homeTeamId, 'home');
+  const p2Name = resolveTeamPsUsername(match.awayTeamId, 'away');
+  createBattle(p1Name, p2Name);
+}
+
+/**
+ * Matches that readied up but never started — both ready flags set yet still
+ * `status = 'scheduled'`. These are the matches stranded when the PS bot was
+ * offline at ready-up time; on reconnect we re-drive them. Scoped to regular
+ * phase with both teams resolved (a readied match always has both teams) and
+ * to active (non-archived) leagues currently in regular phase.
+ */
+export function findResumableReadyMatches() {
+  const rows = db.select().from(schema.matches).where(and(
+    eq(schema.matches.phase, 'regular'),
+    eq(schema.matches.status, 'scheduled'),
+    eq(schema.matches.readyHome, true),
+    eq(schema.matches.readyAway, true),
+    sql`${schema.matches.homeTeamId} IS NOT NULL`,
+    sql`${schema.matches.awayTeamId} IS NOT NULL`,
+  )).all();
+
+  // Only resume within leagues that are actually live (regular phase).
+  return rows.filter(m => {
+    const league = getLeague(m.leagueId);
+    return league?.phase === 'regular';
+  });
 }
 
 // ─── Match reminder ───────────────────────────────────────────────────────────

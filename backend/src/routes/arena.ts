@@ -10,7 +10,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
-import { createBattle, isBotConnected } from '../lib/ps-bot';
+import { createBattle, isBotConnected, onBotConnectionChange } from '../lib/ps-bot';
 import { getLeague } from '../lib/queries';
 import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
@@ -18,6 +18,8 @@ import {
   getUserTeam as _getUserTeam,
   getPlayableMatches as _getPlayableMatches,
   getCurrentMatch as _getCurrentMatch,
+  createBattleForReadyMatch,
+  findResumableReadyMatches,
 } from '../lib/arena-state';
 
 // Re-export so external callers can import from this module if needed.
@@ -291,7 +293,7 @@ function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
 // ─── Route ──────────────────────────────────────────────────────────────────
 
 export const arenaRoutes = new Elysia()
-  .onStart((app) => { registerBroadcastServer((app as any).server); })
+  .onStart((app) => { registerBroadcastServer((app as any).server); registerBotConnectionListener(); })
 
   // Active players for scrim invite picker (public, lightweight)
   .get('/api/arena/players', () => {
@@ -351,7 +353,7 @@ export const arenaRoutes = new Elysia()
       invitee: l.invitee, players: l.players, ready: l.ready, status: l.status,
     }));
 
-    return { myMatch, myMatches, liveMatches, scrimLobbies: lobbies };
+    return { myMatch, myMatches, liveMatches, scrimLobbies: lobbies, botConnected: isBotConnected() };
   })
 
   // ─── Arena WebSocket ────────────────────────────────────────────────
@@ -359,6 +361,11 @@ export const arenaRoutes = new Elysia()
   .ws('/ws/arena', {
     open(ws) {
       ws.subscribe('arena:global');
+
+      // Initial bot-connectivity sync — sent to every connecting socket
+      // (identified or not) so the Arena UI can render the bot badge and
+      // gate the ready-up affordance immediately.
+      ws.send(JSON.stringify({ type: 'bot_status', connected: isBotConnected() }));
 
       // Auto-authenticate from cookie on the upgrade request.
       // ws.data carries the upgrade Request; only `request.headers` is needed.
@@ -469,47 +476,39 @@ export const arenaRoutes = new Elysia()
             // Check if both are now ready
             const updated = db.select().from(schema.matches).where(eq(schema.matches.id, match.id)).get()!;
             if (updated.readyHome && updated.readyAway) {
-              db.update(schema.matches)
-                .set({ status: 'ready', startedAt: new Date().toISOString() })
-                .where(and(
-                  eq(schema.matches.id, match.id),
-                  sql`status = 'scheduled'`,
-                )).run();
-
-              scheduleReadyTimeout(match.id);
-
-              // Log to activity
-              db.insert(schema.activityLog).values({
-                type: 'match_ready',
-                category: 'match',
-                actor: 'system',
-                leagueId: client.leagueId,
-                description: `Both teams ready for ${match.id}`,
-                metadata: JSON.stringify({ matchId: match.id }),
-              }).run();
-
-              // Instruct bot to create the PS battle
               if (isBotConnected()) {
-                const homeTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.homeTeamId ?? '')).get();
-                const awayTeam = db.select().from(schema.teams).where(eq(schema.teams.id, match.awayTeamId ?? '')).get();
-                // PS battles are created against the owning user's account
-                // username (that's what they log in as via SSO). Falls back to
-                // coachName / matchId only if the team has no owning user.
-                const homeUser = homeTeam?.userId
-                  ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, homeTeam.userId)).get()
-                  : null;
-                const awayUser = awayTeam?.userId
-                  ? db.select({ username: schema.users.username }).from(schema.users).where(eq(schema.users.id, awayTeam.userId)).get()
-                  : null;
-                const p1Name = homeUser?.username || homeTeam?.coachName || match.homeTeamId || 'home';
-                const p2Name = awayUser?.username || awayTeam?.coachName || match.awayTeamId || 'away';
-                createBattle(p1Name, p2Name);
+                // Bot online — flip to 'ready', stamp start, arm the timeout,
+                // and instruct the bot to create the PS battle. All of this is
+                // gated on connectivity so we never strand the match in 'ready'
+                // with no battle behind it.
+                db.update(schema.matches)
+                  .set({ status: 'ready', startedAt: new Date().toISOString() })
+                  .where(and(
+                    eq(schema.matches.id, match.id),
+                    sql`status = 'scheduled'`,
+                  )).run();
+
+                scheduleReadyTimeout(match.id);
+
+                db.insert(schema.activityLog).values({
+                  type: 'match_ready',
+                  category: 'match',
+                  actor: 'system',
+                  leagueId: client.leagueId,
+                  description: `Both teams ready for ${match.id}`,
+                  metadata: JSON.stringify({ matchId: match.id }),
+                }).run();
+
+                createBattleForReadyMatch(match);
               } else {
-                // Bot not connected — notify players
+                // Bot offline — KEEP status 'scheduled' and KEEP the ready
+                // flags so the reconnect auto-resume path can pick this up.
+                // Don't arm the ready-timeout (nothing is going to create the
+                // battle yet). Just tell the players we're waiting on the bot.
                 ws.send(JSON.stringify({
                   type: 'match_error',
                   matchId: match.id,
-                  message: 'Could not create battle — Showdown bot is not connected. Try again shortly.',
+                  message: 'Showdown bot is offline — your match will start automatically when it reconnects.',
                 }));
               }
             }
@@ -753,3 +752,77 @@ export const arenaRoutes = new Elysia()
       arenaClients.delete(wsKey(ws));
     },
   });
+
+// ─── Bot connectivity → Arena WS + auto-resume ────────────────────────────────
+
+/**
+ * Drive every both-ready-but-never-started match forward. Called when the PS
+ * bot transitions to connected so matches stranded while it was offline (kept
+ * 'scheduled' with both ready flags by the match_ready handler) resume on their
+ * own. Idempotent: the atomic UPDATE only flips rows still 'scheduled', so a
+ * match already 'ready'/'in_progress' is left alone and never double-created.
+ */
+function resumeReadyMatchesOnBotReconnect() {
+  const matches = findResumableReadyMatches();
+  if (matches.length === 0) return;
+
+  console.log(`[arena] bot reconnected — resuming ${matches.length} ready match(es)`);
+
+  for (const match of matches) {
+    // Atomic flip: only transition rows still 'scheduled'. `.changes` tells us
+    // whether THIS call won the flip, so we don't re-create a battle for a row
+    // another path already advanced.
+    const res = db.update(schema.matches)
+      .set({ status: 'ready', startedAt: new Date().toISOString() })
+      .where(and(
+        eq(schema.matches.id, match.id),
+        sql`status = 'scheduled'`,
+      )).run();
+    if (res.changes === 0) continue;
+
+    scheduleReadyTimeout(match.id);
+
+    db.insert(schema.activityLog).values({
+      type: 'match_ready',
+      category: 'match',
+      actor: 'system',
+      leagueId: match.leagueId,
+      description: `Auto-resumed ready match ${match.id} after bot reconnect`,
+      metadata: JSON.stringify({ matchId: match.id, reason: 'bot_reconnect' }),
+    }).run();
+
+    createBattleForReadyMatch(match);
+    broadcastMatchState(match.id);
+  }
+}
+
+/**
+ * Mirror PS-bot connectivity onto Arena clients and auto-resume stranded
+ * ready matches. The listener only fires on actual connected↔disconnected
+ * transitions (see ps-bot.ts). Registered from the route's `.onStart` hook
+ * (not at module load) to avoid a circular-import TDZ — ps-bot.ts imports
+ * from this module, so its `connectionListeners` set isn't initialized yet
+ * while this module's top-level body is still evaluating.
+ */
+let botListenerRegistered = false;
+function registerBotConnectionListener() {
+  if (botListenerRegistered) return;
+  botListenerRegistered = true;
+  onBotConnectionChange((connected) => {
+    publishWs('arena:global', JSON.stringify({ type: 'bot_status', connected }));
+    if (connected) {
+      try {
+        resumeReadyMatchesOnBotReconnect();
+      } catch (err) {
+        console.error('[arena] auto-resume after bot reconnect failed:', err);
+        logServerFault({
+          kind: 'process',
+          name: 'ArenaAutoResumeError',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack ?? null : null,
+          path: '/arena/auto-resume',
+        });
+      }
+    }
+  });
+}

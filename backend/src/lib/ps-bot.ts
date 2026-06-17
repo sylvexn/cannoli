@@ -75,6 +75,28 @@ let connected = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let challstr: string | null = null;
 
+// ─── Connection-change listeners ──────────────────────────────────────────────
+// Decoupled hook so other modules (e.g. the Arena route) can react to the bot
+// going connected↔disconnected WITHOUT this file importing arena/topic
+// specifics. Listeners fire on each transition, after `connected` is updated.
+type ConnectionListener = (connected: boolean) => void;
+const connectionListeners = new Set<ConnectionListener>();
+
+export function onBotConnectionChange(cb: ConnectionListener): () => void {
+  connectionListeners.add(cb);
+  return () => connectionListeners.delete(cb);
+}
+
+function notifyConnectionChange(next: boolean) {
+  for (const cb of connectionListeners) {
+    try {
+      cb(next);
+    } catch (err) {
+      console.error('[PS Bot] connection-change listener threw:', err);
+    }
+  }
+}
+
 const monitoredBattles = new Map<string, MonitoredBattle>();
 
 interface BotState {
@@ -200,10 +222,12 @@ function connect() {
 
   ws.onopen = () => {
     console.log('[PS Bot] Connected to PS server');
+    const wasConnected = connected;
     connected = true;
     botState.connected = true;
     botState.reconnectAttempts = 0;
     bump();
+    if (!wasConnected) notifyConnectionChange(true);
   };
 
   ws.onmessage = (event) => {
@@ -214,10 +238,12 @@ function connect() {
 
   ws.onclose = () => {
     console.log('[PS Bot] Disconnected');
+    const wasConnected = connected;
     connected = false;
     botState.connected = false;
     botState.authedAs = null;
     ws = null;
+    if (wasConnected) notifyConnectionChange(false);
     scheduleReconnect();
   };
 

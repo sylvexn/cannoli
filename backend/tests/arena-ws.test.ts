@@ -32,12 +32,22 @@
  * `connect + identify` describe below still passes because it only reads the
  * frame sent synchronously from `open`.
  */
-import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
+import { describe, expect, test, beforeAll, afterAll, spyOn } from 'bun:test';
 import { Elysia } from 'elysia';
 import { eq } from 'drizzle-orm';
 import { db, schema, sqlite } from '../src/db';
 import { createSession } from '../src/lib/auth';
 import { arenaRoutes } from '../src/routes/arena';
+import * as psBot from '../src/lib/ps-bot';
+
+// The Arena now gates the "both ready → status='ready' + create battle"
+// transition on bot connectivity (offline ⇒ match stays 'scheduled', flags
+// kept, no timeout). The PS bot can't actually connect in tests, so force it
+// "connected" — these specs assert the ready-up DB/broadcast transition, which
+// only runs on the bot-online path. createBattle() then no-ops (no live socket).
+beforeAll(() => {
+  spyOn(psBot, 'isBotConnected').mockReturnValue(true);
+});
 
 // Shared on-disk dev DB → wait for concurrent-writer locks instead of throwing.
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
@@ -248,6 +258,46 @@ describe('ready-up race', () => {
     expect(m.status).toBe('scheduled');
     home.close();
     await sleep(50);
+  });
+
+  // New robustness contract: when the bot is offline, both-ready must NOT flip
+  // the match to 'ready' (which would strand it with no battle behind it).
+  // Keep the ready flags so the bot-reconnect auto-resume can pick it up, and
+  // surface a clear match_error to the readying client.
+  test('bot offline → both ready keeps status scheduled, flags retained, match_error sent', async () => {
+    const offline = spyOn(psBot, 'isBotConnected').mockReturnValue(false);
+    try {
+      resetMatch();
+      const home = await connect(cookie(homeSession));
+      const away = await connect(cookie(awaySession));
+      await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+      await waitFor(away, (m) => m.some((x) => x.type === 'identified'));
+
+      send(home, { type: 'match_ready' });
+      send(away, { type: 'match_ready' });
+
+      // Whichever client lands in the both-ready branch (the second to ready)
+      // receives the offline match_error. Order isn't deterministic, so accept
+      // it on either socket.
+      const hasError = (c: typeof home) =>
+        c.msgs.some((x) => x.type === 'match_error' && x.matchId === matchId);
+      await waitFor(away, () => hasError(home) || hasError(away));
+      expect(hasError(home) || hasError(away)).toBe(true);
+
+      const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+      expect(m.readyHome).toBe(true);
+      expect(m.readyAway).toBe(true);
+      // Critical: NOT 'ready' — we never strand the match without a battle.
+      expect(m.status).toBe('scheduled');
+      expect(m.startedAt).toBeNull();
+
+      home.close();
+      away.close();
+      await sleep(50);
+    } finally {
+      // Restore the suite-wide "connected" default for the remaining specs.
+      offline.mockReturnValue(true);
+    }
   });
 });
 
