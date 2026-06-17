@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { TeraIndicator } from '@/components/tera-indicator';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
-import { ChevronDown, ArrowLeftRight, ListOrdered, Trophy, Eye } from 'lucide-react';
+import { ChevronDown, ArrowLeftRight, ListOrdered, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useLeagueUrl } from '@/lib/use-league-url';
@@ -28,8 +28,6 @@ import { TeamCoach } from '@/components/team-coach';
 import { PokemonNickname } from '@/components/pokemon-nickname';
 import { PlayoffBracket } from './schedule/playoff-bracket';
 import { TiebreakerBadge, TradeHistoryRow } from './standings-parts';
-import { Spoiler } from '@/components/spoiler';
-import { SpoilerToggle } from '@/components/spoiler-toggle';
 import { ResultsRevealQuickAction } from '@/components/results-reveal-quick-action';
 
 type StandingsView = 'standings' | 'playoffs';
@@ -38,7 +36,6 @@ export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
   const { players, standings, getWeekMatches, matches, loading, refresh } = useLeagueData();
-  const { spoilerFreeMode, spoilerRevealedThrough, revealWeek } = useAuth();
   const currentSeason = league.season;
 
   // Playoffs-final view: when the league has actually generated a playoff
@@ -144,7 +141,6 @@ export function StandingsPage() {
          *  table otherwise. */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ResultsRevealQuickAction league={league} onRevealed={refresh} />
-          <SpoilerToggle />
           {hasPlayoffs && (
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
@@ -197,9 +193,6 @@ export function StandingsPage() {
                 season={currentSeason}
                 playoffCount={league.playoffTeamCount}
                 isQualifyLine={standingsAreRanked && i + 1 === league.playoffTeamCount}
-                leagueId={league.id}
-                spoilerWeek={recentWeek}
-                adminRevealedThrough={league.resultsRevealedThrough}
                 showNarrative={standingsAreRanked}
               />
             ))}
@@ -292,20 +285,9 @@ export function StandingsPage() {
                 <CardTitle className="text-base text-text-primary">
                   Week {recentWeek}
                 </CardTitle>
-                {spoilerFreeMode && (spoilerRevealedThrough[league.id] ?? 0) < recentWeek ? (
-                  <button
-                    type="button"
-                    onClick={() => revealWeek(league.id, recentWeek)}
-                    className="inline-flex items-center gap-1 rounded-md border border-border-default px-2 py-0.5 text-[10px] text-text-muted hover:text-text-primary hover:border-neon/40 transition-colors"
-                    title={`Reveal Week ${recentWeek} results (and earlier)`}
-                  >
-                    <Eye size={11} /> Reveal Week {recentWeek}
-                  </button>
-                ) : (
-                  <Badge variant="outline" className="text-text-muted border-border-default text-[10px]">
-                    Results
-                  </Badge>
-                )}
+                <Badge variant="outline" className="text-text-muted border-border-default text-[10px]">
+                  Results
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-1">
@@ -331,41 +313,35 @@ export function StandingsPage() {
                         size="sm"
                         static
                       />
-                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
+                      <span className={`text-sm font-medium transition-colors ${homeWon ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
                       {completed && (
-                        <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
-                          <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
-                            {homeWon ? 'W' : 'L'}
-                          </span>
-                        </Spoiler>
+                        <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
+                          {homeWon ? 'W' : 'L'}
+                        </span>
                       )}
                     </Link>
                     {completed ? (
-                      <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
-                        <span className="flex items-center gap-2 px-3">
-                          <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
-                            {match.homeScore}
-                          </span>
-                          <span className="text-[10px] text-text-muted">—</span>
-                          <span className={`text-sm tabular-nums font-bold ${awayWon ? 'text-win' : 'text-text-muted'}`}>
-                            {match.awayScore}
-                          </span>
+                      <span className="flex items-center gap-2 px-3">
+                        <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
+                          {match.homeScore}
                         </span>
-                      </Spoiler>
+                        <span className="text-[10px] text-text-muted">—</span>
+                        <span className={`text-sm tabular-nums font-bold ${awayWon ? 'text-win' : 'text-text-muted'}`}>
+                          {match.awayScore}
+                        </span>
+                      </span>
                     ) : (
                       <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
                     )}
                     <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
                       {completed && (
-                        <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
-                          <span className={`text-[10px] font-mono font-bold tabular-nums ${awayWon ? 'text-win' : 'text-loss'}`}>
-                            {awayWon ? 'W' : 'L'}
-                          </span>
-                        </Spoiler>
+                        <span className={`text-[10px] font-mono font-bold tabular-nums ${awayWon ? 'text-win' : 'text-loss'}`}>
+                          {awayWon ? 'W' : 'L'}
+                        </span>
                       )}
-                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && awayWon) ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
+                      <span className={`text-sm font-medium transition-colors ${awayWon ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
                       <TeamLogoSwap
@@ -412,7 +388,7 @@ function PlayoffsFinalView() {
 
 function StandingsRow({
   player, rank, index, leagueUrl, standings, season, playoffCount, isQualifyLine,
-  leagueId, spoilerWeek, adminRevealedThrough, showNarrative,
+  showNarrative,
 }: {
   player: Player;
   rank: number;
@@ -422,12 +398,6 @@ function StandingsRow({
   season: LeagueSeason;
   playoffCount: number;
   isQualifyLine: boolean;
-  /** League id + the week these cumulative stats reflect — used to gate the
-   *  spoiler veil (revealed once the viewer reveals through this week). */
-  leagueId: string;
-  spoilerWeek: number;
-  /** League admin results-reveal gate — hard-locks records beyond the line. */
-  adminRevealedThrough: number | null;
   /** Whether the season has progressed far enough for the ordering (and thus
    *  the per-row narrative chip) to be meaningful. False pre-regular. */
   showNarrative: boolean;
@@ -515,14 +485,12 @@ function StandingsRow({
 
         {/* Record */}
         <div className="shrink-0">
-          <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough}>
-            <RecordDisplay
-              wins={player.record.wins}
-              losses={player.record.losses}
-              differential={player.record.differential}
-              className="text-xs"
-            />
-          </Spoiler>
+          <RecordDisplay
+            wins={player.record.wins}
+            losses={player.record.losses}
+            differential={player.record.differential}
+            className="text-xs"
+          />
         </div>
 
         {/* Narrative chip — at most one, only when meaningful and once the
@@ -559,9 +527,7 @@ function StandingsRow({
           <div className="px-4 pb-4 pt-1 ml-9">
             {/* Stats + Point cap bar */}
             <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle/20">
-              <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough}>
-                <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
-              </Spoiler>
+              <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
               <PointCapBar used={points} className="flex-1 max-w-[200px]" />
               {completedTrades.length > 0 && (
                 <span className="flex items-center gap-1 text-[10px] text-text-muted">
@@ -592,13 +558,11 @@ function StandingsRow({
                   </div>
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />
-                  <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough} className="shrink-0 w-12 justify-end">
-                    <span className="tabular-nums text-[10px] text-right">
-                      <span className="text-win">{mon.seasonStats.kills}</span>
-                      <span className="text-text-muted">/</span>
-                      <span className="text-loss">{mon.seasonStats.deaths}</span>
-                    </span>
-                  </Spoiler>
+                  <span className="shrink-0 w-12 justify-end tabular-nums text-[10px] text-right">
+                    <span className="text-win">{mon.seasonStats.kills}</span>
+                    <span className="text-text-muted">/</span>
+                    <span className="text-loss">{mon.seasonStats.deaths}</span>
+                  </span>
                 </div>
               ))}
             </div>

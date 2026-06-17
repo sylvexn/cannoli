@@ -33,7 +33,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
   const { getMatchDetail } = useLeagueData();
-  const { spoilerFreeMode, spoilerRevealedThrough } = useAuth();
+  const { spoilerFreeMode, spoilerRevealedMatches } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<KDDetail | null>(match.pokemonKD ?? null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -42,14 +42,11 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const homeWon = isCompleted && (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = isCompleted && (match.awayScore ?? 0) > (match.homeScore ?? 0);
   // Whether the W/L color tint on the team names should be suppressed for this
-  // viewer — true when the admin gate hard-locks this week, or when the viewer
-  // is in spoiler-free mode and hasn't peeked this week yet. Mirrors how
-  // standings.tsx hides win-color so the names don't leak the outcome.
-  const adminLocked =
-    league.resultsRevealedThrough != null && match.week > league.resultsRevealedThrough;
-  const perUserHidden =
-    spoilerFreeMode && (spoilerRevealedThrough[league.id] ?? 0) < match.week;
-  const winColorHidden = adminLocked || perUserHidden;
+  // viewer — true when the viewer is in spoiler-free mode and hasn't revealed
+  // THIS match yet. Mirrors the per-match <Spoiler> so the names don't leak the
+  // outcome before the score is peeked.
+  const winColorHidden =
+    spoilerFreeMode && !spoilerRevealedMatches.includes(match.id);
   // Completed matches always offer the expand affordance; the K/D detail is
   // fetched lazily on first expand.
   const canExpand = isCompleted;
@@ -116,12 +113,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
 
         {/* Score / VS */}
         {isCompleted ? (
-          <Spoiler
-            week={match.week}
-            leagueId={league.id}
-            adminRevealedThrough={league.resultsRevealedThrough}
-            className="shrink-0"
-          >
+          <Spoiler matchId={match.id} className="shrink-0">
             <span className="flex items-center gap-2">
               <span className={cn('text-sm tabular-nums font-bold', homeWon ? 'text-win' : 'text-text-muted')}>
                 {match.homeScore}
@@ -225,9 +217,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             <div className="border-t border-border-subtle/50">
             <Spoiler
               as="div"
-              week={match.week}
-              leagueId={league.id}
-              adminRevealedThrough={league.resultsRevealedThrough}
+              matchId={match.id}
               className="w-full !block"
             >
               {/* Team column headers */}

@@ -32,10 +32,13 @@ export function ReplayCard({
   weekEnded,
   onToggleViewing,
 }: ReplayCardProps) {
-  const { spoilerFreeMode } = useAuth();
+  const { spoilerFreeMode, spoilerRevealedMatches } = useAuth();
   const { match, league, homeTeam, awayTeam } = entry;
   const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
+  // Suppress the W/L name tint until this specific match has been revealed
+  // (or spoiler-free mode is off) so the names don't leak the outcome.
+  const winColorHidden = spoilerFreeMode && !spoilerRevealedMatches.includes(match.id);
 
   const sweep = weekEnded && summary?.sweep;
   const teraHeavy = weekEnded && summary && summary.teraCount >= 3;
@@ -79,7 +82,7 @@ export function ReplayCard({
 
         {/* Glance flags float top-right of the preview pane */}
         {(sweep || teraHeavy || hasMvp) && (
-          <Spoiler as="div" week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          <Spoiler as="div" matchId={match.id} className="absolute top-1.5 right-1.5 flex items-center gap-1">
             {hasMvp && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -128,12 +131,12 @@ export function ReplayCard({
             viewTransition
             className={cn(
               'hover:text-neon transition-colors truncate',
-              (!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-secondary',
+              (!winColorHidden && homeWon) ? 'text-win' : 'text-text-secondary',
             )}
           >
             {homeTeam?.teamAbbrev ?? match.homePlayer}
           </Link>
-          <Spoiler week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
+          <Spoiler matchId={match.id} className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
             <span className={homeWon ? 'text-win' : ''}>{match.homeScore ?? 0}</span>
             -
             <span className={awayWon ? 'text-win' : ''}>{match.awayScore ?? 0}</span>
@@ -143,7 +146,7 @@ export function ReplayCard({
             viewTransition
             className={cn(
               'hover:text-neon transition-colors truncate',
-              (!spoilerFreeMode && awayWon) ? 'text-win' : 'text-text-secondary',
+              (!winColorHidden && awayWon) ? 'text-win' : 'text-text-secondary',
             )}
           >
             {awayTeam?.teamAbbrev ?? match.awayPlayer}

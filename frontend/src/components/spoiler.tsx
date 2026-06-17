@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type KeyboardEvent } from 'react';
-import { Eye, Lock } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
@@ -10,32 +10,27 @@ import { cn } from '@/lib/utils';
  * visual or layout change. When it's ON (the default), children are blurred and
  * the element becomes a click-to-reveal target.
  *
- * Reveal model — pass `week` + `leagueId` and revealing is PERSISTED per league
- * with a catch-up rule: clicking reveals that week AND all earlier weeks for the
- * league (stored server-side via the high-water mark), so it survives reloads
- * and syncs across devices. Without week/leagueId the reveal falls back to
- * ephemeral local state (re-hides on reload) for callers that lack week context.
+ * Reveal model — pass `matchId` (a match's stable id, e.g. 'sapphire-w1m1') and
+ * revealing is PERSISTED per user: clicking reveals THAT match and the reveal
+ * survives reloads / syncs across devices (stored server-side). Any user can
+ * always peek a specific battle — this is NOT admin-gated. Without `matchId` the
+ * reveal falls back to ephemeral local state (re-hides on reload) for callers
+ * that lack a match key.
  *
- * Admin gate — pass `adminRevealedThrough` (the league's `resultsRevealedThrough`)
- * to add a HARD, non-bypassable veil: when set and `week > adminRevealedThrough`
- * the content is forced behind a LOCKED veil regardless of the viewer's
- * spoiler-free preference, and clicking does NOT reveal (the per-user reveal
- * cannot defeat the admin lock). When `null` / unset it has no effect and the
- * existing per-user behavior is unchanged.
+ * Used to wrap scores, win/loss highlighting, and result badges on the schedule
+ * and replays pages. Keep it granular — wrap the result-bearing bits, not whole
+ * rows, so the rest of the page stays browsable while hidden.
  *
- * Used to wrap scores, win/loss highlighting, and result badges on the
- * standings, schedule, replays, and home pages. Keep it granular — wrap the
- * result-bearing bits, not whole rows, so the rest of the page stays browsable
- * while hidden.
+ * Note: standings, the homepage top-6, and the stats/coach surfaces no longer
+ * use this — those are gated SERVER-SIDE on the admin publish line and render
+ * whatever the backend sends (no per-user blur).
  */
 export function Spoiler({
   children,
   className,
   as = 'span',
   label = 'Spoiler — click to reveal',
-  week,
-  leagueId,
-  adminRevealedThrough,
+  matchId,
 }: {
   children: ReactNode;
   className?: string;
@@ -43,58 +38,24 @@ export function Spoiler({
   as?: 'span' | 'div';
   /** Accessible label / tooltip shown over the blurred content. */
   label?: string;
-  /** League-week this result belongs to. With `leagueId`, reveal is persisted. */
-  week?: number;
-  /** League the `week` belongs to. Required (with `week`) for persisted reveal. */
-  leagueId?: string;
-  /** League's admin results-reveal gate (`resultsRevealedThrough`). When set and
-   *  `week > adminRevealedThrough`, forces a locked, non-revealable veil. */
-  adminRevealedThrough?: number | null;
+  /** Stable match id. When set, reveal is persisted per user across reloads. */
+  matchId?: string;
 }) {
-  const { spoilerFreeMode, spoilerRevealedThrough, revealWeek } = useAuth();
+  const { spoilerFreeMode, spoilerRevealedMatches, revealMatch } = useAuth();
   const [localRevealed, setLocalRevealed] = useState(false);
-
-  // Admin hard gate — results for weeks beyond the admin's revealed line are
-  // hidden for EVERYONE and cannot be peeked, irrespective of spoiler-free mode.
-  const adminLocked = adminRevealedThrough != null && week != null && week > adminRevealedThrough;
 
   const Tag = as;
 
-  if (adminLocked) {
-    const adminLabel = `Hidden until league admins reveal week ${week}`;
-    return (
-      <Tag
-        aria-label={adminLabel}
-        title={adminLabel}
-        className={cn(
-          'relative inline-flex items-center justify-center align-middle rounded cursor-default',
-          className,
-        )}
-      >
-        {/* Real content, blurred + inert. No reveal handlers — the lock is hard. */}
-        <span aria-hidden className="blur-[5px] select-none pointer-events-none opacity-70 saturate-50">
-          {children}
-        </span>
-        <span
-          aria-hidden
-          className="absolute inset-0 flex items-center justify-center text-text-muted/90"
-        >
-          <Lock className="h-3 w-3" />
-        </span>
-      </Tag>
-    );
-  }
-
-  const perWeek = week != null && !!leagueId;
-  const revealed = perWeek
-    ? (spoilerRevealedThrough[leagueId] ?? 0) >= week
+  const perMatch = !!matchId;
+  const revealed = perMatch
+    ? spoilerRevealedMatches.includes(matchId)
     : localRevealed;
 
   // Feature off, or already peeked — render the real content with no wrapper cost.
   if (!spoilerFreeMode || revealed) return <>{children}</>;
 
   const reveal = () => {
-    if (perWeek) revealWeek(leagueId, week);
+    if (perMatch) revealMatch(matchId);
     else setLocalRevealed(true);
   };
   const onKey = (e: KeyboardEvent) => {
