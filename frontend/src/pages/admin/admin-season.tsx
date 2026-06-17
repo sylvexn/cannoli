@@ -108,6 +108,7 @@ export function AdminSeason() {
               onConfirmWeekAdvance={phase.confirmWeekAdvance}
               onConfirmAdvance={phase.confirmAdvance}
               onConfirmBackward={phase.confirmBackward}
+              onRefreshLeagues={refreshLeagues}
             />
           );
         })}

@@ -47,6 +47,7 @@ export function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>
       playoffTeamCount: a.playoffTeamCount ?? 6,
       costFormat: (a.costFormat as import('@/data/tier-list').CostFormat) ?? 'natdexplus',
       season,
+      resultsRevealedThrough: a.resultsRevealedThrough ?? null,
       players: [],
       playerCount: a.playerCount ?? 0,
       hasData: true,

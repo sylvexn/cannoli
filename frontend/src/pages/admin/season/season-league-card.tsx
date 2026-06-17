@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { ApiDraftState, ApiLeague } from '@/lib/api';
 import { PHASES, phaseConfig, getNextPhase, type EditableLeague, type Phase } from './phase-config';
+import { ResultsRevealControl } from './results-reveal-control';
 
 interface PlayoffInfo {
   hasBracket: boolean;
@@ -31,6 +32,8 @@ interface Props {
   onConfirmWeekAdvance: (id: string) => void;
   onConfirmAdvance: (league: EditableLeague) => void;
   onConfirmBackward: (leagueId: string, from: Phase, to: Phase) => void;
+  /** Refresh the app-wide league cache after the reveal gate changes. */
+  onRefreshLeagues: () => void;
 }
 
 const STORAGE_KEY = 'admin-season:league-expanded';
@@ -81,6 +84,7 @@ export function SeasonLeagueCard({
   onStartDraft, onPauseDraft, onResumeDraft,
   onOpenPlayoffsDialog, onGenerateSchedule,
   onConfirmWeekAdvance, onConfirmAdvance, onConfirmBackward,
+  onRefreshLeagues,
 }: Props) {
   const phase = state.phase as Phase;
   // phaseConfig is keyed off post-predraft phases — fall back to offseason
@@ -354,6 +358,17 @@ export function SeasonLeagueCard({
                     </Button>
                   </div>
                 </div>
+              )}
+
+              {/* Results-reveal gate — relevant once matches can have results
+                  (regular play and beyond). */}
+              {(phase === 'regular' || phase === 'playoffs' || phase === 'offseason') && (
+                <ResultsRevealControl
+                  leagueId={league.id}
+                  currentWeek={state.currentWeek}
+                  value={apiLeague?.resultsRevealedThrough ?? null}
+                  onChanged={onRefreshLeagues}
+                />
               )}
 
               {/* Phase advance */}

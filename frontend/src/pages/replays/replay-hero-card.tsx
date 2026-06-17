@@ -90,7 +90,7 @@ export function ReplayHeroCard({
           </span>
 
           {(sweep || teraHeavy || hasMvp) && (
-            <Spoiler as="div" week={match.week} leagueId={league.id} className="z-10 absolute top-3 right-3 flex items-center gap-1.5">
+            <Spoiler as="div" week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="z-10 absolute top-3 right-3 flex items-center gap-1.5">
               {hasMvp && (
                 <span
                   className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -148,7 +148,7 @@ export function ReplayHeroCard({
             >
               {homeTeam?.teamAbbrev ?? match.homePlayer}
             </Link>
-            <Spoiler week={match.week} leagueId={league.id} className="text-base font-mono tabular-nums text-text-muted shrink-0">
+            <Spoiler week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="text-base font-mono tabular-nums text-text-muted shrink-0">
               <span className={homeWon ? 'text-win' : ''}>{match.homeScore ?? 0}</span>
               {' - '}
               <span className={awayWon ? 'text-win' : ''}>{match.awayScore ?? 0}</span>

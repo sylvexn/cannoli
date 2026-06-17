@@ -30,13 +30,14 @@ import { PlayoffBracket } from './schedule/playoff-bracket';
 import { TiebreakerBadge, TradeHistoryRow } from './standings-parts';
 import { Spoiler } from '@/components/spoiler';
 import { SpoilerToggle } from '@/components/spoiler-toggle';
+import { ResultsRevealQuickAction } from '@/components/results-reveal-quick-action';
 
 type StandingsView = 'standings' | 'playoffs';
 
 export function StandingsPage() {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
-  const { players, standings, getWeekMatches, matches, loading } = useLeagueData();
+  const { players, standings, getWeekMatches, matches, loading, refresh } = useLeagueData();
   const { spoilerFreeMode, spoilerRevealedThrough, revealWeek } = useAuth();
   const currentSeason = league.season;
 
@@ -141,7 +142,8 @@ export function StandingsPage() {
          *  toggle only when a playoff bracket exists. Defaults to the playoffs
          *  view in playoff/offseason phase; falls back to the regular standings
          *  table otherwise. */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <ResultsRevealQuickAction league={league} onRevealed={refresh} />
           <SpoilerToggle />
           {hasPlayoffs && (
             <div className="flex rounded-lg border border-border-default overflow-hidden">
@@ -197,6 +199,7 @@ export function StandingsPage() {
                 isQualifyLine={standingsAreRanked && i + 1 === league.playoffTeamCount}
                 leagueId={league.id}
                 spoilerWeek={recentWeek}
+                adminRevealedThrough={league.resultsRevealedThrough}
                 showNarrative={standingsAreRanked}
               />
             ))}
@@ -332,7 +335,7 @@ export function StandingsPage() {
                         {home.teamAbbrev}
                       </span>
                       {completed && (
-                        <Spoiler week={recentWeek} leagueId={league.id}>
+                        <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
                           <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
                             {homeWon ? 'W' : 'L'}
                           </span>
@@ -340,7 +343,7 @@ export function StandingsPage() {
                       )}
                     </Link>
                     {completed ? (
-                      <Spoiler week={recentWeek} leagueId={league.id}>
+                      <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
                         <span className="flex items-center gap-2 px-3">
                           <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
                             {match.homeScore}
@@ -356,7 +359,7 @@ export function StandingsPage() {
                     )}
                     <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
                       {completed && (
-                        <Spoiler week={recentWeek} leagueId={league.id}>
+                        <Spoiler week={recentWeek} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough}>
                           <span className={`text-[10px] font-mono font-bold tabular-nums ${awayWon ? 'text-win' : 'text-loss'}`}>
                             {awayWon ? 'W' : 'L'}
                           </span>
@@ -409,7 +412,7 @@ function PlayoffsFinalView() {
 
 function StandingsRow({
   player, rank, index, leagueUrl, standings, season, playoffCount, isQualifyLine,
-  leagueId, spoilerWeek, showNarrative,
+  leagueId, spoilerWeek, adminRevealedThrough, showNarrative,
 }: {
   player: Player;
   rank: number;
@@ -423,6 +426,8 @@ function StandingsRow({
    *  spoiler veil (revealed once the viewer reveals through this week). */
   leagueId: string;
   spoilerWeek: number;
+  /** League admin results-reveal gate — hard-locks records beyond the line. */
+  adminRevealedThrough: number | null;
   /** Whether the season has progressed far enough for the ordering (and thus
    *  the per-row narrative chip) to be meaningful. False pre-regular. */
   showNarrative: boolean;
@@ -510,7 +515,7 @@ function StandingsRow({
 
         {/* Record */}
         <div className="shrink-0">
-          <Spoiler week={spoilerWeek} leagueId={leagueId}>
+          <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough}>
             <RecordDisplay
               wins={player.record.wins}
               losses={player.record.losses}
@@ -554,7 +559,7 @@ function StandingsRow({
           <div className="px-4 pb-4 pt-1 ml-9">
             {/* Stats + Point cap bar */}
             <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle/20">
-              <Spoiler week={spoilerWeek} leagueId={leagueId}>
+              <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough}>
                 <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
               </Spoiler>
               <PointCapBar used={points} className="flex-1 max-w-[200px]" />
@@ -587,7 +592,7 @@ function StandingsRow({
                   </div>
                   <TypeChip types={mon.types} size="xs" />
                   <TierBadge points={mon.tier} />
-                  <Spoiler week={spoilerWeek} leagueId={leagueId} className="shrink-0 w-12 justify-end">
+                  <Spoiler week={spoilerWeek} leagueId={leagueId} adminRevealedThrough={adminRevealedThrough} className="shrink-0 w-12 justify-end">
                     <span className="tabular-nums text-[10px] text-right">
                       <span className="text-win">{mon.seasonStats.kills}</span>
                       <span className="text-text-muted">/</span>

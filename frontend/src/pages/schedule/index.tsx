@@ -10,13 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
 import { AvailabilityAggregate } from './availability-aggregate';
+import { SpoilerToggle } from '@/components/spoiler-toggle';
+import { ResultsRevealQuickAction } from '@/components/results-reveal-quick-action';
 import { useUserTimezone, getTimezoneAbbreviation, endOfDayInZone, formatDeadline } from '@/lib/format';
 
 type ScheduleView = 'regular' | 'playoffs';
 
 export function SchedulePage() {
   const league = useLeague();
-  const { players, matches, byes, getWeekMatches, loading } = useLeagueData();
+  const { players, matches, byes, getWeekMatches, loading, refresh } = useLeagueData();
   const season = league.season;
   const tz = useUserTimezone();
 
@@ -86,7 +88,7 @@ export function SchedulePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
             <span className="text-pink">Schedule</span>{' '}
@@ -123,35 +125,41 @@ export function SchedulePage() {
           )}
         </div>
 
-        {/* View toggle */}
-        {hasPlayoffs && (
-          <div className="flex rounded-lg border border-border-default overflow-hidden">
-            <button
-              onClick={() => setView('regular')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                view === 'regular'
-                  ? 'bg-surface-overlay text-text-primary'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-              )}
-            >
-              <Calendar size={13} />
-              Regular Season
-            </button>
-            <button
-              onClick={() => setView('playoffs')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
-                view === 'playoffs'
-                  ? 'bg-pink/10 text-pink'
-                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
-              )}
-            >
-              <Trophy size={13} />
-              Playoffs
-            </button>
-          </div>
-        )}
+        {/* Header controls — spoiler-free toggle + staff reveal quick-action
+         *  always available; the regular/playoffs view toggle only when a
+         *  playoff bracket exists. */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <ResultsRevealQuickAction league={league} onRevealed={refresh} />
+          <SpoilerToggle />
+          {hasPlayoffs && (
+            <div className="flex rounded-lg border border-border-default overflow-hidden">
+              <button
+                onClick={() => setView('regular')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                  view === 'regular'
+                    ? 'bg-surface-overlay text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                )}
+              >
+                <Calendar size={13} />
+                Regular Season
+              </button>
+              <button
+                onClick={() => setView('playoffs')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors',
+                  view === 'playoffs'
+                    ? 'bg-pink/10 text-pink'
+                    : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                )}
+              >
+                <Trophy size={13} />
+                Playoffs
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {view === 'regular' ? (
