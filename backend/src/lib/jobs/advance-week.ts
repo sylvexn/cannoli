@@ -11,6 +11,7 @@
 import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
+import { scheduleDeadline } from '../deadline';
 
 export function runAdvanceWeek() {
   const leagues = db.select().from(schema.leagues)
@@ -29,8 +30,12 @@ export function runAdvanceWeek() {
 
     const nextDateStr = weekDates[String(nextWeek)];
     if (!nextDateStr) continue; // no schedule defined → skip
-    const nextDate = new Date(nextDateStr);
-    if (nextDate.getTime() > now.getTime()) continue; // not yet time
+
+    // Use the same boundary as deadline.ts: a week ends at end-of-day (in the
+    // league timezone) the day BEFORE the next week begins. Advance only once
+    // "now" has passed that boundary — consistent with auto-forfeit resolution.
+    const boundary = scheduleDeadline(weekDates, league.currentWeek, league.timezone ?? 'America/New_York');
+    if (!boundary || boundary > now.toISOString()) continue; // not yet time
 
     // Skip if this league has unfinished current-week matches
     const unfinished = db.select({ count: sql<number>`COUNT(*)` })

@@ -17,6 +17,7 @@ import { advancePlayoffWinner } from './playoff-advance';
 import { runAutoAwards } from './pins/auto-award';
 import { validatePokemonDataForMatch } from './match-validation';
 import { toCannoliSpeciesName } from './pokedex';
+import { matchWinner } from './standings';
 
 export interface PokemonDataEntry {
   teamId: string;
@@ -174,8 +175,14 @@ export function recordMatchResult(
     if (newStatus === 'completed' && match.phase === 'playoffs' && match.playoffRound) {
       // home/away are guaranteed non-null here — the TBD guard near the top of
       // this function returns early for an undetermined bracket slot.
-      const winnerId = (homeScore > awayScore ? match.homeTeamId : match.awayTeamId)!;
-      const winnerSeed = homeScore > awayScore ? match.homeSeed : match.awaySeed;
+      const winnerId = matchWinner({
+        winnerTeamId: recordWinnerTeamId,
+        homeTeamId: match.homeTeamId,
+        awayTeamId: match.awayTeamId,
+        homeScore,
+        awayScore,
+      }) ?? match.homeTeamId!;
+      const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
 
       advancePlayoffWinner({
         matchId,

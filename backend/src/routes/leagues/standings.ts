@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, and, sql, asc } from 'drizzle-orm';
+import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { computeStandings, type TeamStandingRow } from '../../lib/standings';
 
@@ -64,10 +64,18 @@ export const standingsRoutes = new Elysia()
 
       const statsMap = new Map(pokemonStats.map(s => [s.pokemonName, s]));
 
+      // Batch-fetch all pokemon rows for this roster in a single IN query,
+      // then look up from a map — avoids an N+1 per roster slot.
+      const rosterNames = roster.map(r => r.pokemonName);
+      const pokemonRows = rosterNames.length > 0
+        ? db.select().from(schema.pokemon)
+            .where(inArray(schema.pokemon.name, rosterNames))
+            .all()
+        : [];
+      const pokemonByName = new Map(pokemonRows.map(p => [p.name, p]));
+
       const enrichedRoster = roster.map(r => {
-        const pokemon = db.select().from(schema.pokemon)
-          .where(eq(schema.pokemon.name, r.pokemonName))
-          .get();
+        const pokemon = pokemonByName.get(r.pokemonName);
         const stats = statsMap.get(r.pokemonName);
 
         return {

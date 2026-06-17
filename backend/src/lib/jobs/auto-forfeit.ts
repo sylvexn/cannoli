@@ -77,6 +77,13 @@ export function runAutoForfeit() {
     const isPlayoff = match.phase === 'playoffs';
 
     tx(() => {
+      // Re-read the match inside the tx to guard against a concurrent result
+      // landing between the outer scan and this write. Mirror expire-trades.ts.
+      const fresh = db.select().from(schema.matches).where(eq(schema.matches.id, match.id)).get();
+      if (!fresh) return;
+      if (fresh.status !== 'scheduled' && fresh.status !== 'ready') return;
+      if (fresh.homeScore != null) return;
+
       if (policy === 'admin_review') {
         // Admin-review: same behavior in both phases — flag for adjudication.
         db.update(schema.matches)
