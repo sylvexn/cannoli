@@ -5,7 +5,7 @@ import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { advancePlayoffWinner, buildPlayoffMatchups } from '../lib/playoff-advance';
-import { computeStandings } from '../lib/standings';
+import { computeStandings, matchWinner } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
@@ -328,6 +328,29 @@ export const matchRoutes = new Elysia()
 
       if (flippedToCompleted) {
         runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
+
+        // If this was a playoff match, advance the bracket winner. This mirrors
+        // what recordMatchResult does on the normal result path — without it a
+        // dismissed disputed playoff match never fills the next-round slot.
+        if (match.phase === 'playoffs' && match.playoffRound) {
+          const winnerId = matchWinner({
+            winnerTeamId: match.winnerTeamId,
+            homeTeamId: match.homeTeamId,
+            awayTeamId: match.awayTeamId,
+            homeScore: match.homeScore,
+            awayScore: match.awayScore,
+          });
+          if (winnerId) {
+            const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
+            advancePlayoffWinner({
+              matchId: params.matchId,
+              leagueId: match.leagueId,
+              playoffRound: match.playoffRound,
+              winnerId,
+              winnerSeed,
+            });
+          }
+        }
       }
 
       return { success: true };
@@ -370,9 +393,18 @@ export const matchRoutes = new Elysia()
           : [];
 
       if (downstreamRounds.length > 0) {
-        const winnerId = (match.homeScore as number) > (match.awayScore as number)
-          ? match.homeTeamId
-          : match.awayTeamId;
+        const winnerId = matchWinner({
+          winnerTeamId: match.winnerTeamId,
+          homeTeamId: match.homeTeamId,
+          awayTeamId: match.awayTeamId,
+          homeScore: match.homeScore,
+          awayScore: match.awayScore,
+        });
+        if (!winnerId) {
+          // scores are unequal (isPlayoffChainable guard) so this shouldn't
+          // happen, but if winnerTeamId is stale/unknown, skip downstream clearing.
+          downstreamToClear = [];
+        } else {
 
         const downstream = db.select().from(schema.matches)
           .where(and(
@@ -400,6 +432,7 @@ export const matchRoutes = new Elysia()
           clearHome: m.homeTeamId === winnerId,
           clearAway: m.awayTeamId === winnerId,
         }));
+        } // end else (winnerId != null)
       }
     }
 
@@ -573,17 +606,22 @@ export const matchRoutes = new Elysia()
           ? ['f']
           : [];
       if (downstreamRounds.length > 0) {
-        const winnerId = (match.homeScore ?? 0) > (match.awayScore ?? 0)
-          ? match.homeTeamId
-          : match.awayTeamId;
-        const downstream = db.select().from(schema.matches)
+        const winnerId = matchWinner({
+          winnerTeamId: match.winnerTeamId,
+          homeTeamId: match.homeTeamId,
+          awayTeamId: match.awayTeamId,
+          homeScore: match.homeScore,
+          awayScore: match.awayScore,
+        });
+        const downstream = winnerId ? db.select().from(schema.matches)
           .where(and(
             eq(schema.matches.leagueId, match.leagueId),
             eq(schema.matches.phase, 'playoffs'),
           ))
           .all()
           .filter(m => downstreamRounds.includes(m.playoffRound ?? '')
-            && (m.homeTeamId === winnerId || m.awayTeamId === winnerId));
+            && (m.homeTeamId === winnerId || m.awayTeamId === winnerId))
+          : [];
         if (downstream.length > 0) {
           set.status = 409;
           return {

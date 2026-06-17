@@ -125,7 +125,7 @@ function resolveBucketPure(
  * a correct W/L. Falls back to score comparison for legacy/sim rows that
  * predate the column. Returns null for ties / no-contests (double-forfeit 0-0).
  */
-function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null }): string | null {
+export function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string | null; awayTeamId: string | null; homeScore: number | null; awayScore: number | null }): string | null {
   if (m.winnerTeamId) return m.winnerTeamId;
   if (m.homeScore == null || m.awayScore == null) return null;
   if (m.homeScore > m.awayScore) return m.homeTeamId;
@@ -198,10 +198,7 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
   const result = new Map<string, number>(tiedIds.map(id => [id, 0]));
   if (tiedIds.length < 2) return result;
 
-  // Use IN clause via SQL — fetch all completed regular-season matches between
-  // members of the set.
-  const placeholders = tiedIds.map(() => '?').join(',');
-  // Safer: filter in JS after fetching matches that involve any of these teams.
+  // Filter in JS after fetching matches that involve any of these teams.
   const setIds = new Set(tiedIds);
   const matches = db.select().from(schema.matches)
     .where(and(
@@ -224,8 +221,6 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
     }
     // ties / no-contests contribute nothing
   }
-  // Suppress unused placeholder warning
-  void placeholders;
   return result;
 }
 

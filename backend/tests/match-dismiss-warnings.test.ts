@@ -18,6 +18,8 @@ import { describe, expect, test } from 'bun:test';
 import { eq, and } from 'drizzle-orm';
 import { db, schema, sqlite } from '../src/db';
 import { runAutoAwards } from '../src/lib/pins/auto-award';
+import { advancePlayoffWinner } from '../src/lib/playoff-advance';
+import { matchWinner } from '../src/lib/standings';
 
 const PFX = 'tfix3-';
 
@@ -101,6 +103,97 @@ describe('dismiss-warnings → runAutoAwards (Fix 3)', () => {
         .get();
       expect(pin).toBeDefined();
       expect(pin!.awardedBy).toBeNull(); // auto-award sets awardedBy = NULL
+    } finally {
+      sqlite.exec('ROLLBACK');
+    }
+  });
+});
+
+describe('dismiss-warnings → advancePlayoffWinner (playoff bracket fix)', () => {
+  // This suite is fully self-contained: it creates its own season + league
+  // so it runs whether or not the dev DB has seed data.
+  const PFX_P = 'tdmw-po-';
+
+  test('dismissing warnings on a disputed playoff QF match advances the bracket', () => {
+    sqlite.exec('BEGIN');
+    try {
+      // Create a minimal season + league
+      const season = db.insert(schema.seasons).values({
+        seasonNumber: 9900, pointCap: 110, teraCaptainSlots: 2, archived: false,
+      }).returning().get();
+      const leagueId = `${PFX_P}lg`;
+      const teamA = `${PFX_P}A`;
+      const teamB = `${PFX_P}B`;
+      const teamC = `${PFX_P}C`;
+
+      db.insert(schema.leagues).values({
+        id: leagueId, name: 'PO Dismiss Test', color: '#123456',
+        seasonId: season.id, phase: 'playoffs', currentWeek: 10,
+        draftOrder: JSON.stringify([teamA, teamB, teamC]),
+      }).run();
+
+      for (const [id, name] of [[teamA, 'Alpha'], [teamB, 'Bravo'], [teamC, 'Charlie']] as const) {
+        db.insert(schema.teams).values({
+          id, leagueId, userId: null,
+          coachName: name, teamName: name, teamAbbrev: name.slice(0, 3),
+          teamColor: '#cccccc',
+        }).run();
+      }
+
+      // QF match: disputed, teamA wins 6-3 over teamB
+      const qfMatchId = `${PFX_P}pqf1`;
+      db.insert(schema.matches).values({
+        id: qfMatchId, leagueId, week: 10,
+        homeTeamId: teamA, awayTeamId: teamB,
+        homeScore: 6, awayScore: 3,
+        winnerTeamId: teamA,
+        status: 'disputed', phase: 'playoffs', playoffRound: 'qf',
+        homeSeed: 3, awaySeed: 6,
+      }).run();
+
+      // SF match waiting for the QF winner (away slot TBD — teamC holds home)
+      const sfMatchId = `${PFX_P}psf1`;
+      db.insert(schema.matches).values({
+        id: sfMatchId, leagueId, week: 11,
+        homeTeamId: teamC, awayTeamId: null,
+        homeScore: null, awayScore: null,
+        status: 'scheduled', phase: 'playoffs', playoffRound: 'sf',
+        homeSeed: 1, awaySeed: null,
+      }).run();
+
+      // === simulate the dismiss-warnings code path for a playoff match ===
+      // Step 1: flip status disputed → completed (what the handler does in tx)
+      db.update(schema.matches)
+        .set({ status: 'completed', warnings: null })
+        .where(eq(schema.matches.id, qfMatchId))
+        .run();
+
+      // Step 2: derive winner via matchWinner and advance bracket
+      const qfMatch = db.select().from(schema.matches)
+        .where(eq(schema.matches.id, qfMatchId)).get()!;
+      const winnerId = matchWinner({
+        winnerTeamId: qfMatch.winnerTeamId,
+        homeTeamId: qfMatch.homeTeamId,
+        awayTeamId: qfMatch.awayTeamId,
+        homeScore: qfMatch.homeScore,
+        awayScore: qfMatch.awayScore,
+      });
+      expect(winnerId).toBe(teamA);
+
+      const adv = advancePlayoffWinner({
+        matchId: qfMatchId,
+        leagueId,
+        playoffRound: 'qf',
+        winnerId: winnerId!,
+        winnerSeed: qfMatch.homeSeed,
+      });
+
+      // The SF match's away slot must now be filled with teamA
+      const sfAfter = db.select().from(schema.matches)
+        .where(eq(schema.matches.id, sfMatchId)).get()!;
+      expect(sfAfter.awayTeamId).toBe(teamA);
+      expect(adv.advanced).toBe(true);
+      expect(adv.filledSlot).toBe('away');
     } finally {
       sqlite.exec('ROLLBACK');
     }
