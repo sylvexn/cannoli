@@ -63,7 +63,8 @@ export function importS9(db: Database) {
 
   for (const league of LEAGUES) {
     console.log(`\nImporting ${league.name} (S9)...`);
-    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
+    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
+    const styledWb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
 
     // Create league (lifecycle fields per-league now)
     db.prepare(`INSERT INTO leagues (id, name, color, season_id, phase, current_week, total_weeks, trade_deadline_week)
@@ -99,7 +100,7 @@ export function importS9(db: Database) {
       nameToTeamId.set(teamName, teamId);
 
       const teamColor =
-        readTeamColorFromSheet(wb, abbrev) ||
+        readTeamColorFromSheet(styledWb, abbrev) ||
         TEAM_COLORS[teamIds.length - 1] ||
         '#888888';
 
