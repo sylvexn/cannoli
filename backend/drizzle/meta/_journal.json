@@ -393,6 +393,13 @@
       "when": 1782700000000,
       "tag": "0055_results_reveal_gate",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1782800000000,
+      "tag": "0056_spoiler_revealed_matches",
+      "breakpoints": true
     }
   ]
 }

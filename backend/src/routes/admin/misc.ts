@@ -234,51 +234,104 @@ export const miscRoutes = new Elysia()
   // ─── Activity Log ───────────────────────────────────────────────────
 
   .get('/api/activity-log', ({ query }) => {
-    let rows = db.select().from(schema.activityLog)
+    const baseRows = db.select().from(schema.activityLog)
       .orderBy(desc(schema.activityLog.timestamp))
       .all();
 
-    const category = query.category as string | undefined;
-    if (category && category !== 'all') {
-      rows = rows.filter(r => r.category === category);
-    }
-
-    const leagueId = query.leagueId as string | undefined;
-    if (leagueId && leagueId !== 'all') {
-      rows = rows.filter(r => r.leagueId === leagueId);
-    }
-
-    const actor = query.actor as string | undefined;
-    if (actor && actor !== 'all') {
-      rows = rows.filter(r => r.actor === actor);
-    }
-
-    const search = (query.search as string || '').toLowerCase();
-    if (search) {
-      rows = rows.filter(r =>
-        r.description.toLowerCase().includes(search) ||
-        r.actor.toLowerCase().includes(search) ||
-        r.type.toLowerCase().includes(search) ||
-        (r.metadata || '').toLowerCase().includes(search)
-      );
-    }
-
-    const limit = parseInt(query.limit as string) || 50;
-    const offset = parseInt(query.offset as string) || 0;
-    const total = rows.length;
-    rows = rows.slice(offset, offset + limit);
-
-    return {
-      events: rows.map(r => ({
+    // ─── Results-reveal gate: redact unpublished match scores ──────────────
+    // Score-bearing match entries leak the result through their description
+    // text (e.g. "...: 3-2") and metadata. When the entry's match falls in an
+    // UNPUBLISHED week (its league's resultsRevealedThrough is non-null AND the
+    // match's week > it), replace the description with a neutral notice and drop
+    // the score-bearing metadata. Non-result entries pass through untouched, and
+    // a league with NULL gate (archived/ungated) is never redacted. Redaction
+    // happens BEFORE the search filter so a score query can't correlate hidden
+    // matches by their raw text.
+    const SCORE_TYPES = new Set([
+      'match_result', 'match_result_overwritten', 'battle_imported', 'match_force_result',
+    ]);
+    // Cache league gates + match weeks across the page to avoid per-row lookups.
+    const gateCache = new Map<string, number | null>();
+    const leagueGate = (leagueId: string | null): number | null => {
+      if (!leagueId) return null;
+      if (gateCache.has(leagueId)) return gateCache.get(leagueId)!;
+      const lg = db.select({ gate: schema.leagues.resultsRevealedThrough })
+        .from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+      const gate = lg?.gate ?? null;
+      gateCache.set(leagueId, gate);
+      return gate;
+    };
+    const weekCache = new Map<string, number | null>();
+    const matchWeek = (matchId: string): number | null => {
+      if (weekCache.has(matchId)) return weekCache.get(matchId)!;
+      const mr = db.select({ week: schema.matches.week })
+        .from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+      const week = mr?.week ?? null;
+      weekCache.set(matchId, week);
+      return week;
+    };
+    const isUnpublishedResult = (r: typeof baseRows[number]): boolean => {
+      if (!SCORE_TYPES.has(r.type)) return false;
+      const gate = leagueGate(r.leagueId);
+      if (gate == null) return false; // gate off → nothing hidden
+      let meta: Record<string, unknown> = {};
+      try { meta = r.metadata ? JSON.parse(r.metadata) : {}; } catch { meta = {}; }
+      const matchId = typeof meta.matchId === 'string' ? meta.matchId : null;
+      if (!matchId) return false; // can't resolve a week → leave as-is
+      const week = matchWeek(matchId);
+      if (week == null) return false;
+      return week > gate;
+    };
+    // Project each row into its public (possibly redacted) shape once.
+    const REDACTED_DESC = 'A battle result was recorded (hidden until published)';
+    const rows = baseRows.map(r => {
+      const redacted = isUnpublishedResult(r);
+      return {
         id: String(r.id),
         type: r.type,
         category: r.category,
         actor: r.actor,
         leagueId: r.leagueId,
-        description: r.description,
-        metadata: r.metadata ? JSON.parse(r.metadata) : {},
         timestamp: r.timestamp,
-      })),
+        description: redacted ? REDACTED_DESC : r.description,
+        metadata: redacted ? { redacted: true } : (r.metadata ? JSON.parse(r.metadata) : {}),
+        // searchable text mirrors the post-redaction description/metadata so a
+        // score search can't surface a hidden match.
+        _search: (redacted
+          ? `${REDACTED_DESC} ${r.actor} ${r.type}`
+          : `${r.description} ${r.actor} ${r.type} ${r.metadata || ''}`).toLowerCase(),
+      };
+    });
+
+    let filtered = rows;
+
+    const category = query.category as string | undefined;
+    if (category && category !== 'all') {
+      filtered = filtered.filter(r => r.category === category);
+    }
+
+    const leagueId = query.leagueId as string | undefined;
+    if (leagueId && leagueId !== 'all') {
+      filtered = filtered.filter(r => r.leagueId === leagueId);
+    }
+
+    const actor = query.actor as string | undefined;
+    if (actor && actor !== 'all') {
+      filtered = filtered.filter(r => r.actor === actor);
+    }
+
+    const search = (query.search as string || '').toLowerCase();
+    if (search) {
+      filtered = filtered.filter(r => r._search.includes(search));
+    }
+
+    const limit = parseInt(query.limit as string) || 50;
+    const offset = parseInt(query.offset as string) || 0;
+    const total = filtered.length;
+    const page = filtered.slice(offset, offset + limit);
+
+    return {
+      events: page.map(({ _search, ...e }) => e),
       total,
     };
   })
