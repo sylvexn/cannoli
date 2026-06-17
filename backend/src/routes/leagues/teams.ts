@@ -393,21 +393,10 @@ export const teamRoutes = new Elysia()
       return { error: 'Duplicate Pokemon in drop list' };
     }
 
-    // Check none of the pickups are already rostered in this league
-    const teamsInLeague = db.select({ id: schema.teams.id })
-      .from(schema.teams)
-      .where(eq(schema.teams.leagueId, params.leagueId))
-      .all()
-      .map(t => t.id);
-
-    for (const pokemonName of pickupNames) {
-      const alreadyRostered = teamsInLeague.some(tid => {
-        return db.select().from(schema.rosters)
-          .where(and(eq(schema.rosters.teamId, tid), eq(schema.rosters.pokemonName, pokemonName)))
-          .get() != null;
-      });
-      if (alreadyRostered) { set.status = 400; return { error: `${pokemonName} is already rostered` }; }
-    }
+    // NOTE: the "already rostered in this league" check runs INSIDE the tx
+    // below (not here) so the read-check and the roster insert are one atomic
+    // unit — otherwise a concurrent pickup/trade could claim the same mon
+    // between the check and our insert.
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
@@ -463,6 +452,28 @@ export const teamRoutes = new Elysia()
     let pickupResult: { success: boolean; faUsed: number; faRemaining: number; faPerSeason: number };
     try {
       pickupResult = tx(() => {
+        // ── Already-rostered guard (atomic with the inserts) ──
+        // Run inside the tx so the read-check and the roster insert are one
+        // unit: no other pickup/trade can claim the same mon in between.
+        const teamsInLeague = db.select({ id: schema.teams.id })
+          .from(schema.teams)
+          .where(eq(schema.teams.leagueId, params.leagueId))
+          .all()
+          .map(t => t.id);
+        for (const pokemonName of pickupNames) {
+          const alreadyRostered = teamsInLeague.some(tid =>
+            db.select().from(schema.rosters)
+              .where(and(eq(schema.rosters.teamId, tid), eq(schema.rosters.pokemonName, pokemonName)))
+              .get() != null,
+          );
+          if (alreadyRostered) {
+            throw Object.assign(
+              new Error(`${pokemonName} is already rostered`),
+              { _status: 400, _code: 'fa_already_rostered' },
+            );
+          }
+        }
+
         // ── Apply drops first ──
         // Snapshot what each dropped mon actually cost (costAtDraft) so the
         // transaction ledger records the paid value, not the current tier.

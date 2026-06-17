@@ -35,7 +35,10 @@ export const TRADE_STATUS: Record<Trade['status'], { label: string; className: s
 // ── Deadline badge ────────────────────────────────────────────────────────────
 
 export function DeadlineBadge({ deadlineWeek, currentWeek }: { deadlineWeek: number; currentWeek: number }) {
-  const passed = currentWeek > deadlineWeek;
+  // Match the backend's deadline rule (isTradeDeadlinePassed: currentWeek >= deadline).
+  // Using `>` here let the badge show "open" during the deadline week itself while
+  // the backend was already rejecting trades.
+  const passed = currentWeek >= deadlineWeek;
   const weeksLeft = deadlineWeek - currentWeek;
   if (passed) {
     return (

@@ -277,7 +277,7 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
-    const { trade, league, recipientTeam } = ctx;
+    const { trade, league, recipientTeam, season } = ctx;
     const archived = checkLeagueArchived(trade.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
@@ -301,6 +301,24 @@ export const tradeRoutes = new Elysia()
       if (deadlinePassed(league)) {
         set.status = 400;
         return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
+      }
+
+      // Re-validate legality at accept time — rosters may have shifted (other
+      // accepted trades / FA pickups) since the proposal. Don't queue a
+      // now-illegal trade for the admin to discover later; reject it here.
+      const offering = JSON.parse(trade.offering) as string[];
+      const requesting = JSON.parse(trade.requesting) as string[];
+      const legalityErr = validateProposedTrade({
+        proposerId: trade.proposerId,
+        recipientId: trade.recipientId,
+        offering, requesting,
+        pointCap: season?.pointCap ?? 110,
+        leagueId: trade.leagueId,
+        rosterSize: league?.rosterSize,
+      });
+      if (legalityErr) {
+        set.status = 409;
+        return { error: legalityErr, code: 'TRADE_NO_LONGER_LEGAL' };
       }
     }
 
