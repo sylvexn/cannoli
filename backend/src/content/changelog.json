@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-4-2026-06",
+    "date": "2026-06-17T16:00:00Z",
+    "category": "fix",
+    "title": "Cannoli v1.0.4 — Animated replay sprites",
+    "body": "- Replays now play with animated Pokemon sprites instead of static ones (fix)"
+  },
+  {
     "id": "v1-0-3-2026-06",
     "date": "2026-06-17T03:00:00Z",
     "category": "feature",
