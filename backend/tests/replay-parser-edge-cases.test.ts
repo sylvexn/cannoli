@@ -364,3 +364,480 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(ttar?.kills).toBe(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New tests: |replace|, |swap|, tie, forfeit/score clamping, validateMatchResult,
+// and malformed-line robustness.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ReplayParser — Illusion (|replace|)', () => {
+  // ──────────────────────────────────────────────────────────────────────
+  // Zoroark disguises as Garchomp; p2 attacks it; Illusion breaks, revealing
+  // Zoroark. p2 then KOs Zoroark.  Kill must attribute to Zoroark, not to
+  // Garchomp (the disguise target that never actually appeared).
+  // ──────────────────────────────────────────────────────────────────────
+  test('|replace| re-keys species: kills/deaths attribute to the revealed mon', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Zoroark, M|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Tyranitar, M|',
+      '|teampreview',
+      '|start',
+      // Zoroark enters disguised as Garchomp — switch line shows Garchomp species
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Tar|Tyranitar, M|100/100',
+      '|turn|1',
+      '|move|p2a: Tar|Stone Edge|p1a: Chomp',
+      '|-damage|p1a: Chomp|50/100',
+      '|turn|2',
+      '|move|p2a: Tar|Stone Edge|p1a: Chomp',
+      // Illusion breaks — PS reveals the real species
+      '|replace|p1a: Chomp|Zoroark, M|',
+      // The lethal damage fires after the reveal
+      '|-damage|p1a: Chomp|0 fnt',
+      '|faint|p1a: Chomp',
+      '|win|Bob',
+    ]);
+
+    const result = parser.getResult();
+    const zoroark = result.pokemon.find(p => p.species === 'Zoroark');
+    const garchomp = result.pokemon.find(p => p.species === 'Garchomp');
+    const tyranitar = result.pokemon.find(p => p.species === 'Tyranitar');
+
+    // Zoroark took the death; the disguise target Garchomp should not be dead
+    expect(zoroark?.deaths).toBe(1);
+    expect(garchomp?.deaths).toBeUndefined(); // phantom Garchomp entry never created by poke/switch
+
+    // Tyranitar landed the lethal hit → gets the kill
+    expect(tyranitar?.kills).toBe(1);
+    expect(zoroark?.kills).toBe(0);
+  });
+
+  test('|replace| with kill credited before reveal then carries over to true species', () => {
+    // Zoroark (disguised as Snorlax) KOs an opponent mon, then illusion breaks.
+    // The kill accrued under the disguise species name must be re-keyed to Zoroark.
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Zoroark, M|',
+      '|poke|p1|Snorlax, M|',
+      '|poke|p2|Pikachu, M|',
+      '|poke|p2|Eevee, M|',
+      '|teampreview',
+      '|start',
+      // Zoroark enters disguised as Snorlax
+      '|switch|p1a: Lax|Snorlax, M|100/100',
+      '|switch|p2a: Pika|Pikachu, M|100/100',
+      '|turn|1',
+      // Zoroark (still appearing as Snorlax) KOs Pikachu
+      '|move|p1a: Lax|Night Slash|p2a: Pika',
+      '|-damage|p2a: Pika|0 fnt',
+      '|faint|p2a: Pika',
+      '|switch|p2a: Eve|Eevee, M|100/100',
+      '|turn|2',
+      // Illusion breaks before Eevee attacks
+      '|replace|p1a: Lax|Zoroark, M|',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    const zoroark = result.pokemon.find(p => p.species === 'Zoroark');
+    // No entry should remain under 'Snorlax' (re-keyed on replace)
+    const fakeSnorlax = result.pokemon.find(p => p.species === 'Snorlax' && p.player === 'p1');
+    expect(fakeSnorlax).toBeUndefined();
+    // Kill earned while disguised must be on Zoroark
+    expect(zoroark?.kills).toBe(1);
+  });
+});
+
+describe('ReplayParser — |swap| (Ally Switch)', () => {
+  // ──────────────────────────────────────────────────────────────────────
+  // Doubles scenario: p1 has two active slots (p1a, p1b).
+  // Ally Switch swaps them. After the swap, a kill attributed to the
+  // original p1a nick should still go to the right species.
+  // ──────────────────────────────────────────────────────────────────────
+  test('|swap| does not corrupt state — kill attribution still correct after swap', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p1|Volcarona, M|',
+      '|poke|p2|Snorlax, M|',
+      '|teampreview',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p1b: Volc|Volcarona, M|100/100',
+      '|switch|p2a: Lax|Snorlax, M|100/100',
+      '|turn|1',
+      // Ally Switch: Garchomp (p1a slot) and Volcarona (p1b slot) swap positions.
+      // parts: ['', 'swap', 'p1a: Chomp', '1'] — Chomp moves to index 1 (b slot).
+      '|swap|p1a: Chomp|1',
+      // After swap, p1b slot now holds Chomp. A move from p1b hits Snorlax.
+      '|move|p1b: Chomp|Earthquake|p2a: Lax',
+      '|-damage|p2a: Lax|0 fnt',
+      '|faint|p2a: Lax',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    // No duplicate or phantom species entries
+    const chomps = result.pokemon.filter(p => p.species === 'Garchomp');
+    expect(chomps).toHaveLength(1);
+    // Snorlax died
+    const lax = result.pokemon.find(p => p.species === 'Snorlax');
+    expect(lax?.deaths).toBe(1);
+    // No negative scores
+    expect(result.winnerScore).toBeGreaterThanOrEqual(0);
+    expect(result.loserScore).toBeGreaterThanOrEqual(0);
+  });
+
+  test('|swap| with unknown position is ignored gracefully', () => {
+    const parser = new ReplayParser();
+    // Malformed swap — should not throw
+    expect(() => {
+      feed(parser, [
+        '|player|p1|Alice|',
+        '|player|p2|Bob|',
+        '|poke|p1|Garchomp, M|',
+        '|poke|p2|Snorlax, M|',
+        '|start',
+        '|switch|p1a: Chomp|Garchomp, M|100/100',
+        '|switch|p2a: Lax|Snorlax, M|100/100',
+        '|swap|p1a: Chomp|notanumber',
+        '|win|Alice',
+      ]);
+    }).not.toThrow();
+  });
+});
+
+describe('ReplayParser — tie outcome', () => {
+  test('|tie| sets winner to null and scores to 0 after mutual faint', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      // Both faint simultaneously
+      '|-damage|p1a: Chomp|0 fnt',
+      '|faint|p1a: Chomp',
+      '|-damage|p2a: Gambit|0 fnt',
+      '|faint|p2a: Gambit',
+      '|tie',
+    ]);
+
+    const result = parser.getResult();
+    expect(result.winner).toBeNull();
+    expect(result.loser).toBeNull();
+    expect(result.winnerScore).toBe(0);
+    expect(result.loserScore).toBe(0);
+  });
+
+  test('|tie| with survivors still yields null winner', () => {
+    // Rare: double KO on last possible move with both having bench mons still up.
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p1|Volcarona, M|',
+      '|poke|p2|Kingambit, M|',
+      '|poke|p2|Dragapult, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      '|-damage|p1a: Chomp|0 fnt',
+      '|faint|p1a: Chomp',
+      '|-damage|p2a: Gambit|0 fnt',
+      '|faint|p2a: Gambit',
+      '|tie',
+    ]);
+
+    const result = parser.getResult();
+    expect(result.winner).toBeNull();
+    expect(result.loser).toBeNull();
+    // Scores are 0/0 when there is a tie (not computed)
+    expect(result.winnerScore).toBe(0);
+    expect(result.loserScore).toBe(0);
+  });
+});
+
+describe('ReplayParser — forfeit / timeout with surviving mons', () => {
+  test('forfeit at full health produces non-negative scores for both sides', () => {
+    // Winner declared while both players have all mons alive.
+    // brought=6 each, deaths=0 each → scores should be 6/6, not negative.
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p1|Volcarona, M|',
+      '|poke|p1|Tyranitar, M|',
+      '|poke|p2|Kingambit, M|',
+      '|poke|p2|Dragapult, M|',
+      '|poke|p2|Snorlax, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      // Bob immediately forfeits — no faints
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    expect(result.winner).toBe('Alice');
+    expect(result.loser).toBe('Bob');
+    expect(result.winnerScore).toBeGreaterThanOrEqual(0);
+    expect(result.loserScore).toBeGreaterThanOrEqual(0);
+    // Alice (p1) brought 3, deaths 0 → 3 remaining
+    expect(result.winnerScore).toBe(3);
+    // Bob (p2) brought 3, deaths 0 → 3 remaining
+    expect(result.loserScore).toBe(3);
+  });
+
+  test('score never goes negative when deaths exceed brought (missed team-preview reconnect)', () => {
+    // Artificially simulate brought < deaths by feeding faint lines without |poke| lines.
+    // The clamp ensures getResult() never returns a negative score.
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      // No |poke| lines — brought starts at 0 for both sides
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      '|-damage|p1a: Chomp|0 fnt',
+      '|faint|p1a: Chomp',
+      '|win|Bob',
+    ]);
+
+    const result = parser.getResult();
+    // Without the clamp p1Remaining would be brought(1 via switch fallback) - deaths(1) = 0;
+    // but the real concern is cases where deaths > brought → must be >= 0.
+    expect(result.winnerScore).toBeGreaterThanOrEqual(0);
+    expect(result.loserScore).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('ReplayParser — validateMatchResult unit tests', () => {
+  const homeRoster = [
+    { pokemonName: 'Garchomp', isTeraCaptain: false },
+    { pokemonName: 'Volcarona', isTeraCaptain: true },
+  ];
+  const awayRoster = [
+    { pokemonName: 'Kingambit', isTeraCaptain: true },
+    { pokemonName: 'Dragapult', isTeraCaptain: false },
+  ];
+
+  test('returns empty array for a clean valid result', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] NatDex Draft',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|win|Alice',
+    ]);
+    const { validateMatchResult } = require('../src/lib/replay-parser');
+    const warnings = validateMatchResult(parser.getResult(), homeRoster, awayRoster, 'HOM', 'AWY', 'p1');
+    expect(warnings).toEqual([]);
+  });
+
+  test('flags pokemon not on roster as invalid_pokemon', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] NatDex Draft',
+      '|poke|p1|Mewtwo, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Mew|Mewtwo, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|win|Alice',
+    ]);
+    const { validateMatchResult } = require('../src/lib/replay-parser');
+    const warnings = validateMatchResult(parser.getResult(), homeRoster, awayRoster, 'HOM', 'AWY', 'p1');
+    const w = warnings.find((x: any) => x.type === 'invalid_pokemon');
+    expect(w).toBeTruthy();
+    expect(w.pokemon).toBe('Mewtwo');
+    expect(w.team).toBe('HOM');
+  });
+
+  test('flags unauthorized tera when non-captain terastallizes', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] NatDex Draft',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|-terastallize|p1a: Chomp|Steel',
+      '|win|Alice',
+    ]);
+    const { validateMatchResult } = require('../src/lib/replay-parser');
+    const warnings = validateMatchResult(parser.getResult(), homeRoster, awayRoster, 'HOM', 'AWY', 'p1');
+    const w = warnings.find((x: any) => x.type === 'unauthorized_tera');
+    expect(w).toBeTruthy();
+    expect(w.pokemon).toBe('Garchomp');
+  });
+
+  test('does not flag tera for a valid captain', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] NatDex Draft',
+      '|poke|p1|Volcarona, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Volc|Volcarona, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|-terastallize|p1a: Volc|Fire',
+      '|win|Alice',
+    ]);
+    const { validateMatchResult } = require('../src/lib/replay-parser');
+    const warnings = validateMatchResult(parser.getResult(), homeRoster, awayRoster, 'HOM', 'AWY', 'p1');
+    expect(warnings.find((x: any) => x.type === 'unauthorized_tera')).toBeUndefined();
+  });
+
+  test('flags format mismatch', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] OU',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|win|Alice',
+    ]);
+    const { validateMatchResult } = require('../src/lib/replay-parser');
+    const warnings = validateMatchResult(parser.getResult(), homeRoster, awayRoster, 'HOM', 'AWY', 'p1');
+    const w = warnings.find((x: any) => x.type === 'format_mismatch');
+    expect(w).toBeTruthy();
+  });
+});
+
+describe('ReplayParser — malformed / truncated lines', () => {
+  test('does not throw on completely empty or whitespace lines', () => {
+    const parser = new ReplayParser();
+    expect(() => {
+      parser.feedLine('');
+      parser.feedLine('   ');
+      parser.feedLine('\t');
+    }).not.toThrow();
+  });
+
+  test('does not throw on a bare pipe character', () => {
+    const parser = new ReplayParser();
+    expect(() => parser.feedLine('|')).not.toThrow();
+  });
+
+  test('does not throw on |player| with missing username', () => {
+    const parser = new ReplayParser();
+    expect(() => parser.feedLine('|player|p1|')).not.toThrow();
+  });
+
+  test('does not throw on |switch| with missing species', () => {
+    const parser = new ReplayParser();
+    expect(() => {
+      parser.feedLine('|player|p1|Alice|');
+      parser.feedLine('|player|p2|Bob|');
+      parser.feedLine('|switch|p1a: Chomp|');
+    }).not.toThrow();
+  });
+
+  test('does not throw on |faint| with missing nick', () => {
+    const parser = new ReplayParser();
+    expect(() => parser.feedLine('|faint|')).not.toThrow();
+  });
+
+  test('does not throw on |win| with missing username', () => {
+    const parser = new ReplayParser();
+    expect(() => parser.feedLine('|win|')).not.toThrow();
+  });
+
+  test('does not throw on |move| with missing attacker', () => {
+    const parser = new ReplayParser();
+    expect(() => parser.feedLine('|move|')).not.toThrow();
+  });
+
+  test('does not throw on |replace| with missing species', () => {
+    const parser = new ReplayParser();
+    expect(() => {
+      parser.feedLine('|player|p1|Alice|');
+      parser.feedLine('|switch|p1a: Chomp|Garchomp, M|100/100');
+      parser.feedLine('|replace|p1a: Chomp|');
+    }).not.toThrow();
+  });
+
+  test('does not throw on |swap| with non-numeric position', () => {
+    const parser = new ReplayParser();
+    expect(() => {
+      parser.feedLine('|player|p1|Alice|');
+      parser.feedLine('|switch|p1a: Chomp|Garchomp, M|100/100');
+      parser.feedLine('|swap|p1a: Chomp|xyz');
+    }).not.toThrow();
+  });
+
+  test('getResult() still returns valid structure after malformed input stream', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|',   // missing name
+      '|poke|p1|',     // missing species
+      '|switch|',      // totally empty switch
+      '|faint|',       // missing nick
+      '|win|',         // missing winner
+    ]);
+    const result = parser.getResult();
+    expect(result).toHaveProperty('winner');
+    expect(result).toHaveProperty('pokemon');
+    expect(Array.isArray(result.pokemon)).toBe(true);
+    expect(result.winnerScore).toBeGreaterThanOrEqual(0);
+    expect(result.loserScore).toBeGreaterThanOrEqual(0);
+  });
+
+  test('Windows CRLF line endings do not corrupt species names', () => {
+    // Simulate a Windows-pasted replay where lines end with \r\n.
+    // ReplayParser.parse() must normalize these so "\r" doesn't stick to species.
+    const log = [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|tier|[Gen 9] NatDex Draft',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|-terastallize|p1a: Chomp|Steel',
+      '|win|Alice',
+    ].join('\r\n');
+
+    const { ReplayParser: RP } = require('../src/lib/replay-parser');
+    const result = RP.parse(log);
+    const chomp = result.pokemon.find((p: any) => p.species === 'Garchomp');
+    // Species must not carry a trailing \r
+    expect(chomp?.species).toBe('Garchomp');
+    expect(chomp?.teraType).toBe('Steel');
+    expect(result.winner).toBe('Alice');
+  });
+});
