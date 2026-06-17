@@ -86,6 +86,17 @@ function TypeGrid({
     );
   }
 
+  const summary = POKEMON_TYPES.map(type => {
+    let resist = 0;
+    let weak = 0;
+    for (const p of chart) {
+      const mult = p.matchups.find(m => m.type === type)?.multiplier ?? 1;
+      if (mult < 1) resist++;
+      else if (mult > 1) weak++;
+    }
+    return { type, resist, weak };
+  });
+
   return (
     <div className="rounded-lg border border-border-default overflow-x-auto">
       <table className="text-xs border-separate border-spacing-0">
@@ -137,6 +148,25 @@ function TypeGrid({
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="sticky bottom-0 z-10 bg-surface-overlay/40 backdrop-blur-sm">
+            <td className="sticky left-0 z-20 bg-surface-raised px-1.5 py-1 border-t border-r border-border-default text-[9px] font-heading font-semibold uppercase tracking-wider text-text-muted">
+              Resist / Weak
+            </td>
+            {summary.map(({ type, resist, weak }) => (
+              <td
+                key={type}
+                className="py-1 text-center border-t border-border-default leading-none align-middle"
+                title={`${type}: ${resist} resist, ${weak} weak`}
+              >
+                <div className="flex flex-col items-center gap-px font-mono font-bold text-[10px]">
+                  <span className={cn(resist > 0 ? 'text-[#4ade80]' : 'text-[#444]')}>{resist}</span>
+                  <span className={cn(weak > 0 ? 'text-[#f87171]' : 'text-[#444]')}>{weak}</span>
+                </div>
+              </td>
+            ))}
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
