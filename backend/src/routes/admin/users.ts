@@ -71,6 +71,15 @@ export const userRoutes = new Elysia()
     const before = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!before) { set.status = 404; return { error: 'User not found' }; }
 
+    // Whitelist roles this endpoint may assign.  'dev' and 'bot' are platform
+    // tiers that cannot be granted through the admin UI — prevents an admin
+    // from self-escalating to the highest privilege tier.
+    const ASSIGNABLE_ROLES = new Set(['user', 'admin']);
+    if (role !== undefined && !ASSIGNABLE_ROLES.has(role)) {
+      set.status = 400;
+      return { error: `Role '${role}' cannot be assigned via this endpoint` };
+    }
+
     const updates: Record<string, unknown> = {};
     if (role !== undefined) updates.role = role;
     if (active !== undefined) updates.active = active;

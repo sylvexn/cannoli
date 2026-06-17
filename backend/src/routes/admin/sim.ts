@@ -428,6 +428,19 @@ export const simRoutes = new Elysia()
       };
     }
 
+    // Defense-in-depth: refuse to drop tables if any env signal indicates this
+    // is a live deployment.  The triple-gate above (mount-time + assertMockMode
+    // + auth) should have already blocked the request, but we add one more cheap
+    // absolute-last-resort check before the first destructive write.
+    const dbPath = process.env.CANNOLI_DB_PATH ?? '';
+    const isLikelyLive =
+      process.env.CANNOLI_MODE === 'live' ||
+      /live/i.test(dbPath);
+    if (isLikelyLive) {
+      set.status = 403;
+      return { error: 'Sim reset is not permitted in live mode', code: 'live_mode_forbidden' };
+    }
+
     // Wipe in place (seed-fresh pattern) on the already-open `sqlite` handle:
     // drop every user table, vacuum, re-run migrations, then rebuild.
     sqlite.exec('PRAGMA foreign_keys = OFF');
