@@ -68,6 +68,19 @@ function parseRevealedThrough(raw: string | null | undefined): Record<string, nu
   }
 }
 
+/** Parse the stored spoiler_revealed_matches JSON array into a string[] of
+ *  match IDs, tolerating null/garbage (always returns a deduped array). */
+function parseRevealedMatches(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return Array.from(new Set(arr.filter((m): m is string => typeof m === 'string' && m.length > 0)));
+  } catch {
+    return [];
+  }
+}
+
 // IANA zone validator. Modern Bun ships Intl.supportedValuesOf, but if a
 // future runtime drops it we fall back to a try/catch DateTimeFormat probe
 // (which throws RangeError on unknown zones).
@@ -364,6 +377,7 @@ export const userRoutes = new Elysia()
         colorblindMode: row.colorblindMode,
         spoilerFreeMode: row.spoilerFreeMode,
         spoilerRevealedThrough: parseRevealedThrough(row.spoilerRevealedThrough),
+        spoilerRevealedMatches: parseRevealedMatches(row.spoilerRevealedMatches),
         updatedAt: row.updatedAt,
       };
     }
@@ -376,6 +390,7 @@ export const userRoutes = new Elysia()
       colorblindMode: false,
       spoilerFreeMode: true,
       spoilerRevealedThrough: {},
+      spoilerRevealedMatches: [],
       updatedAt: null,
     };
   })
@@ -458,6 +473,33 @@ export const userRoutes = new Elysia()
       db.insert(schema.userPreferences).values({ userId, ...patch }).run();
     }
     return { spoilerRevealedThrough: map };
+  })
+
+  // ─── POST /api/users/me/spoiler-reveal-match ──────────────────────────
+  // Reveal a SINGLE match individually (schedule/replays per-match tag). Adds
+  // the match ID to the user's revealed set (deduped). The reveal persists
+  // across reloads, independent of the per-week reveal high-water mark.
+  .post('/api/users/me/spoiler-reveal-match', ({ body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const { matchId } = (body ?? {}) as { matchId?: unknown };
+
+    if (typeof matchId !== 'string' || !matchId || matchId.length > 64) {
+      set.status = 400; return { error: 'matchId must be a non-empty string' };
+    }
+
+    const userId = parseInt(user.id);
+    const existing = db.select().from(schema.userPreferences).where(eq(schema.userPreferences.userId, userId)).get();
+    const set_ = new Set(parseRevealedMatches(existing?.spoilerRevealedMatches));
+    set_.add(matchId);
+    const list = Array.from(set_);
+
+    const patch = { spoilerRevealedMatches: JSON.stringify(list), updatedAt: new Date().toISOString() };
+    if (existing) {
+      db.update(schema.userPreferences).set(patch).where(eq(schema.userPreferences.userId, userId)).run();
+    } else {
+      db.insert(schema.userPreferences).values({ userId, ...patch }).run();
+    }
+    return { success: true, spoilerRevealedMatches: list };
   })
 
   // ─── GET /api/users/me/lifetime-stats ─────────────────────────────────
@@ -647,12 +689,40 @@ export function computeLifetimeStats(userId: number) {
   const teamIds = userTeams.map(t => t.teamId);
   const leagueIds = Array.from(new Set(userTeams.map(t => t.leagueId)));
 
-  // Aggregate K/D across all match_pokemon for owned teams
+  // Results-reveal gate: resolve each contributing league's reveal high-water
+  // mark. A league with NULL counts fully (archived S9/S10 are unaffected);
+  // only a gated league's unpublished weeks (week > N) are excluded. Multi-league
+  // by design, so the gate is resolved per league.
+  const gateRows = db.select({ id: schema.leagues.id, gate: schema.leagues.resultsRevealedThrough })
+    .from(schema.leagues)
+    .where(sql`${schema.leagues.id} IN (${sql.join(leagueIds.map(id => sql`${id}`), sql`, `)})`)
+    .all();
+  const gateByLeague = new Map<string, number | null>(gateRows.map(r => [r.id, r.gate ?? null]));
+  /** True when a match's week is published under its league's gate. */
+  const weekAllowed = (leagueId: string, week: number | null): boolean => {
+    const gate = gateByLeague.get(leagueId) ?? null;
+    if (gate == null) return true;
+    return (week ?? 0) <= gate;
+  };
+  // SQL form of the gate for the bulk K/D aggregate: exclude matchPokemon whose
+  // match is in a gated league AND beyond the revealed week. Leagues with NULL
+  // gate contribute no exclusion clause.
+  const gatedLeagues = gateRows.filter(r => r.gate != null) as Array<{ id: string; gate: number }>;
+  const kdGateClause = gatedLeagues.length > 0
+    ? and(...gatedLeagues.map(g =>
+        sql`NOT (${schema.matches.leagueId} = ${g.id} AND ${schema.matches.week} > ${g.gate})`))
+    : undefined;
+
+  // Aggregate K/D across all match_pokemon for owned teams (gated per league)
   const kdRow = db.select({
     kills: sql<number>`COALESCE(SUM(${schema.matchPokemon.kills}), 0)`,
     deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
   }).from(schema.matchPokemon)
-    .where(sql`${schema.matchPokemon.teamId} IN (${sql.join(teamIds.map(id => sql`${id}`), sql`, `)})`)
+    .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
+    .where(and(
+      sql`${schema.matchPokemon.teamId} IN (${sql.join(teamIds.map(id => sql`${id}`), sql`, `)})`,
+      kdGateClause,
+    ))
     .get();
 
   const careerKills = kdRow?.kills ?? 0;
@@ -674,6 +744,7 @@ export function computeLifetimeStats(userId: number) {
   for (const ut of userTeams) {
     const matches = db.select({
       id: schema.matches.id,
+      week: schema.matches.week,
       homeTeamId: schema.matches.homeTeamId,
       awayTeamId: schema.matches.awayTeamId,
       homeScore: schema.matches.homeScore,
@@ -692,6 +763,9 @@ export function computeLifetimeStats(userId: number) {
     for (const m of matches) {
       if (m.status !== 'completed') continue;
       if (m.homeScore == null || m.awayScore == null) continue;
+      // Results-reveal gate: skip matches whose week is unpublished for this
+      // league (NULL gate counts everything).
+      if (!weekAllowed(ut.leagueId, m.week)) continue;
       const isHome = m.homeTeamId === ut.teamId;
       const myScore = isHome ? m.homeScore : m.awayScore;
       const oppScore = isHome ? m.awayScore : m.homeScore;

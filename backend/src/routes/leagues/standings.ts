@@ -59,13 +59,20 @@ export const standingsRoutes = new Elysia()
       const losses = standing.losses;
       const differential = standing.differential;
 
+      // Results-reveal gate: per-Pokemon seasonStats (K/D/GP) must also freeze
+      // at the revealed week — join to matches so only matchPokemon from weeks
+      // <= maxWeek count (maxWeek null = no gate = every match counts).
       const pokemonStats = db.select({
         pokemonName: schema.matchPokemon.pokemonName,
-        kills: sql<number>`SUM(kills)`,
-        deaths: sql<number>`SUM(deaths)`,
+        kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
+        deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
         gp: sql<number>`COUNT(*)`,
       }).from(schema.matchPokemon)
-        .where(eq(schema.matchPokemon.teamId, team.id))
+        .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
+        .where(and(
+          eq(schema.matchPokemon.teamId, team.id),
+          maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
+        ))
         .groupBy(schema.matchPokemon.pokemonName)
         .all();
 
@@ -274,6 +281,12 @@ export const standingsRoutes = new Elysia()
   // ─── Pokemon Stats (league-wide aggregated) ──────────────────────────
 
   .get('/api/leagues/:leagueId/stats', ({ params }) => {
+    // Results-reveal gate: when resultsRevealedThrough is set, aggregate only
+    // matchPokemon whose match is in a revealed week (NULL = no gate).
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, params.leagueId)).get();
+    const maxWeek = league?.resultsRevealedThrough ?? null;
+
     const matchIds = db.select({ id: schema.matches.id })
       .from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
@@ -290,7 +303,10 @@ export const standingsRoutes = new Elysia()
       gp: sql<number>`COUNT(*)`,
     }).from(schema.matchPokemon)
       .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
-      .where(eq(schema.matches.leagueId, params.leagueId))
+      .where(and(
+        eq(schema.matches.leagueId, params.leagueId),
+        maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
+      ))
       .groupBy(schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
       .all();
 

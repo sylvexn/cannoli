@@ -579,6 +579,11 @@ export const userPreferences = sqliteTable('user_preferences', {
    *  Revealing week N reveals weeks 1..N (catch-up), so a result for week W is
    *  veiled until W <= revealedThrough[leagueId]. */
   spoilerRevealedThrough: text('spoiler_revealed_through').notNull().default('{}'),
+  /** Per-match spoiler reveals — JSON array of match IDs the user has revealed
+   *  individually on schedule/replays. Persists a revealed match across reloads,
+   *  independent of the per-week `spoilerRevealedThrough` high-water mark.
+   *  NULL/absent = none revealed. */
+  spoilerRevealedMatches: text('spoiler_revealed_matches'),
   /** ISO timestamp the user last opened the "What's New" changelog panel.
    *  Entries dated after this are "unread" and pulse the sidebar bell. Null =
    *  never opened (everything unread). */
