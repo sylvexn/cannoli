@@ -10,7 +10,7 @@
  * Showdown footer.
  */
 import { Link } from 'react-router-dom';
-import { Swords, LogIn, Loader2, Zap } from 'lucide-react';
+import { Swords, LogIn, Loader2, Zap, AlertTriangle } from 'lucide-react';
 import type { ArenaMatch } from '../use-arena-websocket';
 
 interface Props {
@@ -20,9 +20,15 @@ interface Props {
   user: any;
   onReady: (matchId: string) => void;
   onUnready: (matchId: string) => void;
+  /** Whether the Showdown monitor bot is online — gates battle creation. */
+  botConnected: boolean;
+  /** Latest match-error string from the server (e.g. "bot is offline"). */
+  matchError: string | null;
 }
 
-export function OfficialMatchCard({ matches, selected, onSelect, user, onReady, onUnready }: Props) {
+export function OfficialMatchCard({
+  matches, selected, onSelect, user, onReady, onUnready, botConnected, matchError,
+}: Props) {
   const currentWeek = matches.find(m => m.isCurrentWeek)?.week ?? null;
 
   return (
@@ -32,6 +38,7 @@ export function OfficialMatchCard({ matches, selected, onSelect, user, onReady, 
         <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">
           Your Matches
         </h2>
+        <BotStatus connected={botConnected} />
       </div>
 
       {!user ? (
@@ -70,6 +77,8 @@ export function OfficialMatchCard({ matches, selected, onSelect, user, onReady, 
               currentWeek={currentWeek}
               onReady={onReady}
               onUnready={onUnready}
+              botConnected={botConnected}
+              matchError={matchError}
             />
           )}
         </div>
@@ -108,15 +117,30 @@ function WeekPill({ match, active, onClick }: { match: ArenaMatch; active: boole
   );
 }
 
+// ─── Bot status indicator ────────────────────────────────────────────────────
+
+function BotStatus({ connected }: { connected: boolean }) {
+  return (
+    <span className="ml-auto flex items-center gap-1.5 text-[11px]" title="Showdown match bot">
+      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400' : 'bg-text-muted'}`} />
+      <span className={connected ? 'text-green-400' : 'text-text-muted'}>
+        {connected ? 'Bot online' : 'Bot offline'}
+      </span>
+    </span>
+  );
+}
+
 // ─── Selected match detail ───────────────────────────────────────────────────
 
 function SelectedMatch({
-  match, currentWeek, onReady, onUnready,
+  match, currentWeek, onReady, onUnready, botConnected, matchError,
 }: {
   match: ArenaMatch;
   currentWeek: number | null;
   onReady: (matchId: string) => void;
   onUnready: (matchId: string) => void;
+  botConnected: boolean;
+  matchError: string | null;
 }) {
   const timing =
     currentWeek === null || match.week === currentWeek ? null
@@ -148,18 +172,65 @@ function SelectedMatch({
           {(() => {
             const myReady = match.isHome ? match.readyHome : match.readyAway;
             const opponentReady = match.isHome ? match.readyAway : match.readyHome;
+            const bothReady = match.readyHome && match.readyAway;
 
-            if (match.readyHome && match.readyAway) {
+            // Genuinely creating the battle — the server flipped status to
+            // 'ready' (bot was online and both teams readied up).
+            if (bothReady && match.status === 'ready') {
               return (
-                <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
-                  <Loader2 size={14} className="animate-spin" />
-                  Both ready — starting match...
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
+                    <Loader2 size={14} className="animate-spin" />
+                    Both ready — starting match...
+                  </div>
+                  {matchError && (
+                    <span className="text-xs text-amber-400/90 text-center max-w-xs">{matchError}</span>
+                  )}
+                </div>
+              );
+            }
+
+            // Both ready but the server is holding the match at 'scheduled'.
+            if (bothReady && match.status === 'scheduled') {
+              // Bot offline — the server kept the ready flags and will resume
+              // automatically on reconnect. Calm, no spinner.
+              if (!botConnected) {
+                return (
+                  <div className="flex flex-col items-center gap-2 max-w-xs text-center">
+                    <div className="flex items-center gap-2 text-amber-400/90 font-medium text-sm">
+                      <AlertTriangle size={14} className="shrink-0" />
+                      Both ready — Showdown bot is offline.
+                    </div>
+                    <span className="text-xs text-text-muted">
+                      Your match will start automatically when it reconnects.
+                    </span>
+                    {matchError && (
+                      <span className="text-xs text-amber-400/90">{matchError}</span>
+                    )}
+                  </div>
+                );
+              }
+              // Rare race: bot online but match never advanced. Let the coach retry.
+              return (
+                <div className="flex flex-col items-center gap-2 max-w-xs text-center">
+                  <span className="text-xs text-text-muted">
+                    Both ready, but the match didn't start.
+                  </span>
+                  <button
+                    onClick={() => onReady(match.matchId)}
+                    className="px-5 py-2 rounded-md text-sm font-medium transition-all bg-orange-400/20 text-orange-400 border border-orange-400/30 hover:bg-orange-400/30"
+                  >
+                    Retry start
+                  </button>
+                  {matchError && (
+                    <span className="text-xs text-amber-400/90">{matchError}</span>
+                  )}
                 </div>
               );
             }
 
             return (
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-2 max-w-xs text-center">
                 <button
                   onClick={() => (myReady ? onUnready(match.matchId) : onReady(match.matchId))}
                   className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${
@@ -174,6 +245,14 @@ function SelectedMatch({
                   <span className="text-xs text-green-400 animate-pulse">
                     Opponent is ready!
                   </span>
+                )}
+                {!botConnected && (
+                  <span className="text-xs text-text-muted">
+                    You can ready up now; the match starts when the bot reconnects.
+                  </span>
+                )}
+                {matchError && (
+                  <span className="text-xs text-amber-400/90">{matchError}</span>
                 )}
               </div>
             );

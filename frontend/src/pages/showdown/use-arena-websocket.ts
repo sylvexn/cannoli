@@ -82,6 +82,13 @@ export interface ArenaState {
   /** Spectator count keyed by matchId — updated via `spectator_count` events. */
   spectatorCounts: Record<string, number>;
   connected: boolean;
+  /** Whether the Showdown monitor bot is connected. A match can only START
+   *  (status → 'ready', battle created) while the bot is online; if offline,
+   *  ready flags are kept and the match auto-resumes on reconnect. */
+  botConnected: boolean;
+  /** Latest match-error string surfaced by the server (e.g. "bot is offline").
+   *  Cleared on the next successful match_state / match_live. */
+  lastMatchError: string | null;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -97,6 +104,8 @@ export function useArenaWebSocket() {
     liveStats: null,
     spectatorCounts: {},
     connected: false,
+    botConnected: false,
+    lastMatchError: null,
   });
 
   // Seed (and re-seed on reconnect) the slices the WS only sends deltas for.
@@ -110,6 +119,7 @@ export function useArenaWebSocket() {
         myMatches: data.myMatches ?? [],
         liveMatches: data.liveMatches ?? [],
         scrimLobbies: data.scrimLobbies ?? [],
+        botConnected: data.botConnected ?? false,
       })))
       .catch(() => {});
   }, []);
@@ -141,6 +151,8 @@ export function useArenaWebSocket() {
           case 'match_state':
             setState(s => ({
               ...s,
+              // A fresh state for this match supersedes any stale error.
+              lastMatchError: null,
               myMatches: s.myMatches.map(m =>
                 m.matchId === msg.matchId
                   ? {
@@ -158,12 +170,17 @@ export function useArenaWebSocket() {
           case 'match_live':
             setState(s => ({
               ...s,
+              lastMatchError: null,
               myMatches: s.myMatches.map(m =>
                 m.matchId === msg.matchId
                   ? { ...m, status: 'in_progress', psRoomId: msg.psRoomId }
                   : m,
               ),
             }));
+            break;
+
+          case 'bot_status':
+            setState(s => ({ ...s, botConnected: !!msg.connected }));
             break;
 
           case 'match_result':
@@ -206,6 +223,10 @@ export function useArenaWebSocket() {
             break;
 
           case 'match_error':
+            console.warn('[Arena WS]', msg.message);
+            setState(s => ({ ...s, lastMatchError: msg.message ?? null }));
+            break;
+
           case 'error':
             console.warn('[Arena WS]', msg.message);
             break;

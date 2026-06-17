@@ -16,7 +16,7 @@
  * Pill choice + open/closed state are persisted in localStorage so the
  * user's preference survives reloads.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useArenaWebSocket } from './use-arena-websocket';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
@@ -39,7 +39,7 @@ interface ViewingBattle {
   label: string;
 }
 
-export function ArenaFooter() {
+export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boolean }) {
   const { user } = useAuth();
   const arena = useArenaWebSocket();
 
@@ -76,14 +76,62 @@ export function ArenaFooter() {
   const [activePill, setActivePill] = useLocalStorageState<Pill>('arena-footer-pill', 'match');
   const [isOpen, setIsOpen] = useLocalStorageState<boolean>('arena-footer-open', false);
 
+  // A coach has something to play this week (their current-week fixture that
+  // hasn't started/finished). Drives the auto-open on a fresh visit.
+  const hasActionableCurrentMatch = myMatches.some(
+    m => m.isCurrentWeek &&
+      (m.status === 'scheduled' || m.status === 'ready' || m.status === 'in_progress'),
+  );
+
+  // Track an explicit manual collapse so we never re-open the footer the coach
+  // just closed. We also only auto-open ONCE per mount.
+  const userCollapsedRef = useRef(false);
+  const autoOpenedRef = useRef(false);
+
   function togglePill(pill: Pill) {
     if (isOpen && pill === activePill) {
+      userCollapsedRef.current = true;
       setIsOpen(false);
       return;
     }
     setActivePill(pill);
     setIsOpen(true);
   }
+
+  function collapse() {
+    userCollapsedRef.current = true;
+    setIsOpen(false);
+  }
+
+  // Auto-open the Match panel on mount when:
+  //   (a) ?tab=arena routed us here (overrides the persisted collapsed state), or
+  //   (b) there's a playable current-week match and the coach hasn't manually
+  //       collapsed the footer this session.
+  // Runs at most once per mount and never fights a deliberate close.
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (userCollapsedRef.current) return;
+
+    if (forceOpenArena) {
+      autoOpenedRef.current = true;
+      setActivePill('match');
+      setIsOpen(true);
+      return;
+    }
+
+    if (hasActionableCurrentMatch && !isOpen) {
+      autoOpenedRef.current = true;
+      setActivePill('match');
+      setIsOpen(true);
+    }
+  // myMatches seeds in async (REST), so re-run as it resolves; the refs keep
+  // this idempotent and respectful of a manual collapse.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceOpenArena, hasActionableCurrentMatch]);
+
+  // Count of matches the coach can still act on (not finished). Surfaced on the
+  // collapsed Match pill so the 32px bar signals "you have N matches".
+  const playableCount = playable.length;
 
   // Resolve the footer's layout. The footer is ALWAYS in-flow (flex-shrink-0)
   // so it reserves its own band and chokes the iframe into the remaining space
@@ -114,7 +162,7 @@ export function ArenaFooter() {
             icon={<Swords size={12} />}
             label="Match"
             accent="orange"
-            badge={liveMine ? 'LIVE' : null}
+            badge={liveMine ? 'LIVE' : playableCount > 0 ? String(playableCount) : null}
           />
           <PillButton
             active={isOpen && activePill === 'scrims'}
@@ -138,7 +186,7 @@ export function ArenaFooter() {
             <span>{arena.connected ? 'Connected' : 'Reconnecting...'}</span>
             {isOpen && (
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={collapse}
                 className="ml-2 text-text-muted hover:text-text-primary transition-colors"
                 title="Collapse"
                 aria-label="Collapse footer"
@@ -173,6 +221,8 @@ export function ArenaFooter() {
               user={user}
               onReady={arena.readyUp}
               onUnready={arena.unready}
+              botConnected={arena.botConnected}
+              matchError={arena.lastMatchError}
             />
           )}
           {activePill === 'scrims' && (

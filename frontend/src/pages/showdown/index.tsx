@@ -13,11 +13,19 @@
  * wrapper and pin it with `position: absolute; inset: 0`. Do NOT remove —
  * removing this causes the PS toolbar/canvas to leak past the right edge.
  */
+import { useSearchParams } from 'react-router-dom';
 import { ArenaFooter } from './arena-footer';
 
 const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
 export function ShowdownPage() {
+  // The match-banner CTA (and other deep links) point here with ?tab=arena.
+  // Honor it by force-opening the Arena footer to the Match pill on mount —
+  // overriding the persisted collapsed state so the coach lands directly on
+  // their fixture instead of a collapsed pill bar.
+  const [searchParams] = useSearchParams();
+  const forceOpenArena = searchParams.get('tab') === 'arena';
+
   return (
     <div className="relative flex flex-col h-full rounded-lg border border-border-default overflow-hidden">
       {/* PS iframe — flex-1 so it gets all leftover space above the footer.
@@ -41,7 +49,7 @@ export function ShowdownPage() {
       </div>
 
       {/* Arena footer — collapsible, anchors flush to the iframe edge */}
-      <ArenaFooter />
+      <ArenaFooter forceOpenArena={forceOpenArena} />
     </div>
   );
 }
