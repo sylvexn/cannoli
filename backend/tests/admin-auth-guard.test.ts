@@ -153,3 +153,77 @@ describe('admin auth guard — dev-only routes', () => {
     });
   }
 });
+
+// ─── Role escalation whitelist ────────────────────────────────────────────────
+// PUT /api/users/:id is the only endpoint that can change a user's role.
+// An admin must NOT be able to set role='dev' (platform-highest tier) via this
+// endpoint — the whitelist allows only 'user' and 'admin'.
+
+describe('admin user PUT — role escalation prevention', () => {
+  let targetUserId: number;
+
+  beforeAll(() => {
+    // Create a plain user to be the target of escalation attempts.
+    const u = db.insert(schema.users).values({
+      username: `${tag}-target`, passwordHash: 'x', role: 'user',
+      mustChangePassword: false, active: true,
+    }).returning().get();
+    userIds.push(u.id);
+    targetUserId = u.id;
+  });
+
+  test('admin cannot set role to dev (→ 400)', async () => {
+    const res = await hit(
+      'PUT', `/api/users/${targetUserId}`,
+      `session=${staffSession}`,
+      { role: 'dev' },
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/dev/i);
+  });
+
+  test('admin cannot set role to bot (→ 400)', async () => {
+    const res = await hit(
+      'PUT', `/api/users/${targetUserId}`,
+      `session=${staffSession}`,
+      { role: 'bot' },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test('admin CAN set role to user (→ not 400/401/403)', async () => {
+    const res = await hit(
+      'PUT', `/api/users/${targetUserId}`,
+      `session=${staffSession}`,
+      { role: 'user' },
+    );
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+  });
+
+  test('admin CAN set role to admin (→ not 400/401/403)', async () => {
+    const res = await hit(
+      'PUT', `/api/users/${targetUserId}`,
+      `session=${staffSession}`,
+      { role: 'admin' },
+    );
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
+  });
+
+  test('role is unchanged in DB after a rejected dev-escalation attempt', async () => {
+    // Reset target to 'user' first so we have a clean baseline.
+    await hit('PUT', `/api/users/${targetUserId}`, `session=${staffSession}`, { role: 'user' });
+
+    await hit('PUT', `/api/users/${targetUserId}`, `session=${staffSession}`, { role: 'dev' });
+
+    const row = db.select({ role: schema.users.role })
+      .from(schema.users)
+      .where(eq(schema.users.id, targetUserId))
+      .get();
+    expect(row?.role).toBe('user');
+  });
+});

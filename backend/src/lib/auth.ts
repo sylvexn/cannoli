@@ -133,9 +133,28 @@ export function parseSessionToken(cookieHeader: string | undefined): string | nu
 // session is unreadable, and we don't accept CORS credentialed requests from
 // untrusted origins) so they can't echo it back in the X-CSRF-Token header.
 
+const CSRF_DEV_FALLBACK = 'cannoli-dev-csrf-secret-change-in-prod';
 const CSRF_SECRET = process.env.CANNOLI_CSRF_SECRET
   || process.env.CANNOLI_SESSION_SECRET
-  || 'cannoli-dev-csrf-secret-change-in-prod';
+  || CSRF_DEV_FALLBACK;
+
+// Fail-closed in production: if neither secret env var is set the HMAC key is
+// the public fallback constant, making every token forgeable.  Throw at
+// module-load time so the process refuses to start rather than silently
+// serving a broken security model.
+{
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    process.env.CANNOLI_MODE === 'live';
+  const usingFallback =
+    !process.env.CANNOLI_CSRF_SECRET && !process.env.CANNOLI_SESSION_SECRET;
+  if (isProduction && usingFallback) {
+    throw new Error(
+      'FATAL: CANNOLI_CSRF_SECRET (or CANNOLI_SESSION_SECRET) must be set in production. ' +
+      'Refusing to start with the public default CSRF secret.',
+    );
+  }
+}
 
 export function csrfTokenForSession(sessionToken: string): string {
   return createHmac('sha256', CSRF_SECRET).update(sessionToken).digest('hex');

@@ -68,6 +68,27 @@ let nextSessionId = 1;
 const PS_SESSION_TTL = 363 * 24 * 60 * 60; // ~1 year in seconds (matches PS default)
 const PS_COOKIE_DOMAIN = process.env.NODE_ENV === 'production' ? '.cannoli.live' : undefined;
 
+// Periodic sweep: prune expired PS sessions from the in-memory map so that
+// idle/abandoned sessions don't accumulate indefinitely (slow memory-exhaustion
+// vector — each entry is ~200 bytes including the bcrypt hash string, but
+// unbounded growth is the risk over months of uptime).
+//
+// Runs every 6 hours — aggressive enough to bound max resident entries to
+// ~(creation rate × 6h) above the TTL-based floor, cheap enough to be noise.
+// `.unref()` so the interval never prevents the process from exiting cleanly
+// and never keeps the Bun test runner alive after tests complete.
+{
+  const sweepInterval = setInterval(() => {
+    const now = Math.floor(Date.now() / 1000);
+    for (const [id, session] of psSessions) {
+      if (now - session.createdAt > PS_SESSION_TTL) {
+        psSessions.delete(id);
+      }
+    }
+  }, 6 * 60 * 60 * 1000); // 6 hours
+  sweepInterval.unref();
+}
+
 /**
  * Create a PS session and return the sid cookie value.
  */
