@@ -237,8 +237,16 @@
 <script defer src="/js/lib/html-sanitizer-minified.js"></script>
 <script defer src="/js/battle-sound.js"></script>
 <script defer src="/js/battledata.js"></script>
-<script defer src="/data/pokedex-mini.js"></script>
-<script defer src="/data/pokedex-mini-bw.js"></script>
+<!-- Animated-sprite metadata. These two define BattlePokemonSprites /
+     BattlePokemonSpritesBW (per-Pokemon ani-gif dimensions); without them
+     Dex.getSpriteData() finds no animation data and falls back to static
+     gen5 .png. They are NOT vendored in our PS client tree, so load them
+     from the upstream CDN — same source the sprite images themselves and
+     index.html already use (Config.routes.client = play.pokemonshowdown.com).
+     The exports->window shim in battledata.js (loaded above) registers the
+     globals. -->
+<script defer src="//play.pokemonshowdown.com/data/pokedex-mini.js"></script>
+<script defer src="//play.pokemonshowdown.com/data/pokedex-mini-bw.js"></script>
 <script defer src="/data/graphics.js"></script>
 <script defer src="/data/pokedex.js"></script>
 <script defer src="/data/moves.js"></script>
