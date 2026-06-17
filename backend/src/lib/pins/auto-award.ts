@@ -19,6 +19,7 @@
  */
 import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
+import { tx } from '../tx';
 
 type Trigger = 'season-end' | 'match';
 
@@ -74,19 +75,25 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
   // leagues would otherwise have their sibling-league pins clobbered when
   // any one league finalizes. Only touches awarded_by IS NULL rows (auto
   // pins) — admin-minted pins are preserved.
-  db.run(sql`
-    DELETE FROM pins
-    WHERE pin_def_id IN (${PIN.garchomp}, ${PIN.cannoli}, ${PIN.cynthia})
-      AND season_id = ${seasonId}
-      AND awarded_by IS NULL
-      AND json_extract(metadata, '$.teamId') IN (
-        SELECT id FROM teams WHERE league_id = ${leagueId}
-      )
-  `);
+  //
+  // Wrapped in tx() so the clear and the re-inserts are atomic — a crash
+  // between them can no longer leave this league's season pins in a deleted
+  // but not yet re-awarded state.
+  tx(() => {
+    db.run(sql`
+      DELETE FROM pins
+      WHERE pin_def_id IN (${PIN.garchomp}, ${PIN.cannoli}, ${PIN.cynthia})
+        AND season_id = ${seasonId}
+        AND awarded_by IS NULL
+        AND json_extract(metadata, '$.teamId') IN (
+          SELECT id FROM teams WHERE league_id = ${leagueId}
+        )
+    `);
 
-  awardGarchomp(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardCannoli(leagueId, seasonId, opts.awardedBy ?? null, summary);
-  awardCynthia(leagueId, seasonId, opts.awardedBy ?? null, summary);
+    awardGarchomp(leagueId, seasonId, opts.awardedBy ?? null, summary);
+    awardCannoli(leagueId, seasonId, opts.awardedBy ?? null, summary);
+    awardCynthia(leagueId, seasonId, opts.awardedBy ?? null, summary);
+  });
 
   return summary;
 }
