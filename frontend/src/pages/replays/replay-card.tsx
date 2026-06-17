@@ -1,7 +1,9 @@
 import { Play, Image as ImageIcon, Flame, Zap, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { ApiReplaySummary } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
+import { Spoiler } from '@/components/spoiler';
 import type { ReplayEntry } from './replay-types';
 import { BroughtPreview } from './brought-preview';
 
@@ -30,6 +32,7 @@ export function ReplayCard({
   weekEnded,
   onToggleViewing,
 }: ReplayCardProps) {
+  const { spoilerFreeMode } = useAuth();
   const { match, league, homeTeam, awayTeam } = entry;
   const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = (match.awayScore ?? 0) > (match.homeScore ?? 0);
@@ -76,7 +79,7 @@ export function ReplayCard({
 
         {/* Glance flags float top-right of the preview pane */}
         {(sweep || teraHeavy || hasMvp) && (
-          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          <Spoiler as="div" className="absolute top-1.5 right-1.5 flex items-center gap-1">
             {hasMvp && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -101,7 +104,7 @@ export function ReplayCard({
                 {summary!.teraCount}
               </span>
             )}
-          </div>
+          </Spoiler>
         )}
       </div>
 
@@ -125,22 +128,22 @@ export function ReplayCard({
             viewTransition
             className={cn(
               'hover:text-neon transition-colors truncate',
-              homeWon ? 'text-win' : 'text-text-secondary',
+              (!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-secondary',
             )}
           >
             {homeTeam?.teamAbbrev ?? match.homePlayer}
           </Link>
-          <span className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
+          <Spoiler className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
             <span className={homeWon ? 'text-win' : ''}>{match.homeScore ?? 0}</span>
             -
             <span className={awayWon ? 'text-win' : ''}>{match.awayScore ?? 0}</span>
-          </span>
+          </Spoiler>
           <Link
             to={`/league/${league.id}/teams/${awayTeam?.id}`}
             viewTransition
             className={cn(
               'hover:text-neon transition-colors truncate',
-              awayWon ? 'text-win' : 'text-text-secondary',
+              (!spoilerFreeMode && awayWon) ? 'text-win' : 'text-text-secondary',
             )}
           >
             {awayTeam?.teamAbbrev ?? match.awayPlayer}
