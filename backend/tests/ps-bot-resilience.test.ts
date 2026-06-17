@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
-import { formatFromRoomId, readReplayLogFromDisk } from '../src/lib/ps-bot';
+import { formatFromRoomId, readReplayLogFromDisk, sweepIdleBattles, getMonitoredBattlesForTest } from '../src/lib/ps-bot';
 import { ReplayParser } from '../src/lib/replay-parser';
 import { toUserid } from '../src/lib/ps-login';
 
@@ -169,6 +169,76 @@ describe('home/away orientation resolution (pure model of the bot path)', () => 
   test('neither player maps to home team → null (bot defers / logs unmatched)', () => {
     const side = resolveHomeSide(toUserid('Stranger1'), toUserid('Stranger2'), map, 'team-home');
     expect(side).toBeNull();
+  });
+});
+
+// ─── Idle-battle eviction ────────────────────────────────────────────────────
+
+describe('sweepIdleBattles — evicts stale entries, retains fresh ones', () => {
+  const map = getMonitoredBattlesForTest();
+
+  // Helper: insert a synthetic MonitoredBattle at a given age.
+  function addFakeEntry(roomId: string, matchId: string | null, ageMs: number) {
+    map.set(roomId, {
+      roomId,
+      matchId,
+      p1: 'alice',
+      p2: 'bob',
+      format: 'gen9natdexdraft',
+      parser: new ReplayParser(),
+      lines: [],
+      isOfficial: matchId !== null,
+      homeSide: null,
+      lastLineAt: Date.now() - ageMs,
+    } as Parameters<typeof map.set>[1]);
+  }
+
+  test('evicts an entry idle for longer than maxIdleMs', () => {
+    const room = 'battle-gen9natdexdraft-sweep-old';
+    addFakeEntry(room, null, 35 * 60 * 1000); // 35 min old
+    const evicted = sweepIdleBattles(Date.now(), 30 * 60 * 1000);
+    expect(evicted).toBeGreaterThanOrEqual(1);
+    expect(map.has(room)).toBe(false);
+  });
+
+  test('retains an entry that is still fresh', () => {
+    const room = 'battle-gen9natdexdraft-sweep-fresh';
+    addFakeEntry(room, null, 5 * 60 * 1000); // 5 min old
+    sweepIdleBattles(Date.now(), 30 * 60 * 1000);
+    expect(map.has(room)).toBe(true);
+    map.delete(room); // cleanup
+  });
+
+  test('evicts idle scrim (matchId:null) but not a fresh official (matchId set)', () => {
+    const stale = 'battle-gen9natdexdraft-stale-scrim';
+    const fresh = 'battle-gen9natdexdraft-fresh-official';
+    addFakeEntry(stale, null, 60 * 60 * 1000); // 1hr old scrim
+    addFakeEntry(fresh, 'match-abc', 1 * 60 * 1000); // 1min old official
+    sweepIdleBattles(Date.now(), 30 * 60 * 1000);
+    expect(map.has(stale)).toBe(false);
+    expect(map.has(fresh)).toBe(true);
+    map.delete(fresh); // cleanup
+  });
+
+  test('synthetic now: evicts entry idle relative to provided now value', () => {
+    const room = 'battle-gen9natdexdraft-synthetic-now';
+    const anchorMs = 1_000_000_000; // arbitrary epoch
+    map.set(room, {
+      roomId: room,
+      matchId: null,
+      p1: 'x',
+      p2: 'y',
+      format: '',
+      parser: new ReplayParser(),
+      lines: [],
+      isOfficial: false,
+      homeSide: null,
+      // lastLineAt is 45 min before our synthetic now
+      lastLineAt: anchorMs - 45 * 60 * 1000,
+    } as Parameters<typeof map.set>[1]);
+    const evicted = sweepIdleBattles(anchorMs, 30 * 60 * 1000);
+    expect(evicted).toBeGreaterThanOrEqual(1);
+    expect(map.has(room)).toBe(false);
   });
 });
 

@@ -68,6 +68,8 @@ interface MonitoredBattle {
    * matchup (or the bot rejoins an in-progress room with a known psRoomId).
    */
   homeSide: 'p1' | 'p2' | null;
+  /** Epoch ms of the last protocol line appended. Used for idle eviction. */
+  lastLineAt: number;
 }
 
 let ws: WebSocket | null = null;
@@ -161,11 +163,64 @@ export function getBotStatus(): {
 // Map showdown userids → team IDs for match lookup
 const useridToTeam = new Map<string, { teamId: string; leagueId: string }>();
 
+/**
+ * Expose the internal monitoredBattles map for testing only.
+ * Do not use in production code.
+ */
+export function getMonitoredBattlesForTest() {
+  return monitoredBattles;
+}
+
+// ─── Idle-battle eviction ────────────────────────────────────────────────────
+
+/**
+ * Sweep `monitoredBattles` for entries whose last protocol line is older than
+ * `maxIdleMs`. Exported as a pure function so tests can call it directly with
+ * a synthetic `now` without relying on real time. The live process schedules
+ * this on a background interval (see `startIdleSweep`).
+ *
+ * Targets:
+ *   - Scrim battles (matchId:null) where the PS room was abandoned.
+ *   - Official battles that connected while the bot was in a bad state and
+ *     never received |win|/|tie|.
+ *   - Any entry that simply stopped receiving lines.
+ *
+ * The normal completion path (|win|/|tie| → handleMatchEnd) deletes entries
+ * synchronously, so this sweep only catches entries that never completed.
+ */
+export function sweepIdleBattles(
+  now: number = Date.now(),
+  maxIdleMs: number = 30 * 60 * 1000,
+): number {
+  let evicted = 0;
+  for (const [roomId, battle] of monitoredBattles) {
+    if (now - battle.lastLineAt > maxIdleMs) {
+      console.log(
+        `[PS Bot] Evicting idle battle ${roomId} (idle ${Math.round((now - battle.lastLineAt) / 60_000)}m, matchId=${battle.matchId ?? 'null'})`,
+      );
+      monitoredBattles.delete(roomId);
+      evicted++;
+    }
+  }
+  return evicted;
+}
+
+let idleSweepTimer: ReturnType<typeof setInterval> | undefined;
+
+function startIdleSweep() {
+  if (idleSweepTimer) return; // already running
+  idleSweepTimer = setInterval(() => sweepIdleBattles(), 5 * 60 * 1000);
+  // unref() so this timer never prevents the process from exiting cleanly
+  // and doesn't keep the Bun test runner alive.
+  idleSweepTimer.unref();
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export function startBot() {
   refreshUserMap();
   connect();
+  startIdleSweep();
 }
 
 export function stopBot() {
@@ -371,6 +426,7 @@ function handleBotPm(sender: string, message: string) {
       lines: [],
       isOfficial: false,
       homeSide: null,
+      lastLineAt: Date.now(),
     };
     monitoredBattles.set(roomId, entry);
     // Set matchId immediately so live-stats broadcasting starts as soon as the
@@ -547,6 +603,7 @@ function buildBattleFromLog(
     parser: new ReplayParser(),
     lines: [],
     isOfficial: true,
+    lastLineAt: Date.now(),
     homeSide: null,
   };
 
@@ -858,6 +915,7 @@ function rejoinInProgressBattles() {
       lines: [],
       isOfficial: true,
       homeSide,
+      lastLineAt: Date.now(),
     });
 
     console.log(`[PS Bot] Rejoining ${roomId} for match ${match.id}`);
@@ -885,6 +943,7 @@ function handleBattleLine(room: string, line: string) {
         lines: [],
         isOfficial: false,
         homeSide: null,
+        lastLineAt: Date.now(),
       });
     }
     return;
@@ -900,8 +959,9 @@ function handleBattleLine(room: string, line: string) {
     return;
   }
 
-  // Accumulate log
-  battle.lines.push(line);
+  // Accumulate log (cap at 4096 lines to bound memory for pathological/abandoned battles)
+  if (battle.lines.length < 4096) battle.lines.push(line);
+  battle.lastLineAt = Date.now();
   battle.parser.feedLine(line);
 
   switch (cmd) {
