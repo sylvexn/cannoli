@@ -7,6 +7,8 @@ import { effectiveCost } from '../../lib/tera-cost';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
+import { validateRosterLegality } from '../../lib/roster-legality';
+import { refreshUserMap } from '../../lib/ps-bot';
 
 export const teamRoutes = new Elysia()
 
@@ -314,8 +316,10 @@ export const teamRoutes = new Elysia()
     return freeAgents;
   })
 
-  .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     // Accept both legacy single-mon shape and new multi-mon shape.
     // New: { teamId, pickupNames: string[], dropNames?: string[] }
@@ -456,8 +460,9 @@ export const teamRoutes = new Elysia()
       };
     }
 
+    let pickupResult: { success: boolean; faUsed: number; faRemaining: number; faPerSeason: number };
     try {
-      return tx(() => {
+      pickupResult = tx(() => {
         // ── Apply drops first ──
         // Snapshot what each dropped mon actually cost (costAtDraft) so the
         // transaction ledger records the paid value, not the current tier.
@@ -515,49 +520,31 @@ export const teamRoutes = new Elysia()
           );
         }
 
-        // Pull pokemon metadata for mega + dex checks
+        // Pull pokemon metadata for shared legality validator (mega/dex/species).
         const newPokemonRows = db.select().from(schema.pokemon)
           .where(inArray(schema.pokemon.name, newRoster.map(r => r.pokemonName)))
           .all();
         const pokeByName = new Map(newPokemonRows.map(p => [p.name, p]));
 
-        // Mega cap (max 1 per team)
-        let megaCount = 0;
-        for (const r of newRoster) {
-          if (pokeByName.get(r.pokemonName)?.formCategory === 'mega') megaCount++;
-        }
-        if (megaCount > 1) {
-          throw Object.assign(
-            new Error(`Pickup would put ${megaCount} Megas on the team (max 1)`),
-            { _status: 400, _code: 'fa_mega_cap' },
-          );
-        }
-
-        // Duplicate national dex
-        const dexSeen = new Map<number, string>();
-        for (const r of newRoster) {
-          const dex = pokeByName.get(r.pokemonName)?.nationalDexNumber;
-          if (dex == null) continue;
-          const prev = dexSeen.get(dex);
-          if (prev) {
-            throw Object.assign(
-              new Error(`${prev} and ${r.pokemonName} share National Dex #${dex}`),
-              { _status: 400, _code: 'fa_dup_natdex' },
-            );
-          }
-          dexSeen.set(dex, r.pokemonName);
-        }
-
-        // Point cap including captain markup. Use costAtDraft (snapshot).
+        // Shared legality check: point cap + mega cap + dup natdex + dup species.
+        // Use ?? so a legit 0-cost mon isn't treated as missing.
         const pointCap = season?.pointCap ?? 110;
-        const totalCost = newRoster.reduce(
-          (sum, r) => sum + effectiveCost(r.costAtDraft || r.tier, !!r.isTeraCaptain),
-          0,
-        );
-        if (totalCost > pointCap) {
+        const rosterEntries = newRoster.map(r => ({
+          pokemonName: r.pokemonName,
+          cost: r.costAtDraft ?? r.tier ?? 0,
+          isTeraCaptain: !!r.isTeraCaptain,
+        }));
+        const violation = validateRosterLegality(rosterEntries, pokeByName, { pointCap });
+        if (violation) {
+          const codeMap: Record<string, string> = {
+            point_cap: 'fa_over_cap',
+            mega_cap: 'fa_mega_cap',
+            dup_natdex: 'fa_dup_natdex',
+            dup_species: 'fa_dup_species',
+          };
           throw Object.assign(
-            new Error(`Pickup would exceed point cap (${totalCost} > ${pointCap}) including captain markup`),
-            { _status: 400, _code: 'fa_over_cap' },
+            new Error(violation.message),
+            { _status: 400, _code: codeMap[violation.code] ?? 'fa_invalid' },
           );
         }
 
@@ -611,12 +598,19 @@ export const teamRoutes = new Elysia()
       }
       throw e;
     }
+
+    // Best-effort: refresh the PS bot's user→team map after roster change.
+    try { refreshUserMap(); } catch {}
+
+    return pickupResult!;
   })
 
   // Standalone release (drop only) — no pickup paired. Same phase + deadline
   // gating as pickup. Used by the team-profile "Release" button.
-  .post('/api/leagues/:leagueId/free-agents/release', ({ params, body, user, set }) => {
+  .post('/api/leagues/:leagueId/free-agents/release', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force);
+    if (archived) { set.status = 409; return archived; }
 
     const { teamId, pokemonName } = body as { teamId: string; pokemonName: string };
     if (!teamId || !pokemonName) {
@@ -664,7 +658,7 @@ export const teamRoutes = new Elysia()
       return { error: `${pokemonName} is not on ${team.teamName}'s roster`, code: 'fa_drop_not_found' };
     }
 
-    return tx(() => {
+    tx(() => {
       db.delete(schema.rosters).where(eq(schema.rosters.id, rosterRow.id)).run();
 
       // Clear any trade-block listing on the released mon for this team
@@ -682,7 +676,7 @@ export const teamRoutes = new Elysia()
         type: 'fa',
         teamId,
         pokemonOut: pokemonName,
-        pointsOut: rosterRow.costAtDraft || rosterRow.tier,
+        pointsOut: rosterRow.costAtDraft ?? rosterRow.tier,
       }).run();
 
       db.insert(schema.activityLog).values({
@@ -693,7 +687,10 @@ export const teamRoutes = new Elysia()
         description: `FA: ${team.teamName} released ${pokemonName}`,
         metadata: JSON.stringify({ teamId, pokemonName }),
       }).run();
-
-      return { success: true };
     });
+
+    // Best-effort: refresh the PS bot's user→team map after roster change.
+    try { refreshUserMap(); } catch {}
+
+    return { success: true };
   });

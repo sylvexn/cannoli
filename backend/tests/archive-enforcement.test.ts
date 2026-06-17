@@ -189,3 +189,24 @@ describe('missing rows pass through (do not mask 404)', () => {
     expect(checkMatchArchived('nope')).toBeNull();
   });
 });
+
+// ── FA pickup and release share the same checkLeagueArchived guard ────────────
+// The routes /free-agents/pickup and /free-agents/release both call
+// checkLeagueArchived(leagueId, query.force) at the top of their handlers —
+// they had NO archive guard before this fix. Verify the guard function
+// returns the expected block/pass for both paths via the same league fixture.
+describe('FA archive guard (pickup + release gated via checkLeagueArchived)', () => {
+  test('FA pickup: checkLeagueArchived blocks an archived league', () => {
+    const block = checkLeagueArchived(ARCH_LEAGUE);
+    expect(block).not.toBeNull();
+    expect(block!.code).toBe('season_archived');
+  });
+
+  test('FA pickup: checkLeagueArchived passes an active league', () => {
+    expect(checkLeagueArchived(ACTIVE_LEAGUE)).toBeNull();
+  });
+
+  test('FA release: checkLeagueArchived force-bypass works', () => {
+    expect(checkLeagueArchived(ARCH_LEAGUE, '1')).toBeNull();
+  });
+});

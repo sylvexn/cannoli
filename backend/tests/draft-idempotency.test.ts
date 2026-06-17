@@ -16,17 +16,20 @@
  *  - Per-league isolation: an identical id in two leagues is independent.
  *  - The 64-entry ring buffer evicts in insertion order (oldest first).
  *  - Cached *failures* are replayed as failures, not silently retried.
+ *  - Undo clears the cache: pick → undo → re-submit same clientRequestId
+ *    does NOT return the stale cached success.
  *
  * ── Testing approach ─────────────────────────────────────────────────────────
- * `recordIdempotent` / `lookupIdempotent` / `IDEMPOTENCY_LIMIT` are exported
- * from `draft.ts` purely for this test. They are pure operations over a
- * module-level Map — no DB, no WebSocket. The buffer is process-global, so each
- * test uses a unique league id to avoid cross-test contamination.
+ * `recordIdempotent` / `lookupIdempotent` / `evictIdempotentByPokemon` /
+ * `IDEMPOTENCY_LIMIT` are exported from `draft.ts` purely for this test.
+ * Ring-buffer tests are pure (no DB); the undo section uses real DB fixtures
+ * via draft-fixture.ts + executePick/undoLastPick.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, afterEach } from 'bun:test';
 import {
   recordIdempotent,
   lookupIdempotent,
+  evictIdempotentByPokemon,
   IDEMPOTENCY_LIMIT,
   type IdempotentResult,
 } from '../src/routes/draft';
@@ -195,5 +198,149 @@ describe('idempotency — failure replay', () => {
       expect(hit.error).toBe('Pokemon already drafted');
       expect(hit.code).toBe('not_your_turn');
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. evictIdempotentByPokemon — undo clears the cache
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('evictIdempotentByPokemon', () => {
+  test('removes only the entry whose pokemon name matches', () => {
+    const league = freshLeague();
+    recordIdempotent(league, 'req-a', okPick('dragapult', 1));
+    recordIdempotent(league, 'req-b', okPick('garchomp', 2));
+
+    const evicted = evictIdempotentByPokemon(league, 'dragapult');
+    expect(evicted).toBe(1);
+    expect(lookupIdempotent(league, 'req-a')).toBeUndefined();
+    // The other entry is untouched.
+    expect(lookupIdempotent(league, 'req-b')).toEqual(okPick('garchomp', 2));
+  });
+
+  test('returns 0 when no matching entry exists', () => {
+    const league = freshLeague();
+    recordIdempotent(league, 'req-a', okPick('dragapult', 1));
+    const evicted = evictIdempotentByPokemon(league, 'garchomp');
+    expect(evicted).toBe(0);
+    expect(lookupIdempotent(league, 'req-a')).toBeDefined();
+  });
+
+  test('does not evict failure entries for the same pokemon name', () => {
+    const league = freshLeague();
+    recordIdempotent(league, 'req-fail', { ok: false, error: 'banned', code: 'banned' });
+    const evicted = evictIdempotentByPokemon(league, 'dragapult');
+    expect(evicted).toBe(0);
+    // Failure entry (no pick.pokemonName) is not touched.
+    expect(lookupIdempotent(league, 'req-fail')).toBeDefined();
+  });
+
+  test('is scoped per league — does not evict another league', () => {
+    const leagueA = freshLeague();
+    const leagueB = freshLeague();
+    recordIdempotent(leagueA, 'req', okPick('dragapult', 1));
+    recordIdempotent(leagueB, 'req', okPick('dragapult', 1));
+
+    evictIdempotentByPokemon(leagueA, 'dragapult');
+    expect(lookupIdempotent(leagueA, 'req')).toBeUndefined();
+    expect(lookupIdempotent(leagueB, 'req')).toBeDefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Undo-then-retry end-to-end (DB + engine)
+// ─────────────────────────────────────────────────────────────────────────────
+// These tests use real DB fixtures. They prove that after an admin undo, a
+// client re-submitting the original clientRequestId does NOT receive the
+// stale cached success — instead the pick is re-executed (or rejected).
+//
+// We simulate the route handler's behaviour directly (no HTTP/WS):
+//   1. Look up cache  → miss → executePick → recordIdempotent
+//   2. Admin calls undoLastPick → evictIdempotentByPokemon
+//   3. Client retries same clientRequestId → cache miss → real pick logic runs
+
+import { executePick, undoLastPick } from '../src/lib/draft-engine';
+import { buildDraftFixture, pickByTier, type DraftFixture } from './draft-fixture';
+
+const dbFixtures: DraftFixture[] = [];
+afterEach(() => { while (dbFixtures.length) dbFixtures.pop()!.cleanup(); });
+
+function fixtureWith(opts?: Parameters<typeof buildDraftFixture>[0]): DraftFixture {
+  const f = buildDraftFixture(opts);
+  dbFixtures.push(f);
+  return f;
+}
+
+/** Mirrors the route handler: lookup → execute → record. */
+function pickWithIdempotency(
+  leagueId: string, pokemonName: string, teamId: string, clientRequestId: string,
+): { result: IdempotentResult; replayed: boolean } {
+  const cached = lookupIdempotent(leagueId, clientRequestId);
+  if (cached) return { result: cached, replayed: true };
+  const r = executePick(leagueId, pokemonName, teamId, teamId);
+  const stored: IdempotentResult = r.success
+    ? { ok: true, pick: r.pick }
+    : { ok: false, error: r.error!, code: r.code };
+  recordIdempotent(leagueId, clientRequestId, stored);
+  return { result: stored, replayed: false };
+}
+
+describe('idempotency — undo clears cache (end-to-end)', () => {
+  test('after undo, the same clientRequestId is a cache miss and re-executes', () => {
+    const { leagueId, teamIds } = fixtureWith({ teams: 2, rosterSize: 2 });
+    const teamId = teamIds[0];
+    const mon = pickByTier(5);
+    const reqId = 'undo-test-req-1';
+
+    // First pick — cache miss, executes and records.
+    const first = pickWithIdempotency(leagueId, mon, teamId, reqId);
+    expect(first.replayed).toBe(false);
+    expect(first.result.ok).toBe(true);
+
+    // Replaying the same id before undo → cache hit.
+    const replay = pickWithIdempotency(leagueId, mon, teamId, reqId);
+    expect(replay.replayed).toBe(true);
+    expect(replay.result.ok).toBe(true);
+
+    // Admin undoes the pick and evicts the cache entry.
+    const undoResult = undoLastPick(leagueId, 'admin');
+    expect(undoResult.success).toBe(true);
+    if (undoResult.success) {
+      evictIdempotentByPokemon(leagueId, undoResult.undonePick.pokemonName);
+    }
+
+    // The same clientRequestId is now a cache miss.
+    const afterUndo = lookupIdempotent(leagueId, reqId);
+    expect(afterUndo).toBeUndefined();
+
+    // A retry re-executes the pick (the mon is available again after undo).
+    const retry = pickWithIdempotency(leagueId, mon, teamId, reqId);
+    expect(retry.replayed).toBe(false);
+    expect(retry.result.ok).toBe(true);
+  });
+
+  test('undo does not evict cache entries for other pokemon in the same league', () => {
+    const { leagueId, teamIds } = fixtureWith({ teams: 2, rosterSize: 4 });
+    const teamA = teamIds[0];
+    const teamB = teamIds[1];
+    const monA = pickByTier(5);
+    const monB = pickByTier(4, [monA]);
+
+    // Pick monA for teamA (pick index 0), then monB for teamB (pick index 1).
+    pickWithIdempotency(leagueId, monA, teamA, 'req-a');
+    pickWithIdempotency(leagueId, monB, teamB, 'req-b');
+
+    // Undo reverts monB (the last pick).
+    const undoResult = undoLastPick(leagueId, 'admin');
+    expect(undoResult.success).toBe(true);
+    if (undoResult.success) {
+      evictIdempotentByPokemon(leagueId, undoResult.undonePick.pokemonName);
+    }
+
+    // req-b (monB) is evicted.
+    expect(lookupIdempotent(leagueId, 'req-b')).toBeUndefined();
+    // req-a (monA, a different pokemon) is untouched.
+    expect(lookupIdempotent(leagueId, 'req-a')).toBeDefined();
+    expect(lookupIdempotent(leagueId, 'req-a')!.ok).toBe(true);
   });
 });

@@ -80,6 +80,31 @@ export function lookupIdempotent(leagueId: string, requestId: string): Idempoten
 }
 
 /**
+ * Remove all cached idempotency entries for `leagueId` whose successful result
+ * references `pokemonName`. Called after an undo so that a client retry of the
+ * undone pick's original clientRequestId is not served the now-stale cached
+ * success.
+ *
+ * Limitation: `draftPicks` does not store `clientRequestId`, so we cannot evict
+ * by exact request id. Scanning by pokemon name is the best available key — it
+ * covers the common case (one cached success per pokemon name in the ring buffer)
+ * and is safe because a pokemon can only be picked once per league; any cached
+ * success for it after an undo is definitively stale.
+ */
+export function evictIdempotentByPokemon(leagueId: string, pokemonName: string): number {
+  const map = idempotencyByLeague.get(leagueId);
+  if (!map) return 0;
+  let evicted = 0;
+  for (const [key, result] of map) {
+    if (result.ok && result.pick.pokemonName === pokemonName) {
+      map.delete(key);
+      evicted++;
+    }
+  }
+  return evicted;
+}
+
+/**
  * Push the current draft snapshot to every subscriber on this league's WS topic.
  */
 function broadcastDraftState(leagueId: string) {
@@ -342,6 +367,11 @@ export const draftRoutes = new Elysia()
     if (archived) { set.status = 409; return archived; }
     const result = undoLastPick(params.leagueId, user.username);
     if (!result.success) { set.status = 400; return { error: result.error }; }
+    // Clear any cached idempotency entries for the undone pick so a client retry
+    // of the original clientRequestId does not get served the now-stale success.
+    // draftPicks does not store clientRequestId, so we evict by pokemonName
+    // (the best available key — safe because a mon can only be picked once per league).
+    evictIdempotentByPokemon(params.leagueId, result.undonePick.pokemonName);
     broadcastDraftState(params.leagueId);
     return result;
   })

@@ -7,6 +7,8 @@ import { getLeague, getTeamRoster, isTradeDeadlinePassed as deadlinePassed } fro
 import { checkLeagueArchived } from '../lib/archive-guard';
 import { effectiveCost } from '../lib/tera-cost';
 import { getLeagueCostMap } from '../lib/league-costs';
+import { validateRosterLegality } from '../lib/roster-legality';
+import { refreshUserMap } from '../lib/ps-bot';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -23,13 +25,15 @@ function regularPhaseError(league: { phase: string; name?: string } | null | und
 
 /**
  * Validate that a proposed trade would leave both rosters legal:
+ *   - offer count must equal request count (1-for-1, 2-for-2, …)
+ *   - no duplicate names within offering or requesting lists
  *   - point cap not exceeded (using EFFECTIVE cost — retained tera-captains
  *     keep their markup; traded mons lose captain status, so their markup is
  *     dropped from the post-trade total)
  *   - max 1 mega per team
  *   - no duplicate national-dex on either team
+ *   - no duplicate species/base-form on either team (e.g. Tornadus + Tornadus-Therian)
  *   - roster size: neither team may exceed league.rosterSize after the swap.
- *     Unequal (N-for-M) trades are allowed as long as neither side goes over cap.
  *
  * Returns null if valid, or an error message string.
  */
@@ -47,6 +51,21 @@ function validateProposedTrade(opts: {
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
 
+  // Symmetric count check: both sides must offer the same number of mons.
+  if (offering.length !== requesting.length) {
+    return `Both sides must offer the same number of Pokemon (offering ${offering.length}, requesting ${requesting.length})`;
+  }
+
+  // Up-front duplicate-name guard: reject if either list contains a name twice.
+  const offeringSet = new Set(offering);
+  if (offeringSet.size !== offering.length) {
+    return 'Offering list contains duplicate Pokemon names';
+  }
+  const requestingSet = new Set(requesting);
+  if (requestingSet.size !== requesting.length) {
+    return 'Requesting list contains duplicate Pokemon names';
+  }
+
   // Pull rosters
   const proposerRoster = getTeamRoster(proposerId);
   const recipientRoster = getTeamRoster(recipientId);
@@ -63,7 +82,7 @@ function validateProposedTrade(opts: {
     }
   }
 
-  // Pull pokemon metadata for offered + requested + every roster mon (for natdex/mega)
+  // Pull pokemon metadata for all roster mons (natdex/mega/species checks).
   const allNames = new Set<string>([
     ...proposerRoster.map(r => r.pokemonName),
     ...recipientRoster.map(r => r.pokemonName),
@@ -72,14 +91,12 @@ function validateProposedTrade(opts: {
   const pokeByName = new Map(pokemonRows.map(p => [p.name, p]));
 
   // League format cost map — used to resolve the price of traded-IN mons that
-  // don't yet have a costAtDraft on the receiving side. Both teams share the
-  // same league so one map covers both rosters.
+  // don't yet have a costAtDraft on the receiving side.
   const leagueCosts = getLeagueCostMap(leagueId);
 
   // Build post-trade rosters. Incoming (traded-in) mons land as NON-captains —
   // tera-captain status (and its cost markup) does not transfer (mirrors
-  // executeRosterSwap, which clears isTeraCaptain on the moved rows). Retained
-  // mons keep their existing captain flag.
+  // executeRosterSwap). Retained mons keep their existing captain flag.
   const postProposer = [
     ...proposerRoster.filter(r => !offering.includes(r.pokemonName)),
     ...recipientRoster.filter(r => requesting.includes(r.pokemonName)).map(r => ({ ...r, isTeraCaptain: false })),
@@ -90,7 +107,6 @@ function validateProposedTrade(opts: {
   ];
 
   // Roster size cap: neither team may end up with more than rosterSize mons.
-  // (Teams may go below the cap — that's fine; they can FA pickup later.)
   if (rosterSize != null) {
     if (postProposer.length > rosterSize) {
       return `Proposer would have ${postProposer.length} Pokemon after the trade (max ${rosterSize})`;
@@ -101,43 +117,18 @@ function validateProposedTrade(opts: {
   }
 
   for (const [side, roster] of [['Proposer', postProposer], ['Recipient', postRecipient]] as const) {
-    // Point cap. Use the EFFECTIVE cost: a RETAINED tera-captain still carries
-    // its markup post-trade (only the TRADED mons lose captain status), so
-    // summing raw costAtDraft would under-count and let a roster slip over the
-    // real cap (TRADE-CAP-CAPTAIN).
-    // For cost resolution: costAtDraft is the frozen snapshot for already-owned
-    // mons (retained or traded in from a prior acquisition). For mons being
-    // traded in here, fall back to the league format cost rather than the raw
-    // global tier so pricing is consistent with this league's format.
-    const total = roster.reduce((s, r) => {
-      const cost = r.costAtDraft || leagueCosts.get(r.pokemonName)?.tier || r.tier || 0;
-      return s + effectiveCost(cost, !!r.isTeraCaptain);
-    }, 0);
-    if (total > pointCap) {
-      return `${side} would exceed point cap (${total} > ${pointCap})`;
-    }
+    // Map roster rows to RosterEntry shape for the shared validator.
+    // Cost resolution: prefer the frozen costAtDraft snapshot; fall back to the
+    // league format cost (never the raw global r.tier, which may differ from
+    // this league's format). Use ?? so a legit 0-cost mon isn't treated as missing.
+    const entries = roster.map(r => ({
+      pokemonName: r.pokemonName,
+      cost: r.costAtDraft ?? leagueCosts.get(r.pokemonName)?.tier ?? 0,
+      isTeraCaptain: !!r.isTeraCaptain,
+    }));
 
-    // Mega cap
-    let megaCount = 0;
-    for (const r of roster) {
-      const p = pokeByName.get(r.pokemonName);
-      if (p?.formCategory === 'mega') megaCount++;
-    }
-    if (megaCount > 1) {
-      return `${side} would have ${megaCount} megas (max 1)`;
-    }
-
-    // Duplicate national dex
-    const dexSeen = new Map<number, string>();
-    for (const r of roster) {
-      const p = pokeByName.get(r.pokemonName);
-      if (p?.nationalDexNumber == null) continue;
-      const prev = dexSeen.get(p.nationalDexNumber);
-      if (prev) {
-        return `${side} would have duplicate dex#${p.nationalDexNumber} (${prev} + ${r.pokemonName})`;
-      }
-      dexSeen.set(p.nationalDexNumber, r.pokemonName);
-    }
+    const violation = validateRosterLegality(entries, pokeByName, { pointCap, label: side });
+    if (violation) return violation.message;
   }
 
   return null;
@@ -183,7 +174,7 @@ function executeRosterSwap(opts: {
       .get();
     if (!row) throw new Error(`Trade invalid: ${proposerId} no longer has ${name}`);
     // Prefer the frozen costAtDraft snapshot; fall back to the league format cost.
-    offeringSnapshots.set(name, (row.costAtDraft || leagueCosts.get(name)?.tier) ?? null);
+    offeringSnapshots.set(name, (row.costAtDraft ?? leagueCosts.get(name)?.tier) ?? null);
     db.update(schema.rosters).set({
       teamId: recipientId,
       acquiredVia: 'trade',
@@ -200,7 +191,7 @@ function executeRosterSwap(opts: {
       .where(and(eq(schema.rosters.teamId, recipientId), eq(schema.rosters.pokemonName, name)))
       .get();
     if (!row) throw new Error(`Trade invalid: ${recipientId} no longer has ${name}`);
-    requestingSnapshots.set(name, (row.costAtDraft || leagueCosts.get(name)?.tier) ?? null);
+    requestingSnapshots.set(name, (row.costAtDraft ?? leagueCosts.get(name)?.tier) ?? null);
     db.update(schema.rosters).set({
       teamId: proposerId,
       acquiredVia: 'trade',
@@ -417,6 +408,10 @@ export const tradeRoutes = new Elysia()
       set.status = 400;
       return { error: (e as Error).message };
     }
+
+    // Best-effort: refresh the PS bot's user→team map so it stays current.
+    // Never let this fail the request.
+    try { refreshUserMap(); } catch {}
 
     return { success: true };
   })

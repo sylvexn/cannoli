@@ -9,6 +9,7 @@ import { tx } from './tx';
 import { getBaseFormName } from './pokedex';
 import { effectiveCost } from './tera-cost';
 import { getLeagueCostMap } from './league-costs';
+import { validateRosterLegality } from './roster-legality';
 
 // ─── Structured error codes ────────────────────────────────────────────────
 // Mirrors frontend draft-rules ConflictReason kinds — wire-formatted for the
@@ -156,7 +157,8 @@ export function validatePick(
 
   if (existingPick) return { valid: false, error: `${pokemonName} is already drafted`, code: 'already_drafted' };
 
-  // 3. Same-species, same-natdex, + Mega cap checks
+  // 3. Whole-roster invariants: point cap, ≤1 mega, duplicate natdex, duplicate species.
+  // Delegate to the shared validator so these rules can't drift across draft/trade/FA.
   const teamPicks = db.select().from(schema.draftPicks)
     .where(and(
       eq(schema.draftPicks.leagueId, leagueId),
@@ -164,58 +166,70 @@ export function validatePick(
     ))
     .all();
 
-  const incomingBase = getBaseFormName(pokemonName);
-  const incomingIsMega = poke.formCategory === 'mega';
-  const incomingDex = poke.nationalDexNumber;
-  let megaCount = 0;
-
-  // Hydrate all current roster mons in one IN(...) query instead of a point
-  // query per pick (was an N+1 on every pick attempt).
+  // Hydrate all current roster mons in one IN(...) query for the shared validator's
+  // pokeByName map (formCategory + nationalDexNumber).
   const rosterNames = teamPicks.map(p => p.pokemonName);
   const rosterMons = rosterNames.length
     ? db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, rosterNames)).all()
     : [];
-  const rosterMonByName = new Map(rosterMons.map(m => [m.name, m]));
 
-  for (const p of teamPicks) {
-    const otherPoke = rosterMonByName.get(p.pokemonName);
-    const otherBase = getBaseFormName(p.pokemonName);
-    if (otherBase === incomingBase) {
+  // Build the projected post-pick roster for the shared validator.
+  // Cost = raw tier (draft context); isTeraCaptain = false (captains designated post-draft).
+  const projectedRosterEntries = [
+    ...teamPicks.map(p => ({ pokemonName: p.pokemonName, cost: p.tier, isTeraCaptain: false as const })),
+    { pokemonName, cost: pokeTier, isTeraCaptain: false as const },
+  ];
+
+  // pokeByName map: combines hydrated roster mons + the incoming mon's meta.
+  const pokeByName = new Map(rosterMons.map(m => [m.name, {
+    formCategory: m.formCategory,
+    nationalDexNumber: m.nationalDexNumber,
+  }]));
+  pokeByName.set(pokemonName, {
+    formCategory: poke.formCategory,
+    nationalDexNumber: poke.nationalDexNumber,
+  });
+
+  const rosterViolation = validateRosterLegality(projectedRosterEntries, pokeByName, { pointCap });
+  if (rosterViolation) {
+    // Map shared violation codes back to the PickErrorCode wire values the frontend expects,
+    // preserving the existing message style exactly.
+    const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
+    if (rosterViolation.code === 'point_cap') {
       return {
         valid: false,
-        code: 'dup_species',
-        error: `Your team already has ${p.pokemonName} (same species as ${pokemonName})`,
+        code: 'over_budget',
+        error: `Would exceed point cap (${usedPoints} + ${pokeTier} > ${pointCap})`,
       };
     }
-    // Forms that share a National Dex number (e.g. Tornadus-Therian vs Tornadus,
-    // Calyrex-Ice vs Calyrex-Shadow) collide even when the species key differs.
-    if (
-      incomingDex != null
-      && otherPoke?.nationalDexNumber != null
-      && otherPoke.nationalDexNumber === incomingDex
-    ) {
+    if (rosterViolation.code === 'mega_cap') {
+      return { valid: false, code: 'mega_cap', error: `Max 1 Mega per team — already have one` };
+    }
+    if (rosterViolation.code === 'dup_natdex') {
+      // Find the existing team mon that caused the collision.
+      const incomingDex = poke.nationalDexNumber;
+      const conflicting = rosterMons.find(m => m.nationalDexNumber != null && m.nationalDexNumber === incomingDex);
       return {
         valid: false,
         code: 'dup_natdex',
-        error: `Your team already has ${p.pokemonName} (#${incomingDex}) — only one form of that Pokémon allowed`,
+        error: `Your team already has ${conflicting?.name ?? 'a Pokémon'} (#${incomingDex}) — only one form of that Pokémon allowed`,
       };
     }
-    if (otherPoke?.formCategory === 'mega') megaCount++;
+    if (rosterViolation.code === 'dup_species') {
+      // Find the existing team mon that shares the same base species.
+      const incomingBase = getBaseFormName(pokemonName);
+      const conflicting = teamPicks.find(p => getBaseFormName(p.pokemonName) === incomingBase);
+      return {
+        valid: false,
+        code: 'dup_species',
+        error: `Your team already has ${conflicting?.pokemonName ?? 'a Pokémon'} (same species as ${pokemonName})`,
+      };
+    }
+    // Fallback (shouldn't happen — all four codes are handled above).
+    return { valid: false, code: 'over_budget', error: rosterViolation.message };
   }
 
-  if (incomingIsMega && megaCount >= 1) {
-    return { valid: false, code: 'mega_cap', error: `Max 1 Mega per team — already have one` };
-  }
-
-  // 4. Point cap check (raw) — use the league-format tier, not the global pokemon.tier
   const usedPoints = teamPicks.reduce((sum, p) => sum + p.tier, 0);
-  if (usedPoints + pokeTier > pointCap) {
-    return {
-      valid: false,
-      code: 'over_budget',
-      error: `Would exceed point cap (${usedPoints} + ${pokeTier} > ${pointCap})`,
-    };
-  }
 
   // 5. Roster reservation: must leave (picksLeft - 1) × MIN_PICK_COST for remaining
   // snake slots assigned to this team. Skips when we can't compute picksLeft (e.g.
