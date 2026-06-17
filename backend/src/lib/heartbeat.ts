@@ -32,6 +32,9 @@ const INTERVAL_MS = 60_000;
 /** Guards against double-starting (e.g. hot-reload). */
 let _started = false;
 
+/** Handle returned by setInterval so we can clear it on shutdown. */
+let _intervalHandle: NodeJS.Timeout | null = null;
+
 /**
  * Tracks the last known status per probe name.
  * Used to detect state transitions and decide when to fire alerts.
@@ -79,15 +82,32 @@ function probeDb(): ProbeResult {
 
 /** Probe: Pokemon Showdown bot WebSocket connection.
  *  Only registered when PS_SERVER_WS_URL is set — otherwise the bot is not
- *  configured and a persistent "down" would be noise. */
+ *  configured and a persistent "down" would be noise.
+ *
+ *  health mapping:
+ *    green  → ok       (connected and recently active)
+ *    yellow → degraded (connected but idle — zombie socket detection)
+ *    red    → down     (disconnected) */
 function probePsBot(): ProbeResult {
   const t0 = performance.now();
   try {
-    const { connected, lastError } = getBotStatus();
+    const { connected, health, lastError } = getBotStatus();
+    let status: ProbeStatus;
+    let detail: string | null;
+    if (!connected || health === 'red') {
+      status = 'down';
+      detail = lastError ?? 'not connected';
+    } else if (health === 'yellow') {
+      status = 'degraded';
+      detail = 'connected but idle (possible zombie socket)';
+    } else {
+      status = 'ok';
+      detail = null;
+    }
     return {
       name: 'ps_bot',
-      status: connected ? 'ok' : 'down',
-      detail: connected ? null : (lastError ?? 'not connected'),
+      status,
+      detail,
       latencyMs: Math.round(performance.now() - t0),
     };
   } catch (err) {
@@ -208,7 +228,19 @@ export function startHeartbeat(): void {
   // Immediate sweep so the table has data right away.
   runSweep();
 
-  setInterval(runSweep, INTERVAL_MS);
+  _intervalHandle = setInterval(runSweep, INTERVAL_MS);
+}
+
+/**
+ * Stop the background heartbeat interval (called on graceful shutdown).
+ * Safe to call if startHeartbeat() was never called or already stopped.
+ */
+export function stopHeartbeat(): void {
+  if (_intervalHandle !== null) {
+    clearInterval(_intervalHandle);
+    _intervalHandle = null;
+  }
+  _started = false;
 }
 
 // ---------------------------------------------------------------------------
