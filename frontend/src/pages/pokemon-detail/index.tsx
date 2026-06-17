@@ -13,6 +13,7 @@ import { CoachLink } from '@/components/coach-link';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDefensiveMatchups, groupMatchups } from '@/lib/type-effectiveness';
+import { MovepoolCard } from './movepool-card';
 import { Swords, ArrowLeft, Shield, Gauge, UsersRound, Clapperboard, ExternalLink, Sparkles } from 'lucide-react';
 import { api, type ApiGlobalOwnership, type ApiPokemonRecentBattle } from '@/lib/api';
 import type { PokemonType } from '@/lib/pokemon';
@@ -89,6 +90,9 @@ export function PokemonDetailPage({ format }: { format?: CostFormat } = {}) {
           <SpeedTierStrip baseSpeed={stats.spe} />
         </div>
       </div>
+
+      {/* Movepool: full-width scouting card */}
+      <MovepoolCard pokemonName={decodedName} />
 
       {/* Bottom: full-width ownership + recent battles strip */}
       <PokemonScoutingStrip pokemonName={decodedName} />
