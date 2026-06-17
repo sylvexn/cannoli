@@ -9,10 +9,17 @@ export const standingsRoutes = new Elysia()
   // ─── Teams (with rosters + computed records) ─────────────────────────
 
   .get('/api/leagues/:leagueId/teams', ({ params }) => {
+    // Results-reveal gate: when an admin has set resultsRevealedThrough on this
+    // league, standings/records are computed only through that week so nothing
+    // moves until later weeks are revealed (NULL = gate off = full visibility).
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, params.leagueId)).get();
+    const maxWeek = league?.resultsRevealedThrough ?? null;
+
     // Compute standings using the documented tiebreaker hierarchy.
     // Use 'all' phase here so playoff-era views still render correct W-L; the
     // playoff-seeding endpoint scopes to 'regular' separately.
-    const standings = computeStandings(params.leagueId, { phase: 'all' });
+    const standings = computeStandings(params.leagueId, { phase: 'all', maxWeek });
     const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
 
     // Fetch teams keyed by id, then return them in the order standings dictates.

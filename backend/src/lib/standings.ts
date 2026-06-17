@@ -139,8 +139,9 @@ export function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string
  * comparison fallback) so forfeits scored e.g. 2-2 credit the right side; PF/PA
  * remain the raw KO totals.
  */
-function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}): RawRecord[] {
+function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all'; maxWeek?: number | null } = {}): RawRecord[] {
   const phase = opts.phase ?? 'regular';
+  const maxWeek = opts.maxWeek;
   const teams = db.select().from(schema.teams)
     .where(eq(schema.teams.leagueId, leagueId))
     .all();
@@ -149,12 +150,19 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
     ? eq(schema.matches.phase, 'regular')
     : undefined;
 
+  // Results-reveal gate: when maxWeek is set, only count matches up through that
+  // week so standings/records don't move until an admin reveals later weeks.
+  const weekClause = maxWeek != null
+    ? sql`${schema.matches.week} <= ${maxWeek}`
+    : undefined;
+
   const completed = db.select().from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.status, 'completed'),
       sql`home_score IS NOT NULL`,
       phaseClause,
+      weekClause,
     ))
     .all();
 
@@ -194,9 +202,15 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all' } = {}):
  * For a multi-way tie this naturally produces a sub-cycle ordering; if every
  * team in the set has the same H2H record, the next tiebreaker (diff) applies.
  */
-function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number> {
+function headToHeadWins(leagueId: string, tiedIds: string[], maxWeek?: number | null): Map<string, number> {
   const result = new Map<string, number>(tiedIds.map(id => [id, 0]));
   if (tiedIds.length < 2) return result;
+
+  // Results-reveal gate: mirror rawRecords so H2H tiebreaks only consider
+  // revealed weeks when the gate is on.
+  const weekClause = maxWeek != null
+    ? sql`${schema.matches.week} <= ${maxWeek}`
+    : undefined;
 
   // Filter in JS after fetching matches that involve any of these teams.
   const setIds = new Set(tiedIds);
@@ -206,6 +220,7 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
       eq(schema.matches.phase, 'regular'),
       eq(schema.matches.status, 'completed'),
       sql`home_score IS NOT NULL`,
+      weekClause,
     ))
     .all()
     .filter(m => m.homeTeamId != null && m.awayTeamId != null
@@ -230,8 +245,8 @@ function headToHeadWins(leagueId: string, tiedIds: string[]): Map<string, number
  */
 export function computeStandings(
   leagueId: string,
-  opts: { phase?: 'regular' | 'all' } = {},
+  opts: { phase?: 'regular' | 'all'; maxWeek?: number | null } = {},
 ): TeamStandingRow[] {
   const records = rawRecords(leagueId, opts);
-  return orderRecords(records, tiedIds => headToHeadWins(leagueId, tiedIds));
+  return orderRecords(records, tiedIds => headToHeadWins(leagueId, tiedIds, opts.maxWeek));
 }

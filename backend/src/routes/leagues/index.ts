@@ -59,6 +59,11 @@ export const leagueRoutes = new Elysia()
       // job anchors end-of-day to this zone; the frontend (sweep 3c) labels
       // each user's local rendering against it.
       timezone: l.timezone,
+      // Results-reveal gate for THIS league. NULL = gate off (results fully
+      // visible). An integer N = results for weeks > N are hidden for everyone
+      // and standings are computed only through week N. The frontend uses this
+      // (with season.currentWeek) to blur schedule/replay results past the gate.
+      resultsRevealedThrough: l.resultsRevealedThrough ?? null,
       playerCount: teamCounts.get(l.id) ?? 0,
       // Lifecycle fields are per-league (3 leagues run independently per
       // season). Surfaced under `season` for backwards-compat with all
