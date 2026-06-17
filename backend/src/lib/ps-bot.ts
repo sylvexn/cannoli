@@ -12,6 +12,7 @@
 
 import { ReplayParser } from './replay-parser';
 import { validateMatchResult } from './replay-parser';
+import { toCannoliSpeciesName } from './pokedex';
 import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
@@ -1138,7 +1139,9 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           db.insert(schema.matchPokemon).values({
             matchId: battle.matchId,
             teamId,
-            pokemonName: mon.species,
+            // Store in Cannoli convention ("Mega Altaria"), not Showdown's
+            // "Altaria-Mega", so per-Pokemon K/D JOINs to the roster entry.
+            pokemonName: toCannoliSpeciesName(mon.species),
             kills: mon.kills,
             deaths: mon.deaths,
             teraUsed: mon.teraUsed,

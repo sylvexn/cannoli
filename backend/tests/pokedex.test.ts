@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { getBaseFormName, getFormCategory } from '../src/lib/pokedex';
+import { getBaseFormName, getFormCategory, toCannoliSpeciesName } from '../src/lib/pokedex';
 
 describe('getFormCategory', () => {
   test('classifies megas', () => {
@@ -62,5 +62,47 @@ describe('getBaseFormName', () => {
     // This is the rule we enforce in validatePick:
     expect(getBaseFormName('Mega Charizard X')).toBe(getBaseFormName('Mega Charizard Y'));
     expect(getBaseFormName('Mega Charizard X')).toBe(getBaseFormName('Charizard'));
+  });
+});
+
+describe('toCannoliSpeciesName', () => {
+  test('Showdown Mega suffix → Cannoli Mega prefix', () => {
+    expect(toCannoliSpeciesName('Altaria-Mega')).toBe('Mega Altaria');
+    expect(toCannoliSpeciesName('Swampert-Mega')).toBe('Mega Swampert');
+    expect(toCannoliSpeciesName('Gardevoir-Mega')).toBe('Mega Gardevoir');
+  });
+
+  test('Mega X/Y variants keep their letter', () => {
+    expect(toCannoliSpeciesName('Charizard-Mega-X')).toBe('Mega Charizard X');
+    expect(toCannoliSpeciesName('Charizard-Mega-Y')).toBe('Mega Charizard Y');
+    expect(toCannoliSpeciesName('Mewtwo-Mega-Y')).toBe('Mega Mewtwo Y');
+  });
+
+  test('Showdown Primal suffix → Cannoli Primal prefix', () => {
+    expect(toCannoliSpeciesName('Groudon-Primal')).toBe('Primal Groudon');
+    expect(toCannoliSpeciesName('Kyogre-Primal')).toBe('Primal Kyogre');
+  });
+
+  test('idempotent on names already in Cannoli convention', () => {
+    expect(toCannoliSpeciesName('Mega Altaria')).toBe('Mega Altaria');
+    expect(toCannoliSpeciesName('Mega Charizard X')).toBe('Mega Charizard X');
+    expect(toCannoliSpeciesName('Primal Groudon')).toBe('Primal Groudon');
+  });
+
+  test('the disputed match would now validate — both conventions normalize equal', () => {
+    expect(toCannoliSpeciesName('Altaria-Mega').toLowerCase())
+      .toBe(toCannoliSpeciesName('Mega Altaria').toLowerCase());
+  });
+
+  test('regionals and cosmetics pass through unchanged (stored identically in both)', () => {
+    expect(toCannoliSpeciesName('Marowak-Alola')).toBe('Marowak-Alola');
+    expect(toCannoliSpeciesName('Qwilfish-Hisui')).toBe('Qwilfish-Hisui');
+    expect(toCannoliSpeciesName('Porygon2')).toBe('Porygon2');
+    expect(toCannoliSpeciesName('Tauros-Paldea-Aqua')).toBe('Tauros-Paldea-Aqua');
+    expect(toCannoliSpeciesName('Charizard')).toBe('Charizard');
+  });
+
+  test('preserves tera display suffix', () => {
+    expect(toCannoliSpeciesName('Altaria-Mega (T)')).toBe('Mega Altaria (T)');
   });
 });

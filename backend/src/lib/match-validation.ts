@@ -14,6 +14,7 @@
 
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
+import { toCannoliSpeciesName } from './pokedex';
 
 export interface PokemonDataEntry {
   teamId: string;
@@ -73,7 +74,7 @@ export function validatePokemonData(
     }
 
     const roster = rosterByTeam.get(entry.teamId);
-    if (!roster || !roster.has(entry.pokemonName.toLowerCase())) {
+    if (!roster || !roster.has(toCannoliSpeciesName(entry.pokemonName).toLowerCase())) {
       errors.push({
         index,
         teamId: entry.teamId,
@@ -146,7 +147,7 @@ export function validatePokemonDataForMatch(
       .all();
     rosterByTeam.set(
       teamId,
-      new Set(rows.map(r => r.pokemonName.toLowerCase())),
+      new Set(rows.map(r => toCannoliSpeciesName(r.pokemonName).toLowerCase())),
     );
   }
   return validatePokemonData(entries, homeTeamId, awayTeamId, rosterByTeam, scores);

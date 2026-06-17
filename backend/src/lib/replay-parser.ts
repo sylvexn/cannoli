@@ -9,6 +9,8 @@
  * (noah-lichtenberg/epl-replay-stats).
  */
 
+import { toCannoliSpeciesName } from './pokedex';
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface PokemonMatchStats {
@@ -582,17 +584,25 @@ export function validateMatchResult(
     { side: awaySide, roster: awayRoster, abbrev: awayTeamAbbrev },
   ];
 
+  // Normalize both the roster side and the battle side to Cannoli's naming
+  // convention before comparing. Showdown emits "Altaria-Mega"; the roster
+  // stores "Mega Altaria" — without this every Mega is falsely flagged.
   for (const { side, roster, abbrev } of sides) {
-    const rosterNames = new Set(roster.map(r => r.pokemonName.toLowerCase()));
+    const rosterNames = new Set(
+      roster.map(r => toCannoliSpeciesName(r.pokemonName).toLowerCase()),
+    );
     const captainNames = new Set(
-      roster.filter(r => r.isTeraCaptain).map(r => r.pokemonName.toLowerCase()),
+      roster
+        .filter(r => r.isTeraCaptain)
+        .map(r => toCannoliSpeciesName(r.pokemonName).toLowerCase()),
     );
 
     const sidePokemon = result.pokemon.filter(p => p.player === side && p.appeared);
 
     // Check: every Pokemon that appeared must be on the roster
     for (const mon of sidePokemon) {
-      if (!rosterNames.has(mon.species.toLowerCase())) {
+      const species = toCannoliSpeciesName(mon.species).toLowerCase();
+      if (!rosterNames.has(species)) {
         warnings.push({
           type: 'invalid_pokemon',
           team: abbrev,
@@ -602,7 +612,7 @@ export function validateMatchResult(
       }
 
       // Check: if terastallized, must be a tera captain
-      if (mon.teraUsed && !captainNames.has(mon.species.toLowerCase())) {
+      if (mon.teraUsed && !captainNames.has(species)) {
         warnings.push({
           type: 'unauthorized_tera',
           team: abbrev,

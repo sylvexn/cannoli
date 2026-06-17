@@ -16,6 +16,7 @@ import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
 import { runAutoAwards } from './pins/auto-award';
 import { validatePokemonDataForMatch } from './match-validation';
+import { toCannoliSpeciesName } from './pokedex';
 
 export interface PokemonDataEntry {
   teamId: string;
@@ -149,7 +150,8 @@ export function recordMatchResult(
         db.insert(schema.matchPokemon).values({
           matchId,
           teamId: p.teamId,
-          pokemonName: p.pokemonName,
+          // Normalize Mega/Primal to Cannoli convention so K/D JOINs the roster.
+          pokemonName: toCannoliSpeciesName(p.pokemonName),
           kills: p.kills,
           deaths: p.deaths,
           teraUsed: p.teraUsed ?? false,

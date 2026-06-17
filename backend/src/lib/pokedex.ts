@@ -92,3 +92,42 @@ export function getBaseFormName(rawName: string): string {
 
   return name;
 }
+
+/**
+ * Normalize a species name to Cannoli's roster naming convention for Megas and
+ * Primals — the ONLY forms where Cannoli and Pokemon Showdown diverge. Cannoli
+ * stores a `Mega <species>` / `Primal <species>` prefix; Showdown's battle
+ * protocol emits a `<species>-Mega[-X|Y]` / `<species>-Primal` suffix. Every
+ * other form (regionals like "Marowak-Alola", cosmetics like "Porygon2") is
+ * stored identically in both, so those pass through untouched.
+ *
+ *   - toCannoliSpeciesName("Altaria-Mega")      → "Mega Altaria"
+ *   - toCannoliSpeciesName("Charizard-Mega-X")  → "Mega Charizard X"
+ *   - toCannoliSpeciesName("Mewtwo-Mega-Y")     → "Mega Mewtwo Y"
+ *   - toCannoliSpeciesName("Groudon-Primal")    → "Primal Groudon"
+ *
+ * Idempotent: a name already in Cannoli convention ("Mega Altaria") or any
+ * non-Mega/Primal name is returned unchanged (tera suffix preserved). This lets
+ * callers normalize both the roster side and the battle side of a comparison
+ * without worrying which convention each came in as. Used by match validation
+ * (so a Mega isn't falsely flagged "not on roster") and at match_pokemon
+ * storage (so per-Pokemon K/D JOINs to the roster entry by exact name).
+ */
+export function toCannoliSpeciesName(rawName: string): string {
+  if (!rawName) return rawName;
+  const tera = / \(T\)\s*$/.test(rawName) ? ' (T)' : '';
+  const name = stripTeraSuffix(rawName);
+
+  // "<species>-Mega" / "<species>-Mega-X" / "<species>-Mega-Y" → "Mega <species> [X|Y]"
+  const megaSuffix = name.match(/^(.+?)-Mega(?:-([XY]))?$/i);
+  if (megaSuffix) {
+    const variant = megaSuffix[2] ? ` ${megaSuffix[2].toUpperCase()}` : '';
+    return `Mega ${megaSuffix[1]}${variant}${tera}`;
+  }
+
+  // "<species>-Primal" → "Primal <species>"
+  const primalSuffix = name.match(/^(.+?)-Primal$/i);
+  if (primalSuffix) return `Primal ${primalSuffix[1]}${tera}`;
+
+  return rawName;
+}
