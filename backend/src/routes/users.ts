@@ -16,6 +16,34 @@ import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { writeUpload, uploadsPath } from '../lib/uploads';
+import { isR2Configured, r2Delete } from '../lib/r2';
+
+/** Best-effort cleanup of a previously stored asset.
+ *  - If the key looks like an R2 public URL (starts with http) and R2 is configured,
+ *    derives the object key from the URL and calls r2Delete.
+ *  - Otherwise treats it as a local relative path and unlinks it from disk.
+ *  Never throws — errors are logged and swallowed so callers never fail. */
+async function deleteOldAsset(oldPath: string, newPath: string): Promise<void> {
+  if (!oldPath || oldPath === newPath) return;
+  try {
+    if (oldPath.startsWith('http')) {
+      // R2 public URL — extract the object key (everything after the base URL).
+      if (isR2Configured()) {
+        const publicBase = process.env.R2_PUBLIC_URL?.replace(/\/+$/, '') ?? '';
+        const key = publicBase && oldPath.startsWith(publicBase)
+          ? oldPath.slice(publicBase.length).replace(/^\/+/, '')
+          : oldPath.split('/').slice(3).join('/'); // fallback: strip protocol+host
+        await r2Delete(key);
+      }
+    } else {
+      // Local relative path (e.g. "user-avatars/1.png")
+      const abs = uploadsPath(oldPath.replace(/^\/uploads\//, ''));
+      unlinkSync(abs);
+    }
+  } catch (e: any) {
+    console.warn('[uploads] deleteOldAsset failed (non-fatal):', e?.message ?? e);
+  }
+}
 
 const MAX_DISPLAY_NAME = 32;
 const MAX_BIO = 280;
@@ -222,6 +250,13 @@ export const userRoutes = new Elysia()
     const filename = `${user.id}.${safeExt}`;
     const relativePath = `user-avatars/${filename}`;
 
+    // Snapshot the old path BEFORE writing so we can clean it up after.
+    const oldRow = db.select({ avatarPath: schema.users.avatarPath })
+      .from(schema.users)
+      .where(eq(schema.users.id, parseInt(user.id)))
+      .get();
+    const oldPath = oldRow?.avatarPath ?? null;
+
     await writeUpload(relativePath, file);
 
     db.update(schema.users).set({ avatarPath: relativePath }).where(eq(schema.users.id, parseInt(user.id))).run();
@@ -233,6 +268,11 @@ export const userRoutes = new Elysia()
       description: `Updated avatar`,
       metadata: JSON.stringify({ path: relativePath, size: file.size }),
     }).run();
+
+    // Best-effort: remove the old avatar only after new write + DB update succeed.
+    if (oldPath && oldPath !== relativePath) {
+      void deleteOldAsset(oldPath, relativePath);
+    }
 
     return { success: true, path: `/uploads/${relativePath}` };
   })
@@ -277,6 +317,13 @@ export const userRoutes = new Elysia()
     const filename = `${user.id}.${safeExt}`;
     const relativePath = `user-banners/${filename}`;
 
+    // Snapshot the old banner path BEFORE writing so we can clean it up after.
+    const oldBannerRow = db.select({ bannerUrl: schema.users.bannerUrl })
+      .from(schema.users)
+      .where(eq(schema.users.id, parseInt(user.id)))
+      .get();
+    const oldBannerPath = oldBannerRow?.bannerUrl ?? null;
+
     await writeUpload(relativePath, file);
 
     const publicPath = `/uploads/${relativePath}`;
@@ -289,6 +336,11 @@ export const userRoutes = new Elysia()
       description: `Updated banner`,
       metadata: JSON.stringify({ path: relativePath, size: file.size }),
     }).run();
+
+    // Best-effort: remove the old banner only after new write + DB update succeed.
+    if (oldBannerPath && oldBannerPath !== publicPath) {
+      void deleteOldAsset(oldBannerPath, publicPath);
+    }
 
     return { success: true, path: publicPath };
   })
