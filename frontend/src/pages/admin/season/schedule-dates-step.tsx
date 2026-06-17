@@ -10,6 +10,10 @@ function addDays(iso: string, days: number): string {
   return `${y}-${m}-${day}`;
 }
 
+// Calendar-date input (YYYY-MM-DD), no time component. We anchor to local
+// midnight and format directly — this is a pure date marker, not a moment
+// in time, so no zone conversion happens (and we deliberately don't attach
+// a tz suffix because there's no instant the suffix could refer to).
 export function formatShortDate(iso: string): string {
   if (!iso) return '';
   const d = new Date(`${iso}T00:00:00`);

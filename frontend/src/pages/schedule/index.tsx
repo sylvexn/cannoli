@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MatchCardSkeleton } from '@/components/skeletons';
 import { Calendar, Trophy } from 'lucide-react';
 import { AvailabilityPanel } from './availability-panel';
+import { useUserTimezone, getTimezoneAbbreviation } from '@/lib/format';
 
 type ScheduleView = 'regular' | 'playoffs';
 
@@ -17,6 +18,7 @@ export function SchedulePage() {
   const league = useLeague();
   const { players, matches, byes, getWeekMatches, loading } = useLeagueData();
   const season = league.season;
+  const tz = useUserTimezone();
 
   const hasPlayoffs = useMemo(
     () => matches.some(m => m.phase === 'playoffs'),
@@ -94,14 +96,15 @@ export function SchedulePage() {
             Season {season.seasonNumber} &middot; {season.totalWeeks} weeks
             {view === 'regular' && isCompleted && selectedWeek === season.currentWeek && ' — most recent'}
             {view === 'regular' && season.weekDates?.[String(selectedWeek)] && (
-              <span className="ml-1">&middot; Week of {new Date(season.weekDates[String(selectedWeek)] + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</span>
+              <span className="ml-1">&middot; Week of {new Date(season.weekDates[String(selectedWeek)] + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: tz })}</span>
             )}
           </p>
           {league.draftDate && season.phase === 'draft' && (
             <p className="text-xs text-pink font-medium mt-0.5">
-              Draft: {new Date(league.draftDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              Draft: {new Date(league.draftDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: tz })}
               {' at '}
-              {new Date(league.draftDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+              {new Date(league.draftDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz })}
+              {' '}{getTimezoneAbbreviation(new Date(league.draftDate), tz)}
             </p>
           )}
         </div>

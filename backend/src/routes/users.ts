@@ -28,6 +28,24 @@ const VALID_TYPES = new Set([
   'rock', 'ghost', 'dragon', 'dark', 'steel', 'fairy',
 ]);
 
+// IANA zone validator. Modern Bun ships Intl.supportedValuesOf, but if a
+// future runtime drops it we fall back to a try/catch DateTimeFormat probe
+// (which throws RangeError on unknown zones).
+function isValidIanaZone(tz: string): boolean {
+  try {
+    const supported = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+    if (typeof supported === 'function') {
+      return supported('timeZone').includes(tz);
+    }
+  } catch { /* fall through */ }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const userRoutes = new Elysia()
 
   // ─── PATCH /api/users/me ──────────────────────────────────────────────
@@ -209,6 +227,7 @@ export const userRoutes = new Elysia()
         notifyTrades: row.notifyTrades,
         notifyMatches: row.notifyMatches,
         notifyAnnouncements: row.notifyAnnouncements,
+        timezone: row.timezone,
         updatedAt: row.updatedAt,
       };
     }
@@ -220,6 +239,7 @@ export const userRoutes = new Elysia()
       notifyTrades: true,
       notifyMatches: true,
       notifyAnnouncements: true,
+      timezone: null,
       updatedAt: null,
     };
   })
@@ -227,7 +247,7 @@ export const userRoutes = new Elysia()
   // ─── PUT /api/users/me/preferences ────────────────────────────────────
   .put('/api/users/me/preferences', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const { theme, density, defaultLandingPath, notifyTrades, notifyMatches, notifyAnnouncements } =
+    const { theme, density, defaultLandingPath, notifyTrades, notifyMatches, notifyAnnouncements, timezone } =
       (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -254,6 +274,16 @@ export const userRoutes = new Elysia()
       if (v !== undefined) {
         if (typeof v !== 'boolean') { set.status = 400; return { error: `${k} must be boolean` }; }
         updates[k] = v;
+      }
+    }
+    if (timezone !== undefined) {
+      if (timezone === null || timezone === '') {
+        updates.timezone = null;
+      } else if (typeof timezone !== 'string' || timezone.length > 64 || !isValidIanaZone(timezone)) {
+        set.status = 400;
+        return { error: 'timezone must be a valid IANA zone (e.g. America/New_York) or null' };
+      } else {
+        updates.timezone = timezone;
       }
     }
 
