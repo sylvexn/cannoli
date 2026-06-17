@@ -7,7 +7,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { api } from '@/lib/api';
-import type { ApiAdminMatch } from '@/lib/api';
+import type { ApiAdminMatch, MatchWarning } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { useTeamNames } from '@/lib/use-team-names';
 import { TeamLink } from '@/components/team-link';
@@ -25,6 +25,17 @@ import {
 import { MatchEntryDialog, type ResultMode } from './matches/match-entry-dialog';
 import { MatchActionsDropdown } from './matches/match-actions-dropdown';
 import { getErrorMessage } from '@/lib/errors';
+
+/**
+ * Render a single match warning as text. Structured warnings (from the bot /
+ * replay-import path) carry team/pokemon context; flattening them here keeps
+ * React from choking on a raw object child (React error #31).
+ */
+function warningText(w: MatchWarning): string {
+  if (typeof w === 'string') return w;
+  const where = [w.team, w.pokemon].filter(Boolean).join(' ');
+  return where ? `${where}: ${w.reason}` : w.reason;
+}
 
 export function AdminMatches() {
   const { leagues } = useAppData();
@@ -277,7 +288,7 @@ export function AdminMatches() {
                                 </div>
                                 <ul className="space-y-0.5 pl-5 list-disc text-text-secondary">
                                   {match.warnings.map((w, i) => (
-                                    <li key={i}>{w}</li>
+                                    <li key={i}>{warningText(w)}</li>
                                   ))}
                                 </ul>
                                 <Button

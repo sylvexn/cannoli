@@ -230,6 +230,16 @@ export interface ApiSchedule {
   byes: ApiByeWeek[];
 }
 
+/**
+ * A match validation warning. The `warnings` JSON column is heterogeneous:
+ * the bot / replay-import path stores structured {@link ValidationWarning}
+ * objects (roster / tera / format mismatches), while admin disputes and the
+ * internal-consistency checks store plain strings. The UI must tolerate both.
+ */
+export type MatchWarning =
+  | string
+  | { type: string; team?: string; pokemon?: string; reason: string };
+
 export interface ApiAdminMatch {
   id: string;
   leagueId: string;
@@ -240,7 +250,7 @@ export interface ApiAdminMatch {
   awayScore: number | null;
   status: string;
   replayUrl: string | null;
-  warnings: string[];
+  warnings: MatchWarning[];
   phase: string;
   playoffRound: string | null;
   startedAt: string | null;
