@@ -111,7 +111,8 @@ export class ReplayParser {
    */
   static parse(log: string): ParsedMatchResult {
     const parser = new ReplayParser();
-    const lines = log.split('\n');
+    // Normalize Windows line endings so \r doesn't bleed into species/teraType
+    const lines = log.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     for (const line of lines) {
       parser.feedLine(line);
     }
@@ -141,6 +142,8 @@ export class ReplayParser {
       case 'switch':
       case 'drag': return this.handleSwitch(parts);
       case 'detailschange': return this.handleDetailsChange(parts);
+      case 'replace': return this.handleReplace(parts);
+      case 'swap': return this.handleSwap(parts);
       case 'move': return this.handleMove(parts);
       case '-damage': return this.handleDamage(parts);
       case 'faint': return this.handleFaint(parts);
@@ -160,8 +163,8 @@ export class ReplayParser {
     const allStats = Array.from(this.stats.values());
     const p1Deaths = allStats.filter(s => s.player === 'p1' && s.deaths > 0).length;
     const p2Deaths = allStats.filter(s => s.player === 'p2' && s.deaths > 0).length;
-    const p1Remaining = allStats.filter(s => s.player === 'p1' && s.brought).length - p1Deaths;
-    const p2Remaining = allStats.filter(s => s.player === 'p2' && s.brought).length - p2Deaths;
+    const p1Remaining = Math.max(0, allStats.filter(s => s.player === 'p1' && s.brought).length - p1Deaths);
+    const p2Remaining = Math.max(0, allStats.filter(s => s.player === 'p2' && s.brought).length - p2Deaths);
 
     let winner: string | null = null;
     let loser: string | null = null;
@@ -241,6 +244,7 @@ export class ReplayParser {
   private handlePlayer(parts: string[]): boolean {
     const side = parts[2] as 'p1' | 'p2';
     const name = parts[3];
+    if (!side || !name) return false;
     if (side === 'p1' || side === 'p2') {
       this.players[side] = name;
       this.hazardSetters.set(side, new Map());
@@ -270,6 +274,7 @@ export class ReplayParser {
   private handleSwitch(parts: string[]): boolean {
     const nick = parts[2]; // "p1a: Nickname"
     const speciesRaw = parts[3];
+    if (!nick || !speciesRaw) return false;
     const species = this.parseSpecies(speciesRaw);
     const side = this.parseSide(nick);
 
@@ -312,10 +317,98 @@ export class ReplayParser {
     return false;
   }
 
+  /**
+   * |replace|p1a: Nickname|Species, Gender — Illusion (Zoroark/Zorua) reveal.
+   *
+   * When Illusion breaks, PS emits a `|replace|` line that reveals the true
+   * species of the active Pokemon. Re-key the nick→species mapping exactly as
+   * `|detailschange|` does so that subsequent kills/deaths attribute to the
+   * real mon rather than the disguise target.
+   */
+  private handleReplace(parts: string[]): boolean {
+    const nick = parts[2];
+    const speciesRaw = parts[3];
+    if (!nick || !speciesRaw) return false;
+
+    const newSpecies = this.parseSpecies(speciesRaw);
+    const oldSpecies = this.nickToSpecies.get(nick);
+    const side = this.nickToSide.get(nick) ?? this.parseSide(nick);
+
+    if (oldSpecies && oldSpecies !== newSpecies) {
+      // Transfer any stats already accumulated under the disguise's species key
+      // to the true species (the disguise target may not have appeared, so the
+      // old key may reference a phantom entry). We re-key so kill/death credit
+      // flows correctly going forward.
+      const oldKey = `${side}:${oldSpecies}`;
+      const existing = this.stats.get(oldKey);
+      if (existing) {
+        this.stats.delete(oldKey);
+        existing.species = newSpecies;
+        this.stats.set(`${side}:${newSpecies}`, existing);
+      }
+    }
+
+    // Ensure the true species has an entry and is marked appeared
+    const stats = this.getOrCreateStats(side, newSpecies);
+    stats.appeared = true;
+    stats.brought = true;
+
+    this.nickToSpecies.set(nick, newSpecies);
+    this.nickToSide.set(nick, side);
+
+    // Update active slot to point at the revealed mon's nick
+    const slot = nick.substring(0, 3);
+    this.activeSlot.set(slot, nick);
+
+    return true;
+  }
+
+  /**
+   * |swap|p1a: Nickname|Position — Ally Switch / pivot position swap.
+   *
+   * Ally Switch swaps the positions of two Pokemon on the same side in a
+   * doubles battle. For our draft-league parser (singles-focused) there is
+   * typically only one active slot per side; in doubles the `activeSlot` map
+   * uses the full slot key ("p1a", "p1b"). We update the map so the two
+   * involved nicks exchange their slot keys, preventing mis-attribution in
+   * subsequent move/damage lines that reference slots by position.
+   */
+  private handleSwap(parts: string[]): boolean {
+    const nick = parts[2];
+    const positionStr = parts[3];
+    if (!nick || positionStr === undefined) return false;
+
+    const side = this.parseSide(nick);
+    // Derive the two slot letters from the current nick's slot and the target
+    // position index (0-based: 0='a', 1='b', 2='c').
+    const currentSlot = nick.substring(0, 3); // e.g. "p1a"
+    const targetIdx = parseInt(positionStr, 10);
+    if (isNaN(targetIdx)) return false;
+
+    const targetSlotLetter = String.fromCharCode('a'.charCodeAt(0) + targetIdx);
+    const targetSlot = `${side}${targetSlotLetter}`;
+
+    if (currentSlot === targetSlot) return false; // no-op
+
+    const currentNick = this.activeSlot.get(currentSlot) ?? nick;
+    const targetNick = this.activeSlot.get(targetSlot);
+
+    // Swap the slot → nick mappings
+    this.activeSlot.set(targetSlot, currentNick);
+    if (targetNick) {
+      this.activeSlot.set(currentSlot, targetNick);
+    } else {
+      this.activeSlot.delete(currentSlot);
+    }
+
+    return false;
+  }
+
   /** |move|p1a: Nick|Move Name|p2a: Target */
   private handleMove(parts: string[]): boolean {
     const attacker = parts[2];
     const target = parts[4];
+    if (!attacker) return false;
 
     // Track last attacker for direct KO attribution
     if (target && !target.startsWith('[')) {
@@ -396,6 +489,7 @@ export class ReplayParser {
   /** |faint|p2a: Nickname — confirms death, apply kill credit */
   private handleFaint(parts: string[]): boolean {
     const faintedNick = parts[2];
+    if (!faintedNick) return false;
     const side = this.nickToSide.get(faintedNick);
     const species = this.nickToSpecies.get(faintedNick);
     if (!side || !species) return true;
@@ -450,6 +544,7 @@ export class ReplayParser {
 
   /** |win|Username */
   private handleWin(parts: string[]): boolean {
+    if (!parts[2]) return false;
     this.winner = parts[2];
     return true;
   }
