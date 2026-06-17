@@ -286,7 +286,13 @@ export function StandingsPage() {
                 const home = findPlayer(match.homePlayer);
                 const away = findPlayer(match.awayPlayer);
                 if (!home || !away) return null;
-                const homeWon = (match.homeScore ?? 0) > (match.awayScore ?? 0);
+                // A week can be partially played (some fixtures still pending).
+                // Only matches with BOTH scores recorded are real results — gate
+                // the W/L badges + score on that, else show "vs" like an upcoming
+                // fixture so unplayed games don't render a bogus loss/win.
+                const completed = match.homeScore != null && match.awayScore != null;
+                const homeWon = completed && (match.homeScore ?? 0) > (match.awayScore ?? 0);
+                const awayWon = completed && (match.awayScore ?? 0) > (match.homeScore ?? 0);
                 return (
                   <div
                     key={match.id}
@@ -301,30 +307,38 @@ export function StandingsPage() {
                       <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && homeWon) ? 'text-win' : 'text-text-secondary'} group-hover/home:text-neon`}>
                         {home.teamAbbrev}
                       </span>
-                      <Spoiler>
-                        <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
-                          {homeWon ? 'W' : 'L'}
-                        </span>
-                      </Spoiler>
+                      {completed && (
+                        <Spoiler>
+                          <span className={`text-[10px] font-mono font-bold tabular-nums ${homeWon ? 'text-win' : 'text-loss'}`}>
+                            {homeWon ? 'W' : 'L'}
+                          </span>
+                        </Spoiler>
+                      )}
                     </Link>
-                    <Spoiler>
-                      <span className="flex items-center gap-2 px-3">
-                        <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
-                          {match.homeScore}
-                        </span>
-                        <span className="text-[10px] text-text-muted">—</span>
-                        <span className={`text-sm tabular-nums font-bold ${!homeWon ? 'text-win' : 'text-text-muted'}`}>
-                          {match.awayScore}
-                        </span>
-                      </span>
-                    </Spoiler>
-                    <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
+                    {completed ? (
                       <Spoiler>
-                        <span className={`text-[10px] font-mono font-bold tabular-nums ${!homeWon ? 'text-win' : 'text-loss'}`}>
-                          {!homeWon ? 'W' : 'L'}
+                        <span className="flex items-center gap-2 px-3">
+                          <span className={`text-sm tabular-nums font-bold ${homeWon ? 'text-win' : 'text-text-muted'}`}>
+                            {match.homeScore}
+                          </span>
+                          <span className="text-[10px] text-text-muted">—</span>
+                          <span className={`text-sm tabular-nums font-bold ${awayWon ? 'text-win' : 'text-text-muted'}`}>
+                            {match.awayScore}
+                          </span>
                         </span>
                       </Spoiler>
-                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && !homeWon) ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
+                    ) : (
+                      <span className="text-[10px] text-text-muted font-medium uppercase tracking-wider px-3">vs</span>
+                    )}
+                    <Link to={leagueUrl(`/teams/${away.id}`)} viewTransition className="flex items-center gap-2 justify-end group/away">
+                      {completed && (
+                        <Spoiler>
+                          <span className={`text-[10px] font-mono font-bold tabular-nums ${awayWon ? 'text-win' : 'text-loss'}`}>
+                            {awayWon ? 'W' : 'L'}
+                          </span>
+                        </Spoiler>
+                      )}
+                      <span className={`text-sm font-medium transition-colors ${(!spoilerFreeMode && awayWon) ? 'text-win' : 'text-text-secondary'} group-hover/away:text-neon`}>
                         {away.teamAbbrev}
                       </span>
                       <TeamLogoSwap
