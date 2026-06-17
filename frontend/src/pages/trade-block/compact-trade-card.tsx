@@ -19,6 +19,7 @@ import { ArrowLeftRight, UserPlus, Check, X, AlertTriangle, Repeat } from 'lucid
 import { Link } from 'react-router-dom';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
+import { useFormatDate } from '@/lib/format';
 import { toast } from 'sonner';
 
 const statusConfig: Record<Trade['status'], { label: string; className: string }> = {
@@ -43,6 +44,7 @@ export function CompactTradeCard({
   const { players } = useLeagueData();
   const league = useLeague();
   const { user } = useAuth();
+  const fmtDate = useFormatDate();
   const { openSideCard } = usePokemonSideCard();
   const playerMap = new Map<string, Player>(players.map(p => [p.id, p]));
   const proposer = playerMap.get(trade.proposer);
@@ -171,7 +173,7 @@ export function CompactTradeCard({
           </Badge>
         )}
         <span className="text-[9px] text-text-muted ml-auto">
-          {trade.proposedAt ? new Date(trade.proposedAt).toLocaleDateString() : ''}
+          {trade.proposedAt ? fmtDate(trade.proposedAt) : ''}
         </span>
       </div>
 

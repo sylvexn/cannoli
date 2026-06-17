@@ -6,6 +6,7 @@ import { LoadingSprite } from '@/components/loading-sprite';
 import { EmptyState } from '@/components/empty-state';
 import { api } from '@/lib/api';
 import type { ApiFeedbackIssue } from '@/lib/api';
+import { useFormatTime, useFormatDate } from '@/lib/format';
 import {
   ExternalLink, CircleDot, CircleCheck, ChevronDown, ChevronUp, RefreshCw,
 } from 'lucide-react';
@@ -112,13 +113,13 @@ export function AdminFeedback() {
 
 function IssueRow({ issue }: { issue: ApiFeedbackIssue }) {
   const [expanded, setExpanded] = useState(false);
+  const fmtTime = useFormatTime();
+  const fmtDate = useFormatDate();
   const isOpen = issue.state === 'open';
 
   const ts = new Date(issue.createdAt);
   const isToday = new Date().toDateString() === ts.toDateString();
-  const timeStr = isToday
-    ? ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : ts.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const timeStr = isToday ? fmtTime(ts) : fmtDate(ts, { year: 'hide' });
 
   // Parse reporter from body
   const reporterMatch = issue.body?.match(/\*\*Reporter:\*\* (.+)/);
@@ -194,7 +195,7 @@ function IssueRow({ issue }: { issue: ApiFeedbackIssue }) {
             </a>
             {issue.closedAt && (
               <span className="text-xs text-text-muted">
-                Closed {new Date(issue.closedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                Closed {fmtDate(issue.closedAt, { year: 'hide' })}
               </span>
             )}
           </div>
