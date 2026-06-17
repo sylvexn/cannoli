@@ -545,8 +545,13 @@ export const userPreferences = sqliteTable('user_preferences', {
   /** Deuteranopia-safe palette swap — retargets red/green tokens to orange/blue. */
   colorblindMode: integer('colorblind_mode', { mode: 'boolean' }).notNull().default(false),
   /** Spoiler-free mode — when true, the frontend blurs match results (scores,
-   *  winners, result badges) on standings/replays behind a click-to-reveal veil. */
-  spoilerFreeMode: integer('spoiler_free_mode', { mode: 'boolean' }).notNull().default(false),
+   *  winners, result badges) on standings/replays behind a click-to-reveal veil.
+   *  Defaults ON: results are hidden until the viewer reveals them per week. */
+  spoilerFreeMode: integer('spoiler_free_mode', { mode: 'boolean' }).notNull().default(true),
+  /** Per-week spoiler reveals — JSON map `{ [leagueId]: highestRevealedWeek }`.
+   *  Revealing week N reveals weeks 1..N (catch-up), so a result for week W is
+   *  veiled until W <= revealedThrough[leagueId]. */
+  spoilerRevealedThrough: text('spoiler_revealed_through').notNull().default('{}'),
   /** ISO timestamp the user last opened the "What's New" changelog panel.
    *  Entries dated after this are "unread" and pulse the sidebar bell. Null =
    *  never opened (everything unread). */

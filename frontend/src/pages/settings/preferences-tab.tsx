@@ -23,7 +23,8 @@ const DEFAULTS: ApiUserPreferences = {
   defaultLandingPath: '/',
   timezone: null,
   colorblindMode: false,
-  spoilerFreeMode: false,
+  spoilerFreeMode: true,
+  spoilerRevealedThrough: {},
   updatedAt: null,
 };
 

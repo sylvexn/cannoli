@@ -22,11 +22,20 @@ interface AuthContextValue {
    */
   colorblindMode: boolean;
   /**
-   * Whether the user opted into spoiler-free mode. When true, consumers (the
-   * standings and replays pages) render match results behind a click-to-reveal
-   * <Spoiler> veil. Logic is React-side — no <html> stamp.
+   * Whether the user opted into spoiler-free mode. Defaults ON: when true,
+   * consumers (the standings and replays pages) render match results behind a
+   * click-to-reveal <Spoiler> veil. Logic is React-side — no <html> stamp.
    */
   spoilerFreeMode: boolean;
+  /**
+   * Per-league spoiler reveal high-water marks: { [leagueId]: highestRevealedWeek }.
+   * A result for week W is revealed once W <= spoilerRevealedThrough[leagueId]
+   * (revealing week N reveals weeks 1..N — the catch-up model).
+   */
+  spoilerRevealedThrough: Record<string, number>;
+  /** Reveal a league's results through `week` (and all earlier weeks). Persists
+   *  server-side and updates local state optimistically. */
+  revealWeek: (leagueId: string, week: number) => void;
   refreshTimezone: () => Promise<void>;
   /** Re-fetch preferences after a settings save. Updates timezone + colorblind + spoiler. */
   refreshPreferences: () => Promise<void>;
@@ -43,7 +52,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userTimezone, setUserTimezone] = useState<string | null>(null);
   const [colorblindMode, setColorblindMode] = useState(false);
-  const [spoilerFreeMode, setSpoilerFreeMode] = useState(false);
+  // Spoiler-free defaults ON — start veiled during the auth/prefs load so we
+  // never flash results before we know the viewer's preference.
+  const [spoilerFreeMode, setSpoilerFreeMode] = useState(true);
+  const [spoilerRevealedThrough, setSpoilerRevealedThrough] = useState<Record<string, number>>({});
 
   const loadPreferences = useCallback(async () => {
     try {
@@ -51,11 +63,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserTimezone(prefs.timezone ?? null);
       setColorblindMode(!!prefs.colorblindMode);
       setSpoilerFreeMode(!!prefs.spoilerFreeMode);
+      setSpoilerRevealedThrough(prefs.spoilerRevealedThrough ?? {});
     } catch {
       setUserTimezone(null);
       setColorblindMode(false);
-      setSpoilerFreeMode(false);
+      setSpoilerFreeMode(true);
+      setSpoilerRevealedThrough({});
     }
+  }, []);
+
+  // Reveal a league's results through `week` (catch-up: also reveals earlier
+  // weeks). Optimistic local bump, then persist; the server clamps to
+  // max(existing, week) so out-of-order calls are safe.
+  const revealWeek = useCallback((leagueId: string, week: number) => {
+    setSpoilerRevealedThrough(m =>
+      (m[leagueId] ?? 0) >= week ? m : { ...m, [leagueId]: week });
+    api.revealSpoilerWeek(leagueId, week).catch(() => {});
   }, []);
 
   // Apply <html data-colorblind="true"> so the CSS override block in index.css
@@ -99,7 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setUserTimezone(null);
     setColorblindMode(false);
+    // Logged-out (public) browsing has no per-user veil state to honor.
     setSpoilerFreeMode(false);
+    setSpoilerRevealedThrough({});
   }, []);
 
   const changePassword = useCallback(async (current: string, next: string) => {
@@ -129,13 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userTimezone,
     colorblindMode,
     spoilerFreeMode,
+    spoilerRevealedThrough,
+    revealWeek,
     refreshTimezone: loadPreferences,
     refreshPreferences: loadPreferences,
     login,
     logout,
     changePassword,
     refreshUser,
-  }), [user, isLoading, userTimezone, colorblindMode, spoilerFreeMode, loadPreferences, login, logout, changePassword, refreshUser]);
+  }), [user, isLoading, userTimezone, colorblindMode, spoilerFreeMode, spoilerRevealedThrough, revealWeek, loadPreferences, login, logout, changePassword, refreshUser]);
 
   return (
     <AuthContext.Provider value={value}>

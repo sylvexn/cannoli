@@ -23,6 +23,23 @@ const MAX_STATUS = 80;
 const MAX_BANNER_URL = 255;
 const MAX_AVATAR_BYTES = 512 * 1024;
 
+/** Parse the stored spoiler_revealed_through JSON into a { leagueId: week } map,
+ *  tolerating null/garbage (always returns a plain numeric map). */
+function parseRevealedThrough(raw: string | null | undefined): Record<string, number> {
+  if (!raw) return {};
+  try {
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== 'object') return {};
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 // IANA zone validator. Modern Bun ships Intl.supportedValuesOf, but if a
 // future runtime drops it we fall back to a try/catch DateTimeFormat probe
 // (which throws RangeError on unknown zones).
@@ -294,17 +311,19 @@ export const userRoutes = new Elysia()
         timezone: row.timezone,
         colorblindMode: row.colorblindMode,
         spoilerFreeMode: row.spoilerFreeMode,
+        spoilerRevealedThrough: parseRevealedThrough(row.spoilerRevealedThrough),
         updatedAt: row.updatedAt,
       };
     }
-    // Lazy defaults — do not write until PUT
+    // Lazy defaults — do not write until PUT. Spoiler-free defaults ON.
     return {
       theme: 'dark',
       density: 'comfortable',
       defaultLandingPath: '/',
       timezone: null,
       colorblindMode: false,
-      spoilerFreeMode: false,
+      spoilerFreeMode: true,
+      spoilerRevealedThrough: {},
       updatedAt: null,
     };
   })
@@ -358,6 +377,35 @@ export const userRoutes = new Elysia()
       db.insert(schema.userPreferences).values({ userId, ...updates }).run();
     }
     return { success: true };
+  })
+
+  // ─── POST /api/users/me/spoiler-reveal ────────────────────────────────
+  // Reveal a league's results THROUGH a given week — bumps the per-league
+  // high-water mark to max(existing, week). Revealing week N reveals weeks 1..N
+  // (catch-up), so the client un-veils every result for weeks <= N at once.
+  .post('/api/users/me/spoiler-reveal', ({ body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const { leagueId, week } = (body ?? {}) as { leagueId?: unknown; week?: unknown };
+
+    if (typeof leagueId !== 'string' || !leagueId || leagueId.length > 64) {
+      set.status = 400; return { error: 'leagueId must be a non-empty string' };
+    }
+    if (typeof week !== 'number' || !Number.isInteger(week) || week < 1) {
+      set.status = 400; return { error: 'week must be a positive integer' };
+    }
+
+    const userId = parseInt(user.id);
+    const existing = db.select().from(schema.userPreferences).where(eq(schema.userPreferences.userId, userId)).get();
+    const map = parseRevealedThrough(existing?.spoilerRevealedThrough);
+    map[leagueId] = Math.max(map[leagueId] ?? 0, week);
+
+    const patch = { spoilerRevealedThrough: JSON.stringify(map), updatedAt: new Date().toISOString() };
+    if (existing) {
+      db.update(schema.userPreferences).set(patch).where(eq(schema.userPreferences.userId, userId)).run();
+    } else {
+      db.insert(schema.userPreferences).values({ userId, ...patch }).run();
+    }
+    return { spoilerRevealedThrough: map };
   })
 
   // ─── GET /api/users/me/lifetime-stats ─────────────────────────────────

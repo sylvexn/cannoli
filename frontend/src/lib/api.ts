@@ -361,6 +361,10 @@ export interface ApiUserPreferences {
   /** Spoiler-free mode — blurs match results (scores/winners/badges) on the
    *  standings and replays pages behind a click-to-reveal veil. */
   spoilerFreeMode: boolean;
+  /** Per-league spoiler reveal high-water marks: { [leagueId]: highestRevealedWeek }.
+   *  Revealing week N reveals weeks 1..N, so a result for week W shows once
+   *  W <= spoilerRevealedThrough[leagueId]. */
+  spoilerRevealedThrough: Record<string, number>;
   updatedAt: string | null;
 }
 
@@ -1260,6 +1264,11 @@ export const api = {
   getMyPreferences: () => fetchJson<ApiUserPreferences>('/api/users/me/preferences'),
   updateMyPreferences: (prefs: Partial<Omit<ApiUserPreferences, 'updatedAt'>>) =>
     putJson<{ success: boolean }>('/api/users/me/preferences', prefs),
+  /** Reveal a league's results through `week` (catch-up: reveals weeks 1..week).
+   *  Returns the updated per-league high-water-mark map. */
+  revealSpoilerWeek: (leagueId: string, week: number) =>
+    postJson<{ spoilerRevealedThrough: Record<string, number> }>(
+      '/api/users/me/spoiler-reveal', { leagueId, week }),
 
   // Lifetime stats + public profile
   getLifetimeStats: () => fetchJson<ApiLifetimeStats>('/api/users/me/lifetime-stats'),
