@@ -15,6 +15,8 @@ import { Link } from 'react-router-dom';
 import { ReplayLink } from '@/components/replay-link';
 import { useLeagueUrl } from '@/lib/use-league-url';
 import { useLeague } from '@/lib/league-context';
+import { useAuth } from '@/lib/auth-context';
+import { Spoiler } from '@/components/spoiler';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 
@@ -31,6 +33,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const leagueUrl = useLeagueUrl();
   const league = useLeague();
   const { getMatchDetail } = useLeagueData();
+  const { spoilerFreeMode, spoilerRevealedThrough } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<KDDetail | null>(match.pokemonKD ?? null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -38,6 +41,15 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
   const isCompleted = match.homeScore !== undefined;
   const homeWon = isCompleted && (match.homeScore ?? 0) > (match.awayScore ?? 0);
   const awayWon = isCompleted && (match.awayScore ?? 0) > (match.homeScore ?? 0);
+  // Whether the W/L color tint on the team names should be suppressed for this
+  // viewer — true when the admin gate hard-locks this week, or when the viewer
+  // is in spoiler-free mode and hasn't peeked this week yet. Mirrors how
+  // standings.tsx hides win-color so the names don't leak the outcome.
+  const adminLocked =
+    league.resultsRevealedThrough != null && match.week > league.resultsRevealedThrough;
+  const perUserHidden =
+    spoilerFreeMode && (spoilerRevealedThrough[league.id] ?? 0) < match.week;
+  const winColorHidden = adminLocked || perUserHidden;
   // Completed matches always offer the expand affordance; the K/D detail is
   // fetched lazily on first expand.
   const canExpand = isCompleted;
@@ -91,7 +103,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               onClick={e => e.stopPropagation()}
               className={cn(
                 'text-sm font-medium leading-tight transition-colors block line-clamp-2 hover:text-neon',
-                homeWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
+                (homeWon && !winColorHidden) ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               )}
             >
               {homePlayer.teamName}
@@ -104,15 +116,22 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
 
         {/* Score / VS */}
         {isCompleted ? (
-          <div className="flex items-center gap-2 shrink-0">
-            <span className={cn('text-sm tabular-nums font-bold', homeWon ? 'text-win' : 'text-text-muted')}>
-              {match.homeScore}
+          <Spoiler
+            week={match.week}
+            leagueId={league.id}
+            adminRevealedThrough={league.resultsRevealedThrough}
+            className="shrink-0"
+          >
+            <span className="flex items-center gap-2">
+              <span className={cn('text-sm tabular-nums font-bold', homeWon ? 'text-win' : 'text-text-muted')}>
+                {match.homeScore}
+              </span>
+              <span className="text-[10px] text-text-muted">—</span>
+              <span className={cn('text-sm tabular-nums font-bold', awayWon ? 'text-win' : 'text-text-muted')}>
+                {match.awayScore}
+              </span>
             </span>
-            <span className="text-[10px] text-text-muted">—</span>
-            <span className={cn('text-sm tabular-nums font-bold', awayWon ? 'text-win' : 'text-text-muted')}>
-              {match.awayScore}
-            </span>
-          </div>
+          </Spoiler>
         ) : (
           <Badge variant="outline" className="text-neon border-neon/30 text-[10px] shrink-0">
             Scheduled
@@ -127,7 +146,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               onClick={e => e.stopPropagation()}
               className={cn(
                 'text-sm font-medium leading-tight transition-colors block line-clamp-2 hover:text-pink',
-                awayWon ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
+                (awayWon && !winColorHidden) ? 'text-win' : isCompleted ? 'text-text-secondary' : 'text-text-primary',
               )}
             >
               {awayPlayer.teamName}
@@ -204,6 +223,13 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
           )}
           {detail && !detailLoading && (
             <div className="border-t border-border-subtle/50">
+            <Spoiler
+              as="div"
+              week={match.week}
+              leagueId={league.id}
+              adminRevealedThrough={league.resultsRevealedThrough}
+              className="w-full !block"
+            >
               {/* Team column headers */}
               <div className="grid grid-cols-2">
                 <div
@@ -212,13 +238,13 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                 >
                   <TeamLogo abbrev={homePlayer.teamAbbrev} color={homePlayer.teamColor} size="sm" logoPath={homePlayer.logoPath} />
                   {homePlayer.teamAbbrev}
-                  {homeWon && <span className="text-win text-[9px] ml-auto font-bold">W</span>}
+                  {homeWon && !winColorHidden && <span className="text-win text-[9px] ml-auto font-bold">W</span>}
                 </div>
                 <div
                   className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 justify-end border-l border-border-subtle/30"
                   style={{ backgroundColor: `${awayPlayer.teamColor}15`, color: awayPlayer.teamColor }}
                 >
-                  {awayWon && <span className="text-win text-[9px] mr-auto font-bold">W</span>}
+                  {awayWon && !winColorHidden && <span className="text-win text-[9px] mr-auto font-bold">W</span>}
                   {awayPlayer.teamAbbrev}
                   <TeamLogo abbrev={awayPlayer.teamAbbrev} color={awayPlayer.teamColor} size="sm" logoPath={awayPlayer.logoPath} />
                 </div>
@@ -254,6 +280,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                 <TeamKDSummary entries={detail.home} teamColor={homePlayer.teamColor} />
                 <TeamKDSummary entries={detail.away} teamColor={awayPlayer.teamColor} alignRight />
               </div>
+            </Spoiler>
             </div>
           )}
         </div>

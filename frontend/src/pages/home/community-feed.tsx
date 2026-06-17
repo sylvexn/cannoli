@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TeamLink } from '@/components/team-link';
 import { RecordDisplay } from '@/components/record-display';
+import { Spoiler } from '@/components/spoiler';
 import { EmptyState } from '@/components/empty-state';
 import { ActivityFeed } from '@/components/activity-feed';
 import { cn } from '@/lib/utils';
@@ -120,6 +121,11 @@ function DenseLeagueCard({
   loading: boolean;
   index: number;
 }) {
+  // Spoiler-gate the dense records by the league's live week. When there's no
+  // meaningful week yet (predraft / 0), render records untouched — there's
+  // nothing to spoil. A real week routes through <Spoiler> so records are
+  // blurred per-user by default and hard-locked when the admin gate trails it.
+  const spoilerWeek = league.season.currentWeek > 0 ? league.season.currentWeek : undefined;
   return (
     <Card
       className="stagger-item card-interactive border-border-default overflow-hidden"
@@ -180,12 +186,19 @@ function DenseLeagueCard({
                   size="xs"
                   className="flex-1 min-w-0"
                 />
-                <RecordDisplay
-                  wins={team.record.wins}
-                  losses={team.record.losses}
-                  differential={team.record.differential}
-                  className="text-[10px]"
-                />
+                <Spoiler
+                  week={spoilerWeek}
+                  leagueId={league.id}
+                  adminRevealedThrough={league.resultsRevealedThrough}
+                  className="shrink-0"
+                >
+                  <RecordDisplay
+                    wins={team.record.wins}
+                    losses={team.record.losses}
+                    differential={team.record.differential}
+                    className="text-[10px]"
+                  />
+                </Spoiler>
               </div>
             ))}
             <Link

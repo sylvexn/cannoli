@@ -115,6 +115,7 @@ function toLeague(a: ApiLeague): League {
     timezone: a.timezone ?? 'America/New_York',
     costFormat: (a.costFormat as import('@/data/tier-list').CostFormat) ?? 'natdexplus',
     season,
+    resultsRevealedThrough: a.resultsRevealedThrough ?? null,
     players: [], // Will be loaded separately via useLeagueTeams
     hasData: true,
     // WIP: ApiLeague does not yet expose playoffTeamCount; default to 0 to satisfy League type

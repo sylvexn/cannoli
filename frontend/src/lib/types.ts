@@ -197,6 +197,11 @@ export interface League {
    *  for backwards compat (treated as 'natdexplus' when missing). */
   costFormat?: import('@/data/tier-list').CostFormat;
   season: LeagueSeason;
+  /** Admin results-reveal gate. `null` = gate OFF (all results visible);
+   *  integer N = results for weeks > N are hidden for everyone and standings/
+   *  records are computed server-side only through week N. Drives the HARD
+   *  (non-bypassable) `<Spoiler adminRevealedThrough>` veil. */
+  resultsRevealedThrough: number | null;
   players: Player[];
   /** Registered-team (== coach) count, from `/api/leagues`. The `players`
    *  array above is not populated by the list endpoint — use this for counts. */

@@ -100,6 +100,9 @@ export interface ApiLeague {
   costFormat?: string;
   /** Registered-team (== coach) count for this league. */
   playerCount?: number;
+  /** Admin results-reveal gate. `null` = OFF (all visible); integer N = results
+   *  for weeks > N hidden for everyone (standings computed through week N). */
+  resultsRevealedThrough?: number | null;
   season: {
     id: string;
     seasonNumber: number;
@@ -1120,6 +1123,14 @@ export const api = {
 
   advanceWeek: (leagueId: string) =>
     postJson<{ success: boolean; week: number }>(`/api/leagues/${leagueId}/week`),
+
+  /** Set the admin results-reveal gate. `revealedThrough = null` turns the gate
+   *  OFF (all results visible); an integer N hides results for weeks > N for
+   *  everyone (standings computed through week N). Staff-only; backend clamps to
+   *  [0, currentWeek] and 400s with code 'reveal_out_of_range' otherwise. */
+  setResultsReveal: (leagueId: string, revealedThrough: number | null) =>
+    postJson<{ success: boolean; resultsRevealedThrough: number | null }>(
+      `/api/admin/leagues/${leagueId}/results-reveal`, { revealedThrough }),
 
   saveDraftOrder: (leagueId: string, order: string[]) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft-order`, { order }),

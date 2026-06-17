@@ -79,7 +79,7 @@ export function ReplayCard({
 
         {/* Glance flags float top-right of the preview pane */}
         {(sweep || teraHeavy || hasMvp) && (
-          <Spoiler as="div" week={match.week} leagueId={league.id} className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          <Spoiler as="div" week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="absolute top-1.5 right-1.5 flex items-center gap-1">
             {hasMvp && (
               <span
                 className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-400/15 text-amber-400"
@@ -133,7 +133,7 @@ export function ReplayCard({
           >
             {homeTeam?.teamAbbrev ?? match.homePlayer}
           </Link>
-          <Spoiler week={match.week} leagueId={league.id} className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
+          <Spoiler week={match.week} leagueId={league.id} adminRevealedThrough={league.resultsRevealedThrough} className="text-[11px] font-mono tabular-nums text-text-muted shrink-0">
             <span className={homeWon ? 'text-win' : ''}>{match.homeScore ?? 0}</span>
             -
             <span className={awayWon ? 'text-win' : ''}>{match.awayScore ?? 0}</span>
