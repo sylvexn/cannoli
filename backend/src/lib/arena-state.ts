@@ -14,9 +14,23 @@ import { createBattle } from './ps-bot';
 
 // ─── Team resolution ─────────────────────────────────────────────────────────
 
+/**
+ * The coach's team in their CURRENT league. A coach who has played past seasons
+ * owns several team rows (e.g. last season's `sapphire` plus this season's
+ * `s11-sapphire`); a bare `.get()` returns whichever has the lowest rowid —
+ * usually an old, now-`offseason` league — which makes the Arena think they
+ * have no active fixtures. So order the candidates: active (non-offseason)
+ * leagues first, then newest season, and take the top one.
+ */
 export function getUserTeam(userId: number): { teamId: string; leagueId: string } | null {
-  const team = db.select().from(schema.teams)
+  const team = db.select({ id: schema.teams.id, leagueId: schema.teams.leagueId })
+    .from(schema.teams)
+    .innerJoin(schema.leagues, eq(schema.teams.leagueId, schema.leagues.id))
     .where(eq(schema.teams.userId, userId))
+    .orderBy(
+      sql`CASE WHEN ${schema.leagues.phase} = 'offseason' THEN 1 ELSE 0 END`,
+      sql`${schema.leagues.seasonId} DESC`,
+    )
     .get();
   return team ? { teamId: team.id, leagueId: team.leagueId } : null;
 }
