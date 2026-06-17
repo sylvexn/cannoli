@@ -207,7 +207,9 @@ export const teams = sqliteTable('teams', {
    * without a position→label table.
    */
   finishLabel: text('finish_label'),
-});
+}, (t) => ({
+  leagueIdx: index('teams_league_idx').on(t.leagueId),
+}));
 
 // ─── Pokemon (reference table — full national dex) ──────────────────────────
 
@@ -258,7 +260,10 @@ export const rosters = sqliteTable('rosters', {
   acquiredVia: text('acquired_via', { enum: ['draft', 'trade', 'fa'] }).notNull().default('draft'),
   acquiredWeek: integer('acquired_week'),
   nickname: text('nickname'),
-});
+}, (t) => ({
+  teamIdx: index('rosters_team_idx').on(t.teamId),
+  teamPokemonUnique: uniqueIndex('rosters_team_pokemon_unique').on(t.teamId, t.pokemonName),
+}));
 
 // ─── Draft Picks ─────────────────────────────────────────────────────────────
 
@@ -269,7 +274,11 @@ export const draftPicks = sqliteTable('draft_picks', {
   pickNumber: integer('pick_number').notNull(), // 1-10+
   pokemonName: text('pokemon_name').notNull(),
   tier: integer('tier').notNull(),
-});
+}, (t) => ({
+  leagueTeamIdx: index('draft_picks_league_team_idx').on(t.leagueId, t.teamId),
+  leaguePokemonUnique: uniqueIndex('draft_picks_league_pokemon_unique').on(t.leagueId, t.pokemonName),
+  leaguePicknumUnique: uniqueIndex('draft_picks_league_picknum_unique').on(t.leagueId, t.pickNumber),
+}));
 
 // ─── Matches ─────────────────────────────────────────────────────────────────
 
@@ -322,7 +331,10 @@ export const matches = sqliteTable('matches', {
    * sim matches), they fall back to score comparison. Null for ties/draws.
    */
   winnerTeamId: text('winner_team_id').references(() => teams.id),
-});
+}, (t) => ({
+  leagueWeekIdx: index('matches_league_week_idx').on(t.leagueId, t.week),
+  statusIdx: index('matches_status_idx').on(t.status),
+}));
 
 // ─── Bye Weeks (one row per team-week sit-out for odd-team leagues) ─────────
 
@@ -331,7 +343,10 @@ export const byeWeeks = sqliteTable('bye_weeks', {
   leagueId: text('league_id').notNull().references(() => leagues.id),
   week: integer('week').notNull(),
   teamId: text('team_id').notNull().references(() => teams.id),
-});
+}, (t) => ({
+  leagueWeekIdx: index('bye_weeks_league_week_idx').on(t.leagueId, t.week),
+  teamIdx: index('bye_weeks_team_idx').on(t.teamId),
+}));
 
 // ─── Match Pokemon (per-match K/D for each Pokemon) ─────────────────────────
 
@@ -344,7 +359,9 @@ export const matchPokemon = sqliteTable('match_pokemon', {
   deaths: integer('deaths').notNull().default(0),
   teraUsed: integer('tera_used', { mode: 'boolean' }).notNull().default(false),
   teraType: text('tera_type'),
-});
+}, (t) => ({
+  matchIdx: index('match_pokemon_match_idx').on(t.matchId),
+}));
 
 // ─── Move Categories (admin-configurable, for matchup analysis) ─────────────
 
@@ -381,7 +398,9 @@ export const transactions = sqliteTable('transactions', {
   pointsIn: integer('points_in'),
   /** For tera changes: the pokemon whose tera types changed */
   teraPokemon: text('tera_pokemon'),
-});
+}, (t) => ({
+  leagueWeekIdx: index('transactions_league_week_idx').on(t.leagueId, t.week),
+}));
 
 // ─── Trades (proposal lifecycle — separate from completed transactions) ─────
 
