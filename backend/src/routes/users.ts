@@ -293,6 +293,7 @@ export const userRoutes = new Elysia()
         defaultLandingPath: landing,
         timezone: row.timezone,
         colorblindMode: row.colorblindMode,
+        spoilerFreeMode: row.spoilerFreeMode,
         updatedAt: row.updatedAt,
       };
     }
@@ -303,6 +304,7 @@ export const userRoutes = new Elysia()
       defaultLandingPath: '/',
       timezone: null,
       colorblindMode: false,
+      spoilerFreeMode: false,
       updatedAt: null,
     };
   })
@@ -310,7 +312,7 @@ export const userRoutes = new Elysia()
   // ─── PUT /api/users/me/preferences ────────────────────────────────────
   .put('/api/users/me/preferences', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const { theme, density, defaultLandingPath, timezone, colorblindMode } =
+    const { theme, density, defaultLandingPath, timezone, colorblindMode, spoilerFreeMode } =
       (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
@@ -342,6 +344,10 @@ export const userRoutes = new Elysia()
     if (colorblindMode !== undefined) {
       if (typeof colorblindMode !== 'boolean') { set.status = 400; return { error: 'colorblindMode must be boolean' }; }
       updates.colorblindMode = colorblindMode;
+    }
+    if (spoilerFreeMode !== undefined) {
+      if (typeof spoilerFreeMode !== 'boolean') { set.status = 400; return { error: 'spoilerFreeMode must be boolean' }; }
+      updates.spoilerFreeMode = spoilerFreeMode;
     }
 
     const userId = parseInt(user.id);

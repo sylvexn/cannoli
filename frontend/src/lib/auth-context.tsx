@@ -21,8 +21,14 @@ interface AuthContextValue {
    * red/green tokens to orange/blue.
    */
   colorblindMode: boolean;
+  /**
+   * Whether the user opted into spoiler-free mode. When true, consumers (the
+   * standings and replays pages) render match results behind a click-to-reveal
+   * <Spoiler> veil. Logic is React-side — no <html> stamp.
+   */
+  spoilerFreeMode: boolean;
   refreshTimezone: () => Promise<void>;
-  /** Re-fetch preferences after a settings save. Updates timezone + colorblind. */
+  /** Re-fetch preferences after a settings save. Updates timezone + colorblind + spoiler. */
   refreshPreferences: () => Promise<void>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -37,15 +43,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userTimezone, setUserTimezone] = useState<string | null>(null);
   const [colorblindMode, setColorblindMode] = useState(false);
+  const [spoilerFreeMode, setSpoilerFreeMode] = useState(false);
 
   const loadPreferences = useCallback(async () => {
     try {
       const prefs = await api.getMyPreferences();
       setUserTimezone(prefs.timezone ?? null);
       setColorblindMode(!!prefs.colorblindMode);
+      setSpoilerFreeMode(!!prefs.spoilerFreeMode);
     } catch {
       setUserTimezone(null);
       setColorblindMode(false);
+      setSpoilerFreeMode(false);
     }
   }, []);
 
@@ -90,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setUserTimezone(null);
     setColorblindMode(false);
+    setSpoilerFreeMode(false);
   }, []);
 
   const changePassword = useCallback(async (current: string, next: string) => {
@@ -118,13 +128,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isAdmin: isStaff(user),
     userTimezone,
     colorblindMode,
+    spoilerFreeMode,
     refreshTimezone: loadPreferences,
     refreshPreferences: loadPreferences,
     login,
     logout,
     changePassword,
     refreshUser,
-  }), [user, isLoading, userTimezone, colorblindMode, loadPreferences, login, logout, changePassword, refreshUser]);
+  }), [user, isLoading, userTimezone, colorblindMode, spoilerFreeMode, loadPreferences, login, logout, changePassword, refreshUser]);
 
   return (
     <AuthContext.Provider value={value}>
