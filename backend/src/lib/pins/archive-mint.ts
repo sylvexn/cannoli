@@ -22,6 +22,7 @@
 
 import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
+import { tx } from '../tx';
 
 const PIN = {
   champion: 'champion',
@@ -61,22 +62,28 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
   // Re-runs after stats corrections need a clean slate for THIS league's
   // teams. Match auto-award.ts: scope by metadata.teamId to avoid stomping
   // on sibling-league pins for coaches who play in multiple leagues.
-  if (clear) {
-    db.run(sql`
-      DELETE FROM pins
-      WHERE pin_def_id IN (${PIN.champion}, ${PIN.highScore}, ${PIN.stealOfTheDraft}, ${PIN.sweeper})
-        AND season_id = ${seasonId}
-        AND awarded_by IS NULL
-        AND json_extract(metadata, '$.teamId') IN (
-          SELECT id FROM teams WHERE league_id = ${leagueId}
-        )
-    `);
-  }
+  //
+  // Wrapped in tx() so the clear and the re-inserts are atomic — a crash
+  // between them can no longer leave this league's season pins in a deleted
+  // but not yet re-awarded state.
+  tx(() => {
+    if (clear) {
+      db.run(sql`
+        DELETE FROM pins
+        WHERE pin_def_id IN (${PIN.champion}, ${PIN.highScore}, ${PIN.stealOfTheDraft}, ${PIN.sweeper})
+          AND season_id = ${seasonId}
+          AND awarded_by IS NULL
+          AND json_extract(metadata, '$.teamId') IN (
+            SELECT id FROM teams WHERE league_id = ${leagueId}
+          )
+      `);
+    }
 
-  awardChampion(leagueId, seasonId, awardedBy, summary);
-  awardHighScore(leagueId, seasonId, awardedBy, summary);
-  awardStealOfTheDraft(leagueId, seasonId, awardedBy, summary);
-  awardSweeper(leagueId, seasonId, awardedBy, summary);
+    awardChampion(leagueId, seasonId, awardedBy, summary);
+    awardHighScore(leagueId, seasonId, awardedBy, summary);
+    awardStealOfTheDraft(leagueId, seasonId, awardedBy, summary);
+    awardSweeper(leagueId, seasonId, awardedBy, summary);
+  });
 
   return summary;
 }

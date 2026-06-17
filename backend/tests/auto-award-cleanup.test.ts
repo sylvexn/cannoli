@@ -18,6 +18,7 @@ import { describe, expect, test } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import { db, schema, sqlite } from '../src/db';
 import { runAutoAwards } from '../src/lib/pins/auto-award';
+import { mintManualPins } from '../src/lib/pins/awards-data';
 
 const PFX = 'tfix4-';
 
@@ -201,6 +202,91 @@ describe('runAutoAwards season-end re-run cleanup (Fix 4)', () => {
       )).all();
       expect(userVPins.length).toBe(1);
       expect(userVPins[0].awardedBy).toBeNull();
+    } finally {
+      sqlite.exec('ROLLBACK');
+    }
+  });
+});
+
+// ─── mintManualPins league-scope isolation ────────────────────────────────
+//
+// Regression guard for the pre-fix bug: mintManualPins cleared overlap auto-pins
+// (cannoli/cynthia/garchomp) scoped only by season_id, so bulk-minting league A's
+// manual awards would also delete sibling league B's auto-pins in the same season.
+// Post-fix the clear scopes by metadata.teamId IN (teams of the target league).
+
+describe('mintManualPins — sibling league auto-pin isolation', () => {
+  const host = pickHost();
+  if (!host) {
+    test.skip('seeded DB lacks a season + 3 users — skipping', () => {});
+    return;
+  }
+
+  test('minting league A manual pins does not delete league B auto-pins', () => {
+    sqlite.exec('BEGIN');
+    try {
+      const PFX2 = 'tmmp-';
+      const [userA, userB] = host.userIds;
+
+      // Two leagues in the same season.
+      const leagueA = `${PFX2}lgA`;
+      const leagueB = `${PFX2}lgB`;
+      db.insert(schema.leagues).values([
+        { id: leagueA, name: 'Manual Mint League A', color: '#aa0000', seasonId: host.seasonId, phase: 'offseason' },
+        { id: leagueB, name: 'Sibling League B', color: '#0000aa', seasonId: host.seasonId, phase: 'offseason' },
+      ]).run();
+
+      const teamA = `${PFX2}tA`;
+      const teamB = `${PFX2}tB`;
+      db.insert(schema.teams).values([
+        { id: teamA, leagueId: leagueA, userId: userA, coachName: 'A', teamName: 'TA', teamAbbrev: 'TA', teamColor: '#111' },
+        { id: teamB, leagueId: leagueB, userId: userB, coachName: 'B', teamName: 'TB', teamAbbrev: 'TB', teamColor: '#222' },
+      ]).run();
+
+      // Auto-pin for userB from league B. This is the pin that MUST survive.
+      db.insert(schema.pins).values({
+        userId: userB, pinDefId: 'cannoli', seasonId: host.seasonId,
+        awardedBy: null,
+        metadata: JSON.stringify({ teamId: teamB, source: 'leagueB-auto' }),
+      }).run();
+
+      // Sanity: userB's pin exists before the mint.
+      const before = db.select().from(schema.pins).where(and(
+        eq(schema.pins.pinDefId, 'cannoli'),
+        eq(schema.pins.seasonId, host.seasonId),
+        eq(schema.pins.userId, userB),
+      )).all();
+      expect(before.length).toBe(1);
+
+      // Look up the season_number for mintManualPins (which takes season number,
+      // not the internal seasonId).
+      const seasonRow = db.select().from(schema.seasons)
+        .where(eq(schema.seasons.id, host.seasonId)).get();
+      if (!seasonRow) throw new Error('season row not found');
+
+      const userARow = db.select({ username: schema.users.username })
+        .from(schema.users).where(eq(schema.users.id, userA)).get();
+      if (!userARow) throw new Error('userA not found');
+
+      // Mint league A's manual cannoli award. The pre-fix code would delete
+      // ALL cannoli auto-pins for this season_id (including userB's leagueB pin).
+      // Post-fix it only deletes within leagueA's teams.
+      mintManualPins(
+        sqlite,
+        seasonRow.seasonNumber,
+        [{ pin: 'cannoli', leagueId: leagueA, username: userARow.username }],
+        null,
+      );
+
+      // userB's league B auto-pin MUST still be present (post-fix guarantee).
+      const after = db.select().from(schema.pins).where(and(
+        eq(schema.pins.pinDefId, 'cannoli'),
+        eq(schema.pins.seasonId, host.seasonId),
+        eq(schema.pins.userId, userB),
+      )).all();
+      expect(after.length).toBe(1);
+      const meta = JSON.parse(after[0].metadata as string) as { source?: string };
+      expect(meta.source).toBe('leagueB-auto');
     } finally {
       sqlite.exec('ROLLBACK');
     }

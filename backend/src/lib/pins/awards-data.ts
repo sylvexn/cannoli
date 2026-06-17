@@ -229,19 +229,6 @@ export function mintManualPins(
   }
   const seasonId = seasonRow.id;
 
-  // Clear overlapping auto-pins for this season so the manual list takes
-  // over. Only touches awarded_by IS NULL (auto rows). Does NOT touch
-  // sibling-season rows since season_id is the filter.
-  const overlap = ['cannoli', 'cynthia', 'garchomp'];
-  for (const pinDefId of overlap) {
-    sqlite.prepare(
-      `DELETE FROM pins
-        WHERE pin_def_id = ?
-          AND season_id = ?
-          AND awarded_by IS NULL`,
-    ).run(pinDefId, seasonId);
-  }
-
   const findUser = sqlite.prepare(
     `SELECT id, username FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1`,
   );
@@ -261,60 +248,93 @@ export function mintManualPins(
      VALUES (?, ?, ?, ?, ?)`,
   );
 
-  for (const a of awards) {
-    const def = ensureDef.get(a.pin) as { id: string } | undefined;
-    if (!def) {
-      summary.unresolved.push({ award: a, reason: `pin definition '${a.pin}' missing` });
-      continue;
+  // Collect the distinct leagues referenced by overlap-slug awards. We'll do
+  // a league-scoped clear (by metadata.teamId, matching auto-award.ts and
+  // archive-mint.ts) so a bulk-mint for one league can't delete sibling
+  // leagues' auto-pins that share the same season_id.
+  const overlap = new Set(['cannoli', 'cynthia', 'garchomp']);
+  const overlapLeagues = new Set<string>(
+    awards
+      .filter(a => overlap.has(a.pin) && a.leagueId)
+      .map(a => a.leagueId as string),
+  );
+
+  const clearOverlapByLeague = sqlite.prepare(
+    `DELETE FROM pins
+      WHERE pin_def_id IN ('cannoli', 'cynthia', 'garchomp')
+        AND season_id = ?
+        AND awarded_by IS NULL
+        AND json_extract(metadata, '$.teamId') IN (
+          SELECT id FROM teams WHERE league_id = ?
+        )`,
+  );
+
+  // Wrap the clear + all inserts in a single transaction so a crash between
+  // them cannot leave the season's pins in a half-deleted state.
+  sqlite.transaction(() => {
+    // Clear overlapping auto-pins per league so the manual list takes over.
+    // Only touches awarded_by IS NULL (auto rows). Scoped by metadata.teamId
+    // to match the pattern used by runAutoAwards and mintArchivePins — avoids
+    // stomping on sibling-league auto-pins for coaches in multiple leagues.
+    for (const leagueId of overlapLeagues) {
+      clearOverlapByLeague.run(seasonId, leagueId);
     }
 
-    let userId: number | null = null;
-    const metadata: Record<string, unknown> = {};
-    if (a.leagueId) metadata.leagueId = a.leagueId;
+    for (const a of awards) {
+      const def = ensureDef.get(a.pin) as { id: string } | undefined;
+      if (!def) {
+        summary.unresolved.push({ award: a, reason: `pin definition '${a.pin}' missing` });
+        continue;
+      }
 
-    if ('username' in a && a.username) {
-      const u = findUser.get(a.username) as { id: number; username: string } | undefined;
-      if (!u) {
-        summary.unresolved.push({ award: a, reason: `username '${a.username}' not found` });
+      let userId: number | null = null;
+      const metadata: Record<string, unknown> = {};
+      if (a.leagueId) metadata.leagueId = a.leagueId;
+
+      if ('username' in a && a.username) {
+        const u = findUser.get(a.username) as { id: number; username: string } | undefined;
+        if (!u) {
+          summary.unresolved.push({ award: a, reason: `username '${a.username}' not found` });
+          continue;
+        }
+        userId = u.id;
+      } else if ('pokemon' in a && a.pokemon) {
+        if (!a.leagueId) {
+          summary.unresolved.push({ award: a, reason: `pokemon-form award missing leagueId` });
+          continue;
+        }
+        const row = findRosterTeam.get(a.leagueId, a.pokemon) as
+          | { team_id: string; user_id: number | null; team_name: string; roster_nickname: string | null }
+          | undefined;
+        if (!row) {
+          summary.unresolved.push({ award: a, reason: `pokemon '${a.pokemon}' not on any roster in '${a.leagueId}'` });
+          continue;
+        }
+        if (!row.user_id) {
+          summary.unresolved.push({ award: a, reason: `team '${row.team_name}' (${row.team_id}) has no userId — orphan` });
+          continue;
+        }
+        userId = row.user_id;
+        metadata.pokemon = a.pokemon;
+        metadata.teamId = row.team_id;
+        if (a.nickname) metadata.nickname = a.nickname;
+      } else {
+        summary.unresolved.push({ award: a, reason: `award has neither username nor pokemon` });
         continue;
       }
-      userId = u.id;
-    } else if ('pokemon' in a && a.pokemon) {
-      if (!a.leagueId) {
-        summary.unresolved.push({ award: a, reason: `pokemon-form award missing leagueId` });
-        continue;
-      }
-      const row = findRosterTeam.get(a.leagueId, a.pokemon) as
-        | { team_id: string; user_id: number | null; team_name: string; roster_nickname: string | null }
-        | undefined;
-      if (!row) {
-        summary.unresolved.push({ award: a, reason: `pokemon '${a.pokemon}' not on any roster in '${a.leagueId}'` });
-        continue;
-      }
-      if (!row.user_id) {
-        summary.unresolved.push({ award: a, reason: `team '${row.team_name}' (${row.team_id}) has no userId — orphan` });
-        continue;
-      }
-      userId = row.user_id;
-      metadata.pokemon = a.pokemon;
-      metadata.teamId = row.team_id;
-      if (a.nickname) metadata.nickname = a.nickname;
-    } else {
-      summary.unresolved.push({ award: a, reason: `award has neither username nor pokemon` });
-      continue;
+
+      const res = insertPin.run(
+        userId,
+        a.pin,
+        seasonId,
+        awardedBy,
+        Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
+      );
+      const changed = (res as unknown as { changes?: number }).changes ?? 0;
+      if (changed > 0) summary.inserted++;
+      else summary.skipped++;
     }
-
-    const res = insertPin.run(
-      userId,
-      a.pin,
-      seasonId,
-      awardedBy,
-      Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
-    );
-    const changed = (res as unknown as { changes?: number }).changes ?? 0;
-    if (changed > 0) summary.inserted++;
-    else summary.skipped++;
-  }
+  })();
 
   return summary;
 }
