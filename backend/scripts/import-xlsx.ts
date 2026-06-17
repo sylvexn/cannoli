@@ -177,7 +177,7 @@ export function importSeason(
   // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
 
   console.log('Importing Pokemon reference data...');
-  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file), { cellStyles: true });
+  const refWb = XLSX.readFile(resolve(IMPORTS_DIR, config.files[0].file));
   const pokemonSheet = sheet(refWb, 'Pokemon');
   // Row 1 = headers: Pokemon, Pts, Sprite, Mono Sprite, Smogon Name, Github Name, BW Sprite, Type1, Type2, HP, ATK, DEF, SPA, SPD, SPE, Ability1, Ability2, Hidden Ability, Shiny, Pokemon, Tera Banned
   const pokemonRows: typeof schema.pokemon.$inferInsert[] = [];
@@ -245,7 +245,11 @@ export function importSeason(
 
   for (const league of config.files) {
     console.log(`\nImporting ${league.name}...`);
-    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
+    const wb = XLSX.readFile(resolve(IMPORTS_DIR, league.file));
+    // Separate styled read used only for the team-color cell on each
+    // team sheet — loading styles into the main workbook expands every
+    // sheet's `!ref` and shifts sheet_to_json output by leading columns.
+    const styledWb = XLSX.readFile(resolve(IMPORTS_DIR, league.file), { cellStyles: true });
 
     // Create league (lifecycle fields are per-league now)
     db.insert(schema.leagues).values({
@@ -287,7 +291,7 @@ export function importSeason(
       coachToTeamId.set(coach, teamId);
 
       const teamColor =
-        readTeamColorFromSheet(wb, abbrev) ||
+        readTeamColorFromSheet(styledWb, abbrev) ||
         TEAM_COLORS[teamIds.length - 1] ||
         '#888888';
 
