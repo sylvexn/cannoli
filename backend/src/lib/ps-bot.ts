@@ -16,7 +16,7 @@ import { toCannoliSpeciesName } from './pokedex';
 import { broughtSidesFromResult } from './brought-preview';
 import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
 import { runAutoAwards } from './pins/auto-award';
 import { tx } from './tx';
@@ -79,6 +79,29 @@ let ws: WebSocket | null = null;
 let connected = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let challstr: string | null = null;
+
+// ─── Send queue ───────────────────────────────────────────────────────────────
+// Messages that arrive while the socket is not OPEN are buffered here and flushed
+// in order from the onopen handler. Prevents lost |/join and |/cannoli-battle
+// commands across reconnect windows. Bounded at SEND_QUEUE_CAP (FIFO eviction).
+const SEND_QUEUE_CAP = 100;
+const sendQueue: string[] = [];
+
+function flushSendQueue() {
+  while (sendQueue.length > 0 && ws?.readyState === WebSocket.OPEN) {
+    const msg = sendQueue.shift()!;
+    ws.send(msg);
+  }
+}
+
+// ─── Staleness reconnect ─────────────────────────────────────────────────────
+// If the socket claims OPEN but no inbound line has arrived within this window,
+// assume the connection is dead and force-reconnect. PS emits traffic
+// continuously, so 90s of total silence is a reliable dead-connection signal.
+// Set to 0 to disable (tests / offline dev).
+const STALENESS_THRESHOLD_MS = 90_000;
+let lastInboundAt: number = Date.now();
+let stalenessTimer: ReturnType<typeof setInterval> | undefined;
 
 // ─── Connection-change listeners ──────────────────────────────────────────────
 // Decoupled hook so other modules (e.g. the Arena route) can react to the bot
@@ -224,10 +247,12 @@ export function startBot() {
   refreshUserMap();
   connect();
   startIdleSweep();
+  startStalenessTimer();
 }
 
 export function stopBot() {
   clearTimeout(reconnectTimer);
+  stopStalenessTimer();
   ws?.close();
   ws = null;
   connected = false;
@@ -251,19 +276,37 @@ export function isBotConnected(): boolean {
 
 /**
  * Send a command to the PS server (e.g., to create a battle).
+ * When the socket is not OPEN, the message is buffered in sendQueue and flushed
+ * automatically once the connection is re-established (onopen).
  */
 export function sendToPs(message: string) {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(message);
+  } else {
+    if (sendQueue.length >= SEND_QUEUE_CAP) {
+      const dropped = sendQueue.shift();
+      console.warn(`[PS Bot] Send-queue cap (${SEND_QUEUE_CAP}) reached — dropped oldest: ${dropped?.slice(0, 80)}`);
+    }
+    sendQueue.push(message);
   }
 }
 
 /**
  * Create a battle between two players via the /cannoli-battle command.
+ * When matchId is provided, it is forwarded to the PS plugin so the resulting
+ * PM carries a 6th field that lets handleBotPm link the room deterministically
+ * without inference (backward-compatible — the 5-field form still works if the
+ * PS fork hasn't been rebuilt yet).
  */
-export function createBattle(p1Username: string, p2Username: string, format: string = 'gen9natdexdraft') {
-  sendToPs(`|/cannoli-battle ${p1Username}, ${p2Username}, ${format}`);
+export function createBattle(p1Username: string, p2Username: string, format: string = 'gen9natdexdraft', matchId?: string) {
+  const cmd = matchId
+    ? `|/cannoli-battle ${p1Username}, ${p2Username}, ${format}, ${matchId}`
+    : `|/cannoli-battle ${p1Username}, ${p2Username}, ${format}`;
+  sendToPs(cmd);
 }
+
+/** Expose send queue for test assertions only. */
+export function getSendQueueForTest() { return sendQueue; }
 
 // ─── Connection ─────────────────────────────────────────────────────────────
 
@@ -280,16 +323,20 @@ function connect() {
 
   ws.onopen = () => {
     console.log('[PS Bot] Connected to PS server');
+    lastInboundAt = Date.now();
     const wasConnected = connected;
     connected = true;
     botState.connected = true;
     botState.reconnectAttempts = 0;
     bump();
     if (!wasConnected) notifyConnectionChange(true);
+    // Flush messages queued while the socket was down.
+    flushSendQueue();
   };
 
   ws.onmessage = (event) => {
     const data = typeof event.data === 'string' ? event.data : '';
+    lastInboundAt = Date.now();
     bump();
     handleMessage(data);
   };
@@ -301,6 +348,7 @@ function connect() {
     botState.connected = false;
     botState.authedAs = null;
     ws = null;
+    stopStalenessTimer();
     if (wasConnected) notifyConnectionChange(false);
     scheduleReconnect();
   };
@@ -320,6 +368,25 @@ function scheduleReconnect() {
     console.log(`[PS Bot] Reconnecting (attempt ${botState.reconnectAttempts})...`);
     connect();
   }, delay);
+}
+
+function startStalenessTimer() {
+  if (stalenessTimer) return;
+  if (!STALENESS_THRESHOLD_MS) return; // disabled
+  stalenessTimer = setInterval(() => {
+    if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const idleMs = Date.now() - lastInboundAt;
+    if (idleMs > STALENESS_THRESHOLD_MS) {
+      console.warn(`[PS Bot] No inbound traffic for ${Math.round(idleMs / 1000)}s — assuming dead connection, reconnecting`);
+      recordError(`Staleness reconnect after ${Math.round(idleMs / 1000)}s of silence`);
+      ws.close();
+    }
+  }, 15_000);
+  stalenessTimer.unref();
+}
+
+function stopStalenessTimer() {
+  if (stalenessTimer) { clearInterval(stalenessTimer); stalenessTimer = undefined; }
 }
 
 // ─── Message Handling ───────────────────────────────────────────────────────
@@ -414,16 +481,22 @@ function handleBotPm(sender: string, message: string) {
 
   if (!message.startsWith('cannoli-battle-created|')) return;
 
-  const [, roomId, p1, p2, format] = message.split('|');
+  // 5-field (old, no matchId): cannoli-battle-created|roomId|p1|p2|format
+  // 6-field (new, with matchId): cannoli-battle-created|roomId|p1|p2|format|matchId
+  // BACKWARD COMPATIBILITY: the old 5-field form must keep working — the PS
+  // server fork is deployed independently and may still emit it until rebuilt.
+  const parts = message.split('|');
+  const [, roomId, p1, p2, format, pmMatchId] = parts;
   if (!roomId) return;
 
-  // Pre-register the battle so handleBattleLine has state when |init| arrives.
   if (!monitoredBattles.has(roomId)) {
+    const p1uid = toUserid(p1 || '');
+    const p2uid = toUserid(p2 || '');
     const entry: MonitoredBattle = {
       roomId,
       matchId: null,
-      p1: toUserid(p1 || ''),
-      p2: toUserid(p2 || ''),
+      p1: p1uid,
+      p2: p2uid,
       format: format || '',
       parser: new ReplayParser(),
       lines: [],
@@ -432,10 +505,40 @@ function handleBotPm(sender: string, message: string) {
       lastLineAt: Date.now(),
     };
     monitoredBattles.set(roomId, entry);
-    // Set matchId immediately so live-stats broadcasting starts as soon as the
-    // first protocol lines arrive (gating only on `|player|` would lose the
-    // opening few turns of telemetry).
-    if (entry.p1 && entry.p2) checkForOfficialMatch(entry);
+
+    // Deterministic matchId link: when the PS plugin forwarded a matchId, link
+    // without inference. Validate the match exists and is in a pre-final status.
+    if (pmMatchId && pmMatchId.trim()) {
+      const matchRow = db.select().from(schema.matches)
+        .where(eq(schema.matches.id, pmMatchId.trim()))
+        .get();
+      if (matchRow && matchRow.status !== 'completed' && matchRow.status !== 'disputed') {
+        entry.matchId = matchRow.id;
+        entry.isOfficial = true;
+        const p1TeamId = useridToTeam.get(p1uid)?.teamId;
+        const p2TeamId = useridToTeam.get(p2uid)?.teamId;
+        entry.homeSide =
+          p1TeamId === matchRow.homeTeamId ? 'p1'
+            : p2TeamId === matchRow.homeTeamId ? 'p2'
+              : null;
+        db.update(schema.matches)
+          .set({ status: 'in_progress', psRoomId: roomId, startedAt: new Date().toISOString() })
+          .where(and(
+            eq(schema.matches.id, matchRow.id),
+            inArray(schema.matches.status, ['scheduled', 'ready']),
+          ))
+          .run();
+        console.log(`[PS Bot] Deterministic match link: ${matchRow.id} → ${roomId}`);
+        clearReadyTimerForMatch(matchRow.id);
+      } else if (!matchRow) {
+        console.warn(`[PS Bot] PM matchId ${pmMatchId} not found — falling back to inference`);
+      }
+    }
+
+    // Inference fallback (old 5-field PM, or matchId lookup failed).
+    if (!entry.matchId && entry.p1 && entry.p2) {
+      checkForOfficialMatch(entry);
+    }
   }
 
   // Join the battle room so PS routes its protocol lines to us.
@@ -1083,14 +1186,19 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
         : team2.teamId === match.homeTeamId ? 'p2'
           : null;
 
-    // Update match with PS room ID and status
+    // Update match with PS room ID and status. Write-race guard: only advance
+    // if the match is still in a pre-start state (prevents double-write if the
+    // deterministic PM path already flipped it to in_progress).
     db.update(schema.matches)
       .set({
         status: 'in_progress',
         psRoomId: battle.roomId,
         startedAt: new Date().toISOString(),
       })
-      .where(eq(schema.matches.id, match.id))
+      .where(and(
+        eq(schema.matches.id, match.id),
+        inArray(schema.matches.status, ['scheduled', 'ready']),
+      ))
       .run();
 
     // Log to activity
@@ -1222,7 +1330,9 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // brings the bot path to parity with recordMatchResult. (The body is kept
       // at its existing indentation to keep this a minimal, reviewable diff.)
       tx(() => {
-      // Update match record
+      // Update match record. Write-race guard: only write if the match is still
+      // in a pre-completion state (prevents a double-write from a late disk-replay
+      // or a concurrent admin force-result from clobbering an already-finalized row).
       db.update(schema.matches)
         .set({
           status: 'completed',
@@ -1242,7 +1352,10 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
             ? null
             : `${PS_PUBLIC_HOST}/${battle.roomId}`,
         })
-        .where(eq(schema.matches.id, matchId))
+        .where(and(
+          eq(schema.matches.id, matchId),
+          inArray(schema.matches.status, ['scheduled', 'ready', 'in_progress']),
+        ))
         .run();
 
       // Write per-Pokemon K/D stats. Attribute by orientation, not by raw

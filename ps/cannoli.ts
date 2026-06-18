@@ -27,7 +27,7 @@ function pmBot(message: string) {
 
 export const commands: Chat.Commands = {
 	/**
-	 * /cannoli-battle player1, player2, format
+	 * /cannoli-battle player1, player2[, format[, matchId]]
 	 *
 	 * Creates a battle room and places both players in it.
 	 * Used by CannoliBot when both players ready up in the Arena lobby.
@@ -35,6 +35,11 @@ export const commands: Chat.Commands = {
 	 *
 	 * On success, sends a PM back to the bot with the new battle's room id
 	 * so the bot can join and observe the battle for result recording.
+	 *
+	 * PM format (5-field, old, backward-compatible):
+	 *   cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>
+	 * PM format (6-field, new, with matchId for deterministic linking):
+	 *   cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>|<matchId>
 	 */
 	'cannoli-battle'(target, room, user) {
 		if (user.id !== BOT_USERID) {
@@ -43,10 +48,10 @@ export const commands: Chat.Commands = {
 
 		const parts = target.split(',').map(s => s.trim());
 		if (parts.length < 2) {
-			return this.errorReply('Usage: /cannoli-battle player1, player2[, format]');
+			return this.errorReply('Usage: /cannoli-battle player1, player2[, format[, matchId]]');
 		}
 
-		const [p1Name, p2Name, formatId] = parts;
+		const [p1Name, p2Name, formatId, matchId] = parts;
 		const format = formatId || 'gen9natdexdraft';
 
 		const user1 = Users.get(p1Name);
@@ -98,9 +103,11 @@ export const commands: Chat.Commands = {
 		}
 
 		// PM the bot the new room id so it can join and observe.
-		// Format: cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>
+		// 5-field (old, backward-compatible): cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>
+		// 6-field (new, with matchId):        cannoli-battle-created|<roomid>|<p1userid>|<p2userid>|<format>|<matchId>
 		// roomid already includes the `battle-` prefix.
-		pmBot(`cannoli-battle-created|${battleRoom.roomid}|${user1.id}|${user2.id}|${format}`);
+		const matchSuffix = (matchId && matchId.trim()) ? `|${matchId.trim()}` : '';
+		pmBot(`cannoli-battle-created|${battleRoom.roomid}|${user1.id}|${user2.id}|${format}${matchSuffix}`);
 
 		this.sendReply(`Battle created: ${user1.name} vs ${user2.name} [${format}] (${battleRoom.roomid})`);
 	},
