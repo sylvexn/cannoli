@@ -15,22 +15,13 @@
  * the ready-up "create battle" call short-circuits — we assert on DB+broadcast
  * state, which is the part that must be race-safe regardless of the bot.
  *
- * ── LAUNCH-BUG: arena-ws-client-identity ─────────────────────────────────────
- * Every test below that drives a `message`-handler path (match_ready, scrim_*,
- * spectator count) is `describe.skip`'d because they ALL fail against the
- * installed Elysia (1.4.28; package.json still pins ^1.2.0). Root cause:
+ * ── arena-ws-client-identity (FIXED) ─────────────────────────────────────────
  * Elysia 1.4 passes a *different* ServerWebSocket wrapper object to `open`
- * vs `message`/`close` (verified: `wsOpen !== wsMessage`, though `ws.raw` and
- * `ws.id` ARE stable). arena.ts keys `arenaClients` / `matchSpectators` (and
- * draft.ts keys `leaguePresence` / `chatRateLimit`) on the wrapper object, so
- * `arenaClients.get(ws)` in `message` never finds the entry set in `open`.
- * Result: match_ready silently no-ops ("No team assigned"), scrim_create never
- * acks, spectator counts never update, close() never tears down presence.
- *
- * These specs are written to be CORRECT once the source switches its Map keys
- * to `ws.id` (or `ws.raw`); un-skip them after the fix lands. The active
- * `connect + identify` describe below still passes because it only reads the
- * frame sent synchronously from `open`.
+ * vs `message`/`close` (`wsOpen !== wsMessage`, though `ws.raw` and `ws.id`
+ * ARE stable across all callbacks). arena.ts and draft.ts now key all
+ * per-connection Maps on `wsKey(ws)` = `ws.raw` (see arena.ts:35-37), which is
+ * stable for the connection lifetime. All describes below are active (no
+ * `describe.skip`) and all 13 tests pass.
  */
 import { describe, expect, test, beforeAll, afterAll, spyOn } from 'bun:test';
 import { Elysia } from 'elysia';
