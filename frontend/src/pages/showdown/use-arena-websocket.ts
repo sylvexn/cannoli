@@ -96,6 +96,8 @@ export interface ArenaState {
 export function useArenaWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Guard against setState / reconnect firing after the component unmounts.
+  const mountedRef = useRef(true);
 
   const [state, setState] = useState<ArenaState>({
     myMatches: [],
@@ -114,13 +116,16 @@ export function useArenaWebSocket() {
   const refreshState = useCallback(() => {
     fetch('/api/arena/state', { credentials: 'include' })
       .then(r => r.json())
-      .then(data => setState(s => ({
-        ...s,
-        myMatches: data.myMatches ?? [],
-        liveMatches: data.liveMatches ?? [],
-        scrimLobbies: data.scrimLobbies ?? [],
-        botConnected: data.botConnected ?? false,
-      })))
+      .then(data => {
+        if (!mountedRef.current) return;
+        setState(s => ({
+          ...s,
+          myMatches: data.myMatches ?? [],
+          liveMatches: data.liveMatches ?? [],
+          scrimLobbies: data.scrimLobbies ?? [],
+          botConnected: data.botConnected ?? false,
+        }));
+      })
       .catch(() => {});
   }, []);
 
@@ -133,6 +138,7 @@ export function useArenaWebSocket() {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!mountedRef.current) return;
       setState(s => ({ ...s, connected: true }));
       // Auth happens via cookie on WS upgrade — no explicit identify needed.
       // Pull a fresh snapshot now that we're (re)connected.
@@ -140,6 +146,7 @@ export function useArenaWebSocket() {
     };
 
     ws.onmessage = (event) => {
+      if (!mountedRef.current) return;
       try {
         const msg = JSON.parse(event.data);
 
@@ -237,10 +244,13 @@ export function useArenaWebSocket() {
     };
 
     ws.onclose = () => {
+      if (!mountedRef.current) return;
       setState(s => ({ ...s, connected: false }));
       wsRef.current = null;
-      // Auto-reconnect after 2s
-      reconnectTimerRef.current = setTimeout(connect, 2000);
+      // Auto-reconnect after 2s — only while the component is still mounted.
+      reconnectTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) connect();
+      }, 2000);
     };
 
     ws.onerror = () => {
@@ -250,8 +260,12 @@ export function useArenaWebSocket() {
 
   // Connect on mount, disconnect on unmount
   useEffect(() => {
+    mountedRef.current = true;
     connect();
     return () => {
+      // Mark unmounted first so any in-flight onclose / onmessage / timers
+      // that fire after this point do not call setState or schedule reconnects.
+      mountedRef.current = false;
       clearTimeout(reconnectTimerRef.current);
       wsRef.current?.close();
       wsRef.current = null;

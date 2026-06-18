@@ -84,10 +84,25 @@ export function BattleHud(props: BattleHudProps) {
             </button>
           )}
 
+          {/*
+            sandbox tokens — all are required for the PS client to function:
+              allow-scripts      — PS is a JS-heavy app (battle engine, UI)
+              allow-same-origin  — needed for cookies (SSO sid), localStorage, and
+                                   the cannoli-battle plugin that posts to the parent
+              allow-forms        — login form inside PS client
+              allow-popups       — PS opens replays and external links in new tabs
+              allow-modals       — PS uses alert/confirm/prompt dialogs
+              allow-popups-to-escape-sandbox — lets popups opened by PS behave as
+                                   normal top-level pages (otherwise they inherit
+                                   this sandbox and may break)
+            Notably absent: allow-top-navigation — this is the key dangerous default
+            we are removing; without it the iframe cannot navigate the parent page.
+          */}
           <iframe
             src={iframeUrl}
             className="absolute inset-0 block h-full w-full border-0"
             allow="clipboard-write"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox"
             title="Pokemon Showdown Battle"
           />
 

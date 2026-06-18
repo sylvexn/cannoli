@@ -176,12 +176,18 @@ function CreateScrimDialog({
       setSelectedInvitee(null);
       return;
     }
+    const controller = new AbortController();
     setLoading(true);
-    fetch('/api/arena/players', { credentials: 'include' })
+    fetch('/api/arena/players', { credentials: 'include', signal: controller.signal })
       .then(r => r.json())
       .then(data => setPlayers(data))
-      .catch(() => {})
+      .catch(err => {
+        // Ignore aborts (dialog closed / component unmounted before fetch resolved)
+        if (err instanceof Error && err.name === 'AbortError') return;
+      })
       .finally(() => setLoading(false));
+    // Abort on cleanup: fires when dialog closes or the component unmounts.
+    return () => controller.abort();
   }, [open]);
 
   const filteredPlayers = players.filter(p =>
