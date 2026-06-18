@@ -35,6 +35,11 @@ BEFORE="${BEFORE:-}"
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK:-}"
 
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-900}"   # 15 min — covers build-on-construct + pull + restart
+VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-900}"   # secondary confirm window AFTER Coolify reports "finished":
+                                          # the container restart + backend boot (migrations) + nginx
+                                          # upstream pickup can lag "finished" by many minutes, especially
+                                          # during a multi-app deploy storm. 180s was too short and produced
+                                          # false-negative failures on deploys that actually came up fine.
 POLL_INTERVAL=15
 WEB_SETTLE=90                              # frontends serve 200 with the OLD build mid-deploy; settle first
 
@@ -133,7 +138,7 @@ except Exception: print((l or '')[-1500:])" 2>/dev/null | tail -20
 }
 
 wait_for_version() {   # backend SECONDARY confirm: /api/health version == SHORT
-  local url="$1" deadline=$(( $(date +%s) + 180 )) got
+  local url="$1" deadline=$(( $(date +%s) + VERIFY_TIMEOUT )) got
   log "Confirming $url reports version=$SHORT ..."
   while [ "$(date +%s)" -lt "$deadline" ]; do
     got="$(curl -sf --max-time 10 "$url" 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4)"
@@ -144,7 +149,7 @@ wait_for_version() {   # backend SECONDARY confirm: /api/health version == SHORT
 }
 
 wait_for_200() {       # frontend SECONDARY confirm: root returns 200
-  local url="$1" deadline=$(( $(date +%s) + 180 )) code
+  local url="$1" deadline=$(( $(date +%s) + VERIFY_TIMEOUT )) code
   log "Confirming $url returns 200 ..."
   while [ "$(date +%s)" -lt "$deadline" ]; do
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null)"

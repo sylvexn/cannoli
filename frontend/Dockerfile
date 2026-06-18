@@ -14,7 +14,10 @@ COPY frontend/ frontend/
 ARG COMMIT_HASH=unknown
 ENV COMMIT_HASH=$COMMIT_HASH
 
-RUN cd frontend && bun run build
+# Bundle only (`vite build`) — the `tsc -b` typecheck is a blocking CI gate
+# (Fast checks), so re-running it here just burns RAM on the build server and
+# risks an OOM kill. Keep the image build lean.
+RUN cd frontend && bun run build:dist
 
 FROM nginx:alpine
 COPY --from=build /app/frontend/dist /usr/share/nginx/html
