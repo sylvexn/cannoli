@@ -18,9 +18,12 @@ import { test, expect, type APIRequestContext, type BrowserContext, type Page } 
  *
  * Setup short-circuits performed in this spec because they're pure test
  * fixtures, not behaviour we want to exercise:
- *   - Sapphire is left in `phase=offseason` by the seed (after the
- *     historical S10 import). We walk it back to `predraft`, set draft
- *     order, then forward to `draft`.
+ *   - The seed leaves Sapphire mid-season (`phase=regular`). We walk it back
+ *     to `predraft`, set draft order, then forward to `draft` — and restore it
+ *     to `regular` at the end so order-dependent specs that read Sapphire (e.g.
+ *     standings.spec, which asserts the ranked qualify line) don't inherit our
+ *     draft-phase residue. Playwright runs spec files serially in CI and this
+ *     one sorts before standings.
  *   - Coach users seed with `must_change_password=1`. We login each one
  *     with the default password and run change-password so the live login
  *     against the UI doesn't redirect to /change-password.
@@ -222,6 +225,14 @@ test.describe('12-coach live draft', () => {
     const final: DraftSnapshot = await finalRes.json();
     expect(final.status).toBe('completed');
     expect(final.picks.length).toBe(TOTAL_PICKS);
+
+    // Restore Sapphire to the seeded mid-season state so later specs (standings)
+    // see a ranked league, not our draft-phase residue. Done before the
+    // captured-errors assertion so the cleanup lands even if that one fails.
+    const restore = await csrfPost(request, `/api/leagues/${LEAGUE_ID}/phase`, {
+      phase: 'regular', override: true, confirm: 'I understand',
+    });
+    expect(restore.ok(), `restore → regular: ${restore.status()} ${await restore.text()}`).toBeTruthy();
 
     if (captured.length > 0) {
       // eslint-disable-next-line no-console
