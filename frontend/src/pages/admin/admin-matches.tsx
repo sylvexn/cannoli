@@ -8,6 +8,7 @@ import { useTeamNames } from '@/lib/use-team-names';
 import { useFormatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
+import { SpoilerToggle } from '@/components/spoiler-toggle';
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { matchNeedsAttention, matchIsSettled } from './matches/match-status-badges';
 import { MatchEntryDialog, type ResultMode } from './matches/match-entry-dialog';
@@ -221,6 +222,8 @@ export function AdminMatches() {
             {stats.warnings} with warnings
           </Badge>
         )}
+        <div className="flex-1" />
+        <SpoilerToggle />
       </div>
 
       {/* Filters */}

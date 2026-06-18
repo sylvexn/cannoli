@@ -9,6 +9,7 @@ import type { League } from '@/lib/types';
 import type { TeamNameResolver } from '@/lib/use-team-names';
 import { TeamLink } from '@/components/team-link';
 import { ReplayLink } from '@/components/replay-link';
+import { Spoiler } from '@/components/spoiler';
 import {
   StatusBadge, WarningCountBadge, PhaseBadge, WeekSummary,
 } from './match-status-badges';
@@ -148,11 +149,16 @@ function MatchRow({
           <AdminTeamChip teamId={match.awayTeamId} resolver={teamNames} />
         </div>
 
-        <div className="w-[60px] text-center">
+        <div
+          className="w-[60px] text-center"
+          onClick={e => e.stopPropagation()}
+        >
           {match.homeScore !== null ? (
-            <span className="text-xs font-mono font-medium text-text-primary">
-              {match.homeScore} - {match.awayScore}
-            </span>
+            <Spoiler matchId={match.id} label="Score — click to reveal">
+              <span className="text-xs font-mono font-medium text-text-primary">
+                {match.homeScore} - {match.awayScore}
+              </span>
+            </Spoiler>
           ) : (
             <span className="text-[10px] text-text-muted">—</span>
           )}
