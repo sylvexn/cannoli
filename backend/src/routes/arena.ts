@@ -226,11 +226,16 @@ function buildMatchPayload(matchId: string, teamId: string, currentWeek: number)
   const data = getMatchWithTeams(matchId);
   if (!data) return null;
   const { match, homeTeam, awayTeam } = data;
+  const isPlayoff = match.phase === 'playoffs';
   return {
     matchId: match.id,
     leagueId: match.leagueId,
     week: match.week,
-    isCurrentWeek: match.week === currentWeek,
+    // Playoffs have no "current week"; a surfaced bracket fixture is always the
+    // one to play now, so mark it current for the MatchBanner / footer.
+    isCurrentWeek: isPlayoff ? true : match.week === currentWeek,
+    phase: match.phase,
+    playoffRound: match.playoffRound,
     status: match.status,
     readyHome: match.readyHome,
     readyAway: match.readyAway,

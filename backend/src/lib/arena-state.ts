@@ -54,6 +54,24 @@ export const BATTLE_LOOKAHEAD_WEEKS = 2;
 export function getPlayableMatches(teamId: string, leagueId: string) {
   const league = getLeague(leagueId);
   if (!league) return [];
+
+  // Playoffs: bracket fixtures have weeks past the regular season and there's
+  // no single "current week", so the week window doesn't apply. Surface a
+  // team's playoff match once BOTH bracket slots are filled (a TBD opponent
+  // isn't playable yet) and it isn't finished. A team is only ever in one
+  // resolved-and-unplayed playoff match at a time.
+  if (league.phase === 'playoffs') {
+    return db.select().from(schema.matches).where(
+      eq(schema.matches.leagueId, leagueId),
+    ).all().filter(m => {
+      if (m.phase !== 'playoffs') return false;
+      if (m.homeTeamId == null || m.awayTeamId == null) return false; // TBD slot
+      if (m.homeTeamId !== teamId && m.awayTeamId !== teamId) return false;
+      if (m.status === 'in_progress') return true; // never hide a live battle
+      return m.status === 'scheduled' || m.status === 'ready';
+    }).sort((a, b) => a.week - b.week);
+  }
+
   if (league.phase !== 'regular') return [];
 
   const maxWeek = league.currentWeek + BATTLE_LOOKAHEAD_WEEKS;
@@ -70,7 +88,11 @@ export function getPlayableMatches(teamId: string, leagueId: string) {
 /** The team's fixture for the league's current week, if still playable. */
 export function getCurrentMatch(teamId: string, leagueId: string) {
   const league = getLeague(leagueId);
-  if (!league || league.phase !== 'regular') return null;
+  if (!league) return null;
+  // Playoffs have no "current week" — the active bracket fixture is the single
+  // resolved, unplayed playoff match (earliest if more than one ever lined up).
+  if (league.phase === 'playoffs') return getPlayableMatches(teamId, leagueId)[0] ?? null;
+  if (league.phase !== 'regular') return null;
   return getPlayableMatches(teamId, leagueId).find(m => m.week === league.currentWeek) ?? null;
 }
 
@@ -101,13 +123,33 @@ function resolveTeamPsUsername(teamId: string | null, sideLabel: 'home' | 'away'
  * match_ready handler used to inline. Shared by the ready-up handler and the
  * bot-reconnect auto-resume path so the resolution logic lives in one place.
  */
+/**
+ * Map a Cannoli league `format` label to the Pokemon Showdown battle-format id
+ * its matches play under. Today every league resolves to `gen9natdexdraft`:
+ * `format` is a moveset-display label and `costFormat` (natdex/natdexplus) is a
+ * draft-pricing distinction — neither implies a different PS ruleset, and
+ * `gen9natdexdraft` is the only Cannoli-tuned draft format on the server. This
+ * seam exists so a future doubles/LC league can route to its own existing PS
+ * format without re-plumbing battle creation; unknown labels fall back to the
+ * default.
+ */
+const PS_FORMAT_BY_LEAGUE_FORMAT: Record<string, string> = {
+  gen9natdex: 'gen9natdexdraft',
+};
+const DEFAULT_PS_FORMAT = 'gen9natdexdraft';
+export function leagueToPsFormat(format: string | null | undefined): string {
+  return (format ? PS_FORMAT_BY_LEAGUE_FORMAT[format] : undefined) ?? DEFAULT_PS_FORMAT;
+}
+
 export function createBattleForReadyMatch(match: {
+  leagueId: string;
   homeTeamId: string | null;
   awayTeamId: string | null;
 }) {
   const p1Name = resolveTeamPsUsername(match.homeTeamId, 'home');
   const p2Name = resolveTeamPsUsername(match.awayTeamId, 'away');
-  createBattle(p1Name, p2Name);
+  const league = getLeague(match.leagueId);
+  createBattle(p1Name, p2Name, leagueToPsFormat(league?.format));
 }
 
 /**
