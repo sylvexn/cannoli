@@ -12,8 +12,8 @@ import { test, expect, type Page } from '@playwright/test';
  *      pattern, so the expand toggle is the only way to see a roster.
  *   3. Team names link to the team profile (entity cross-link convention).
  *
- * Sapphire is left in offseason by the seed (post-S10 import), so the page
- * also exercises the playoffs/standings view toggle.
+ * The seed leaves Sapphire mid-season (regular, ~week 7), so the standings
+ * table renders ranked rows with the live qualify-line footer.
  */
 test.describe('League Hub — standings', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -40,7 +40,11 @@ test.describe('League Hub — standings', () => {
     await expect(errorBoundary).toHaveCount(0);
 
     // The qualify-line footer is rendered by the standings table specifically.
-    await expect(page.getByText(/qualify for playoffs/i)).toBeVisible({ timeout: 10_000 });
+    // It only appears once the league-data fetch resolves (the page shell
+    // renders first), so give it a generous window — a loaded CI runner (this
+    // suite's live-draft test alone takes ~7 min) can lag well past a few
+    // seconds even though the page renders instantly in isolation.
+    await expect(page.getByText(/qualify for playoffs/i)).toBeVisible({ timeout: 30_000 });
 
     // Each standings row is a <button> (the expand toggle) whose accessible
     // name begins with the team's rank. Grab the rank-1 row and expand it.
@@ -65,7 +69,8 @@ test.describe('League Hub — standings', () => {
 
   test('team names link to the team profile page', async ({ page }) => {
     await page.goto('/league/sapphire');
-    await expect(page.getByText(/qualify for playoffs/i)).toBeVisible({ timeout: 15_000 });
+    // Generous window: the data-driven footer can lag on a loaded CI runner.
+    await expect(page.getByText(/qualify for playoffs/i)).toBeVisible({ timeout: 30_000 });
 
     // The first team-name link in the standings table should navigate to a
     // /league/sapphire/teams/:id route.
