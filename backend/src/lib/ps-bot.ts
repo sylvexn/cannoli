@@ -16,9 +16,11 @@ import { toCannoliSpeciesName } from './pokedex';
 import { broughtSidesFromResult } from './brought-preview';
 import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
 import { runAutoAwards } from './pins/auto-award';
+import { tx } from './tx';
+import { advancePlayoffWinner } from './playoff-advance';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
@@ -1102,6 +1104,19 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
     }).run();
 
     console.log(`[PS Bot] Official match detected: ${match.id} → ${battle.roomId}`);
+
+    // Tell Arena clients the match just went live. `match_live` is the FE event
+    // (use-arena-websocket.ts) that flips the row to in_progress and stamps the
+    // room id; without it a readied coach sits on the "Both ready — starting
+    // match..." spinner until the next live-stats tick or a manual reload.
+    // Publish on the per-match channel (HUD) and arena:global (myMatches list).
+    const liveBroadcaster = getArenaBroadcaster();
+    if (liveBroadcaster) {
+      const liveMsg = JSON.stringify({ type: 'match_live', matchId: match.id, psRoomId: battle.roomId });
+      liveBroadcaster.publish(`arena:match:${match.id}`, liveMsg);
+      liveBroadcaster.publish('arena:global', liveMsg);
+    }
+
     clearReadyTimerForMatch(match.id);
   }
 }
@@ -1118,6 +1133,10 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, battle.matchId))
       .get();
+
+    // Capture the (narrowed) match id — the tx() closure below loses the
+    // `if (battle.matchId)` narrowing, so refer to `matchId` inside it.
+    const matchId = battle.matchId;
 
     if (match) {
       // Fix 2 — never overwrite a finalized match. Auto-forfeit may have
@@ -1177,12 +1196,13 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         }
       }
 
-      // Cap replayLog at 256 KB — long battles can run 100+ KB of protocol
-      // lines and we don't want a single match row ballooning the SQLite
-      // page cache. The canonical full log lives at replayUrl on the PS
-      // server, so truncation is recoverable.
+      // Cap replayLog at 1 MB. This was 256 KB, but the |win|/|tie| line lives
+      // at the END of the log, so a long best-of / 6v6 battle exceeding 256 KB
+      // had its result clipped off the in-site replay viewer. 1 MB clears any
+      // realistic singles battle; the canonical full log still lives at
+      // replayUrl, so truncation remains recoverable.
       const replayLog = battle.lines.join('\n');
-      const MAX_REPLAY_LOG = 256 * 1024;
+      const MAX_REPLAY_LOG = 1024 * 1024;
       const truncatedLog = replayLog.length > MAX_REPLAY_LOG
         ? replayLog.slice(0, MAX_REPLAY_LOG) + '\n[...truncated]'
         : replayLog;
@@ -1197,6 +1217,11 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         ? JSON.stringify(broughtSidesFromResult(result, homeSideResolved))
         : null;
 
+      // All result writes run in ONE transaction so a mid-write crash can't
+      // leave a `completed` match with partial/zero match_pokemon rows — this
+      // brings the bot path to parity with recordMatchResult. (The body is kept
+      // at its existing indentation to keep this a minimal, reviewable diff.)
+      tx(() => {
       // Update match record
       db.update(schema.matches)
         .set({
@@ -1217,7 +1242,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
             ? null
             : `${PS_PUBLIC_HOST}/${battle.roomId}`,
         })
-        .where(eq(schema.matches.id, battle.matchId))
+        .where(eq(schema.matches.id, matchId))
         .run();
 
       // Write per-Pokemon K/D stats. Attribute by orientation, not by raw
@@ -1226,6 +1251,12 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // mapping, name change), the fallback `match.homeTeamId` for p1 was
       // wrong half the time. With battle.homeSide resolved at match start,
       // we deterministically know which PS side is home.
+      // Delete-before-insert so a re-run (admin re-import, disk-replay recovery)
+      // can never duplicate match_pokemon rows — mirrors recordMatchResult.
+      db.delete(schema.matchPokemon)
+        .where(eq(schema.matchPokemon.matchId, matchId))
+        .run();
+
       for (const mon of result.pokemon) {
         const side = mon.player;
         const homeSide = battle.homeSide
@@ -1235,7 +1266,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
 
         if (mon.appeared) {
           db.insert(schema.matchPokemon).values({
-            matchId: battle.matchId,
+            matchId,
             teamId,
             // Store in Cannoli convention ("Mega Altaria"), not Showdown's
             // "Altaria-Mega", so per-Pokemon K/D JOINs to the roster entry.
@@ -1273,7 +1304,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           hasWarnings = true;
           db.update(schema.matches)
             .set({ warnings: JSON.stringify(warnings), status: 'disputed' })
-            .where(eq(schema.matches.id, battle.matchId))
+            .where(eq(schema.matches.id, matchId))
             .run();
         }
       }
@@ -1284,7 +1315,23 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // match is now 'disputed' — dismiss-warnings will run the awards once
       // an admin clears them.
       if (!hasWarnings) {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId: battle.matchId });
+        runAutoAwards(match.leagueId, { trigger: 'match', matchId });
+      }
+
+      // Advance the playoff bracket when a clean (non-disputed) playoff match
+      // finalizes. The bot was the only recording path that never filled the
+      // next-round slot, which stalled brackets until an admin stepped in.
+      // Disputed matches wait for dismiss-warnings to advance. advancePlayoffWinner
+      // only fills a still-empty slot, so re-running it is safe.
+      if (!hasWarnings && match.phase === 'playoffs' && match.playoffRound && winnerTeamId) {
+        const winnerSeed = winnerTeamId === match.homeTeamId ? match.homeSeed : match.awaySeed;
+        advancePlayoffWinner({
+          matchId,
+          leagueId: match.leagueId,
+          playoffRound: match.playoffRound,
+          winnerId: winnerTeamId,
+          winnerSeed,
+        });
       }
 
       // Activity log
@@ -1294,15 +1341,17 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         actor: BOT_USERNAME,
         leagueId: match.leagueId,
         description: `Match completed: ${homeTeam?.teamAbbrev ?? '?'} ${homeScore}-${awayScore} ${awayTeam?.teamAbbrev ?? '?'}`,
-        metadata: JSON.stringify({ matchId: battle.matchId, homeScore, awayScore, winner: winnerUsername }),
+        metadata: JSON.stringify({ matchId, homeScore, awayScore, winner: winnerUsername }),
       }).run();
+      }); // end result-write transaction
 
-      // Broadcast result to Arena
+      // Broadcast result to Arena (after commit — clients only learn the result
+      // once it's durably written).
       const broadcaster = getArenaBroadcaster();
       if (broadcaster) {
-        broadcaster.publish(`arena:match:${battle.matchId}`, JSON.stringify({
+        broadcaster.publish(`arena:match:${matchId}`, JSON.stringify({
           type: 'match_result',
-          matchId: battle.matchId,
+          matchId,
           winner: winnerUsername,
           score: [homeScore, awayScore],
         }));
@@ -1364,19 +1413,30 @@ function authenticate() {
 export function refreshUserMap() {
   useridToTeam.clear();
 
-  const teams = db.select({
-    id: schema.teams.id,
+  // Order exactly like getUserTeam (arena-state.ts): active (non-offseason)
+  // leagues first, then newest season. A coach who has played multiple seasons
+  // owns one team row per season; keeping the FIRST (top-ranked) row per PS
+  // userid maps them to their CURRENT-season team rather than a stale archived
+  // one — otherwise the bot's match detection mis-resolves the league for any
+  // returning coach (the live DB holds S9/S10/S11 side by side).
+  const rows = db.select({
+    teamId: schema.teams.id,
     leagueId: schema.teams.leagueId,
-    userId: schema.teams.userId,
-  }).from(schema.teams).all();
+    username: schema.users.username,
+  })
+    .from(schema.teams)
+    .innerJoin(schema.users, eq(schema.teams.userId, schema.users.id))
+    .innerJoin(schema.leagues, eq(schema.teams.leagueId, schema.leagues.id))
+    .orderBy(
+      sql`CASE WHEN ${schema.leagues.phase} = 'offseason' THEN 1 ELSE 0 END`,
+      sql`${schema.leagues.seasonId} DESC`,
+    )
+    .all();
 
-  for (const team of teams) {
-    if (team.userId) {
-      const user = db.select().from(schema.users).where(eq(schema.users.id, team.userId)).get();
-      if (user) {
-        useridToTeam.set(toUserid(user.username), { teamId: team.id, leagueId: team.leagueId });
-      }
-    }
+  for (const row of rows) {
+    const userid = toUserid(row.username);
+    if (useridToTeam.has(userid)) continue; // first (current-season) row wins
+    useridToTeam.set(userid, { teamId: row.teamId, leagueId: row.leagueId });
   }
 
   console.log(`[PS Bot] User map loaded: ${useridToTeam.size} players`);
