@@ -58,6 +58,28 @@ export const TYPE_LABELS: Record<PokemonType, string> = {
   dark: 'DRK', steel: 'STL', fairy: 'FAI',
 };
 
+/** Singular playoff-round labels keyed by a match's `playoffRound`. The
+ *  bracket view uses plural column headers ("Quarter Finals"); these read as a
+ *  single fixture reference ("you have a Quarterfinal to play"). */
+export const PLAYOFF_ROUND_LABEL: Record<string, string> = {
+  qf: 'Quarterfinal', sf: 'Semifinal', f: 'Final',
+};
+export const PLAYOFF_ROUND_SHORT: Record<string, string> = {
+  qf: 'QF', sf: 'SF', f: 'F',
+};
+
+/** Human label for a fixture — "Quarterfinal"/"Semifinal"/"Final" in playoffs,
+ *  otherwise "Week N". Keeps the playoff vs. regular wording in one place. */
+export function fixtureLabel(m: { phase?: string | null; playoffRound?: string | null; week: number }): string {
+  if (m.phase === 'playoffs' && m.playoffRound) return PLAYOFF_ROUND_LABEL[m.playoffRound] ?? 'Playoffs';
+  return `Week ${m.week}`;
+}
+/** Compact pill label — "QF"/"SF"/"F" in playoffs, otherwise "W{n}". */
+export function fixtureShortLabel(m: { phase?: string | null; playoffRound?: string | null; week: number }): string {
+  if (m.phase === 'playoffs' && m.playoffRound) return PLAYOFF_ROUND_SHORT[m.playoffRound] ?? 'PO';
+  return `W${m.week}`;
+}
+
 /** Alias kept for code that imported the team-profile copy as TYPE_ABBR */
 export const TYPE_ABBR = TYPE_LABELS;
 

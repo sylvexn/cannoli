@@ -11,6 +11,7 @@
  */
 import { Link } from 'react-router-dom';
 import { Swords, LogIn, Loader2, Zap, AlertTriangle } from 'lucide-react';
+import { fixtureLabel, fixtureShortLabel } from '@/lib/constants';
 import type { ArenaMatch } from '../use-arena-websocket';
 
 interface Props {
@@ -108,7 +109,7 @@ function WeekPill({ match, active, onClick }: { match: ArenaMatch; active: boole
       }`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-      <span className="font-mono">W{match.week}</span>
+      <span className="font-mono">{fixtureShortLabel(match)}</span>
       {match.isCurrentWeek && (
         <span className="text-[9px] font-mono uppercase text-orange-400/80">now</span>
       )}
@@ -143,7 +144,7 @@ function SelectedMatch({
   matchError: string | null;
 }) {
   const timing =
-    currentWeek === null || match.week === currentWeek ? null
+    match.phase === 'playoffs' || currentWeek === null || match.week === currentWeek ? null
     : match.week > currentWeek ? 'Playing ahead of schedule'
     : 'Make-up match';
 
@@ -156,7 +157,7 @@ function SelectedMatch({
       </div>
 
       <div className="text-xs text-text-muted text-center">
-        Week {match.week} &middot; {match.leagueId.charAt(0).toUpperCase() + match.leagueId.slice(1)} League
+        {fixtureLabel(match)} &middot; {match.leagueId.charAt(0).toUpperCase() + match.leagueId.slice(1)} League
         {match.status === 'in_progress' && (
           <span className="ml-2 text-green-400 font-medium">
             <Zap size={10} className="inline" /> LIVE

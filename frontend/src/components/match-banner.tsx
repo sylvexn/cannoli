@@ -8,11 +8,14 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { fixtureLabel } from '@/lib/constants';
 import { Swords, X } from 'lucide-react';
 
 interface BannerMatch {
   matchId: string;
   week: number;
+  phase?: string;
+  playoffRound?: string | null;
   status: string;
   readyHome: boolean;
   readyAway: boolean;
@@ -21,12 +24,19 @@ interface BannerMatch {
   isHome: boolean;
 }
 
+const DISMISS_KEY = 'matchBannerDismissedId';
+
 export function MatchBanner() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [match, setMatch] = useState<BannerMatch | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  // Persist dismissal by matchId so the X sticks across reloads/navigation
+  // until the fixture changes (week advances / playoff round resolves),
+  // instead of the toast re-nagging on every remount.
+  const [dismissedId, setDismissedId] = useState<string | null>(
+    () => { try { return localStorage.getItem(DISMISS_KEY); } catch { return null; } },
+  );
 
   // Fetch match state periodically
   useEffect(() => {
@@ -50,8 +60,8 @@ export function MatchBanner() {
     return () => clearInterval(interval);
   }, [user]);
 
-  // Don't render on showdown pages, when dismissed, or when no match
-  if (!match || dismissed) return null;
+  // Don't render on showdown pages, when this fixture was dismissed, or no match
+  if (!match || match.matchId === dismissedId) return null;
   if (pathname.startsWith('/showdown')) return null;
 
   const opponentReady = match.isHome ? match.readyAway : match.readyHome;
@@ -61,7 +71,10 @@ export function MatchBanner() {
     <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
       <div className="bg-surface-raised border border-border-default rounded-lg shadow-lg p-3 pr-8 max-w-xs">
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => {
+            try { localStorage.setItem(DISMISS_KEY, match.matchId); } catch { /* ignore */ }
+            setDismissedId(match.matchId);
+          }}
           className="absolute top-2 right-2 text-text-muted hover:text-text-primary"
         >
           <X size={12} />
@@ -71,7 +84,7 @@ export function MatchBanner() {
           <Swords size={16} className="text-orange-400 mt-0.5 flex-shrink-0" />
           <div className="min-w-0">
             <div className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-              Week {match.week} — vs. {opponentTeam?.name ?? 'TBD'}
+              {fixtureLabel(match)} — vs. {opponentTeam?.name ?? 'TBD'}
             </div>
 
             {match.status === 'in_progress' ? (

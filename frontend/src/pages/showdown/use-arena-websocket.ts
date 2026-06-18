@@ -17,7 +17,9 @@ export interface ArenaMatch {
   matchId: string;
   leagueId: string;
   week: number;
-  isCurrentWeek?: boolean; // true for the league's active-week fixture
+  isCurrentWeek?: boolean; // true for the league's active-week fixture (and any playoff fixture)
+  phase?: 'regular' | 'playoffs'; // present on official fixtures
+  playoffRound?: string | null;   // 'qf' | 'sf' | 'f' for playoff fixtures
   status: 'scheduled' | 'ready' | 'in_progress' | 'completed' | 'disputed';
   readyHome: boolean;
   readyAway: boolean;
