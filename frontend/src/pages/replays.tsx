@@ -75,6 +75,16 @@ export function ReplaysPage() {
     return fromReplays > 0 ? fromReplays : 1;
   }, [leagues, entries]);
 
+  // The broadcast cockpit button targets the ACTIVE season's current week, so
+  // only surface it when the active (non-archived) season — or the "All-time"
+  // view — is selected. An explicitly-selected archived season (S10, S9) hides
+  // it, since streaming a finished season makes no sense.
+  const hasActiveSeason = seasons.some(s => !s.archived);
+  const selectedSeasonArchived =
+    seasonFilter !== 'all' &&
+    seasons.find(s => s.seasonNumber === seasonFilter)?.archived === true;
+  const canStream = isAdmin && hasActiveSeason && !selectedSeasonArchived;
+
   // Entries within the selected season — the base set for week-based filters.
   const seasonEntries = useMemo(
     () => seasonFilter === 'all'
@@ -314,7 +324,7 @@ export function ReplaysPage() {
         <div className="flex items-center gap-2 shrink-0">
           <SpoilerToggle />
 
-          {isAdmin && (
+          {canStream && (
             <button
               onClick={() => navigate(`/replays/stream/${streamWeek}`)}
               title={`Open broadcast cockpit for week ${streamWeek}`}

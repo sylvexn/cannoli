@@ -78,7 +78,7 @@ export function StreamPage() {
         const teamMap = new Map(teams.map(t => [t.id, t]));
         return matches
           .filter((m: ApiMatch) => m.week === week)
-          .filter((m: ApiMatch) => m.replayUrl && m.replayUrl !== '#')
+          .filter((m: ApiMatch) => (m.replayUrl && m.replayUrl !== '#') || m.hasReplay)
           .filter((m: ApiMatch) => m.status === 'completed' || m.homeScore !== null)
           .sort((a: ApiMatch, b: ApiMatch) => a.id.localeCompare(b.id))
           .map<QueueEntry>(m => {
