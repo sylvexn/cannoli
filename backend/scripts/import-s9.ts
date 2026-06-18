@@ -204,7 +204,12 @@ export function importS9(db: Database) {
     let draftCount = 0;
     if (wb.SheetNames.includes('RawDrafts')) {
       const rawDrafts = sheet(wb, 'RawDrafts');
-      const teamPickCounts = new Map<string, number>();
+      // RawDrafts rows are already in overall draft order, so a single running
+      // counter yields the league-wide pick_number (unique per league, matching
+      // the live draft engine's global sequence). A per-team counter would make
+      // every team restart at 1 and collide on the (league_id, pick_number)
+      // unique index.
+      let pickNum = 0;
 
       for (const row of rawDrafts) {
         const teamName = row[0]?.toString().trim();
@@ -215,8 +220,7 @@ export function importS9(db: Database) {
         const teamId = abbrevToTeamId.get(abbrev);
         if (!teamId) continue;
 
-        const pickNum = (teamPickCounts.get(teamId) || 0) + 1;
-        teamPickCounts.set(teamId, pickNum);
+        pickNum++;
 
         const tierResult = db.prepare('SELECT tier FROM pokemon WHERE name = ?').get(normalizePokemonName(pokemonName)) as any;
 

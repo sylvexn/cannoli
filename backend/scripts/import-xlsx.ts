@@ -643,6 +643,14 @@ export function importSeason(
       if (row[0] === 'Coach:') poolStarts.push(i);
     }
 
+    // The sheet lays picks out per team (one column each, rounds going down).
+    // But `draft_picks.pick_number` is UNIQUE per league (it mirrors the live
+    // draft engine's global snake sequence), so writing the raw round index for
+    // every team collides. Collect every pick, then number them sequentially in
+    // round-major order (round 1 across all teams, then round 2, …).
+    const picks: { teamId: string; round: number; teamOrder: number; pokemonName: string; tier: number }[] = [];
+    let teamOrder = 0;
+
     for (const poolRow of poolStarts) {
       const coachRow = draftSheet[poolRow] || [];
       // Coaches at cols 2, 6, 10, 14, 18, 22
@@ -655,25 +663,41 @@ export function importSeason(
         const teamId = resolveTeamId(coachAbbrev) || `${league.id}-${coachAbbrev.toLowerCase()}`;
         if (!teamIds.includes(teamId)) continue;
 
-        // Read picks (rows poolRow+1 through poolRow+10)
+        const order = teamOrder++;
+
+        // Read picks (rows poolRow+1 through poolRow+12)
         for (let pickIdx = 1; pickIdx <= 12; pickIdx++) {
           const pickRow = draftSheet[poolRow + pickIdx] || [];
           const pts = parseInt(pickRow[col]);
           const pokemon = pickRow[col + 2];
           if (!pts || !pokemon || typeof pokemon !== 'string' || !pokemon.trim()) continue;
 
-          const cleanName = normalizePokemonName(pokemon.toString());
-
-          db.insert(schema.draftPicks).values({
-            leagueId: league.id,
+          picks.push({
             teamId,
-            pickNumber: pickIdx,
-            pokemonName: cleanName,
+            round: pickIdx,
+            teamOrder: order,
+            pokemonName: normalizePokemonName(pokemon.toString()),
             tier: pts,
-          }).run();
-          draftCount++;
+          });
         }
       }
+    }
+
+    // Round-major, then by team draft order within the round → a unique,
+    // ascending league-wide pick number.
+    picks.sort((a, b) => a.round - b.round || a.teamOrder - b.teamOrder);
+
+    let pickNumber = 0;
+    for (const p of picks) {
+      pickNumber++;
+      db.insert(schema.draftPicks).values({
+        leagueId: league.id,
+        teamId: p.teamId,
+        pickNumber,
+        pokemonName: p.pokemonName,
+        tier: p.tier,
+      }).run();
+      draftCount++;
     }
     console.log(`  ${draftCount} draft picks`);
 
