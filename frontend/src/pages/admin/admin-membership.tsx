@@ -66,6 +66,11 @@ export function AdminMembership() {
   // Remove dialog
   const [removing, setRemoving] = useState<{ coach: ApiMembershipCoach; leagueName: string } | null>(null);
 
+  // Replace-coach dialog (deliberate override of the membership lock — keeps the
+  // team and all its data, only swaps the linked user account).
+  const [replacing, setReplacing] = useState<{ coach: ApiMembershipCoach; league: ApiMembershipLeague } | null>(null);
+  const [replaceUserId, setReplaceUserId] = useState<number | null>(null);
+
   function load() {
     setLoading(true);
     Promise.all([api.getMembership(), api.getUsers()])
@@ -137,6 +142,26 @@ export function AdminMembership() {
     }
   }
 
+  function openReplace(coach: ApiMembershipCoach, league: ApiMembershipLeague) {
+    setReplaceUserId(null);
+    setReplacing({ coach, league });
+  }
+
+  async function handleReplace() {
+    if (!replacing || replaceUserId == null) return;
+    setBusy(true);
+    try {
+      await api.replaceCoach(replacing.coach.id, { newUserId: replaceUserId });
+      toast.success(`Replaced coach of ${replacing.coach.teamName}`);
+      setReplacing(null);
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Replace failed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="text-text-muted text-sm">Loading membership…</div>;
   if (!data || data.leagues.length === 0) {
     return <div className="text-text-muted text-sm">No leagues in the current season yet.</div>;
@@ -170,6 +195,7 @@ export function AdminMembership() {
             onAdd={() => openAdd(league)}
             onMove={handleMove}
             onRemove={(coach) => setRemoving({ coach, leagueName: league.name })}
+            onReplace={(coach) => openReplace(coach, league)}
           />
         ))}
       </div>
@@ -288,17 +314,74 @@ export function AdminMembership() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Replace coach dialog — deliberate lock override; keeps the team intact. */}
+      <Dialog open={!!replacing} onOpenChange={v => { if (!v) setReplacing(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Replace coach of {replacing?.coach.teamName}?</DialogTitle>
+            <DialogDescription>
+              The team, its roster, draft picks, and all completed results stay
+              intact. This season's win/loss and K/D for matches already played
+              will be credited to the new coach. The departing coach loses access
+              to this team immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Field label="New Coach" icon={<UserCog size={11} />}>
+              <Select
+                value={replaceUserId == null ? '' : String(replaceUserId)}
+                onValueChange={(v) => setReplaceUserId(v ? parseInt(v) : null)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a user…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {users
+                    .filter(u => u.active)
+                    .sort((a, b) => a.username.localeCompare(b.username))
+                    .map(u => {
+                      const taken = replacing?.league.teams.some(
+                        t => t.id !== replacing.coach.id && String(t.userId) === String(u.id),
+                      );
+                      const current = String(replacing?.coach.userId) === String(u.id);
+                      return (
+                        <SelectItem key={u.id} value={String(u.id)} disabled={taken || current}>
+                          {u.username} <span className="text-text-muted">({u.role}{current ? ' · current' : taken ? ' · in league' : ''})</span>
+                        </SelectItem>
+                      );
+                    })}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplacing(null)} disabled={busy}>Cancel</Button>
+            <Button
+              onClick={handleReplace}
+              disabled={busy || replaceUserId == null}
+              className="bg-neon text-surface-base hover:bg-neon/90"
+            >
+              <UserCog size={14} />
+              {busy ? 'Replacing…' : 'Replace coach'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function LeagueColumn({ league, allLeagues, busy, onAdd, onMove, onRemove }: {
+function LeagueColumn({ league, allLeagues, busy, onAdd, onMove, onRemove, onReplace }: {
   league: ApiMembershipLeague;
   allLeagues: ApiMembershipLeague[];
   busy: boolean;
   onAdd: () => void;
   onMove: (coach: ApiMembershipCoach, toLeagueId: string) => void;
   onRemove: (coach: ApiMembershipCoach) => void;
+  onReplace: (coach: ApiMembershipCoach) => void;
 }) {
   const otherLeagues = allLeagues.filter(l => l.id !== league.id);
   return (
@@ -348,6 +431,7 @@ function LeagueColumn({ league, allLeagues, busy, onAdd, onMove, onRemove }: {
                 otherLeagues={otherLeagues}
                 onMove={onMove}
                 onRemove={onRemove}
+                onReplace={onReplace}
               />
             ))}
           </div>
@@ -357,13 +441,14 @@ function LeagueColumn({ league, allLeagues, busy, onAdd, onMove, onRemove }: {
   );
 }
 
-function CoachRow({ coach, editable, busy, otherLeagues, onMove, onRemove }: {
+function CoachRow({ coach, editable, busy, otherLeagues, onMove, onRemove, onReplace }: {
   coach: ApiMembershipCoach;
   editable: boolean;
   busy: boolean;
   otherLeagues: ApiMembershipLeague[];
   onMove: (coach: ApiMembershipCoach, toLeagueId: string) => void;
   onRemove: (coach: ApiMembershipCoach) => void;
+  onReplace: (coach: ApiMembershipCoach) => void;
 }) {
   const career = coach.career;
   return (
@@ -442,6 +527,24 @@ function CoachRow({ coach, editable, busy, otherLeagues, onMove, onRemove }: {
           </SelectContent>
         </Select>
       )}
+
+      {/* Replace coach — deliberate override; stays enabled even when the
+          league is locked (it keeps the same team, so no data is stranded). */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => onReplace(coach)}
+            disabled={busy}
+            className="shrink-0"
+            aria-label="Replace coach"
+          >
+            <UserCog size={11} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Replace coach (keeps the team)</TooltipContent>
+      </Tooltip>
 
       <Button
         size="xs"

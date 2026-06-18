@@ -1428,6 +1428,8 @@ export const api = {
   }) => postJson<{ id: string }>('/api/admin/membership/add', data),
   moveCoach: (teamId: string, toLeagueId: string) =>
     postJson<{ success: boolean }>('/api/admin/membership/move', { teamId, toLeagueId }),
+  replaceCoach: (teamId: string, body: { newUserId: number; coachName?: string }) =>
+    postJson<{ success: boolean }>('/api/admin/membership/replace-coach', { teamId, ...body }),
   removeCoachTeam: (teamId: string) =>
     deleteJson<{ success: boolean }>(`/api/admin/membership/team/${teamId}`),
 

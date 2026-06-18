@@ -18,6 +18,8 @@ import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { isMembershipEditable, getLeague } from '../../lib/queries';
 import { deleteTeamCascade, appendToDraftOrder, removeFromDraftOrder } from '../../lib/team-cascade';
+import { checkTeamArchived } from '../../lib/archive-guard';
+import { notifyUser } from '../../lib/notifications/notify';
 import { computeLifetimeStats } from '../users';
 
 /** True if `userId` already owns a team in `leagueId` (the one-team-per-user-
@@ -210,6 +212,83 @@ export const membershipRoutes = new Elysia()
         metadata: JSON.stringify({ teamId, userId: team.userId, fromLeagueId, toLeagueId }),
       }).run();
     });
+
+    return { success: true };
+  })
+
+  // ─── Replace a team's coach ─────────────────────────────────────────────
+  // Swaps the human (teams.userId + coachName) while keeping the SAME team row,
+  // so rosters, draft picks, completed results, standings and trades all stay
+  // intact (everything competitive is keyed on teams.id, not userId). This is a
+  // deliberate override of the membership lock — safe because the teamId never
+  // changes — so it works mid-season too. Only an archived (finalized) season is
+  // off-limits. NOTE: career stats are coach-tied, so the new coach inherits this
+  // season's already-played W/L + K/D for this team (intended; the UI says so).
+
+  .post('/api/admin/membership/replace-coach', ({ body, user, set }) => {
+    const { teamId, newUserId, coachName } = body as {
+      teamId?: string; newUserId?: number; coachName?: string;
+    };
+    if (!teamId || typeof newUserId !== 'number') {
+      set.status = 400;
+      return { error: 'teamId and newUserId are required' };
+    }
+
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    // Never reshuffle a finalized/archived season.
+    const archived = checkTeamArchived(teamId);
+    if (archived) { set.status = 409; return archived; }
+
+    const account = db.select().from(schema.users).where(eq(schema.users.id, newUserId)).get();
+    if (!account) { set.status = 404; return { error: `User ${newUserId} not found` }; }
+    if (!account.active) { set.status = 400; return { error: `User ${account.username} is deactivated` }; }
+
+    if (userHasTeamInLeague(newUserId, team.leagueId, team.id)) {
+      set.status = 409;
+      return { error: `${account.username} already has a team in this league`, code: 'already_in_league' };
+    }
+
+    const fromUserId = team.userId;
+    const resolvedCoach = coachName?.trim() || account.displayName || account.username;
+    // draftQueue only exists while a league is still drafting; in regular/playoffs
+    // there's nothing to clear.
+    const inDraftWindow = team.leagueId
+      ? (() => { const l = getLeague(team.leagueId); return l?.phase === 'predraft' || l?.phase === 'draft'; })()
+      : false;
+
+    tx(() => {
+      db.update(schema.teams)
+        .set({ userId: newUserId, coachName: resolvedCoach })
+        .where(eq(schema.teams.id, teamId)).run();
+      if (inDraftWindow) {
+        // The previous coach's auto-pick prefs shouldn't carry over.
+        db.delete(schema.draftQueue).where(eq(schema.draftQueue.teamId, teamId)).run();
+      }
+      db.insert(schema.activityLog).values({
+        type: 'coach_replaced',
+        category: 'admin',
+        actor: user.username,
+        leagueId: team.leagueId,
+        description: `Replaced coach of ${team.teamName} with ${account.username}`,
+        metadata: JSON.stringify({ teamId, fromUserId, toUserId: newUserId, leagueId: team.leagueId }),
+      }).run();
+    });
+
+    // Best-effort notifications — never block the swap on these.
+    notifyUser(newUserId, {
+      type: 'system',
+      title: `You're now the coach of ${team.teamName}`,
+      metadata: { teamId, leagueId: team.leagueId },
+    });
+    if (fromUserId != null && fromUserId !== newUserId) {
+      notifyUser(fromUserId, {
+        type: 'system',
+        title: `You've been removed as coach of ${team.teamName}`,
+        metadata: { teamId, leagueId: team.leagueId },
+      });
+    }
 
     return { success: true };
   })
