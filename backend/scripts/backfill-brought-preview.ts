@@ -26,7 +26,12 @@ import { Database } from 'bun:sqlite';
 import { resolve } from 'node:path';
 import { computeBroughtPreviewFromLog } from '../src/lib/brought-preview';
 
-const DB_PATH = process.env.DB_PATH || resolve(import.meta.dir, '../data/cannoli.db');
+// Honor CANNOLI_DB_PATH (what the app + deploy boot scripts use) first, then a
+// bare DB_PATH override, else the canonical backend/data/cannoli.db — so a live
+// backfill targets the same volume DB the running backend does.
+const DB_PATH = process.env.CANNOLI_DB_PATH
+  ? resolve(process.env.CANNOLI_DB_PATH)
+  : process.env.DB_PATH || resolve(import.meta.dir, '../data/cannoli.db');
 
 interface MatchRow {
   id: string;
