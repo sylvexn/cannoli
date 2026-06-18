@@ -92,12 +92,21 @@ export function ReplaysPage() {
     [leagues, seasonFilter],
   );
 
-  // Highest week with at least one replay IN THE SELECTED SEASON — used for
-  // "This Week" / "Last Week" so they land on something meaningful.
-  const latestReplayWeek = useMemo(
-    () => seasonEntries.reduce((max, e) => Math.max(max, e.match.week), 0),
-    [seasonEntries],
-  );
+  // The week number "This Week" / "Last Week" pivot on. Anchored to the
+  // SELECTED SEASON's real current week (a week NUMBER straight off the league
+  // schedule) rather than "the highest week that happens to have a replay" —
+  // otherwise a single stray future-week replay (e.g. a week-11 test import)
+  // hijacks the buckets and pushes the actual current week's replays out of
+  // both "This Week" and "Last Week". Falls back to the highest replayed week
+  // only when no league current-week is known (free-play / unscoped views).
+  const referenceWeek = useMemo(() => {
+    const scoped = seasonFilter === 'all'
+      ? leagues.filter(l => !l.season?.archived)
+      : leagues.filter(l => l.season?.seasonNumber === seasonFilter);
+    const fromLeagues = scoped.reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
+    if (fromLeagues > 0) return fromLeagues;
+    return seasonEntries.reduce((max, e) => Math.max(max, e.match.week), 0);
+  }, [leagues, seasonFilter, seasonEntries]);
 
   // Open the season with the most recent replays by default (newest season
   // that actually has any — so an empty week-1 S11 falls back to S10).
@@ -206,8 +215,8 @@ export function ReplaysPage() {
 
     if (timeFilter !== 'all') {
       result = result.filter(e => {
-        if (timeFilter === 'this-week') return e.match.week === latestReplayWeek;
-        if (timeFilter === 'last-week') return e.match.week === Math.max(0, latestReplayWeek - 1);
+        if (timeFilter === 'this-week') return e.match.week === referenceWeek;
+        if (timeFilter === 'last-week') return e.match.week === Math.max(0, referenceWeek - 1);
         if (timeFilter === 'my-matches') {
           if (!user) return false;
           const myUserId = parseInt(user.id);
@@ -235,7 +244,7 @@ export function ReplaysPage() {
       if (b.match.week !== a.match.week) return b.match.week - a.match.week;
       return b.match.id.localeCompare(a.match.id);
     });
-  }, [seasonEntries, search, leagueFilter, timeFilter, latestReplayWeek, user]);
+  }, [seasonEntries, search, leagueFilter, timeFilter, referenceWeek, user]);
 
   // Hero pick = most recent in the current filtered set (filtered[0] after
   // descending sort). Rest of the cards fill the grid.
