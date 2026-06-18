@@ -17,7 +17,7 @@ import { NumberInput } from '@/components/ui/number-input';
 import {
   AlertTriangle, Trash2, MoreVertical,
   Eraser, ArrowRightLeft, Gavel, Swords,
-  Upload, FileText,
+  Upload, FileText, RefreshCw,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
 import { getErrorMessage } from '@/lib/errors';
@@ -46,6 +46,10 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
 }) {
   const homeName = teamNames.name(match.homeTeamId);
   const awayName = teamNames.name(match.awayTeamId);
+  // A recorded result exists — re-uploading must void it first, then import.
+  const hasResult =
+    match.homeScore !== null || match.awayScore !== null ||
+    match.status === 'completed' || match.status === 'disputed';
   const [voidOpen, setVoidOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -152,6 +156,18 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
     }
     setSubmitting(true);
     try {
+      // Re-upload over an existing result: void first (backend rejects imports
+      // onto finalized matches). If the void fails (e.g. a downstream playoff
+      // match is already completed), surface it and STOP — don't import.
+      if (hasResult) {
+        try {
+          await api.voidMatch(match.id);
+        } catch (err: unknown) {
+          toast.error(`Could not clear existing result — ${getErrorMessage(err)}`);
+          setSubmitting(false);
+          return;
+        }
+      }
       const res = await api.importMatchBattle(
         match.id,
         replay ? { replay } : { roomId },
@@ -160,7 +176,14 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
       setImportOpen(false);
       onChanged();
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err));
+      // The void already cleared the result, so the match is back to scheduled —
+      // make clear the admin can just retry the attach.
+      if (hasResult) {
+        toast.error(`Re-import failed — match result was cleared; retry the attach. (${getErrorMessage(err)})`);
+        onChanged();
+      } else {
+        toast.error(getErrorMessage(err));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -197,8 +220,8 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
           <DropdownMenuItem
             onClick={openImport}
           >
-            <Swords size={12} />
-            Attach Played Battle
+            {hasResult ? <RefreshCw size={12} /> : <Swords size={12} />}
+            {hasResult ? 'Replace Result (re-upload)' : 'Attach Played Battle'}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setVoidOpen(true)}
@@ -318,11 +341,22 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Swords size={16} className="text-neon" />
-              Attach Played Battle
+              {hasResult ? (
+                <>
+                  <RefreshCw size={16} className="text-draw" />
+                  Replace Result
+                </>
+              ) : (
+                <>
+                  <Swords size={16} className="text-neon" />
+                  Attach Played Battle
+                </>
+              )}
             </DialogTitle>
             <DialogDescription>
-              {`Upload a coach's downloaded Showdown replay and record it as ${homeName} vs ${awayName} (W${match.week}). Score and per-Pokemon stats are filled in automatically.`}
+              {hasResult
+                ? `This VOIDS the existing result for ${homeName} vs ${awayName} (W${match.week}), then imports the new replay. Score and per-Pokemon stats are recomputed automatically.`
+                : `Upload a coach's downloaded Showdown replay and record it as ${homeName} vs ${awayName} (W${match.week}). Score and per-Pokemon stats are filled in automatically.`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -384,10 +418,14 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
             <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
             <Button
               disabled={importDisabled}
-              className="bg-neon text-surface-base hover:bg-neon/90"
+              className={hasResult
+                ? 'bg-draw text-surface-base hover:bg-draw/90'
+                : 'bg-neon text-surface-base hover:bg-neon/90'}
               onClick={executeImport}
             >
-              {submitting ? 'Attaching...' : 'Attach as this match'}
+              {submitting
+                ? (hasResult ? 'Replacing...' : 'Attaching...')
+                : (hasResult ? 'Void & re-import' : 'Attach as this match')}
             </Button>
           </DialogFooter>
         </DialogContent>

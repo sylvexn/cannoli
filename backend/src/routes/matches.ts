@@ -233,40 +233,53 @@ export const matchRoutes = new Elysia()
       return { error: 'Forbidden' };
     }
 
-    let q = db.select().from(schema.matches)
-      .orderBy(desc(schema.matches.week))
-      .all();
-
+    // Filter in SQL (uses matches_league_week_idx / matches_status_idx) and
+    // select only the columns the admin list needs. Crucially we DON'T pull
+    // `replayLog` — it holds the full battle protocol (tens of KB per row) and
+    // is only needed as a boolean here; SELECTing it for every match across all
+    // seasons was the load-time bottleneck. Order ascending by week (1→N).
     const leagueId = query.leagueId as string | undefined;
-    if (leagueId && leagueId !== 'all') {
-      q = q.filter(m => m.leagueId === leagueId);
-    }
-
     const status = query.status as string | undefined;
+
+    const conds = [];
+    if (leagueId && leagueId !== 'all') {
+      conds.push(eq(schema.matches.leagueId, leagueId));
+    }
     if (status && status !== 'all') {
-      q = q.filter(m => m.status === status);
+      conds.push(eq(schema.matches.status, status as typeof schema.matches.$inferSelect.status));
     }
 
-    return q.map(m => ({
-      id: m.id,
-      leagueId: m.leagueId,
-      week: m.week,
-      homeTeamId: m.homeTeamId,
-      awayTeamId: m.awayTeamId,
-      homeScore: m.homeScore,
-      awayScore: m.awayScore,
-      status: m.status,
-      replayUrl: m.replayUrl,
+    const rows = db.select({
+      id: schema.matches.id,
+      leagueId: schema.matches.leagueId,
+      week: schema.matches.week,
+      homeTeamId: schema.matches.homeTeamId,
+      awayTeamId: schema.matches.awayTeamId,
+      homeScore: schema.matches.homeScore,
+      awayScore: schema.matches.awayScore,
+      status: schema.matches.status,
+      replayUrl: schema.matches.replayUrl,
       // Imported replays have a stored log but no live PS room URL. The
       // in-site viewer plays by match id off replayLog, so surface a flag
       // the UI can gate the "watch replay" affordance on independently of url.
-      hasReplay: m.replayLog != null,
+      // Computed in SQL so we never ship the (large) log to the client.
+      hasReplay: sql<number>`(${schema.matches.replayLog} is not null)`,
+      warnings: schema.matches.warnings,
+      phase: schema.matches.phase,
+      playoffRound: schema.matches.playoffRound,
+      startedAt: schema.matches.startedAt,
+      completedAt: schema.matches.completedAt,
+      psRoomId: schema.matches.psRoomId,
+    })
+      .from(schema.matches)
+      .where(conds.length ? and(...conds) : undefined)
+      .orderBy(asc(schema.matches.week), asc(schema.matches.id))
+      .all();
+
+    return rows.map(m => ({
+      ...m,
+      hasReplay: !!m.hasReplay,
       warnings: m.warnings ? JSON.parse(m.warnings) : [],
-      phase: m.phase,
-      playoffRound: m.playoffRound,
-      startedAt: m.startedAt,
-      completedAt: m.completedAt,
-      psRoomId: m.psRoomId,
     }));
   })
 

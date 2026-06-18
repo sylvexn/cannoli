@@ -41,3 +41,56 @@ export function PhaseBadge({ match }: { match: ApiAdminMatch }) {
     </Badge>
   );
 }
+
+/** Returns true when a match needs an admin's eyes: warnings present, a
+ *  dispute, or a not-yet-recorded scheduled/ready match. */
+export function matchNeedsAttention(m: ApiAdminMatch): boolean {
+  if (m.warnings.length > 0) return true;
+  if (m.status === 'disputed') return true;
+  if ((m.status === 'scheduled' || m.status === 'ready') && m.homeScore === null) return true;
+  return false;
+}
+
+/** Returns true when a match is fully done with nothing outstanding. */
+export function matchIsSettled(m: ApiAdminMatch): boolean {
+  return m.status === 'completed' && m.warnings.length === 0;
+}
+
+/** Compact per-week tally: completed / pending / disputed / warnings. */
+export function WeekSummary({ matches }: { matches: ApiAdminMatch[] }) {
+  const completed = matches.filter(m => m.status === 'completed').length;
+  const disputed = matches.filter(m => m.status === 'disputed').length;
+  const warnings = matches.filter(m => m.warnings.length > 0).length;
+  const pending = matches.filter(
+    m => (m.status === 'scheduled' || m.status === 'ready') && m.homeScore === null,
+  ).length;
+
+  return (
+    <span className="flex items-center gap-2.5 font-mono normal-case tracking-normal">
+      {completed > 0 && (
+        <span className="flex items-center gap-0.5 text-win" title="Completed">
+          <CheckCircle2 size={11} />
+          {completed}
+        </span>
+      )}
+      {pending > 0 && (
+        <span className="flex items-center gap-0.5 text-text-muted" title="Pending result">
+          <Clock size={11} />
+          {pending}
+        </span>
+      )}
+      {disputed > 0 && (
+        <span className="flex items-center gap-0.5 text-loss" title="Disputed">
+          <AlertTriangle size={11} />
+          {disputed}
+        </span>
+      )}
+      {warnings > 0 && (
+        <span className="flex items-center gap-0.5 text-draw" title="With warnings">
+          <Shield size={11} />
+          {warnings}
+        </span>
+      )}
+    </span>
+  );
+}
