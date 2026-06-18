@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
-import { formatFromRoomId, readReplayLogFromDisk, sweepIdleBattles, getMonitoredBattlesForTest } from '../src/lib/ps-bot';
+import { formatFromRoomId, readReplayLogFromDisk, sweepIdleBattles, getMonitoredBattlesForTest, sendToPs, getSendQueueForTest } from '../src/lib/ps-bot';
 import { ReplayParser } from '../src/lib/replay-parser';
 import { toUserid } from '../src/lib/ps-login';
 
@@ -265,5 +265,82 @@ describe('unmatched-battle classification (checkForOfficialMatch gate)', () => {
 
   test('empty/unknown format between unknown users IS logged', () => {
     expect(shouldLogUnmatched('', false, false)).toBe(true);
+  });
+});
+
+// ─── Send-queue ───────────────────────────────────────────────────────────────
+
+describe('sendToPs send-queue — buffers when socket not OPEN', () => {
+  // The bot's module-level `ws` is null in test context (no real WS), so
+  // sendToPs always takes the buffer path. We exercise the queue directly.
+
+  test('message is buffered when socket is not open (ws null)', () => {
+    const queue = getSendQueueForTest();
+    const before = queue.length;
+    sendToPs('|/join test-room-queue-1');
+    expect(queue.length).toBe(before + 1);
+    expect(queue[queue.length - 1]).toBe('|/join test-room-queue-1');
+    // Drain so later tests start clean.
+    queue.splice(0);
+  });
+
+  test('FIFO eviction: oldest message dropped when cap exceeded', () => {
+    const queue = getSendQueueForTest();
+    queue.splice(0); // start clean
+
+    // Fill to cap (100) with sentinel prefix messages.
+    for (let i = 0; i < 100; i++) {
+      queue.push(`|/msg sentinel-${i}`);
+    }
+    expect(queue.length).toBe(100);
+
+    // One more send should drop the oldest (sentinel-0) and push the new one.
+    sendToPs('|/msg overflow');
+    expect(queue.length).toBe(100); // still capped at 100
+    expect(queue[0]).toBe('|/msg sentinel-1'); // sentinel-0 was evicted
+    expect(queue[queue.length - 1]).toBe('|/msg overflow');
+
+    // Drain.
+    queue.splice(0);
+  });
+});
+
+// ─── 6-field vs 5-field PM contract ─────────────────────────────────────────
+
+describe('cannoli-battle-created PM field contract', () => {
+  // Replicate the parse logic from handleBotPm to pin the contract without
+  // needing to boot the bot socket (which requires a live DB and WS).
+  function parseBotPm(message: string) {
+    const parts = message.split('|');
+    const [, roomId, p1, p2, format, pmMatchId] = parts;
+    return { roomId, p1, p2, format, pmMatchId };
+  }
+
+  test('5-field PM (old form) has no pmMatchId — falls back to inference', () => {
+    const msg = 'cannoli-battle-created|battle-gen9natdexdraft-123|alice|bob|gen9natdexdraft';
+    const { roomId, p1, p2, format, pmMatchId } = parseBotPm(msg);
+    expect(roomId).toBe('battle-gen9natdexdraft-123');
+    expect(p1).toBe('alice');
+    expect(p2).toBe('bob');
+    expect(format).toBe('gen9natdexdraft');
+    // 5-field: no 6th field → pmMatchId is undefined → falls through to inference.
+    expect(pmMatchId).toBeUndefined();
+    // Inference guard: no pmMatchId means deterministic path is skipped.
+    const usesDeterministicPath = !!(pmMatchId && pmMatchId.trim());
+    expect(usesDeterministicPath).toBe(false);
+  });
+
+  test('6-field PM (new form) has pmMatchId — deterministic link fires', () => {
+    const matchId = 'match-s11-week3-001';
+    const msg = `cannoli-battle-created|battle-gen9natdexdraft-456|alice|bob|gen9natdexdraft|${matchId}`;
+    const { roomId, p1, p2, format, pmMatchId } = parseBotPm(msg);
+    expect(roomId).toBe('battle-gen9natdexdraft-456');
+    expect(p1).toBe('alice');
+    expect(p2).toBe('bob');
+    expect(format).toBe('gen9natdexdraft');
+    expect(pmMatchId).toBe(matchId);
+    // Deterministic path guard fires.
+    const usesDeterministicPath = !!(pmMatchId && pmMatchId.trim());
+    expect(usesDeterministicPath).toBe(true);
   });
 });
