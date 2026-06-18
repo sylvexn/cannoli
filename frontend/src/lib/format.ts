@@ -40,8 +40,27 @@ interface FormatTimeOpts {
   hour24?: boolean;
 }
 
+/**
+ * Parse a stored timestamp into a Date. SQLite's `datetime('now')` default
+ * (used for `created_at` and friends) emits "YYYY-MM-DD HH:MM:SS" — UTC, but
+ * with a space separator and NO zone marker, which `new Date()` reinterprets as
+ * *local* time (so the rendered clock is off by the viewer's UTC offset). Treat
+ * that — and any ISO string lacking a trailing Z / ±HH:MM — as UTC, matching the
+ * "storage is always UTC" contract. Numbers and Date objects pass through.
+ */
+export function parseTimestamp(input: DateInput): Date {
+  if (input instanceof Date) return input;
+  if (typeof input === 'number') return new Date(input);
+  const s = input.trim();
+  const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s);
+  if (!hasZone && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
+    return new Date(s.replace(' ', 'T') + 'Z');
+  }
+  return new Date(s);
+}
+
 function toDate(input: DateInput): Date {
-  return input instanceof Date ? input : new Date(input);
+  return parseTimestamp(input);
 }
 
 /** Pluck the short TZ token (e.g. "EDT") for a given moment + zone. */

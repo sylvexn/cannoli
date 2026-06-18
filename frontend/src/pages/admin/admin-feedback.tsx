@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,12 +10,13 @@ import { LoadingSprite } from '@/components/loading-sprite';
 import { EmptyState } from '@/components/empty-state';
 import { api, type ApiFeedbackItem, type FeedbackCategory } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
-import { useFormatTime, useFormatDate } from '@/lib/format';
+import { useFormatTime, useFormatDate, useUserTimezone, parseTimestamp } from '@/lib/format';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
   ExternalLink, ChevronDown, ChevronUp, RefreshCw,
   CircleDot, CircleCheck, Bell, Image as ImageIcon,
+  Copy, Check,
 } from 'lucide-react';
 
 // ─── Filter types ─────────────────────────────────────────────────────────────
@@ -209,13 +210,29 @@ function FeedbackRow({
   const [response, setResponse] = useState('');
   const [resolving, setResolving] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const fmtTime = useFormatTime();
   const fmtDate = useFormatDate();
+  const tz = useUserTimezone();
 
-  const ts = new Date(item.createdAt);
+  const ts = parseTimestamp(item.createdAt);
   const isToday = new Date().toDateString() === ts.toDateString();
   const timeStr = isToday ? fmtTime(ts) : fmtDate(ts, { year: 'hide' });
+  // Full, unambiguous instant for the hover tooltip — date + seconds + zone.
+  const exactTs = ts.toLocaleString(undefined, {
+    dateStyle: 'medium', timeStyle: 'long', timeZone: tz,
+  });
   const isOpen = item.status === 'open';
+
+  function copyId(e: MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(`#${item.id}`)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      })
+      .catch(() => toast.error('Copy failed'));
+  }
 
   async function handleResolve() {
     setResolving(true);
@@ -269,8 +286,26 @@ function FeedbackRow({
           </Badge>
         )}
 
+        {/* Copyable lookup ID */}
+        <span
+          role="button"
+          tabIndex={-1}
+          onClick={copyId}
+          title={copied ? 'Copied!' : 'Click to copy ID'}
+          className="shrink-0 inline-flex items-center gap-1 font-mono text-[11px] text-text-muted hover:text-text-secondary transition-colors cursor-pointer tabular-nums"
+        >
+          {copied
+            ? <Check size={11} className="text-win" />
+            : <Copy size={11} className="opacity-50 group-hover:opacity-100 transition-opacity" />
+          }
+          #{item.id}
+        </span>
+
         {/* Timestamp */}
-        <span className="shrink-0 w-16 text-right text-xs text-text-muted font-mono tabular-nums">
+        <span
+          title={exactTs}
+          className="shrink-0 w-16 text-right text-xs text-text-muted font-mono tabular-nums cursor-default"
+        >
           {timeStr}
         </span>
 
@@ -324,7 +359,12 @@ function FeedbackRow({
 
             {/* Resolved info */}
             {!isOpen && item.resolvedAt && (
-              <span className="text-xs text-text-muted">
+              <span
+                title={parseTimestamp(item.resolvedAt).toLocaleString(undefined, {
+                  dateStyle: 'medium', timeStyle: 'long', timeZone: tz,
+                })}
+                className="text-xs text-text-muted cursor-default"
+              >
                 Resolved {fmtDate(item.resolvedAt, { year: 'hide' })}
               </span>
             )}
