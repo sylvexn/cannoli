@@ -318,6 +318,14 @@ export const matches = sqliteTable('matches', {
   psRoomId: text('ps_room_id'),
   /** Full replay protocol log (JSON) */
   replayLog: text('replay_log'),
+  /**
+   * Derived cache of the 6 brought (team-preview) species per side as JSON
+   * `{home: string[], away: string[]}` in Cannoli naming, recovered from
+   * replayLog. Null for legacy/sim rows. Used only to render the full 12-mon
+   * replay-card grid (incl. benched mons); never feeds usage/award/stats
+   * aggregates — those stay sourced from match_pokemon (appeared-only).
+   */
+  broughtPreview: text('brought_preview'),
   /** JSON array of warning strings from post-match validation */
   warnings: text('warnings'),
   phase: text('phase', { enum: ['regular', 'playoffs'] }).notNull().default('regular'),

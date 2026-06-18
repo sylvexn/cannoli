@@ -13,6 +13,7 @@
 import { ReplayParser } from './replay-parser';
 import { validateMatchResult } from './replay-parser';
 import { toCannoliSpeciesName } from './pokedex';
+import { broughtSidesFromResult } from './brought-preview';
 import { toUserid, signAssertion } from './ps-login';
 import { db, schema } from '../db';
 import { eq, and } from 'drizzle-orm';
@@ -1186,6 +1187,16 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         ? replayLog.slice(0, MAX_REPLAY_LOG) + '\n[...truncated]'
         : replayLog;
 
+      // Resolve which PS side is the home team (same logic the K/D loop uses
+      // below). Used to cache the full brought team-of-6 per side so replay
+      // cards can render benched mons that never appeared in battle. Only
+      // meaningful when both teams are resolved (real official match).
+      const homeSideResolved: 'p1' | 'p2' = battle.homeSide
+        ?? (useridToTeam.get(battle.p1)?.teamId === match.homeTeamId ? 'p1' : 'p2');
+      const broughtPreview = (match.homeTeamId && match.awayTeamId)
+        ? JSON.stringify(broughtSidesFromResult(result, homeSideResolved))
+        : null;
+
       // Update match record
       db.update(schema.matches)
         .set({
@@ -1195,6 +1206,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           winnerTeamId,
           completedAt: new Date().toISOString(),
           replayLog: truncatedLog,
+          broughtPreview,
           // Build an absolute URL that resolves to the public sim host's
           // replay viewer. PS exposes battle rooms at `https://{host}/{roomId}`
           // — this works whether or not the room was explicitly /savereplay'd

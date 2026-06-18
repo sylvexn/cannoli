@@ -10,6 +10,7 @@ import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
+import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
 
 export const matchRoutes = new Elysia()
 
@@ -82,6 +83,149 @@ export const matchRoutes = new Elysia()
       (awayScore === 6 && homeScore === 0)
     );
 
+    // ── Full 12-mon grid: merge brought team-of-6 (incl. benched mons) with
+    // the real appeared K/D from match_pokemon. The K/D / MVP / teraCount /
+    // sweep above stay sourced purely from match_pokemon (appeared-only) —
+    // only the returned display arrays gain the benched slots.
+    type DisplayMon = {
+      name: string;
+      nickname: string | null;
+      isShiny: boolean;
+      kills: number;
+      deaths: number;
+      teraUsed: boolean;
+      teraType: string | null;
+    };
+
+    const fallbackHome: DisplayMon[] = homeMons.map(m => ({
+      name: m.pokemonName,
+      nickname: m.nickname ?? null,
+      isShiny: !!m.isShiny,
+      kills: m.kills,
+      deaths: m.deaths,
+      teraUsed: m.teraUsed,
+      teraType: m.teraType,
+    }));
+    const fallbackAway: DisplayMon[] = awayMons.map(m => ({
+      name: m.pokemonName,
+      nickname: m.nickname ?? null,
+      isShiny: !!m.isShiny,
+      kills: m.kills,
+      deaths: m.deaths,
+      teraUsed: m.teraUsed,
+      teraType: m.teraType,
+    }));
+
+    // Resolve the brought sides: cached column → lazy re-parse of replayLog
+    // (self-healing the cache) → null (legacy/sim rows fall back below).
+    let brought: BroughtSides | null = null;
+    if (match.broughtPreview) {
+      try {
+        const parsed = JSON.parse(match.broughtPreview);
+        if (parsed && Array.isArray(parsed.home) && Array.isArray(parsed.away)) {
+          brought = parsed as BroughtSides;
+        }
+      } catch { /* malformed cache → recompute below if a log exists */ }
+    }
+    if (!brought && match.replayLog) {
+      const homeRoster = db.select({ name: schema.rosters.pokemonName })
+        .from(schema.rosters)
+        .where(eq(schema.rosters.teamId, match.homeTeamId ?? ''))
+        .all().map(r => r.name);
+      const awayRoster = db.select({ name: schema.rosters.pokemonName })
+        .from(schema.rosters)
+        .where(eq(schema.rosters.teamId, match.awayTeamId ?? ''))
+        .all().map(r => r.name);
+      const computed = computeBroughtPreviewFromLog(match.replayLog, {
+        recorded: entries.map(e => ({ teamId: e.teamId, pokemonName: e.pokemonName })),
+        homeTeamId: match.homeTeamId,
+        awayTeamId: match.awayTeamId,
+        homeRoster,
+        awayRoster,
+      });
+      if (computed) {
+        brought = computed;
+        // Persist back so the next read skips the parse. A write failure must
+        // never break the read.
+        try {
+          db.update(schema.matches)
+            .set({ broughtPreview: JSON.stringify(computed) })
+            .where(eq(schema.matches.id, match.id))
+            .run();
+        } catch { /* self-heal best-effort */ }
+      }
+    }
+
+    let home: DisplayMon[];
+    let away: DisplayMon[];
+
+    if (brought) {
+      // K/D lookup keyed by lowercased Cannoli species, per team.
+      const kdByTeam = new Map<string, Map<string, typeof entries[number]>>();
+      for (const e of entries) {
+        let m = kdByTeam.get(e.teamId);
+        if (!m) { m = new Map(); kdByTeam.set(e.teamId, m); }
+        m.set(e.pokemonName.toLowerCase(), e);
+      }
+
+      // Roster lookup (nickname / shiny) keyed by lowercased species, per team.
+      const rosterRows = (teamId: string | null) => teamId
+        ? db.select({
+            pokemonName: schema.rosters.pokemonName,
+            nickname: schema.rosters.nickname,
+            isShiny: schema.rosters.isShiny,
+          }).from(schema.rosters)
+            .where(eq(schema.rosters.teamId, teamId))
+            .all()
+        : [];
+      const rosterMap = (teamId: string | null) => {
+        const map = new Map<string, { nickname: string | null; isShiny: boolean }>();
+        for (const r of rosterRows(teamId)) {
+          map.set(r.pokemonName.toLowerCase(), {
+            nickname: r.nickname ?? null,
+            isShiny: !!r.isShiny,
+          });
+        }
+        return map;
+      };
+      const homeRosterMap = rosterMap(match.homeTeamId);
+      const awayRosterMap = rosterMap(match.awayTeamId);
+
+      const buildSide = (
+        species: string[],
+        kd: Map<string, typeof entries[number]> | undefined,
+        roster: Map<string, { nickname: string | null; isShiny: boolean }>,
+      ): DisplayMon[] => species.map(name => {
+        const key = name.toLowerCase();
+        const k = kd?.get(key);
+        const r = roster.get(key);
+        return {
+          name,
+          nickname: r?.nickname ?? null,
+          isShiny: r?.isShiny ?? false,
+          kills: k?.kills ?? 0,
+          deaths: k?.deaths ?? 0,
+          teraUsed: k?.teraUsed ?? false,
+          teraType: k?.teraType ?? null,
+        };
+      });
+
+      home = buildSide(
+        brought.home,
+        match.homeTeamId ? kdByTeam.get(match.homeTeamId) : undefined,
+        homeRosterMap,
+      );
+      away = buildSide(
+        brought.away,
+        match.awayTeamId ? kdByTeam.get(match.awayTeamId) : undefined,
+        awayRosterMap,
+      );
+    } else {
+      // Legacy / sim / undecidable: keep current behavior (appeared-only).
+      home = fallbackHome;
+      away = fallbackAway;
+    }
+
     return {
       matchId: match.id,
       isComplete,
@@ -93,24 +237,8 @@ export const matchRoutes = new Elysia()
       scoreLine: isComplete ? `${homeScore}-${awayScore}` : null,
       // pokemon entries returned so the row's MVP popover doesn't need a
       // second round-trip to /pokemon
-      home: homeMons.map(m => ({
-        name: m.pokemonName,
-        nickname: m.nickname ?? null,
-        isShiny: !!m.isShiny,
-        kills: m.kills,
-        deaths: m.deaths,
-        teraUsed: m.teraUsed,
-        teraType: m.teraType,
-      })),
-      away: awayMons.map(m => ({
-        name: m.pokemonName,
-        nickname: m.nickname ?? null,
-        isShiny: !!m.isShiny,
-        kills: m.kills,
-        deaths: m.deaths,
-        teraUsed: m.teraUsed,
-        teraType: m.teraType,
-      })),
+      home,
+      away,
     };
   })
 
