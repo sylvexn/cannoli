@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-6-2026-06",
+    "date": "2026-06-19T15:00:00Z",
+    "category": "fix",
+    "title": "Cannoli v1.0.6 — Pick your team in Showdown",
+    "body": "- Readying up for an Arena match or scrim now sends each coach a team-select invite in Showdown — choose a saved team and accept, and the battle begins once both players have picked. This fixes coaches being dropped into a battle before they could choose their team (fix)\n- While both coaches are choosing teams the match now shows \"pick your team in Showdown\" instead of starting immediately, and resets if someone doesn't pick in time (improvement)"
+  },
+  {
     "id": "v1-0-5-2026-06",
     "date": "2026-06-17T18:30:00Z",
     "category": "feature",
