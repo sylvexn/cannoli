@@ -236,6 +236,17 @@ export function useArenaWebSocket() {
             setState(s => ({ ...s, lastMatchError: msg.message ?? null }));
             break;
 
+          case 'match_timeout':
+            // Team-selection window expired before both coaches picked a team.
+            // Surface a clear, actionable message; the match itself reverts to
+            // 'scheduled' server-side (delivered via a following match_state).
+            console.warn('[Arena WS] match_timeout', msg.matchId);
+            setState(s => ({
+              ...s,
+              lastMatchError: msg.message ?? 'Team selection timed out — ready up to try again.',
+            }));
+            break;
+
           case 'error':
             console.warn('[Arena WS]', msg.message);
             break;

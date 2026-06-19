@@ -3,7 +3,7 @@
  * Extracted from arena-tab.tsx for the Showdown footer.
  */
 import { useEffect, useState } from 'react';
-import { Users, Plus, Loader2, Search } from 'lucide-react';
+import { Users, Plus, Loader2, Search, ArrowUp, ClipboardCheck } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -96,9 +96,13 @@ function ScrimLobbyRow({
   const isInLobby = lobby.players.includes(username ?? '');
   const myIdx = lobby.players.indexOf(username ?? '');
   const amReady = myIdx >= 0 && lobby.ready[myIdx];
+  // Both players readied — the server sent a team-select invite to the Showdown
+  // panel above. The battle only starts once both pick a team (not instant).
+  const awaitingTeamPick = lobby.status === 'ready';
 
   return (
-    <div className="flex items-center justify-between px-3 py-2 rounded-md bg-surface-overlay text-sm">
+    <div className="rounded-md bg-surface-overlay">
+    <div className="flex items-center justify-between px-3 py-2 text-sm">
       <div className="flex items-center gap-2">
         <span className={`w-2 h-2 rounded-full ${
           lobby.status === 'in_progress' ? 'bg-green-400' :
@@ -120,6 +124,11 @@ function ScrimLobbyRow({
       <div className="flex items-center gap-1">
         {lobby.status === 'in_progress' ? (
           <span className="text-xs text-green-400 font-medium">Live</span>
+        ) : awaitingTeamPick ? (
+          <span className="flex items-center gap-1 text-xs text-neon font-medium">
+            <ClipboardCheck size={12} className="shrink-0" />
+            Pick your team
+          </span>
         ) : isInLobby ? (
           <>
             <button
@@ -151,6 +160,16 @@ function ScrimLobbyRow({
           <span className="text-xs text-text-muted">Full</span>
         )}
       </div>
+    </div>
+    {awaitingTeamPick && (
+      <div className="flex items-center gap-1.5 px-3 pb-2 text-xs text-text-secondary">
+        <ArrowUp size={11} className="shrink-0 animate-bounce" />
+        <span>
+          Both ready — open the Showdown panel above and pick a team. The battle
+          starts once both players choose.
+        </span>
+      </div>
+    )}
     </div>
   );
 }

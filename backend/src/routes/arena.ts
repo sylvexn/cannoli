@@ -10,7 +10,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
-import { createBattle, isBotConnected, onBotConnectionChange } from '../lib/ps-bot';
+import { createBattle, cancelBattle, isBotConnected, onBotConnectionChange } from '../lib/ps-bot';
 import { getLeague } from '../lib/queries';
 import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
@@ -113,10 +113,22 @@ function removeSpectatorFromAll(ws: object) {
 }
 
 /**
- * Per-match ready-up timeout. If both teams ready up but the bot doesn't transition
- * the match to in_progress within READY_TIMEOUT_MS, revert to scheduled and notify.
+ * Per-match ready-up / team-selection timeout. Both teams ready up, the bot
+ * sends a /cannoli-battle INVITE, and the PS plugin creates a room with both
+ * player slots empty + invited — each player then picks a team in their native
+ * Showdown team-picker and accepts. The battle only STARTS once both accept, at
+ * which point the bot flips the match to in_progress and clears this timer.
+ *
+ * If the battle hasn't started within INVITE_TIMEOUT_MS (a player never picked
+ * a team), revert to scheduled, cancel the orphaned invite room, and notify.
+ * This window is longer than the old battle-create window because it now spans
+ * human team selection.
+ *
+ * READY_TIMEOUT_MS is retained for backward compatibility / any external
+ * reference, but the ready→start window uses INVITE_TIMEOUT_MS.
  */
 const READY_TIMEOUT_MS = parseInt(process.env.READY_TIMEOUT_MS || '120000');
+const INVITE_TIMEOUT_MS = parseInt(process.env.INVITE_TIMEOUT_MS || '300000');
 const readyTimers = new Map<string, NodeJS.Timeout>();
 
 function clearReadyTimer(matchId: string) {
@@ -132,7 +144,8 @@ function scheduleReadyTimeout(matchId: string) {
   const handle = setTimeout(() => {
     readyTimers.delete(matchId);
     const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
-    // Only revert if still ready (bot hasn't picked it up)
+    // Only revert if still ready (the battle never started — i.e. at least one
+    // player never picked a team / accepted the invite).
     if (!m || m.status !== 'ready') return;
     // A readied match always has both teams resolved (not a NULL bracket slot).
     if (m.homeTeamId == null || m.awayTeamId == null) return;
@@ -141,6 +154,14 @@ function scheduleReadyTimeout(matchId: string) {
       .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
       .where(eq(schema.matches.id, matchId))
       .run();
+
+    // Tear down the orphaned PS invite room (created at /cannoli-battle but never
+    // started). Without this the empty invite room lingers until the bot's idle
+    // sweep evicts it 30 min later.
+    if (m.psRoomId) {
+      try { cancelBattle(m.psRoomId); }
+      catch (err) { console.error(`[arena] cancelBattle failed for ${m.psRoomId}:`, err); }
+    }
 
     db.insert(schema.matchReadyLog).values({
       matchId,
@@ -157,19 +178,19 @@ function scheduleReadyTimeout(matchId: string) {
       category: 'match',
       actor: 'system',
       leagueId: m.leagueId,
-      description: `Ready-up timed out for ${matchId} — battle was not created within ${READY_TIMEOUT_MS / 1000}s`,
+      description: `Team selection timed out for ${matchId} — a player did not pick a team within ${INVITE_TIMEOUT_MS / 1000}s`,
       metadata: JSON.stringify({ matchId }),
     }).run();
 
     publishWs(`arena:match:${matchId}`, JSON.stringify({
       type: 'match_timeout',
       matchId,
-      message: 'Ready-up timed out — try again',
+      message: 'Team selection timed out — try again',
     }));
     broadcastMatchState(matchId);
 
-    console.log(`[arena] ready-up timeout: ${matchId}`);
-  }, READY_TIMEOUT_MS);
+    console.log(`[arena] team-selection timeout: ${matchId}`);
+  }, INVITE_TIMEOUT_MS);
   readyTimers.set(matchId, handle);
 }
 
@@ -537,6 +558,18 @@ export const arenaRoutes = new Elysia()
               .where(eq(schema.matches.id, match.id)).run();
             clearReadyTimer(match.id);
 
+            // If an invite room was already created for this not-yet-started
+            // match (player unreadies mid team-selection), tear it down so we
+            // don't leave an orphaned PS room behind. Clear psRoomId so a later
+            // re-ready mints a fresh invite.
+            if (match.psRoomId) {
+              try { cancelBattle(match.psRoomId); }
+              catch (err) { console.error(`[arena] cancelBattle failed for ${match.psRoomId}:`, err); }
+              db.update(schema.matches)
+                .set({ psRoomId: null })
+                .where(eq(schema.matches.id, match.id)).run();
+            }
+
             db.insert(schema.matchReadyLog).values({
               matchId: match.id,
               teamId: client.teamId,
@@ -638,7 +671,13 @@ export const arenaRoutes = new Elysia()
             // Check if both ready
             if (lobby.players.length === 2 && lobby.ready[0] && lobby.ready[1]) {
               lobby.status = 'ready';
-              // Create scrim battle via bot
+              // Create scrim battle via bot. Scrims go through the same INVITE/
+              // team-pick flow as official matches now: createBattle sends an
+              // invite (both players pick a team in their native team-picker and
+              // accept; the battle starts once both accept). Scrims have no DB
+              // match lifecycle, so there's no in_progress transition to defer —
+              // the lobby stays 'ready' and the live battle is observed once it
+              // starts.
               if (isBotConnected()) {
                 createBattle(lobby.players[0], lobby.players[1]);
               }

@@ -73,6 +73,15 @@ interface MonitoredBattle {
   homeSide: 'p1' | 'p2' | null;
   /** Epoch ms of the last protocol line appended. Used for idle eviction. */
   lastLineAt: number;
+  /**
+   * Which PS sides have actually JOINED the battle (a `|player|p{N}|USERNAME`
+   * line with a NON-EMPTY username). For the invite flow the room is created
+   * with both slots empty + invited; PS emits `|player|p1|` (empty) for an
+   * unfilled slot and re-emits it with the username once a player picks a team
+   * and accepts. Battle-start = both sides in this set. Distinct from p1/p2,
+   * which are pre-seeded from the creation PM for orientation/display.
+   */
+  joinedSides: Set<'p1' | 'p2'>;
 }
 
 let ws: WebSocket | null = null;
@@ -305,8 +314,32 @@ export function createBattle(p1Username: string, p2Username: string, format: str
   sendToPs(cmd);
 }
 
+/**
+ * Cancel a pending invite battle that never started. With the invite flow the
+ * PS plugin creates the room with both player slots empty + invited, so a room
+ * can linger if a player never picks a team / accepts. This tells the plugin to
+ * tear that room down (`/cannoli-cancel <roomId>`) and drops our local monitor
+ * entry if present. Used by the Arena ready-timeout and unready paths to clean
+ * up orphaned rooms. Safe to call for an unknown room (the command is a no-op
+ * server-side and the map delete is a no-op).
+ */
+export function cancelBattle(roomId: string) {
+  sendToPs(`|/cannoli-cancel ${roomId}`);
+  monitoredBattles.delete(roomId);
+}
+
 /** Expose send queue for test assertions only. */
 export function getSendQueueForTest() { return sendQueue; }
+
+/**
+ * Feed a raw inbound protocol chunk through the same dispatch the live
+ * `ws.onmessage` uses (room-prefix strip → global/battle line routing). Test
+ * ONLY — lets specs exercise the PM-link + battle-start lifecycle against the
+ * DB without booting a socket. Do not use in production code.
+ */
+export function handleMessageForTest(raw: string) {
+  handleMessage(raw);
+}
 
 // ─── Connection ─────────────────────────────────────────────────────────────
 
@@ -503,11 +536,21 @@ function handleBotPm(sender: string, message: string) {
       isOfficial: false,
       homeSide: null,
       lastLineAt: Date.now(),
+      joinedSides: new Set(),
     };
     monitoredBattles.set(roomId, entry);
 
     // Deterministic matchId link: when the PS plugin forwarded a matchId, link
     // without inference. Validate the match exists and is in a pre-final status.
+    //
+    // INVITE FLOW: the plugin now creates the room with both player slots EMPTY +
+    // INVITED — the battle has NOT started yet (each player must pick a team in
+    // their native team-picker and accept). So we ONLY record the psRoomId here
+    // and link the room → match; we do NOT flip the match to in_progress and do
+    // NOT clear the ready-timeout. The in_progress transition happens later in
+    // handleBattleLine once BOTH players have accepted (joined the battle). The
+    // ready-timeout (extended to the team-pick window in arena.ts) stays armed so
+    // a player who never picks a team triggers a proper revert + room cancel.
     if (pmMatchId && pmMatchId.trim()) {
       const matchRow = db.select().from(schema.matches)
         .where(eq(schema.matches.id, pmMatchId.trim()))
@@ -521,15 +564,15 @@ function handleBotPm(sender: string, message: string) {
           p1TeamId === matchRow.homeTeamId ? 'p1'
             : p2TeamId === matchRow.homeTeamId ? 'p2'
               : null;
+        // Record the room id only — leave status as-is ('scheduled'/'ready').
         db.update(schema.matches)
-          .set({ status: 'in_progress', psRoomId: roomId, startedAt: new Date().toISOString() })
+          .set({ psRoomId: roomId })
           .where(and(
             eq(schema.matches.id, matchRow.id),
             inArray(schema.matches.status, ['scheduled', 'ready']),
           ))
           .run();
-        console.log(`[PS Bot] Deterministic match link: ${matchRow.id} → ${roomId}`);
-        clearReadyTimerForMatch(matchRow.id);
+        console.log(`[PS Bot] Deterministic match link (invite pending): ${matchRow.id} → ${roomId}`);
       } else if (!matchRow) {
         console.warn(`[PS Bot] PM matchId ${pmMatchId} not found — falling back to inference`);
       }
@@ -711,6 +754,7 @@ function buildBattleFromLog(
     isOfficial: true,
     lastLineAt: Date.now(),
     homeSide: null,
+    joinedSides: new Set(),
   };
 
   // Replay every line through the parser. We also accumulate lines into
@@ -1022,6 +1066,7 @@ function rejoinInProgressBattles() {
       isOfficial: true,
       homeSide,
       lastLineAt: Date.now(),
+      joinedSides: new Set(),
     });
 
     console.log(`[PS Bot] Rejoining ${roomId} for match ${match.id}`);
@@ -1050,6 +1095,7 @@ function handleBattleLine(room: string, line: string) {
         isOfficial: false,
         homeSide: null,
         lastLineAt: Date.now(),
+        joinedSides: new Set(),
       });
     }
     return;
@@ -1073,14 +1119,29 @@ function handleBattleLine(room: string, line: string) {
   switch (cmd) {
     case 'player': {
       // |player|p1|USERNAME|AVATAR|RATING
+      // Invite flow: an unfilled slot arrives as `|player|p1|` (empty username);
+      // once a player picks a team and accepts, PS (re-)emits it WITH a username.
+      // Only a non-empty username counts as that side having JOINED.
       const side = parts[2]; // p1 or p2
       const username = parts[3];
-      if (side === 'p1') battle.p1 = toUserid(username);
-      if (side === 'p2') battle.p2 = toUserid(username);
+      const joinedSide = side === 'p1' || side === 'p2' ? side : null;
+      if (joinedSide && username) {
+        battle[joinedSide] = toUserid(username);
+        battle.joinedSides.add(joinedSide);
+      }
 
-      // Once we have both players, check if this is a league match
-      if (battle.p1 && battle.p2 && !battle.matchId) {
+      const bothJoined = battle.joinedSides.has('p1') && battle.joinedSides.has('p2');
+      if (bothJoined && !battle.matchId) {
+        // 5-field PM / pure-inference path: resolve the match now AND, since
+        // both players have joined, flip it to in_progress (checkForOfficialMatch
+        // does the flip itself when it links a match).
         checkForOfficialMatch(battle);
+      } else if (bothJoined && battle.matchId) {
+        // Deterministic-link path: the room was linked at PM time (psRoomId
+        // recorded, status left pre-start). Both players have now accepted the
+        // invite and joined the battle — THIS is battle-start, so transition the
+        // match to in_progress.
+        transitionMatchToInProgress(battle);
       }
       break;
     }
@@ -1186,47 +1247,73 @@ function checkForOfficialMatch(battle: MonitoredBattle) {
         : team2.teamId === match.homeTeamId ? 'p2'
           : null;
 
-    // Update match with PS room ID and status. Write-race guard: only advance
-    // if the match is still in a pre-start state (prevents double-write if the
-    // deterministic PM path already flipped it to in_progress).
-    db.update(schema.matches)
-      .set({
-        status: 'in_progress',
-        psRoomId: battle.roomId,
-        startedAt: new Date().toISOString(),
-      })
-      .where(and(
-        eq(schema.matches.id, match.id),
-        inArray(schema.matches.status, ['scheduled', 'ready']),
-      ))
-      .run();
-
-    // Log to activity
-    db.insert(schema.activityLog).values({
-      type: 'match_started',
-      category: 'match',
-      actor: BOT_USERNAME,
-      leagueId: match.leagueId,
-      description: `Match started: ${battle.roomId}`,
-      metadata: JSON.stringify({ matchId: match.id, psRoomId: battle.roomId, p1: battle.p1, p2: battle.p2 }),
-    }).run();
-
     console.log(`[PS Bot] Official match detected: ${match.id} → ${battle.roomId}`);
 
-    // Tell Arena clients the match just went live. `match_live` is the FE event
-    // (use-arena-websocket.ts) that flips the row to in_progress and stamps the
-    // room id; without it a readied coach sits on the "Both ready — starting
-    // match..." spinner until the next live-stats tick or a manual reload.
-    // Publish on the per-match channel (HUD) and arena:global (myMatches list).
-    const liveBroadcaster = getArenaBroadcaster();
-    if (liveBroadcaster) {
-      const liveMsg = JSON.stringify({ type: 'match_live', matchId: match.id, psRoomId: battle.roomId });
-      liveBroadcaster.publish(`arena:match:${match.id}`, liveMsg);
-      liveBroadcaster.publish('arena:global', liveMsg);
-    }
-
-    clearReadyTimerForMatch(match.id);
+    // This path only runs once BOTH |player| lines have arrived (the caller
+    // guards on battle.p1 && battle.p2), so the battle has started — flip the
+    // match to in_progress now.
+    transitionMatchToInProgress(battle);
   }
+}
+
+/**
+ * Transition a linked match to `in_progress` at BATTLE START — i.e. once both
+ * players have joined the invite battle by picking a team and accepting. This is
+ * deferred from PM time (where we only record psRoomId) because the invite-flow
+ * room exists before either player has picked a team.
+ *
+ * Idempotent: the write-race guard only advances rows still in a pre-start
+ * status, so a duplicate |player| line or a concurrent path can't double-flip.
+ * No-ops unless the battle has a linked matchId and BOTH players are present.
+ */
+function transitionMatchToInProgress(battle: MonitoredBattle) {
+  if (!battle.matchId) return;
+  if (!battle.joinedSides.has('p1') || !battle.joinedSides.has('p2')) return;
+
+  const match = db.select().from(schema.matches)
+    .where(eq(schema.matches.id, battle.matchId))
+    .get();
+  // Only fire battle-start while the match is still pre-start. If it's already
+  // in_progress (e.g. a second |player| line) or finalized, do nothing.
+  if (!match || (match.status !== 'scheduled' && match.status !== 'ready')) return;
+
+  // Update match with PS room ID and status. Write-race guard: only advance if
+  // the match is still in a pre-start state.
+  db.update(schema.matches)
+    .set({
+      status: 'in_progress',
+      psRoomId: battle.roomId,
+      startedAt: new Date().toISOString(),
+    })
+    .where(and(
+      eq(schema.matches.id, match.id),
+      inArray(schema.matches.status, ['scheduled', 'ready']),
+    ))
+    .run();
+
+  // Log to activity
+  db.insert(schema.activityLog).values({
+    type: 'match_started',
+    category: 'match',
+    actor: BOT_USERNAME,
+    leagueId: match.leagueId,
+    description: `Match started: ${battle.roomId}`,
+    metadata: JSON.stringify({ matchId: match.id, psRoomId: battle.roomId, p1: battle.p1, p2: battle.p2 }),
+  }).run();
+
+  // Tell Arena clients the match just went live. `match_live` is the FE event
+  // (use-arena-websocket.ts) that flips the row to in_progress and stamps the
+  // room id; without it a readied coach sits on the "Both ready — starting
+  // match..." spinner until the next live-stats tick or a manual reload.
+  // Publish on the per-match channel (HUD) and arena:global (myMatches list).
+  const liveBroadcaster = getArenaBroadcaster();
+  if (liveBroadcaster) {
+    const liveMsg = JSON.stringify({ type: 'match_live', matchId: match.id, psRoomId: battle.roomId });
+    liveBroadcaster.publish(`arena:match:${match.id}`, liveMsg);
+    liveBroadcaster.publish('arena:global', liveMsg);
+  }
+
+  clearReadyTimerForMatch(match.id);
 }
 
 // ─── Match Result ───────────────────────────────────────────────────────────

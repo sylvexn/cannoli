@@ -10,7 +10,7 @@
  * Showdown footer.
  */
 import { Link } from 'react-router-dom';
-import { Swords, LogIn, Loader2, Zap, AlertTriangle } from 'lucide-react';
+import { Swords, LogIn, Loader2, Zap, AlertTriangle, ArrowUp, ClipboardCheck } from 'lucide-react';
 import { fixtureLabel, fixtureShortLabel } from '@/lib/constants';
 import type { ArenaMatch } from '../use-arena-websocket';
 
@@ -175,14 +175,41 @@ function SelectedMatch({
             const opponentReady = match.isHome ? match.readyAway : match.readyHome;
             const bothReady = match.readyHome && match.readyAway;
 
-            // Genuinely creating the battle — the server flipped status to
-            // 'ready' (bot was online and both teams readied up).
+            // Both readied and the server sent the team-select invite (status
+            // 'ready' + a psRoomId). Each coach must now open the Showdown panel
+            // above, pick a saved team in the challenge popup, and accept — the
+            // battle only starts once BOTH have chosen. This window can take a
+            // few minutes, so we make the instruction explicit (not "starting").
+            if (bothReady && match.status === 'ready' && match.psRoomId) {
+              return (
+                <div className="flex flex-col items-center gap-2 max-w-xs text-center">
+                  <div className="flex items-center gap-2 text-neon font-medium text-sm">
+                    <ClipboardCheck size={14} className="shrink-0" />
+                    Match ready — pick your team in Showdown.
+                  </div>
+                  <span className="flex items-center justify-center gap-1.5 text-xs text-text-secondary">
+                    <ArrowUp size={11} className="shrink-0 animate-bounce" />
+                    A team-select invite is waiting in the Showdown panel above.
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    Choose a saved team and accept. The battle starts once both
+                    coaches have picked.
+                  </span>
+                  {matchError && (
+                    <span className="text-xs text-amber-400/90">{matchError}</span>
+                  )}
+                </div>
+              );
+            }
+
+            // Both readied, server flipped to 'ready', but the invite/room isn't
+            // attached yet — the bot is creating the challenge. Brief spinner.
             if (bothReady && match.status === 'ready') {
               return (
                 <div className="flex flex-col items-center gap-2">
                   <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
                     <Loader2 size={14} className="animate-spin" />
-                    Both ready — starting match...
+                    Both ready — sending team-select invite...
                   </div>
                   {matchError && (
                     <span className="text-xs text-amber-400/90 text-center max-w-xs">{matchError}</span>

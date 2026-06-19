@@ -293,6 +293,46 @@ describe('ready-up race', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// 2b. Invite-flow cleanup: unready cancels the pending PS invite room
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('invite-flow unready cancels orphaned PS room', () => {
+  // With the invite flow, a both-ready match has an invite room created
+  // (psRoomId set) before either player picks a team. If a player unreadies
+  // mid team-selection, the Arena must tear down that orphaned room via the
+  // bot's cancelBattle and clear psRoomId so a later re-ready mints a fresh one.
+  test('match_unready on a match with a psRoomId calls cancelBattle and clears psRoomId', async () => {
+    resetMatch();
+    // Simulate the post-ready state: an invite room exists but the battle has
+    // not started (status still 'ready', psRoomId stamped by the bot PM).
+    db.update(schema.matches)
+      .set({ status: 'ready', readyHome: true, readyAway: true, psRoomId: 'battle-gen9natdexdraft-invite-1' })
+      .where(eq(schema.matches.id, matchId)).run();
+
+    const cancel = spyOn(psBot, 'cancelBattle').mockImplementation(() => {});
+    try {
+      const home = await connect(cookie(homeSession));
+      await waitFor(home, (m) => m.some((x) => x.type === 'identified'));
+
+      send(home, { type: 'match_unready' });
+      await waitFor(home, (m) => m.some((x) => x.type === 'match_state' && x.matchId === matchId));
+
+      expect(cancel).toHaveBeenCalledWith('battle-gen9natdexdraft-invite-1');
+
+      const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+      expect(m.psRoomId).toBeNull();
+      expect(m.status).toBe('scheduled');
+      expect(m.readyHome).toBe(false);
+
+      home.close();
+      await sleep(50);
+    } finally {
+      cancel.mockRestore();
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // 3. Spectator count sync across clients
 // ───────────────────────────────────────────────────────────────────────────
 

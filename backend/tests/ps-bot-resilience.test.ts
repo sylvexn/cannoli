@@ -190,6 +190,7 @@ describe('sweepIdleBattles — evicts stale entries, retains fresh ones', () => 
       isOfficial: matchId !== null,
       homeSide: null,
       lastLineAt: Date.now() - ageMs,
+      joinedSides: new Set(),
     } as Parameters<typeof map.set>[1]);
   }
 
@@ -235,6 +236,7 @@ describe('sweepIdleBattles — evicts stale entries, retains fresh ones', () => 
       homeSide: null,
       // lastLineAt is 45 min before our synthetic now
       lastLineAt: anchorMs - 45 * 60 * 1000,
+      joinedSides: new Set(),
     } as Parameters<typeof map.set>[1]);
     const evicted = sweepIdleBattles(anchorMs, 30 * 60 * 1000);
     expect(evicted).toBeGreaterThanOrEqual(1);
@@ -330,7 +332,12 @@ describe('cannoli-battle-created PM field contract', () => {
     expect(usesDeterministicPath).toBe(false);
   });
 
-  test('6-field PM (new form) has pmMatchId — deterministic link fires', () => {
+  test('6-field PM (new form) has pmMatchId — deterministic link fires (records psRoomId, defers in_progress)', () => {
+    // INVITE FLOW: a 6-field PM links the room → match deterministically and
+    // records psRoomId, but the match stays pre-start ('ready') until both
+    // players accept the invite. The full deferred-in_progress + battle-start
+    // lifecycle is covered against the DB in ps-bot-invite-flow.test.ts; here we
+    // only pin the PM field contract that drives the deterministic-link branch.
     const matchId = 'match-s11-week3-001';
     const msg = `cannoli-battle-created|battle-gen9natdexdraft-456|alice|bob|gen9natdexdraft|${matchId}`;
     const { roomId, p1, p2, format, pmMatchId } = parseBotPm(msg);
