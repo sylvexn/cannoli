@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, inArray, desc, sql, and } from 'drizzle-orm';
+import { getLeagueCostMap } from '../../lib/league-costs';
 
 /**
  * Ownership entry for a single Pokemon — one per (league, team) it's rostered
@@ -35,7 +36,7 @@ interface Ownership {
  * Computation is deliberately client-side so toggles (item, ability, nature,
  * weather, stage, Trick Room) update with zero RTT.
  */
-function buildSpeedRows(leagueIds: string[]) {
+function buildSpeedRows(leagueIds: string[], leagueId?: string) {
   // Always source the canonical Pokemon list — even with no leagues we want
   // a full undrafted dex. The "(T)" suffix rows are tera-captain duplicates
   // imported from the source XLSX (same species, just marked as captain via
@@ -91,6 +92,12 @@ function buildSpeedRows(leagueIds: string[]) {
     }
   }
 
+  // When called for a specific league, resolve tiers via that league's format
+  // cost map so per-format overrides (natdex vs natdexplus) are honoured.
+  // When called globally (no leagueId), there is no single correct format —
+  // fall back to the global pokemon.tier baseline.
+  const costMap = leagueId ? getLeagueCostMap(leagueId) : null;
+
   return pokemonRows.map(p => {
     const ownerships = ownershipsByName.get(p.name) ?? [];
     const abilities = [p.ability1, p.ability2, p.hiddenAbility]
@@ -108,7 +115,7 @@ function buildSpeedRows(leagueIds: string[]) {
       baseSpeed: p.spe ?? 0,
       type1: p.type1 ?? null,
       type2: p.type2 ?? null,
-      tier: p.tier,
+      tier: costMap ? (costMap.get(p.name)?.tier ?? p.tier) : p.tier,
       formCategory: p.formCategory,
       isTeraCaptain,
       abilities,
@@ -137,7 +144,7 @@ export const speedTierRoutes = new Elysia()
    * the one league.
    */
   .get('/api/leagues/:leagueId/speed-tiers', ({ params }) => {
-    return buildSpeedRows([params.leagueId]);
+    return buildSpeedRows([params.leagueId], params.leagueId);
   })
 
   /**

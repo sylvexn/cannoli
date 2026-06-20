@@ -3,6 +3,7 @@ import { db, schema } from '../../db';
 import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { computeStandings, type TeamStandingRow } from '../../lib/standings';
+import { getLeagueCostMap } from '../../lib/league-costs';
 
 export const standingsRoutes = new Elysia()
 
@@ -310,6 +311,10 @@ export const standingsRoutes = new Elysia()
       .groupBy(schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
       .all();
 
+    // Resolve the league's format cost map once — avoids N per-species lookups
+    // and returns the correct per-format tier rather than the global baseline.
+    const costMap = getLeagueCostMap(params.leagueId);
+
     return stats.map(s => {
       const pokemon = db.select().from(schema.pokemon)
         .where(eq(schema.pokemon.name, s.pokemonName))
@@ -324,7 +329,7 @@ export const standingsRoutes = new Elysia()
         differential: s.kills - s.deaths,
         kpg: s.gp > 0 ? +(s.kills / s.gp).toFixed(2) : 0,
         types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
-        tier: pokemon?.tier || 0,
+        tier: costMap.get(s.pokemonName)?.tier ?? 0,
       };
     });
   });
