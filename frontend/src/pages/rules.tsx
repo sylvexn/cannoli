@@ -1,235 +1,392 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollText, Swords, Star, ShieldOff } from 'lucide-react';
-import { getTeraBanned, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  ScrollText,
+  Swords,
+  Star,
+  ShieldOff,
+  Info,
+  ListOrdered,
+  BookOpen,
+  Ban,
+  ShieldAlert,
+} from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { LoadingSprite } from '@/components/loading-sprite';
+import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
+import type { LeagueRulesResponse } from '@/lib/rules-types';
 import { cn } from '@/lib/utils';
 
-const FORMAT_LABELS: Record<CostFormat, string> = {
-  natdexplus: 'NatDex+ (Ruby/Sapphire)',
-  natdex: 'NatDex (Emerald)',
-};
-
-const DRAFT_RULES: string[] = [
-  'You have up to 110 points with which to draft 10–12 Pokémon. Costs are listed on the draft board. You do not have to spend your full budget.',
-  'Pokémon cost anywhere between 1 – 20 points.',
-  'The draft is a randomized snake-style draft (1→12, 12→1, etc.).',
-  'If a Pokémon is picked by someone else, you cannot pick it.',
-  'Tera Captains are limited to Tiers 9 and below, and have a multiplier applied to their cost when drafted as a Tera Captain (see Draft Board).',
-  'You may have up to 2 Tera Captains from any tiers 9 and below. Tera Captains have 3 Tera Types, visible on each team\'s sheet. All three types are free, and Stellar Tera is banned.',
-  'The deadline for trades and free agencies is Week 7.',
-  'You can change tera types on each captain for free once per season.',
-  'You change tera captains within your team for free when making a trade, or by using a FA. However, a Pokémon can only be a captain once.',
-  'You cannot draft more than 1 Mega Pokémon, and Mega Pokémon need to have their Mega Stone in battle. They don\'t need to Mega Evolve.',
-  'You cannot draft two Pokémon with the same National Dex number. This means you cannot draft two forms of the same Pokémon. Ex. Decidueye and Decidueye-Hisui, Rotom-Wash and Rotom-Heat or Mega Gardevoir and Gardevoir.',
-];
-
-const BATTLE_RULES: string[] = [
-  'All games must be played in the NatDex Draft format with Tera Preview enabled on Pokémon Showdown.',
-  'Each set is a best-of-one set.',
-  'Either coach can turn the timer on without asking the other coach (Sapphire & Ruby).',
-  'All Pokémon must be Level 100 and you must bring a team of 6 Pokémon to battle.',
-  'Battles are done with Tera Preview, meaning the Tera Types of both teams are posted in the battle\'s chat box when choosing your lead Pokémon.',
-  'The top 8 teams in each league qualify for the playoff bracket.',
-  'Forfeits are handled case-by-case by admin review — there is no automatic double-forfeit. If a match cannot be completed by the week\'s deadline, contact staff and the result will be adjudicated.',
-];
-
-const CLAUSES: { name: string; description: string }[] = [
-  { name: 'Species Clause', description: 'A player cannot have two Pokémon with the same National Pokédex number on a team.' },
-  { name: 'Sleep Clause', description: 'If a player has already put a Pokémon on their opponent\'s side to sleep and it is still sleeping, another one can\'t be put to sleep.' },
-  { name: 'Evasion Clause', description: 'A Pokémon may not hold an item, use a move, or possess an ability that can increase their evasion stat.' },
-  { name: 'OHKO Clause', description: 'A Pokémon may not have the moves Fissure, Guillotine, Horn Drill, or Sheer Cold in its moveset.' },
-  { name: 'Moody Clause', description: 'A Pokémon may not enter battle with the ability Moody.' },
-  { name: 'Endless Battle Clause', description: 'Players cannot intentionally prevent an opponent from being able to end the game without forfeiting.' },
-  { name: 'Baton Pass Clause', description: 'A Pokémon may not have Baton Pass in its moveset.' },
-  { name: 'Accuracy Moves Clause', description: 'A Pokémon may not have a move that lowers the opponent\'s accuracy.' },
-];
-
-const POKEMON_BANS: { pokemon: string; move: string }[] = [
-  { pokemon: 'Mega Alakazam', move: 'Nasty Plot' },
-];
-
-const BANNED_ABILITIES = ['Shadow Tag', 'Arena Trap', 'Moody'];
-const BANNED_ITEMS = ['Bright Powder', 'Lax Incense', 'Razor Fang', "King's Rock"];
-const BANNED_MOVES = [
-  'Acupressure', 'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
-  'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail', 'Swagger',
-  'Take Heart',
-];
+/** A document section that appears in both the TOC and the body. */
+interface SectionDef {
+  id: string;
+  label: string;
+  icon: typeof ScrollText;
+  /** Whether this section has content worth rendering / linking. */
+  present: boolean;
+}
 
 export function RulesPage() {
-  const [format, setFormat] = useState<CostFormat>(DEFAULT_FORMAT);
-  const teraBanned = getTeraBanned(format);
-  const [customText, setCustomText] = useState<string | null>(null);
+  const { leagues, loading: leaguesLoading } = useAppData();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Resolve the selected league from ?league=, falling back to the first.
+  const paramLeagueId = searchParams.get('league');
+  const selectedLeague = useMemo(() => {
+    if (leagues.length === 0) return null;
+    return leagues.find(l => l.id === paramLeagueId) ?? leagues[0];
+  }, [leagues, paramLeagueId]);
+
+  const [data, setData] = useState<LeagueRulesResponse | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState(false);
+
+  // Normalize an invalid/missing ?league= to the resolved default.
+  useEffect(() => {
+    if (!selectedLeague) return;
+    if (paramLeagueId !== selectedLeague.id) {
+      setSearchParams({ league: selectedLeague.id }, { replace: true });
+    }
+  }, [selectedLeague, paramLeagueId, setSearchParams]);
 
   useEffect(() => {
-    api.getRules().then(r => setCustomText(r.rulesText)).catch(() => {});
-  }, []);
+    if (!selectedLeague) return;
+    let cancelled = false;
+    setFetching(true);
+    setError(false);
+    api
+      .getLeagueRules(selectedLeague.id)
+      .then(res => {
+        if (!cancelled) setData(res);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedLeague]);
+
+  const selectLeague = (id: string) => setSearchParams({ league: id });
+
+  // Initial load: leagues still resolving.
+  if (leaguesLoading && leagues.length === 0) {
+    return (
+      <div className="space-y-3">
+        <Header />
+        <LoadingSprite label="Loading leagues" />
+      </div>
+    );
+  }
+
+  if (leagues.length === 0) {
+    return (
+      <div className="space-y-3">
+        <Header />
+        <Card className="bg-surface-raised border-border-default">
+          <CardContent className="py-10 text-center text-sm text-text-muted">
+            No leagues are available yet. Rules appear here once a season is set up.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const content = data?.content ?? null;
+
+  const sections: SectionDef[] = content
+    ? [
+        { id: 'notes', label: 'Additional Notes', icon: Info, present: content.notes.trim().length > 0 },
+        { id: 'draft', label: 'Draft Rules', icon: BookOpen, present: content.draftRules.length > 0 },
+        { id: 'battle', label: 'Battle Rules', icon: Swords, present: content.battleRules.length > 0 },
+        { id: 'clauses', label: 'Clauses', icon: ListOrdered, present: content.clauses.length > 0 },
+        { id: 'pokemon-bans', label: 'Pokémon-Specific Bans', icon: Ban, present: content.pokemonBans.length > 0 },
+        {
+          id: 'bans',
+          label: 'Banned Abilities, Items & Moves',
+          icon: ShieldOff,
+          present:
+            content.bannedAbilities.length > 0 ||
+            content.bannedItems.length > 0 ||
+            content.bannedMoves.length > 0,
+        },
+        { id: 'tera-bans', label: 'Tera Captain Bans', icon: Star, present: content.teraCaptainBans.length > 0 },
+      ].filter(s => s.present)
+    : [];
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
-          <span className="text-pink">League</span>{' '}
-          <span className="text-text-primary">Rules</span>
-        </h1>
-        <p className="text-xs text-text-muted">Cannoli draft and battle rules — read before drafting.</p>
-      </div>
+      <Header />
 
-      {/* Admin-authored custom text (if set) */}
-      {customText && customText.trim() && (
+      {/* League switcher */}
+      <LeagueSwitcher leagues={leagues} selectedId={selectedLeague?.id ?? null} onSelect={selectLeague} />
+
+      {/* Body */}
+      {fetching && !data ? (
+        <LoadingSprite label="Loading rules" />
+      ) : error || !content ? (
         <Card className="bg-surface-raised border-border-default">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ScrollText size={14} className="text-neon" />
-              Additional Notes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <p className="text-xs text-text-secondary whitespace-pre-line leading-relaxed">
-              {customText}
-            </p>
+          <CardContent className="py-10 text-center text-sm text-loss">
+            <ShieldAlert size={18} className="mx-auto mb-2 opacity-70" />
+            Could not load rules for this league. Please try again.
           </CardContent>
         </Card>
-      )}
+      ) : (
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
+          <Toc sections={sections} accent={selectedLeague?.color} />
 
-      {/* Three-column row: Draft / Battle / Bans */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
-        {/* Draft Rules */}
-        <Card className="bg-surface-raised border-border-default">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ScrollText size={14} className="text-neon" />
-              Draft Rules
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <ol className="space-y-1 text-xs text-text-secondary list-decimal pl-4 leading-snug">
-              {DRAFT_RULES.map((rule, i) => (
-                <li key={i}>{rule}</li>
-              ))}
-            </ol>
-          </CardContent>
-        </Card>
-
-        {/* Battle Rules */}
-        <Card className="bg-surface-raised border-border-default">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Swords size={14} className="text-pink" />
-              Battle Rules
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 space-y-3">
-            <ol className="space-y-1 text-xs text-text-secondary list-decimal pl-4 leading-snug">
-              {BATTLE_RULES.map((rule, i) => (
-                <li key={i}>{rule}</li>
-              ))}
-            </ol>
-
-            <div>
-              <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">
-                Clauses
-              </h4>
-              <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] leading-snug">
-                {CLAUSES.map(c => (
-                  <div key={c.name}>
-                    <dt className="inline font-medium text-text-primary">{c.name}:</dt>{' '}
-                    <dd className="inline text-text-secondary">{c.description}</dd>
+          <div
+            className={cn(
+              'min-w-0 flex-1 max-w-3xl space-y-5',
+              fetching && 'opacity-60 transition-opacity',
+            )}
+          >
+            {sections.map(s => (
+              <Section key={s.id} id={s.id} label={s.label} icon={s.icon}>
+                {s.id === 'notes' && (
+                  <div className="rounded-md bg-surface-raised border border-border-default px-4 py-3 flex gap-3">
+                    <ScrollText size={15} className="text-neon shrink-0 mt-0.5" />
+                    <p className="text-xs text-text-secondary whitespace-pre-line leading-relaxed">
+                      {content.notes}
+                    </p>
                   </div>
-                ))}
-              </dl>
-            </div>
+                )}
 
-            <div>
-              <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">
-                Pokémon-specific bans
-              </h4>
-              <ul className="space-y-0.5 text-xs">
-                {POKEMON_BANS.map(b => (
-                  <li key={b.pokemon} className="text-text-secondary leading-snug">
-                    <span className="font-medium text-text-primary">{b.move}</span> on{' '}
-                    <span className="text-pink">{b.pokemon}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+                {s.id === 'draft' && <RuleList rules={content.draftRules} />}
+                {s.id === 'battle' && <RuleList rules={content.battleRules} />}
 
-        {/* Banned Abilities / Items / Moves */}
-        <Card className="bg-surface-raised border-border-default">
-          <CardHeader className="pb-2 pt-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <ShieldOff size={14} className="text-loss" />
-              Banned Abilities, Items &amp; Moves
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3">
-            <div className="space-y-2">
-              <BanList title="Abilities" items={BANNED_ABILITIES} />
-              <BanList title="Items" items={BANNED_ITEMS} />
-              <BanList title="Moves" items={BANNED_MOVES} />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                {s.id === 'clauses' && (
+                  <dl className="space-y-1.5 text-[12px] leading-snug">
+                    {content.clauses.map(c => (
+                      <div key={c.name}>
+                        <dt className="inline font-semibold text-text-primary">{c.name}:</dt>{' '}
+                        <dd className="inline text-text-secondary">{c.description}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
 
-      {/* Tera Captain bans — full width strip */}
-      <Card className="bg-surface-raised border-border-default">
-        <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
-            <Star size={14} className="text-yellow-400" />
-            Tera Captain Bans
-            <span className="text-[10px] font-mono text-text-muted normal-case tracking-normal">
-              draftable, but not as captain
-            </span>
-            {/* Format toggle — ban lists differ between NatDex and NatDex+ */}
-            <div className="ml-auto flex items-center gap-px rounded border border-border-subtle overflow-hidden">
-              {(['natdexplus', 'natdex'] as CostFormat[]).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFormat(f)}
-                  className={cn(
-                    'px-2.5 py-0.5 text-[10px] font-medium transition-colors',
-                    format === f
-                      ? 'bg-surface-overlay text-text-primary'
-                      : 'text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary',
-                  )}
-                >
-                  {FORMAT_LABELS[f]}
-                </button>
-              ))}
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-3">
-          <div className="flex flex-wrap gap-1.5">
-            {teraBanned.map(name => (
-              <span
-                key={name}
-                className="inline-flex items-center gap-1 rounded-md bg-surface-overlay/60 border border-border-subtle px-2 py-0.5 text-[11px] text-text-secondary"
-              >
-                {name}
-              </span>
+                {s.id === 'pokemon-bans' && (
+                  <ul className="space-y-1 text-xs">
+                    {content.pokemonBans.map(b => (
+                      <li key={`${b.pokemon}-${b.move}`} className="text-text-secondary leading-snug">
+                        <span className="font-medium text-text-primary">{b.move}</span> is banned on{' '}
+                        <span className="text-pink">{b.pokemon}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {s.id === 'bans' && (
+                  <div className="space-y-3">
+                    {content.bannedAbilities.length > 0 && (
+                      <ChipGroup title="Abilities" items={content.bannedAbilities} />
+                    )}
+                    {content.bannedItems.length > 0 && (
+                      <ChipGroup title="Items" items={content.bannedItems} />
+                    )}
+                    {content.bannedMoves.length > 0 && (
+                      <ChipGroup title="Moves" items={content.bannedMoves} />
+                    )}
+                  </div>
+                )}
+
+                {s.id === 'tera-bans' && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                      draftable, but not as captain
+                    </p>
+                    <Chips items={content.teraCaptainBans} />
+                  </div>
+                )}
+              </Section>
             ))}
+
+            {sections.length === 0 && (
+              <p className="text-sm text-text-muted py-8 text-center">
+                No rules have been published for this league yet.
+              </p>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }
 
-function BanList({ title, items }: { title: string; items: string[] }) {
+function Header() {
   return (
     <div>
-      <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-0.5">
-        {title}
-      </h4>
-      <p className="text-[11px] text-text-secondary leading-snug">
-        {items.join(' · ')}
+      <h1 className="text-xl font-mono font-bold tracking-tight uppercase">
+        <span className="text-pink">League</span>{' '}
+        <span className="text-text-primary">Rules</span>
+      </h1>
+      <p className="text-xs text-text-muted">
+        Cannoli draft and battle rules — read before drafting. Rules can differ per league.
       </p>
+    </div>
+  );
+}
+
+function LeagueSwitcher({
+  leagues,
+  selectedId,
+  onSelect,
+}: {
+  leagues: { id: string; name: string; color: string }[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-px rounded border border-border-subtle overflow-hidden w-fit">
+      {leagues.map(l => {
+        const active = l.id === selectedId;
+        return (
+          <button
+            key={l.id}
+            onClick={() => onSelect(l.id)}
+            className={cn(
+              'px-3 py-1 text-xs font-medium transition-colors border-b-2',
+              active
+                ? 'bg-surface-overlay text-text-primary'
+                : 'border-transparent text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary',
+            )}
+            style={active ? { borderBottomColor: l.color } : undefined}
+          >
+            <span
+              className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+              style={{ backgroundColor: l.color, opacity: active ? 1 : 0.5 }}
+            />
+            {l.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Toc({ sections, accent }: { sections: SectionDef[]; accent?: string }) {
+  const [activeId, setActiveId] = useState<string | null>(sections[0]?.id ?? null);
+  const idsKey = sections.map(s => s.id).join('|');
+
+  // Scroll-spy: highlight the section nearest the top of the viewport.
+  useEffect(() => {
+    const ids = idsKey.split('|').filter(Boolean);
+    if (ids.length === 0) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        const visible = entries
+          .filter(e => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveId(visible[0].target.id);
+      },
+      { rootMargin: '0px 0px -70% 0px', threshold: 0 },
+    );
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [idsKey]);
+
+  const go = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveId(id);
+  };
+
+  return (
+    <nav
+      className={cn(
+        'shrink-0 w-full lg:w-56 lg:sticky lg:top-4 self-start',
+        'flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-visible',
+        'pb-1 lg:pb-0 border-b lg:border-b-0 border-border-subtle',
+      )}
+    >
+      <span className="hidden lg:block text-[10px] font-mono uppercase tracking-wider text-text-muted px-2 pb-1">
+        Contents
+      </span>
+      {sections.map(s => {
+        const active = s.id === activeId;
+        const Icon = s.icon;
+        return (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            onClick={e => go(e, s.id)}
+            className={cn(
+              'flex items-center gap-2 rounded px-2 py-1 text-xs whitespace-nowrap transition-colors border-l-2',
+              active
+                ? 'bg-surface-overlay/60 text-text-primary'
+                : 'border-transparent text-text-muted hover:text-text-secondary hover:bg-surface-overlay/30',
+            )}
+            style={active ? { borderLeftColor: accent ?? 'var(--color-neon)' } : undefined}
+          >
+            <Icon size={13} className="shrink-0 opacity-80" />
+            <span className="truncate">{s.label}</span>
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
+function Section({
+  id,
+  label,
+  icon: Icon,
+  children,
+}: {
+  id: string;
+  label: string;
+  icon: typeof ScrollText;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-4">
+      <h2 className="flex items-center gap-2 text-sm font-mono uppercase tracking-wide text-text-primary mb-2 pb-1 border-b border-border-subtle">
+        <Icon size={15} className="text-neon" />
+        {label}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function RuleList({ rules }: { rules: string[] }) {
+  return (
+    <ol className="space-y-1.5 text-xs text-text-secondary list-decimal pl-5 leading-relaxed marker:text-text-muted">
+      {rules.map((rule, i) => (
+        <li key={i}>{rule}</li>
+      ))}
+    </ol>
+  );
+}
+
+function ChipGroup({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h4 className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">{title}</h4>
+      <Chips items={items} />
+    </div>
+  );
+}
+
+function Chips({ items }: { items: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map(name => (
+        <span
+          key={name}
+          className="inline-flex items-center rounded-md bg-surface-overlay/60 border border-border-subtle px-2 py-0.5 text-[11px] text-text-secondary"
+        >
+          {name}
+        </span>
+      ))}
     </div>
   );
 }

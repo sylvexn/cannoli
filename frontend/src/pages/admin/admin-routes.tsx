@@ -33,7 +33,7 @@ import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
 import { AdminAnnouncements } from './announcements';
-import { AdminRules } from './admin-rules';
+import { AdminRules } from './rules';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
