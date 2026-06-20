@@ -202,6 +202,8 @@ export const MAX_BIO = 280;
 export const MAX_TEAM_BIO = 280;
 export const MAX_AVATAR_BYTES = 512 * 1024;
 export const MAX_BANNER_BYTES = 1024 * 1024;
+/** PS userid length limit (after normalization: lowercase, strip non-alnum). */
+export const MAX_PS_USERID = 18;
 
 /** Profile color swatch presets — lifted from settings.tsx */
 export const PROFILE_COLOR_SWATCHES = [

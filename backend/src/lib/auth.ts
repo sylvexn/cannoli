@@ -55,6 +55,7 @@ export function validateSession(token: string) {
     displayName: user.displayName,
     bio: user.bio,
     avatarPath: user.avatarPath,
+    psUsername: user.psUsername,
   };
 }
 

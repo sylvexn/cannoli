@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { User as UserIcon, Palette, Camera, X } from 'lucide-react';
+import { User as UserIcon, Palette, Camera, X, Swords } from 'lucide-react';
 import { UserAccentScope } from '@/components/user-accent-scope';
 import { getErrorMessage } from '@/lib/errors';
 import { buildUploadUrl } from '@/lib/api';
@@ -15,7 +15,13 @@ import {
   MAX_DISPLAY_NAME,
   MAX_BIO,
   MAX_AVATAR_BYTES,
+  MAX_PS_USERID,
 } from '@/lib/constants';
+
+/** Mirror of the backend toUserid() normalization: lowercase, strip non-alnum. */
+function toUserid(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -238,6 +244,7 @@ export function ProfileTab() {
 
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
+  const [psUsernameRaw, setPsUsernameRaw] = useState(user?.psUsername ?? '');
   const [primary, setPrimary] = useState<string | null>(user?.primaryColor ?? null);
   const [secondary, setSecondary] = useState<string | null>(user?.secondaryColor ?? null);
   const [tertiary, setTertiary] = useState<string | null>(user?.tertiaryColor ?? null);
@@ -246,26 +253,41 @@ export function ProfileTab() {
   useEffect(() => {
     setDisplayName(user?.displayName ?? '');
     setBio(user?.bio ?? '');
+    setPsUsernameRaw(user?.psUsername ?? '');
     setPrimary(user?.primaryColor ?? null);
     setSecondary(user?.secondaryColor ?? null);
     setTertiary(user?.tertiaryColor ?? null);
-  }, [user?.displayName, user?.bio, user?.primaryColor, user?.secondaryColor, user?.tertiaryColor]);
+  }, [user?.displayName, user?.bio, user?.psUsername, user?.primaryColor, user?.secondaryColor, user?.tertiaryColor]);
+
+  // Live-preview the normalized PS userid
+  const psNormalized = toUserid(psUsernameRaw.trim());
+  const psOverLimit = psNormalized.length > MAX_PS_USERID;
 
   const dirty =
     displayName !== (user?.displayName ?? '') ||
     bio !== (user?.bio ?? '') ||
+    psUsernameRaw !== (user?.psUsername ?? '') ||
     primary !== (user?.primaryColor ?? null) ||
     secondary !== (user?.secondaryColor ?? null) ||
     tertiary !== (user?.tertiaryColor ?? null);
 
   async function save() {
+    if (psOverLimit) {
+      toast.error(`Showdown username normalizes to "${psNormalized}" (${psNormalized.length} chars) — PS limit is ${MAX_PS_USERID}`);
+      return;
+    }
     setSaving(true);
     try {
       const tasks: Promise<unknown>[] = [];
-      if (displayName !== (user?.displayName ?? '') || bio !== (user?.bio ?? '')) {
+      const profileChanged =
+        displayName !== (user?.displayName ?? '') ||
+        bio !== (user?.bio ?? '') ||
+        psUsernameRaw !== (user?.psUsername ?? '');
+      if (profileChanged) {
         tasks.push(api.updateMe({
           displayName: displayName.trim() === '' ? null : displayName.trim(),
           bio: bio.trim() === '' ? null : bio,
+          psUsername: psUsernameRaw.trim() === '' ? null : psUsernameRaw.trim(),
         }));
       }
       const colorsChanged =
@@ -367,6 +389,51 @@ export function ProfileTab() {
               placeholder="A short blurb about you, your team, or your battling style."
               className="resize-none"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Showdown username card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Swords size={16} />
+            Showdown Identity
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-text-muted">
+            The name that appears in Pokemon Showdown battles and chat. Leave empty to use your
+            Cannoli username (<code className="font-mono">@{user?.username}</code>) as your PS identity.
+          </p>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label htmlFor="ps-username" className="text-xs text-text-muted">Showdown username</label>
+              <span className={`text-[10px] tabular-nums ${psOverLimit ? 'text-loss' : 'text-text-muted'}`}>
+                {psNormalized.length}/{MAX_PS_USERID}
+              </span>
+            </div>
+            <Input
+              id="ps-username"
+              value={psUsernameRaw}
+              onChange={e => setPsUsernameRaw(e.target.value)}
+              placeholder={user?.username ?? 'e.g. PPG, SSS, EGD'}
+              maxLength={64}
+            />
+            {psUsernameRaw.trim() !== '' && (
+              <p className={`text-[11px] ${psOverLimit ? 'text-loss' : 'text-text-muted'}`}>
+                PS userid:{' '}
+                <code className="font-mono">
+                  {psNormalized.length > 0 ? psNormalized : <span className="italic text-text-muted">empty after normalization</span>}
+                </code>
+                {psOverLimit && ` — too long (max ${MAX_PS_USERID} chars)`}
+              </p>
+            )}
+            {psUsernameRaw.trim() === '' && (user?.psUsername ?? '') !== '' && (
+              <p className="text-[11px] text-text-muted">
+                Clearing will revert your PS identity to <code className="font-mono">{toUserid(user?.username ?? '')}</code>.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

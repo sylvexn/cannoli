@@ -9,7 +9,7 @@
  */
 import { Elysia } from 'elysia';
 import {
-  authenticateUser, signAssertion, toUserid,
+  authenticateUser, signAssertion, toUserid, getPsUserid,
   createPsSession, validatePsSid, destroyPsSession, parsePsSid,
   psSidCookieString, clearPsSidCookieString, getKeyId,
 } from '../lib/ps-login';
@@ -46,21 +46,24 @@ export const psLoginRoutes = new Elysia()
       return psResponse(psJson({ actionsuccess: false, assertion: false }));
     }
 
-    const userid = toUserid(name);
+    // Use the user's chosen psUsername (if set) as their PS identity.
+    // Fall back to their Cannoli username when no PS-specific name is configured.
+    const userid = getPsUserid(user);
     const assertion = signAssertion(challstr, userid);
     if (!assertion) {
       return psResponse(psJson({ actionsuccess: false, assertion: false }));
     }
 
-    // Create PS session + set sid cookie
+    // Create PS session + set sid cookie. Use the effective userid as the
+    // session username so upkeep / getassertion round-trips resolve the same name.
     const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
-    const { sidCookie } = createPsSession(name, ip);
+    const { sidCookie } = createPsSession(userid, ip);
 
     return psResponse(
       psJson({
         actionsuccess: true,
         assertion,
-        curuser: { loggedin: true, username: user.username, userid },
+        curuser: { loggedin: true, username: userid, userid },
       }),
       psSidCookieString(sidCookie),
     );
@@ -186,18 +189,19 @@ function handleActionPhp(params: Record<string, string>, request: Request): Resp
       if (!user) {
         return psResponse(psJson({ actionsuccess: false, assertion: false }));
       }
-      const userid = toUserid(params.name);
+      // Use the user's chosen psUsername (if set) as their PS identity.
+      const userid = getPsUserid(user);
       const assertion = signAssertion(params.challstr, userid);
       if (!assertion) {
         return psResponse(psJson({ actionsuccess: false, assertion: false }));
       }
       const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
-      const { sidCookie } = createPsSession(params.name, ip);
+      const { sidCookie } = createPsSession(userid, ip);
       return psResponse(
         psJson({
           actionsuccess: true,
           assertion,
-          curuser: { loggedin: true, username: user.username, userid },
+          curuser: { loggedin: true, username: userid, userid },
         }),
         psSidCookieString(sidCookie),
       );

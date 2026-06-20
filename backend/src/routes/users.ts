@@ -13,10 +13,11 @@
 import { Elysia } from 'elysia';
 import { unlinkSync } from 'fs';
 import { db, schema } from '../db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, ne } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { writeUpload, uploadsPath } from '../lib/uploads';
 import { isR2Configured, r2Delete } from '../lib/r2';
+import { toUserid } from '../lib/ps-login';
 
 /** Best-effort cleanup of a previously stored asset.
  *  - If the key looks like an R2 public URL (starts with http) and R2 is configured,
@@ -50,6 +51,8 @@ const MAX_BIO = 280;
 const MAX_STATUS = 80;
 const MAX_BANNER_URL = 255;
 const MAX_AVATAR_BYTES = 512 * 1024;
+/** PS userid (post-normalization) length limit. */
+const MAX_PS_USERID = 18;
 
 /** Parse the stored spoiler_revealed_through JSON into a { leagueId: week } map,
  *  tolerating null/garbage (always returns a plain numeric map). */
@@ -112,7 +115,7 @@ export const userRoutes = new Elysia()
   .patch('/api/users/me', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const {
-      displayName, bio, statusMessage, bannerUrl,
+      displayName, bio, statusMessage, bannerUrl, psUsername,
     } = (body ?? {}) as Record<string, unknown>;
 
     const updates: Record<string, unknown> = {};
@@ -154,6 +157,52 @@ export const userRoutes = new Elysia()
         return { error: `bannerUrl must be a string ≤ ${MAX_BANNER_URL} chars` };
       } else {
         updates.bannerUrl = bannerUrl.trim();
+      }
+    }
+    if (psUsername !== undefined) {
+      if (psUsername === null || psUsername === '') {
+        // Clear — fall back to username-derived userid
+        updates.psUsername = null;
+      } else if (typeof psUsername !== 'string') {
+        set.status = 400;
+        return { error: 'psUsername must be a string' };
+      } else {
+        const normalized = toUserid(psUsername.trim());
+        if (normalized.length === 0) {
+          set.status = 400;
+          return { error: 'psUsername must contain at least one alphanumeric character' };
+        }
+        if (normalized.length > MAX_PS_USERID) {
+          set.status = 400;
+          return { error: `psUsername normalizes to "${normalized}" which is ${normalized.length} chars — PS limit is ${MAX_PS_USERID}` };
+        }
+        // Uniqueness check: no other user may have the same effective PS userid.
+        // We compare normalized psUsername against other users' psUsername (if set)
+        // and against their username (the fallback identity) so there are no collisions.
+        const myId = parseInt(user.id);
+        const conflictByPsUsername = db.select({ id: schema.users.id })
+          .from(schema.users)
+          .where(and(ne(schema.users.id, myId), eq(schema.users.psUsername, psUsername.trim())))
+          .get();
+        if (conflictByPsUsername) {
+          set.status = 409;
+          return { error: `That Showdown username is already taken` };
+        }
+        // Also check whether the normalized form collides with any user's
+        // effective PS userid (normalized psUsername if set, else username).
+        const allOthers = db.select({ id: schema.users.id, username: schema.users.username, psUsername: schema.users.psUsername })
+          .from(schema.users)
+          .where(ne(schema.users.id, myId))
+          .all();
+        const collision = allOthers.find(u => {
+          const effective = u.psUsername ? toUserid(u.psUsername) : toUserid(u.username);
+          return effective === normalized;
+        });
+        if (collision) {
+          set.status = 409;
+          return { error: `That Showdown username normalizes to "${normalized}" which conflicts with another user` };
+        }
+        updates.psUsername = psUsername.trim();
       }
     }
     if (Object.keys(updates).length === 0) {

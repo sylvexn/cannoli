@@ -124,6 +124,7 @@ export const authRoutes = new Elysia()
         displayName: user.displayName,
         bio: user.bio,
         avatarPath: user.avatarPath,
+        psUsername: user.psUsername,
       },
     }), { headers });
   })
@@ -254,6 +255,7 @@ export const authRoutes = new Elysia()
         displayName: demoUser.displayName,
         bio: demoUser.bio,
         avatarPath: demoUser.avatarPath,
+        psUsername: demoUser.psUsername,
       },
     }), { headers });
   })

@@ -35,6 +35,12 @@ export const users = sqliteTable('users', {
    *  "Late-Round Loyalist". Displayed under display_name on the profile
    *  page and inside the CoachLink hover popover. */
   title: text('title'),
+  /** User-chosen Showdown username (raw as entered; normalized via toUserid()
+   *  before use as a PS identity). When set, this overrides `username` as the
+   *  PS userid — so battles and the PS chat show the chosen name (e.g. PPG,
+   *  SSS, EGD). NULL falls back to `username`. Max 18 chars after normalization
+   *  (PS userid length limit). */
+  psUsername: text('ps_username'),
 });
 
 // ─── Sessions ───────────────────────────────────────────────────────────────

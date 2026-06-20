@@ -302,6 +302,17 @@ export function toUserid(name: string): string {
 }
 
 /**
+ * Derive the effective PS userid for a Cannoli user row.
+ *
+ * When a user has set a custom `psUsername`, that takes precedence so their
+ * chosen name (e.g. PPG, SSS, EGD) appears in Showdown battles and chat.
+ * Otherwise we fall back to the Cannoli `username` — the existing behaviour.
+ */
+export function getPsUserid(user: { username: string; psUsername?: string | null }): string {
+  return toUserid(user.psUsername ?? user.username);
+}
+
+/**
  * Look up a user and verify password. Returns the user row or null.
  *
  * Mock mode: if the user doesn't exist in Cannoli's `users` table, auto-create

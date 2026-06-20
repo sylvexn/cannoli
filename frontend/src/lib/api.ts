@@ -1215,6 +1215,7 @@ export const api = {
     bio?: string | null;
     statusMessage?: string | null;
     bannerUrl?: string | null;
+    psUsername?: string | null;
   }) => mutateJson<{ success: boolean }>('PATCH', '/api/users/me', data),
 
   // Staff override — edit another user's profile fields. Backend gates on

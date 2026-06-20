@@ -14,6 +14,9 @@ export interface User {
   displayName?: string | null;
   bio?: string | null;
   avatarPath?: string | null;
+  /** User-chosen Showdown username. When set, overrides `username` as the PS
+   *  identity shown in battles and chat. NULL means fall back to username. */
+  psUsername?: string | null;
 }
 
 /** League-level configuration (admin-managed) */
