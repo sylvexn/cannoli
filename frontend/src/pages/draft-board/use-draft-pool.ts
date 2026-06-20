@@ -47,18 +47,24 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
   }, [players]);
 
   // Ownership map ────────────────────────────────────────────────
+  // CURRENT ownership is authoritative from rosters (`players[].roster`), which
+  // is complete and already reflects trades + free agencies. `state.allPicks`
+  // (the draft_picks event log) only ENRICHES draft round/pick detail and covers
+  // a live draft before rosters are populated — it must NOT gate the "owned"
+  // flag, because that table can be partially populated (e.g. live S11 only has
+  // one team's picks recorded), which would render every other team's mons as
+  // free agents. The sim seeds a full draft_picks log, so this only bit live.
   const ownershipMap = useMemo(() => {
     const map = new Map<string, PoolOwnership>();
 
     if (state.view === 'history') {
-      // Show all historical picks
+      // Draft replay: the draft sequence, then trades overlaid.
       for (const pick of state.allPicks) {
         map.set(pick.pokemonName, {
           teamId: pick.playerId,
           acquisition: { method: 'drafted', round: pick.round, pick: pick.pick },
         });
       }
-      // Apply trades on top
       for (const trade of state.trades) {
         const existing = map.get(trade.pokemonName);
         if (existing) {
@@ -68,18 +74,40 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
           });
         }
       }
+      // Union rosters so mons absent from an incomplete draft_picks log still
+      // show as owned by their current team.
+      for (const player of players) {
+        for (const mon of player.roster) {
+          if (!map.has(mon.name)) {
+            map.set(mon.name, { teamId: player.id, acquisition: { method: 'drafted' } });
+          }
+        }
+      }
     } else {
-      // Active view: show picks made so far
+      // Active / current view: rosters are the source of truth for who owns what
+      // right now. Seed every rostered mon, then enrich with draft detail.
+      for (const player of players) {
+        for (const mon of player.roster) {
+          map.set(mon.name, { teamId: player.id, acquisition: { method: 'drafted' } });
+        }
+      }
       for (const pick of state.allPicks) {
-        map.set(pick.pokemonName, {
-          teamId: pick.playerId,
-          acquisition: { method: 'drafted', round: pick.round, pick: pick.pick },
-        });
+        const cur = map.get(pick.pokemonName);
+        if (!cur) {
+          // A live-draft pick not yet reflected on a roster.
+          map.set(pick.pokemonName, {
+            teamId: pick.playerId,
+            acquisition: { method: 'drafted', round: pick.round, pick: pick.pick },
+          });
+        } else if (cur.teamId === pick.playerId) {
+          // Same owner — attach the draft round/pick for the tooltip.
+          cur.acquisition = { method: 'drafted', round: pick.round, pick: pick.pick };
+        }
       }
     }
 
     return map;
-  }, [state.allPicks, state.trades, state.view]);
+  }, [players, state.allPicks, state.trades, state.view]);
 
   // Filtered pool + match reasons ────────────────────────────────
   const { filteredPool, matchReasons } = useMemo(() => {
