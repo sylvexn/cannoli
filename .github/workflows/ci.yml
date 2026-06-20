@@ -53,7 +53,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2   # need HEAD~1 to diff which apps changed
+          fetch-depth: 0   # full history so deploy.sh can diff the TRUE
+                           # github.event.before..sha range. With a shallow
+                           # checkout, a multi-commit push can't resolve
+                           # `before`, falls back to HEAD~1, and strands apps
+                           # whose paths changed in earlier commits (e.g. a
+                           # ps/** change rode the bundle but ps-server was
+                           # never selected).
       - name: Deploy affected apps
         env:
           COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
