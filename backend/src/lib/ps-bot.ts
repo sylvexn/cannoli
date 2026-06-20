@@ -15,6 +15,7 @@ import { validateMatchResult } from './replay-parser';
 import { toCannoliSpeciesName } from './pokedex';
 import { broughtSidesFromResult } from './brought-preview';
 import { toUserid, signAssertion } from './ps-login';
+import { getLeagueCostFormat } from './league-costs';
 import { db, schema } from '../db';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
@@ -1577,6 +1578,10 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           homeTeam.teamAbbrev,
           awayTeam.teamAbbrev,
           homeSide,
+          // Per-league move/ability/item legality is keyed by the league's cost
+          // format ('natdex' | 'natdexplus'). Wired through so the LEAGUE_BANNED_*
+          // maps take effect the moment they're populated (currently empty stubs).
+          getLeagueCostFormat(match.leagueId),
         );
 
         // Partition warnings: blocking ones flip to disputed; warn-only ones are

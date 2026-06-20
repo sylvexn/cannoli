@@ -85,16 +85,19 @@ export interface ValidationWarning {
 // ─── Per-league ban lists (stub) ─────────────────────────────────────────────
 //
 // TODO: fill these maps with actual per-league bans once the data model is
-// ready. Keys are league format identifiers (e.g. "natdex", "natdexplus").
+// ready. Keys are the league's COST FORMAT id ('natdex' = Emerald, 'natdexplus'
+// = Ruby/Sapphire) — the same value ps-bot passes via getLeagueCostFormat().
 // Values are arrays of move / ability / item names (case-insensitive match).
 //
 // Example (do NOT uncomment — leave empty until wired to league config):
-//   LEAGUE_BANNED_MOVES.set('emerald', ['Jet Punch']);
-//   LEAGUE_BANNED_ABILITIES.set('emerald', ['Shadow Tag']);
-//   LEAGUE_BANNED_ITEMS.set('emerald', ["King's Rock"]);
+//   LEAGUE_BANNED_MOVES.set('natdex', ['Jet Punch']);       // banned in Emerald
+//   LEAGUE_BANNED_ABILITIES.set('natdex', ['Shadow Tag']);
+//   LEAGUE_BANNED_ITEMS.set('natdex', ["King's Rock"]);
 //
-// The ban-check loop in validateMatchResult reads these maps; empty = nothing
-// flagged today.
+// NOTE: even once populated, the move-usage check below also needs per-mon move
+// data, which the parser does not yet extract (only K/D/tera). Wiring is ready;
+// move parsing is the remaining piece. The ban-check loop reads these maps;
+// empty = nothing flagged today.
 
 export const LEAGUE_BANNED_MOVES = new Map<string, string[]>();
 export const LEAGUE_BANNED_ABILITIES = new Map<string, string[]>();
