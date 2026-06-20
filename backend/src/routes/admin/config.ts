@@ -4,6 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
 import { requireStaff } from '../../lib/auth-guards';
 import { getFormatCostMap, invalidateCostCache, DEFAULT_COST_FORMAT } from '../../lib/league-costs';
+import { normalizeRules } from '../../lib/rules-defaults';
 
 // Group-level staff guard: every route below is staff-only. The guard runs
 // before each handler and short-circuits non-staff with 401/403, so the check
@@ -29,23 +30,51 @@ export const configRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Rules content (admin write) ────────────────────────────────────
+  // ─── Rules content (admin write, per-league) ────────────────────────
+  // Saves the structured rules document for one league. The body is coerced
+  // through normalizeRules (length-capped, shape-validated) before storage.
 
-  .put('/api/rules', ({ body, user, set }) => {
-    const { rulesText } = body as { rulesText: string | null };
-    if (rulesText !== null && typeof rulesText !== 'string') {
-      set.status = 400; return { error: 'rulesText must be a string or null' };
-    }
-    const value = typeof rulesText === 'string' ? rulesText.slice(0, 32_000) : null;
-    db.update(schema.siteSettings).set({ rulesText: value }).where(eq(schema.siteSettings.id, 1)).run();
-    db.insert(schema.activityLog).values({
-      type: 'rules_updated',
-      category: 'config',
-      actor: user!.username,
-      leagueId: null,
-      description: value === null ? 'Cleared custom rules text' : `Updated rules text (${value.length} chars)`,
-      metadata: null,
-    }).run();
+  .put('/api/leagues/:leagueId/rules', ({ params, body, user, set }) => {
+    const league = db.select({ id: schema.leagues.id })
+      .from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const content = normalizeRules((body as { content?: unknown })?.content);
+    const json = JSON.stringify(content);
+    const now = new Date().toISOString();
+
+    tx(() => {
+      db.insert(schema.leagueRules)
+        .values({ leagueId: params.leagueId, content: json, updatedAt: now, updatedBy: user!.username })
+        .onConflictDoUpdate({
+          target: schema.leagueRules.leagueId,
+          set: { content: json, updatedAt: now, updatedBy: user!.username },
+        }).run();
+      db.insert(schema.activityLog).values({
+        type: 'rules_updated',
+        category: 'config',
+        actor: user!.username,
+        leagueId: params.leagueId,
+        description: `Updated rules for ${params.leagueId}`,
+        metadata: null,
+      }).run();
+    });
+    return { success: true, content };
+  })
+
+  // Reset a league back to its cost-format default by dropping the override.
+  .delete('/api/leagues/:leagueId/rules', ({ params, user }) => {
+    tx(() => {
+      db.delete(schema.leagueRules).where(eq(schema.leagueRules.leagueId, params.leagueId)).run();
+      db.insert(schema.activityLog).values({
+        type: 'rules_reset',
+        category: 'config',
+        actor: user!.username,
+        leagueId: params.leagueId,
+        description: `Reset rules for ${params.leagueId} to format default`,
+        metadata: null,
+      }).run();
+    });
     return { success: true };
   })
 

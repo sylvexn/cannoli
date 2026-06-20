@@ -481,9 +481,21 @@ export const siteSettings = sqliteTable('site_settings', {
    *  up costs 1 slot; drops are free). Enforced per-team against the fa
    *  transactions table. Default 6. */
   faPickupsPerSeason: integer('fa_pickups_per_season').notNull().default(6),
-  /** Admin-authored rules prose rendered on the public /rules page.
-   *  NULL = no custom text; frontend falls back to hard-coded defaults. */
+  /** DEPRECATED — superseded by the per-league `league_rules` table.
+   *  Kept only so the column isn't dropped from existing DBs. */
   rulesText: text('rules_text'),
+});
+
+// ─── Per-League Rules ───────────────────────────────────────────────────────
+
+/** Admin-authored, structured rules document for a single league. One row per
+ *  league; absence means "use the cost-format default" (see lib/rules-defaults).
+ *  `content` is a JSON-serialized RulesContent. */
+export const leagueRules = sqliteTable('league_rules', {
+  leagueId: text('league_id').primaryKey().references(() => leagues.id),
+  content: text('content').notNull(),
+  updatedAt: text('updated_at'),
+  updatedBy: text('updated_by'),
 });
 
 // ─── Draft State (tracks active/completed drafts per league) ────────────────

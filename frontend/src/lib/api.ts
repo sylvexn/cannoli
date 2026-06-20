@@ -4,6 +4,7 @@
  */
 
 import type { ApiError } from './errors';
+import type { RulesContent, LeagueRulesResponse } from './rules-types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -1783,10 +1784,13 @@ export const api = {
   simResetMatch: (matchId: string) =>
     postJson<{ ok: boolean; matchId: string }>(`/api/admin/sim/reset-match/${matchId}`),
 
-  // ─── Rules content ───────────────────────────────────────────────────
-  getRules: () => fetchJson<{ rulesText: string | null }>('/api/rules'),
-  saveRules: (rulesText: string | null) =>
-    putJson<{ success: boolean }>('/api/rules', { rulesText }),
+  // ─── Rules content (per-league) ──────────────────────────────────────
+  getLeagueRules: (leagueId: string) =>
+    fetchJson<LeagueRulesResponse>(`/api/leagues/${leagueId}/rules`),
+  saveLeagueRules: (leagueId: string, content: RulesContent) =>
+    putJson<{ success: boolean; content: RulesContent }>(`/api/leagues/${leagueId}/rules`, { content }),
+  resetLeagueRules: (leagueId: string) =>
+    deleteJson<{ success: boolean }>(`/api/leagues/${leagueId}/rules`),
 };
 
 // ─── Simulator types ─────────────────────────────────────────────────────────

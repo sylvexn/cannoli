@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, desc, sql, and, isNull, inArray } from 'drizzle-orm';
+import { defaultRulesFor, normalizeRules } from '../../lib/rules-defaults';
 import { standingsRoutes } from './standings';
 import { teamRoutes } from './teams';
 import { pokemonRoutes } from './pokemon';
@@ -184,12 +185,33 @@ export const leagueRoutes = new Elysia()
     };
   })
 
-  // ─── Rules content (public) ─────────────────────────────────────────
-  // Returns the admin-authored rules text. NULL when no custom content has
-  // been saved yet — the frontend falls back to its hard-coded defaults.
-  .get('/api/rules', () => {
-    const row = db.select({ rulesText: schema.siteSettings.rulesText }).from(schema.siteSettings).get();
-    return { rulesText: row?.rulesText ?? null };
+  // ─── Rules content (public, per-league) ─────────────────────────────
+  // Returns the resolved structured rules for one league: the admin-saved
+  // document if present, otherwise the cost-format default. `isCustom` tells
+  // the admin UI whether the league has been overridden. `defaults` is always
+  // the pristine format default (so the editor can offer a one-click reset).
+  .get('/api/leagues/:leagueId/rules', ({ params, set }) => {
+    const league = db.select({ costFormat: schema.leagues.costFormat })
+      .from(schema.leagues)
+      .where(eq(schema.leagues.id, params.leagueId))
+      .get();
+    if (!league) { set.status = 404; return { error: 'League not found' }; }
+
+    const defaults = defaultRulesFor(league.costFormat);
+    const row = db.select({ content: schema.leagueRules.content, updatedAt: schema.leagueRules.updatedAt })
+      .from(schema.leagueRules)
+      .where(eq(schema.leagueRules.leagueId, params.leagueId))
+      .get();
+
+    let content = defaults;
+    let isCustom = false;
+    if (row?.content) {
+      try {
+        content = normalizeRules(JSON.parse(row.content));
+        isCustom = true;
+      } catch { /* corrupt blob — fall back to defaults */ }
+    }
+    return { leagueId: params.leagueId, content, isCustom, updatedAt: row?.updatedAt ?? null, defaults };
   })
 
   .use(standingsRoutes)
