@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-8-2026-06",
+    "date": "2026-06-20T19:30:00Z",
+    "category": "feature",
+    "title": "Cannoli v1.0.8 — Per-league rules & redesigned Rules page",
+    "body": "- Rules are now per-league — each league has its own draft rules, battle rules, clauses, bans, and tera-captain bans, matching that league's format (feature)\n- Redesigned Rules page — a cleaner document layout with a contents sidebar to jump between sections, plus a league switcher to view any league's rules (feature)\n- Admins can edit every part of a league's rules from Admin → Rules: notes, draft/battle rules, clauses, banned abilities/items/moves, and tera-captain bans, with reset-to-default and a per-league picker (feature)"
+  },
+  {
     "id": "v1-0-7-2026-06",
     "date": "2026-06-20T17:00:00Z",
     "category": "improvement",
