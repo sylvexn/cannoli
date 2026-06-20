@@ -1,5 +1,12 @@
 [
   {
+    "id": "v1-0-7-2026-06",
+    "date": "2026-06-20T17:00:00Z",
+    "category": "improvement",
+    "title": "Cannoli v1.0.7 — Showdown names, type-chart toggle & draft-board fixes",
+    "body": "- Set a custom Showdown username in Settings — use a team acronym (PPG, SSS, EGD) instead of your account name, and it shows in battles and chat (feature)\n- Matchup Center type chart adds an Offensive/Defensive toggle — switch between \"what's super-effective against this Pokemon\" and \"what this Pokemon resists\" (feature)\n- Draft board no longer shows already-drafted Pokemon as free agents after switching leagues — ownership now resolves correctly for every league (fix)\n- Attaching a battle to a match lets you manually pick which Showdown side maps to which team when auto-detection guesses wrong — no more results recorded against the wrong rosters (fix)\n- Showdown battles are no longer blocked by moves that are legal in your league's format (like Jet Punch in Ruby/Sapphire) — legality is checked after the match instead (fix)\n- Pokemon base-stat bars now run green for high and red for low, matching the rest of the app (fix)\n- The type tab on draft-board Pokemon moved to the top of the card so it no longer overlaps the name on hover (improvement)\n- 4x weaknesses and 1/4 resistances stand out more on the team page (improvement)\n- Tier numbers in the colored diamonds are easier to read (improvement)"
+  },
+  {
     "id": "v1-0-6-2026-06",
     "date": "2026-06-19T15:00:00Z",
     "category": "fix",
