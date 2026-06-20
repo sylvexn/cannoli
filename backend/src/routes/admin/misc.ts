@@ -181,15 +181,28 @@ export const miscRoutes = new Elysia()
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { roomId, replay } = (body ?? {}) as { roomId?: string; replay?: string };
+    const { roomId, replay, sideOverride } = (body ?? {}) as {
+      roomId?: string;
+      replay?: string;
+      /**
+       * Admin-supplied side assignment when auto-detection is wrong or uncertain.
+       * 'p1IsHome' — the p1 player is the Cannoli home team.
+       * 'p2IsHome' — the p2 player is the Cannoli home team.
+       * Omit / null to use auto-detection.
+       */
+      sideOverride?: 'p1IsHome' | 'p2IsHome' | null;
+    };
+
+    const override: 'p1IsHome' | 'p2IsHome' | null =
+      sideOverride === 'p1IsHome' || sideOverride === 'p2IsHome' ? sideOverride : null;
 
     let result;
     let source: string;
     if (replay && replay.trim()) {
-      result = importBattleFromReplay(params.matchId, replay);
+      result = importBattleFromReplay(params.matchId, replay, override);
       source = 'replay';
     } else if (roomId && roomId.trim()) {
-      result = importBattleForMatch(params.matchId, roomId);
+      result = importBattleForMatch(params.matchId, roomId, override);
       source = 'disk';
     } else {
       set.status = 422;
@@ -208,7 +221,7 @@ export const miscRoutes = new Elysia()
       category: 'match',
       actor: user.username,
       leagueId: match?.leagueId ?? null,
-      description: `Imported battle (${source}) into ${params.matchId}: ${result.homeScore}-${result.awayScore} (${result.pokemonCount} Pokemon, status ${result.status})`,
+      description: `Imported battle (${source}) into ${params.matchId}: ${result.homeScore}-${result.awayScore} (${result.pokemonCount} Pokemon, status ${result.status}${result.sidesUncertain ? ' — sides uncertain' : ''})`,
       metadata: JSON.stringify({
         matchId: params.matchId,
         source,
@@ -218,6 +231,8 @@ export const miscRoutes = new Elysia()
         winnerTeamId: result.winnerTeamId,
         pokemonCount: result.pokemonCount,
         status: result.status,
+        sidesUncertain: result.sidesUncertain,
+        sideOverride: override,
         by: user.username,
       }),
     }).run();
@@ -228,6 +243,10 @@ export const miscRoutes = new Elysia()
       awayScore: result.awayScore,
       winnerTeamId: result.winnerTeamId,
       pokemonCount: result.pokemonCount,
+      /** True when orientation could not be auto-detected — admin should confirm or re-import with sideOverride. */
+      sidesUncertain: result.sidesUncertain,
+      detectedP1: result.detectedP1,
+      detectedP2: result.detectedP2,
     };
   })
 

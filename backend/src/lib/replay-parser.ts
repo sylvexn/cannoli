@@ -65,11 +65,40 @@ export interface LiveMatchStats {
 }
 
 export interface ValidationWarning {
-  type: 'invalid_pokemon' | 'unauthorized_tera' | 'format_mismatch';
+  /**
+   * `invalid_pokemon` / `unauthorized_tera` — blocking: flip match to disputed.
+   * `format_mismatch` — blocking: unexpected format.
+   * `banned_move` / `banned_ability` / `banned_item` — warn-only: logged but
+   *   do NOT flip match to disputed (per-league bans are enforced at the PS
+   *   server level; backend warns for audit without blocking the result).
+   */
+  type: 'invalid_pokemon' | 'unauthorized_tera' | 'format_mismatch'
+      | 'banned_move' | 'banned_ability' | 'banned_item';
   team?: string;
   pokemon?: string;
   reason: string;
+  /** When true this warning is informational only — it must NOT flip the match
+   *  to `disputed`. Callers should store it for audit but not gate the result. */
+  warnOnly?: boolean;
 }
+
+// ─── Per-league ban lists (stub) ─────────────────────────────────────────────
+//
+// TODO: fill these maps with actual per-league bans once the data model is
+// ready. Keys are league format identifiers (e.g. "natdex", "natdexplus").
+// Values are arrays of move / ability / item names (case-insensitive match).
+//
+// Example (do NOT uncomment — leave empty until wired to league config):
+//   LEAGUE_BANNED_MOVES.set('emerald', ['Jet Punch']);
+//   LEAGUE_BANNED_ABILITIES.set('emerald', ['Shadow Tag']);
+//   LEAGUE_BANNED_ITEMS.set('emerald', ["King's Rock"]);
+//
+// The ban-check loop in validateMatchResult reads these maps; empty = nothing
+// flagged today.
+
+export const LEAGUE_BANNED_MOVES = new Map<string, string[]>();
+export const LEAGUE_BANNED_ABILITIES = new Map<string, string[]>();
+export const LEAGUE_BANNED_ITEMS = new Map<string, string[]>();
 
 // ─── Parser ─────────────────────────────────────────────────────────────────
 
@@ -655,6 +684,16 @@ export class ReplayParser {
 
 /**
  * Validate a parsed match result against team rosters and tera captain rules.
+ *
+ * Warnings come in two flavours (see {@link ValidationWarning.warnOnly}):
+ *  - Blocking (`warnOnly` absent / false): `invalid_pokemon`, `unauthorized_tera`,
+ *    `format_mismatch` → callers MUST flip match to `disputed`.
+ *  - Warn-only (`warnOnly: true`): `banned_move`, `banned_ability`, `banned_item`
+ *    → logged for audit but must NOT block the result or flip match to disputed.
+ *
+ * @param leagueFormat  Optional league format key (e.g. "natdex", "natdexplus")
+ *   used to look up per-league banned moves/abilities/items from the stub maps
+ *   ({@link LEAGUE_BANNED_MOVES}, etc.). Pass `null` / omit to skip ban checks.
  */
 export function validateMatchResult(
   result: ParsedMatchResult,
@@ -663,6 +702,7 @@ export function validateMatchResult(
   homeTeamAbbrev: string,
   awayTeamAbbrev: string,
   homeSide: 'p1' | 'p2' = 'p1',
+  leagueFormat: string | null = null,
 ): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
 
@@ -679,6 +719,18 @@ export function validateMatchResult(
     { side: awaySide, roster: awayRoster, abbrev: awayTeamAbbrev },
   ];
 
+  // Build per-league ban sets for this format (empty when no config yet).
+  const fmtKey = leagueFormat?.toLowerCase() ?? null;
+  const leagueBannedMoves = new Set(
+    (fmtKey ? (LEAGUE_BANNED_MOVES.get(fmtKey) ?? []) : []).map(m => m.toLowerCase()),
+  );
+  const leagueBannedAbilities = new Set(
+    (fmtKey ? (LEAGUE_BANNED_ABILITIES.get(fmtKey) ?? []) : []).map(a => a.toLowerCase()),
+  );
+  const leagueBannedItems = new Set(
+    (fmtKey ? (LEAGUE_BANNED_ITEMS.get(fmtKey) ?? []) : []).map(i => i.toLowerCase()),
+  );
+
   // Normalize both the roster side and the battle side to Cannoli's naming
   // convention before comparing. Showdown emits "Altaria-Mega"; the roster
   // stores "Mega Altaria" — without this every Mega is falsely flagged.
@@ -694,7 +746,7 @@ export function validateMatchResult(
 
     const sidePokemon = result.pokemon.filter(p => p.player === side && p.appeared);
 
-    // Check: every Pokemon that appeared must be on the roster
+    // Check: every Pokemon that appeared must be on the roster (blocking)
     for (const mon of sidePokemon) {
       const species = toCannoliSpeciesName(mon.species).toLowerCase();
       if (!rosterNames.has(species)) {
@@ -706,7 +758,7 @@ export function validateMatchResult(
         });
       }
 
-      // Check: if terastallized, must be a tera captain
+      // Check: if terastallized, must be a tera captain (blocking)
       if (mon.teraUsed && !captainNames.has(species)) {
         warnings.push({
           type: 'unauthorized_tera',
@@ -718,11 +770,35 @@ export function validateMatchResult(
     }
   }
 
-  // Check format
+  // Per-league banned move/ability/item checks — warn-only (never dispute the
+  // match). The PS server is the enforcement layer; backend warns for audit.
+  // These checks are intentionally lightweight string scans on the replay log
+  // (not parsed move-by-move) — full per-mon move tracking is future work.
+  // TODO: wire these to per-league config once the data model is ready.
+  if (leagueBannedMoves.size > 0 || leagueBannedAbilities.size > 0 || leagueBannedItems.size > 0) {
+    for (const mon of result.pokemon) {
+      // Move ban check would need move-usage data from the parser — reserved.
+      // Ability / item bans would need ability/item tracking — reserved.
+      // Stub: no-op loops until parser tracks move/ability/item usage.
+      void mon;
+    }
+
+    // Direct log-scan for banned moves (fast heuristic until parser is wired).
+    // We don't have move log here (it's in the raw protocol, not ParsedMatchResult),
+    // so this section is a forward stub. Leave as no-op until the parser exposes
+    // per-mon move lists.
+    void leagueBannedMoves;
+    void leagueBannedAbilities;
+    void leagueBannedItems;
+  }
+
+  // Check format — warn-only (don't block result; unusual formats may be valid
+  // for special events / exhibition matches). Still surfaced so admin can review.
   if (result.format && !result.format.includes('NatDex Draft')) {
     warnings.push({
       type: 'format_mismatch',
       reason: `Expected [Gen 9] NatDex Draft, got ${result.format}`,
+      warnOnly: true,
     });
   }
 

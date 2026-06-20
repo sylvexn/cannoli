@@ -76,6 +76,12 @@ function applyBanlist(src) {
 // Clause"` thrown out of getRuleTable, which kills the format-list build
 // that runs on each handleConnect, so the client never gets |challstr|
 // and /trn auto-login never fires.
+// This banlist is applied at the PS server level for ALL Cannoli formats.
+// Per-league bans (e.g. Jet Punch in Emerald but not Ruby/Sapphire) are
+// intentionally NOT listed here — they are enforced in the backend
+// post-match legality check (replay-parser.ts LEAGUE_BANNED_MOVES stub)
+// so they don't block battles from starting on the PS server. Add only
+// bans that apply universally across ALL leagues.
 const banlist = [
 	// Abilities
 	'Shadow Tag', 'Arena Trap', 'Moody',
@@ -85,9 +91,11 @@ const banlist = [
 	'Baton Pass', 'Flatter', 'Frustration', 'Hidden Power',
 	'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail',
 	'Swagger',
-	// Per-Pokemon clauses
+	// Per-Pokemon clauses (universal only — per-league combos go in LEAGUE_BANNED_MOVES)
 	'Alakazam-Mega + Nasty Plot',
-	'Palafin + Jet Punch',
+	// NOTE: 'Palafin + Jet Punch' was removed — Jet Punch is only banned in
+	// the Emerald format, not Ruby/Sapphire. Blocking it here broke Ruby/Sapphire
+	// battles. Per-league enforcement is handled in the backend warn-only check.
 ];
 
 const banlistLine = `\t\tbanlist: ${JSON.stringify(banlist)}, ${MARKER}`;

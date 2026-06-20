@@ -17,7 +17,7 @@ import { NumberInput } from '@/components/ui/number-input';
 import {
   AlertTriangle, Trash2, MoreVertical,
   Eraser, ArrowRightLeft, Gavel, Swords,
-  Upload, FileText, RefreshCw,
+  Upload, FileText, RefreshCw, ArrowLeftRight,
 } from 'lucide-react';
 import type { TeamNameResolver } from '@/lib/use-team-names';
 import { getErrorMessage } from '@/lib/errors';
@@ -59,6 +59,14 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
   const [importRoom, setImportRoom] = useState('');
   const [importReplay, setImportReplay] = useState('');
   const [importFileName, setImportFileName] = useState('');
+  // Side-assignment override: null = auto, 'p1IsHome' / 'p2IsHome' = manual
+  const [sideOverride, setSideOverride] = useState<'p1IsHome' | 'p2IsHome' | null>(null);
+  // After import: if sidesUncertain, show a side-confirm dialog
+  const [sideConfirmOpen, setSideConfirmOpen] = useState(false);
+  const [detectedP1, setDetectedP1] = useState('');
+  const [detectedP2, setDetectedP2] = useState('');
+  // Saved payload for re-import after side confirmation
+  const [pendingImportPayload, setPendingImportPayload] = useState<{ replay?: string; roomId?: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +80,7 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
     setImportRoom('');
     setImportReplay('');
     setImportFileName('');
+    setSideOverride(null);
     setImportOpen(true);
   }
 
@@ -147,7 +156,7 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
     }
   }
 
-  async function executeImport() {
+  async function executeImport(forcedSideOverride?: 'p1IsHome' | 'p2IsHome') {
     const replay = importReplay.trim();
     const roomId = normalizeRoomId(importRoom);
     if (!replay && !roomId) {
@@ -168,13 +177,31 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
           return;
         }
       }
-      const res = await api.importMatchBattle(
-        match.id,
-        replay ? { replay } : { roomId },
-      );
-      toast.success(`Recorded ${res.homeScore}–${res.awayScore}, ${res.pokemonCount} Pokemon`);
-      setImportOpen(false);
-      onChanged();
+
+      const effectiveSideOverride = forcedSideOverride ?? sideOverride ?? undefined;
+      const payload = replay ? { replay } : { roomId };
+      const res = await api.importMatchBattle(match.id, {
+        ...payload,
+        ...(effectiveSideOverride ? { sideOverride: effectiveSideOverride } : {}),
+      });
+
+      // When sides could not be auto-detected, surface a confirmation dialog
+      // so the admin can verify or flip the assignment before moving on.
+      if (res.sidesUncertain && !forcedSideOverride) {
+        setDetectedP1(res.detectedP1 || 'p1');
+        setDetectedP2(res.detectedP2 || 'p2');
+        // Save payload so the re-import after confirmation uses the same source.
+        setPendingImportPayload(payload);
+        setSideConfirmOpen(true);
+        // Don't close import dialog or call onChanged yet — wait for confirmation.
+        // The match IS already recorded (p1=home as best-guess); confirmation
+        // will re-import with the correct side if the admin flips it.
+        toast.warning('Sides uncertain — please confirm team assignment below');
+      } else {
+        toast.success(`Recorded ${res.homeScore}–${res.awayScore}, ${res.pokemonCount} Pokemon`);
+        setImportOpen(false);
+        onChanged();
+      }
     } catch (err: unknown) {
       // The void already cleared the result, so the match is back to scheduled —
       // make clear the admin can just retry the attach.
@@ -187,6 +214,21 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /** Called when admin confirms or flips side assignment after an uncertain import. */
+  async function confirmSides(override: 'p1IsHome' | 'p2IsHome') {
+    if (!pendingImportPayload) return;
+    setSideConfirmOpen(false);
+    // Restore the import payload into state so executeImport can read it.
+    if (pendingImportPayload.replay) setImportReplay(pendingImportPayload.replay);
+    if (pendingImportPayload.roomId) setImportRoom(pendingImportPayload.roomId);
+    // Re-run with the chosen override. The match was already voided + imported
+    // (with wrong sides) — void again + re-import with correct sides.
+    await executeImport(override);
+    setPendingImportPayload(null);
+    setImportOpen(false);
+    onChanged();
   }
 
   const importDisabled = submitting || (!importReplay.trim() && !importRoom.trim());
@@ -399,18 +441,63 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
             </div>
             <details className="group">
               <summary className="text-[10px] font-mono uppercase tracking-wider text-text-muted cursor-pointer select-none hover:text-text-primary">
-                Advanced: room ID (legacy)
+                Advanced: room ID / side assignment
               </summary>
-              <div className="mt-2 space-y-1">
-                <Input
-                  value={importRoom}
-                  onChange={e => setImportRoom(e.target.value)}
-                  placeholder="battle-gen9natdexdraft-12345"
-                  className="h-8 text-xs bg-surface-overlay font-mono"
-                />
-                <p className="text-[10px] text-text-muted">
-                  Reads a server-side saved replay by room ID. Only works for battles still on disk.
-                </p>
+              <div className="mt-2 space-y-3">
+                <div className="space-y-1">
+                  <Input
+                    value={importRoom}
+                    onChange={e => setImportRoom(e.target.value)}
+                    placeholder="battle-gen9natdexdraft-12345"
+                    className="h-8 text-xs bg-surface-overlay font-mono"
+                  />
+                  <p className="text-[10px] text-text-muted">
+                    Reads a server-side saved replay by room ID. Only works for battles still on disk.
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
+                    Side assignment (override if teams are reversed)
+                  </label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSideOverride(null)}
+                      className={`flex-1 h-7 text-[10px] rounded border transition-colors ${
+                        sideOverride === null
+                          ? 'border-neon text-neon bg-neon/10'
+                          : 'border-border text-text-muted hover:border-text-muted'
+                      }`}
+                    >
+                      Auto-detect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSideOverride('p1IsHome')}
+                      className={`flex-1 h-7 text-[10px] rounded border transition-colors ${
+                        sideOverride === 'p1IsHome'
+                          ? 'border-neon text-neon bg-neon/10'
+                          : 'border-border text-text-muted hover:border-text-muted'
+                      }`}
+                    >
+                      p1 = {homeName}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSideOverride('p2IsHome')}
+                      className={`flex-1 h-7 text-[10px] rounded border transition-colors ${
+                        sideOverride === 'p2IsHome'
+                          ? 'border-neon text-neon bg-neon/10'
+                          : 'border-border text-text-muted hover:border-text-muted'
+                      }`}
+                    >
+                      p2 = {homeName}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-text-muted">
+                    Use when all Pokemon flag "Not on roster" — the sides are probably reversed.
+                  </p>
+                </div>
               </div>
             </details>
           </div>
@@ -421,11 +508,59 @@ export function MatchActionsDropdown({ match, teamNames, onChanged, onForceResul
               className={hasResult
                 ? 'bg-draw text-surface-base hover:bg-draw/90'
                 : 'bg-neon text-surface-base hover:bg-neon/90'}
-              onClick={executeImport}
+              onClick={() => executeImport()}
             >
               {submitting
                 ? (hasResult ? 'Replacing...' : 'Attaching...')
                 : (hasResult ? 'Void & re-import' : 'Attach as this match')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Side-Assignment Confirmation — shown when auto-detection is uncertain */}
+      <Dialog open={sideConfirmOpen} onOpenChange={setSideConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowLeftRight size={16} className="text-draw" />
+              Confirm Side Assignment
+            </DialogTitle>
+            <DialogDescription>
+              Auto-detection could not determine which side is {homeName} (home). Verify or flip below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded border border-border p-2 bg-surface-overlay space-y-0.5">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">p1</div>
+                <div className="font-medium text-text-primary truncate">{detectedP1 || '—'}</div>
+              </div>
+              <div className="rounded border border-border p-2 bg-surface-overlay space-y-0.5">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted">p2</div>
+                <div className="font-medium text-text-primary truncate">{detectedP2 || '—'}</div>
+              </div>
+            </div>
+            <p className="text-[10px] text-text-muted">
+              Choose which PS side maps to <strong>{homeName}</strong>. The match will be re-imported with that assignment.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 text-xs"
+              disabled={submitting}
+              onClick={() => confirmSides('p1IsHome')}
+            >
+              p1 is {homeName}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 text-xs"
+              disabled={submitting}
+              onClick={() => confirmSides('p2IsHome')}
+            >
+              p2 is {homeName}
             </Button>
           </DialogFooter>
         </DialogContent>

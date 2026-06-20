@@ -1322,8 +1322,25 @@ export const api = {
   }) =>
     postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
 
-  importMatchBattle: (matchId: string, data: { roomId?: string; replay?: string }) =>
-    postJson<{ success: boolean; homeScore: number; awayScore: number; winnerTeamId: string | null; pokemonCount: number }>(`/api/admin/matches/${matchId}/import-battle`, data),
+  importMatchBattle: (matchId: string, data: {
+    roomId?: string;
+    replay?: string;
+    /** Override when auto-detection is wrong. 'p1IsHome' = p1 is Cannoli home team; 'p2IsHome' = p2. */
+    sideOverride?: 'p1IsHome' | 'p2IsHome';
+  }) =>
+    postJson<{
+      success: boolean;
+      homeScore: number;
+      awayScore: number;
+      winnerTeamId: string | null;
+      pokemonCount: number;
+      /** True when orientation could not be auto-detected. Admin should confirm sides. */
+      sidesUncertain: boolean;
+      /** PS username of p1 side (from replay |player| lines). */
+      detectedP1: string;
+      /** PS username of p2 side (from replay |player| lines). */
+      detectedP2: string;
+    }>(`/api/admin/matches/${matchId}/import-battle`, data),
 
   // Team logo
   uploadTeamLogo: async (teamId: string, file: File) => {

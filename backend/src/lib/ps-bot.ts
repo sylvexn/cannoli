@@ -831,9 +831,31 @@ export function normalizeRoomId(raw: string): string {
 /**
  * Result of an admin "import battle" attempt. `ok: false` carries an HTTP
  * status the route maps onto `set.status`.
+ *
+ * On `ok: true`:
+ *  - `sidesUncertain` — auto-detection could not confidently resolve which PS
+ *    side is the Cannoli home team (userid not in useridToTeam). The UI should
+ *    surface a side-assignment picker pre-filled with `detectedP1` / `detectedP2`
+ *    so the admin can confirm or flip before the result is finalized. When a
+ *    `sideOverride` was passed the resolution is authoritative and this is false.
+ *  - `detectedP1` / `detectedP2` — the Showdown usernames parsed from the replay
+ *    `|player|` lines, exposed so the UI can label the override picker.
  */
 export type ImportBattleResult =
-  | { ok: true; homeScore: number; awayScore: number; winnerTeamId: string | null; status: string; pokemonCount: number }
+  | {
+      ok: true;
+      homeScore: number;
+      awayScore: number;
+      winnerTeamId: string | null;
+      status: string;
+      pokemonCount: number;
+      /** True when the home/away orientation was guessed (userid not found). */
+      sidesUncertain: boolean;
+      /** PS username for p1 side, as parsed from the replay. */
+      detectedP1: string;
+      /** PS username for p2 side, as parsed from the replay. */
+      detectedP2: string;
+    }
   | { ok: false; error: string; status: number };
 
 /**
@@ -846,7 +868,18 @@ export type ImportBattleResult =
  * messy) roomId, and returns a structured result for the admin route. Will not
  * overwrite an already-finalized match (v1 — use force-result for that).
  */
-export function importBattleForMatch(matchId: string, roomId: string): ImportBattleResult {
+/**
+ * @param sideOverride  Admin-supplied mapping override when auto-detection is
+ *   wrong or uncertain. `'p1IsHome'` means p1 is the Cannoli home team;
+ *   `'p2IsHome'` means p2 is. `null` (default) uses auto-detection via
+ *   `useridToTeam`. Only used when provided — it takes precedence over the
+ *   auto-detected `battle.homeSide`.
+ */
+export function importBattleForMatch(
+  matchId: string,
+  roomId: string,
+  sideOverride: 'p1IsHome' | 'p2IsHome' | null = null,
+): ImportBattleResult {
   const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
   if (!match) return { ok: false, error: 'Match not found', status: 404 };
 
@@ -872,7 +905,23 @@ export function importBattleForMatch(matchId: string, roomId: string): ImportBat
     };
   }
 
-  console.log(`[PS Bot] Importing battle ${normalizedRoomId} into match ${matchId}`);
+  // Apply side override when supplied — this is authoritative and overrides the
+  // auto-detected battle.homeSide from useridToTeam. Lets admins correct a
+  // reversed orientation without voiding and re-importing.
+  const sidesUncertain = !sideOverride && battle.homeSide === null;
+  if (sideOverride) {
+    battle.homeSide = sideOverride === 'p1IsHome' ? 'p1' : 'p2';
+  } else if (battle.homeSide === null) {
+    // Auto-detection failed — fall back to p1=home as a best guess. The
+    // sidesUncertain flag is returned so the UI can ask the admin to confirm.
+    battle.homeSide = 'p1';
+  }
+
+  // Capture detected player names before handleMatchEnd mutates/cleans up.
+  const detectedP1 = battle.p1;
+  const detectedP2 = battle.p2;
+
+  console.log(`[PS Bot] Importing battle ${normalizedRoomId} into match ${matchId}${sidesUncertain ? ' (sides uncertain — defaulting p1=home)' : ''}`);
   // handleMatchEnd does all recording; the match isn't completed so its
   // no-clobber guard passes.
   handleMatchEnd(battle, winnerUsername);
@@ -891,6 +940,9 @@ export function importBattleForMatch(matchId: string, roomId: string): ImportBat
     winnerTeamId: updated?.winnerTeamId ?? null,
     status: updated?.status ?? 'completed',
     pokemonCount,
+    sidesUncertain,
+    detectedP1,
+    detectedP2,
   };
 }
 
@@ -960,8 +1012,17 @@ export function extractReplayLogLines(replay: string): string[] | null {
  * than from a disk autosave. Mirrors importBattleForMatch but sources its
  * lines via extractReplayLogLines. Used for league battles that never touched
  * this backend's disk.
+ *
+ * @param sideOverride  Admin-supplied mapping when auto-detection is wrong or
+ *   uncertain. `'p1IsHome'` = p1 is home; `'p2IsHome'` = p2 is home.
+ *   `null` = auto-detect. When uncertain, falls back to p1=home and sets
+ *   `sidesUncertain: true` on the result so the UI can ask the admin to confirm.
  */
-export function importBattleFromReplay(matchId: string, replay: string): ImportBattleResult {
+export function importBattleFromReplay(
+  matchId: string,
+  replay: string,
+  sideOverride: 'p1IsHome' | 'p2IsHome' | null = null,
+): ImportBattleResult {
   const match = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
   if (!match) return { ok: false, error: 'Match not found', status: 404 };
 
@@ -985,7 +1046,19 @@ export function importBattleFromReplay(matchId: string, replay: string): ImportB
     };
   }
 
-  console.log(`[PS Bot] Importing replay into match ${matchId} (${lines.length} lines)`);
+  // Apply side override when supplied — authoritative, overrides auto-detected homeSide.
+  const sidesUncertain = !sideOverride && battle.homeSide === null;
+  if (sideOverride) {
+    battle.homeSide = sideOverride === 'p1IsHome' ? 'p1' : 'p2';
+  } else if (battle.homeSide === null) {
+    // Auto-detection failed — fall back to p1=home as a best guess.
+    battle.homeSide = 'p1';
+  }
+
+  const detectedP1 = battle.p1;
+  const detectedP2 = battle.p2;
+
+  console.log(`[PS Bot] Importing replay into match ${matchId} (${lines.length} lines)${sidesUncertain ? ' — sides uncertain, defaulting p1=home' : ''}`);
   // handleMatchEnd does all recording; the match isn't finalized so its
   // no-clobber guard passes.
   handleMatchEnd(battle, winnerUsername);
@@ -1004,6 +1077,9 @@ export function importBattleFromReplay(matchId: string, replay: string): ImportB
     winnerTeamId: updated?.winnerTeamId ?? null,
     status: updated?.status ?? 'completed',
     pokemonCount,
+    sidesUncertain,
+    detectedP1,
+    detectedP2,
   };
 }
 
@@ -1479,10 +1555,13 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         }
       }
 
-      // Run validation. Fix 5 — when warnings exist, flip status to 'disputed'
-      // so the match is excluded from standings/playoffs gating. The manual
-      // handler does the same; bot-flagged matches must not sneak through.
-      // Fix 1 — only fire per-match auto-awards when no warnings; for a
+      // Run validation. Fix 5 — when BLOCKING warnings exist, flip status to
+      // 'disputed' so the match is excluded from standings/playoffs gating.
+      // Warn-only findings (warnOnly: true — format_mismatch, banned_move, etc.)
+      // are stored on the match row for admin visibility but must NOT flip status
+      // to disputed; the match proceeds as completed. The manual handler does the
+      // same; bot-flagged matches must not sneak through on blocking issues.
+      // Fix 1 — only fire per-match auto-awards when no BLOCKING warnings; for a
       // disputed match we wait for dismiss-warnings to mint awards.
       let hasWarnings = false;
       if (homeTeam && awayTeam) {
@@ -1500,12 +1579,25 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           homeSide,
         );
 
+        // Partition warnings: blocking ones flip to disputed; warn-only ones are
+        // stored for audit but do not change match status.
+        const blockingWarnings = warnings.filter(w => !w.warnOnly);
         if (warnings.length > 0) {
-          hasWarnings = true;
-          db.update(schema.matches)
-            .set({ warnings: JSON.stringify(warnings), status: 'disputed' })
-            .where(eq(schema.matches.id, matchId))
-            .run();
+          // Always persist all warnings (blocking + warn-only) for admin review.
+          // Only set disputed when blocking issues exist.
+          if (blockingWarnings.length > 0) {
+            hasWarnings = true;
+            db.update(schema.matches)
+              .set({ warnings: JSON.stringify(warnings), status: 'disputed' })
+              .where(eq(schema.matches.id, matchId))
+              .run();
+          } else {
+            // Warn-only: store warnings but keep status = completed.
+            db.update(schema.matches)
+              .set({ warnings: JSON.stringify(warnings) })
+              .where(eq(schema.matches.id, matchId))
+              .run();
+          }
         }
       }
 
@@ -1654,4 +1746,19 @@ function teamPsUserid(team: { userId: number | null } | null | undefined): strin
     .where(eq(schema.users.id, team.userId))
     .get();
   return user ? toUserid(user.username) : '';
+}
+
+/**
+ * Resolve the canonical PS userid for a user record.
+ *
+ * TODAY this is `toUserid(users.username)` because that is what the SSO login
+ * server signs assertions for. Once the `users.psUsername` column is added
+ * (separate migration), prefer that field — it lets coaches use a different PS
+ * handle from their Cannoli account name.
+ *
+ * // TODO: prefer psUsername once available (check if non-null / non-empty first)
+ */
+export function effectivePsUserid(user: { username: string }): string {
+  // TODO: when psUsername column exists: return user.psUsername ? toUserid(user.psUsername) : toUserid(user.username);
+  return toUserid(user.username);
 }
