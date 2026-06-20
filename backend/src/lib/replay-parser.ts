@@ -35,6 +35,9 @@ export interface ParsedMatchResult {
   pokemon: PokemonMatchStats[];
   /** Player usernames keyed by side */
   players: { p1: string; p2: string };
+  /** Distinct (side, species, move) tuples for every move USED in the battle
+   *  (from |move| lines). Powers per-league banned-move auditing. */
+  movesUsed: { side: 'p1' | 'p2'; species: string; move: string }[];
 }
 
 export interface LiveMatchStats {
@@ -82,24 +85,27 @@ export interface ValidationWarning {
   warnOnly?: boolean;
 }
 
-// ─── Per-league ban lists (stub) ─────────────────────────────────────────────
+// ─── Per-league ban lists ────────────────────────────────────────────────────
 //
-// TODO: fill these maps with actual per-league bans once the data model is
-// ready. Keys are the league's COST FORMAT id ('natdex' = Emerald, 'natdexplus'
-// = Ruby/Sapphire) — the same value ps-bot passes via getLeagueCostFormat().
-// Values are arrays of move / ability / item names (case-insensitive match).
+// Move/ability/item bans that DIFFER between Cannoli leagues, keyed by the
+// league's COST FORMAT id ('natdex' = Emerald, 'natdexplus' = Ruby/Sapphire) —
+// the same value ps-bot passes via getLeagueCostFormat(). Universal bans (the
+// same across every league) are NOT here; those are enforced at the PS server
+// level (ps/patch-natdex-draft.js) so they never start a battle.
 //
-// Example (do NOT uncomment — leave empty until wired to league config):
-//   LEAGUE_BANNED_MOVES.set('natdex', ['Jet Punch']);       // banned in Emerald
-//   LEAGUE_BANNED_ABILITIES.set('natdex', ['Shadow Tag']);
-//   LEAGUE_BANNED_ITEMS.set('natdex', ["King's Rock"]);
+// From the S11 rules sheets, exactly TWO moves differ across the three leagues:
+//   - Emerald (natdex)        bans Jet Punch (Palafin); Ruby/Sapphire allow it.
+//   - Ruby/Sapphire (natdex+) ban Take Heart; Emerald allows it.
+// Enforcement is WARN-ONLY and replay-based: validateMatchResult flags a banned
+// move that was actually USED in the battle (scanning result.movesUsed). A
+// banned move brought but never clicked can't be seen in a replay — acceptable
+// for an audit warning. Names match case-insensitively.
 //
-// NOTE: even once populated, the move-usage check below also needs per-mon move
-// data, which the parser does not yet extract (only K/D/tera). Wiring is ready;
-// move parsing is the remaining piece. The ban-check loop reads these maps;
-// empty = nothing flagged today.
-
-export const LEAGUE_BANNED_MOVES = new Map<string, string[]>();
+// Abilities/items have no per-format differences today (kept for future use).
+export const LEAGUE_BANNED_MOVES = new Map<string, string[]>([
+	['natdex', ['Jet Punch']],
+	['natdexplus', ['Take Heart']],
+]);
 export const LEAGUE_BANNED_ABILITIES = new Map<string, string[]>();
 export const LEAGUE_BANNED_ITEMS = new Map<string, string[]>();
 
@@ -124,6 +130,10 @@ export class ReplayParser {
 
   // Active Pokemon on each side
   private activeSlot = new Map<string, string>(); // "p1a" → "p1a: Nickname"
+
+  // Distinct moves used in the battle, keyed side|species|move → for the
+  // per-league banned-move audit in validateMatchResult.
+  private movesUsed = new Map<string, { side: 'p1' | 'p2'; species: string; move: string }>();
 
   // Match state
   private turn = 0;
@@ -225,6 +235,7 @@ export class ReplayParser {
       format: this.format,
       pokemon: allStats,
       players: { ...this.players },
+      movesUsed: Array.from(this.movesUsed.values()),
     };
   }
 
@@ -445,6 +456,19 @@ export class ReplayParser {
     // Track last attacker for direct KO attribution
     if (target && !target.startsWith('[')) {
       this.lastAttacker.set(target, attacker);
+    }
+
+    // Record the move used (deduped by side+species+move) for the per-league
+    // banned-move audit. The mon must already be on the field (a |switch| set
+    // its species), so nickToSpecies resolves; fall back to '' if not.
+    const moveName = parts[3];
+    if (moveName) {
+      const side = this.parseSide(attacker);
+      const species = this.nickToSpecies.get(attacker) ?? '';
+      const key = `${side} ${species} ${moveName}`;
+      if (!this.movesUsed.has(key)) {
+        this.movesUsed.set(key, { side, species, move: moveName });
+      }
     }
 
     return false;
@@ -722,16 +746,12 @@ export function validateMatchResult(
     { side: awaySide, roster: awayRoster, abbrev: awayTeamAbbrev },
   ];
 
-  // Build per-league ban sets for this format (empty when no config yet).
+  // Build the per-league banned-MOVE set for this format (empty when the format
+  // has no per-league move bans). Abilities/items have no per-format differences
+  // today, so they are not scanned (the maps stay empty for future use).
   const fmtKey = leagueFormat?.toLowerCase() ?? null;
   const leagueBannedMoves = new Set(
     (fmtKey ? (LEAGUE_BANNED_MOVES.get(fmtKey) ?? []) : []).map(m => m.toLowerCase()),
-  );
-  const leagueBannedAbilities = new Set(
-    (fmtKey ? (LEAGUE_BANNED_ABILITIES.get(fmtKey) ?? []) : []).map(a => a.toLowerCase()),
-  );
-  const leagueBannedItems = new Set(
-    (fmtKey ? (LEAGUE_BANNED_ITEMS.get(fmtKey) ?? []) : []).map(i => i.toLowerCase()),
   );
 
   // Normalize both the roster side and the battle side to Cannoli's naming
@@ -773,26 +793,30 @@ export function validateMatchResult(
     }
   }
 
-  // Per-league banned move/ability/item checks — warn-only (never dispute the
-  // match). The PS server is the enforcement layer; backend warns for audit.
-  // These checks are intentionally lightweight string scans on the replay log
-  // (not parsed move-by-move) — full per-mon move tracking is future work.
-  // TODO: wire these to per-league config once the data model is ready.
-  if (leagueBannedMoves.size > 0 || leagueBannedAbilities.size > 0 || leagueBannedItems.size > 0) {
-    for (const mon of result.pokemon) {
-      // Move ban check would need move-usage data from the parser — reserved.
-      // Ability / item bans would need ability/item tracking — reserved.
-      // Stub: no-op loops until parser tracks move/ability/item usage.
-      void mon;
+  // Per-league banned-MOVE check — warn-only (never disputes the match; the PS
+  // server is the hard enforcement layer, this is an audit signal). Scans the
+  // moves actually USED in the battle (result.movesUsed) against the format's
+  // ban list and attributes each to the team whose side used it.
+  if (leagueBannedMoves.size > 0) {
+    const abbrevBySide: Record<'p1' | 'p2', string> = {
+      p1: homeSide === 'p1' ? homeTeamAbbrev : awayTeamAbbrev,
+      p2: homeSide === 'p2' ? homeTeamAbbrev : awayTeamAbbrev,
+    };
+    const flagged = new Set<string>(); // dedupe identical (team, mon, move)
+    for (const mv of result.movesUsed) {
+      if (!leagueBannedMoves.has(mv.move.toLowerCase())) continue;
+      const team = abbrevBySide[mv.side];
+      const dedupeKey = `${team} ${mv.species} ${mv.move}`;
+      if (flagged.has(dedupeKey)) continue;
+      flagged.add(dedupeKey);
+      warnings.push({
+        type: 'banned_move',
+        team,
+        pokemon: mv.species || undefined,
+        reason: `${mv.move} is banned in this league's format`,
+        warnOnly: true,
+      });
     }
-
-    // Direct log-scan for banned moves (fast heuristic until parser is wired).
-    // We don't have move log here (it's in the raw protocol, not ParsedMatchResult),
-    // so this section is a forward stub. Leave as no-op until the parser exposes
-    // per-mon move lists.
-    void leagueBannedMoves;
-    void leagueBannedAbilities;
-    void leagueBannedItems;
   }
 
   // Check format — warn-only (don't block result; unusual formats may be valid
