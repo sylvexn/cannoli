@@ -164,7 +164,10 @@ export function DraftPoolGrid({
 
                 const isMega = isMegaForm(entry.name);
                 const isTeraBanned = getTeraBanned(format).includes(entry.name);
-                const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9;
+                // entry.teraBanned already reflects the format-correct ban list (entries
+                // come from a format-aware pool). The explicit tier range also guards the
+                // rule that only tiers 1–9 are captain-eligible.
+                const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9 && !entry.teraBanned;
                 const isAnimating = animatingPokemonName === entry.name;
 
                 return (

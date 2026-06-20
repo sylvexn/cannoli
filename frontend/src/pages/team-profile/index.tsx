@@ -424,6 +424,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         onToggleCaptain={handleToggleCaptain}
         onTeraTypeToggle={handleTeraTypeToggle}
         onTeraEditsClear={() => setTeraEdits([])}
+        costFormat={costFormat}
       />
 
       {/* ═══ MAIN CONTENT GRID ═══ */}

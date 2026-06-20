@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollText, Swords, Star, ShieldOff } from 'lucide-react';
-// Sourced from the generated tier list (backend/imports/Costs.xlsx, NatDex+) so
-// the published ban list always matches what the draft board enforces.
-import { TERA_BANNED } from '@/data/tier-list';
+import { getTeraBanned, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { cn } from '@/lib/utils';
+
+const FORMAT_LABELS: Record<CostFormat, string> = {
+  natdexplus: 'NatDex+ (Ruby/Sapphire)',
+  natdex: 'NatDex (Emerald)',
+};
 
 const DRAFT_RULES: string[] = [
   'You have up to 110 points with which to draft 10–12 Pokémon. Costs are listed on the draft board. You do not have to spend your full budget.',
@@ -52,6 +57,9 @@ const BANNED_MOVES = [
 ];
 
 export function RulesPage() {
+  const [format, setFormat] = useState<CostFormat>(DEFAULT_FORMAT);
+  const teraBanned = getTeraBanned(format);
+
   return (
     <div className="space-y-3">
       {/* Header */}
@@ -148,17 +156,34 @@ export function RulesPage() {
       {/* Tera Captain bans — full width strip */}
       <Card className="bg-surface-raised border-border-default">
         <CardHeader className="pb-2 pt-3 px-4">
-          <CardTitle className="text-sm flex items-center gap-2">
+          <CardTitle className="text-sm flex items-center gap-2 flex-wrap">
             <Star size={14} className="text-yellow-400" />
             Tera Captain Bans
-            <span className="ml-2 text-[10px] font-mono text-text-muted normal-case tracking-normal">
+            <span className="text-[10px] font-mono text-text-muted normal-case tracking-normal">
               draftable, but not as captain
             </span>
+            {/* Format toggle — ban lists differ between NatDex and NatDex+ */}
+            <div className="ml-auto flex items-center gap-px rounded border border-border-subtle overflow-hidden">
+              {(['natdexplus', 'natdex'] as CostFormat[]).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFormat(f)}
+                  className={cn(
+                    'px-2.5 py-0.5 text-[10px] font-medium transition-colors',
+                    format === f
+                      ? 'bg-surface-overlay text-text-primary'
+                      : 'text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary',
+                  )}
+                >
+                  {FORMAT_LABELS[f]}
+                </button>
+              ))}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           <div className="flex flex-wrap gap-1.5">
-            {TERA_BANNED.map(name => (
+            {teraBanned.map(name => (
               <span
                 key={name}
                 className="inline-flex items-center gap-1 rounded-md bg-surface-overlay/60 border border-border-subtle px-2 py-0.5 text-[11px] text-text-secondary"

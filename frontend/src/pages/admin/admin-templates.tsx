@@ -105,6 +105,11 @@ export function AdminTemplates() {
   async function snapshotTierList(): Promise<{ tier: number; names: string[] }[]> {
     // Snapshot the live tier list at save time. We bucket by tier number so the
     // template stores the same shape the season wizard / league seeder expects.
+    // TODO: api.getTierList() has no format param here — it captures the server's
+    // default (natdexplus). Ideally the template wizard exposes a costFormat selector
+    // (natdex | natdexplus) and passes it to the API so the snapshot matches the
+    // league's intended cost format. Requires a backend param + costFormat field on
+    // the template model.
     const rows = await api.getTierList();
     const byTier = new Map<number, string[]>();
     for (const r of rows) {

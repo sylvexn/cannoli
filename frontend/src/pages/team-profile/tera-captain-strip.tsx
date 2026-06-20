@@ -4,7 +4,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
-import { getTermCost, canBeTeraCaptain } from '@/data/tier-list';
+import { getTermCost, canBeTeraCaptain, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { Save, X, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
@@ -29,6 +29,8 @@ interface TeraCaptainStripProps {
   teraEditingIndex: number | null;
   pointsUsed: number;
   playerId: string;
+  /** League cost format — drives tera-ban eligibility checks. Defaults to natdexplus. */
+  costFormat?: CostFormat;
   onTeraEditingIndexChange: (index: number | null) => void;
   onToggleCaptain: (index: number) => void;
   onTeraTypeToggle: (index: number, type: PokemonType) => void;
@@ -46,6 +48,7 @@ export function TeraCaptainStrip({
   teraEditingIndex,
   pointsUsed,
   playerId,
+  costFormat = DEFAULT_FORMAT,
   onTeraEditingIndexChange,
   onToggleCaptain,
   onTeraTypeToggle,
@@ -74,7 +77,7 @@ export function TeraCaptainStrip({
     .map((mon, i) => ({ mon, index: i }))
     .filter(({ mon }) => {
       if (mon.isTeraCaptain) return false;
-      if (!canBeTeraCaptain(mon.name)) return false;
+      if (!canBeTeraCaptain(mon.name, costFormat)) return false;
       const costDelta = getTermCost(mon.tier) - mon.tier;
       if (pointsUsed + costDelta > config.pointCap) return false;
       return true;

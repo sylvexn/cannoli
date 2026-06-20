@@ -1,8 +1,13 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import { PokemonSideCard } from './pokemon-side-card';
+import type { CostFormat } from '@/data/tier-list';
 
 interface SideCardState {
-  openSideCard: (name: string) => void;
+  /** Open the side card for the given Pokemon name.
+   *  Pass `format` when opening from a context where the active format is known
+   *  (e.g. the global tier-list page). Inside league routes the card resolves
+   *  the format from the in-scope league automatically, so callers there can omit it. */
+  openSideCard: (name: string, format?: CostFormat) => void;
   closeSideCard: () => void;
 }
 
@@ -13,14 +18,21 @@ const PokemonSideCardContext = createContext<SideCardState>({
 
 export function PokemonSideCardProvider({ children }: { children: React.ReactNode }) {
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<CostFormat | undefined>(undefined);
 
-  const openSideCard = useCallback((name: string) => setSelectedName(name), []);
-  const closeSideCard = useCallback(() => setSelectedName(null), []);
+  const openSideCard = useCallback((name: string, format?: CostFormat) => {
+    setSelectedName(name);
+    setSelectedFormat(format);
+  }, []);
+  const closeSideCard = useCallback(() => {
+    setSelectedName(null);
+    setSelectedFormat(undefined);
+  }, []);
 
   return (
     <PokemonSideCardContext.Provider value={{ openSideCard, closeSideCard }}>
       {children}
-      <PokemonSideCard name={selectedName} onClose={closeSideCard} />
+      <PokemonSideCard name={selectedName} format={selectedFormat} onClose={closeSideCard} />
     </PokemonSideCardContext.Provider>
   );
 }

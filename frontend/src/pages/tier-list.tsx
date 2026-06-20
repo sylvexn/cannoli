@@ -336,7 +336,7 @@ function TierCard({ entry, accent, ownership, format }: TierCardProps) {
       {/* Sprite — opens side card. Stacks ownership as small color pips below. */}
       <button
         type="button"
-        onClick={() => openSideCard(entry.name)}
+        onClick={() => openSideCard(entry.name, format)}
         className="shrink-0 rounded bg-surface-base/40 p-0.5 hover:bg-surface-base transition-colors"
         title={`Quick view ${entry.name}`}
       >

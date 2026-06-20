@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import type { Player, RosterPokemon, LeagueConfig, LeagueSeason } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
-import { getTermCost } from '@/data/tier-list';
+import { getTermCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
 import { PointCapBarLarge } from '@/components/point-cap-bar';
@@ -50,6 +50,8 @@ interface SpriteShowcaseProps {
   onToggleCaptain: (index: number) => void;
   onTeraTypeToggle: (index: number, type: PokemonType) => void;
   onTeraEditsClear: () => void;
+  /** League cost format — drives tera-ban eligibility checks. Defaults to natdexplus. */
+  costFormat?: CostFormat;
 }
 
 export function SpriteShowcase({
@@ -83,6 +85,7 @@ export function SpriteShowcase({
   onToggleCaptain,
   onTeraTypeToggle,
   onTeraEditsClear,
+  costFormat = DEFAULT_FORMAT,
 }: SpriteShowcaseProps) {
   const isDragging = draggingPosFrom !== null;
 
@@ -241,6 +244,7 @@ export function SpriteShowcase({
           teraEditingIndex={teraEditingIndex}
           pointsUsed={pointsUsed}
           playerId={player.id}
+          costFormat={costFormat}
           onTeraEditingIndexChange={onSetTeraEditingIndex}
           onToggleCaptain={onToggleCaptain}
           onTeraTypeToggle={onTeraTypeToggle}

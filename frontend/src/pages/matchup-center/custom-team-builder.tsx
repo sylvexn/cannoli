@@ -9,6 +9,12 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getMatchupColors } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
+import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+
+const FORMAT_LABELS: Record<CostFormat, string> = {
+  natdexplus: 'NatDex+',
+  natdex: 'NatDex',
+};
 
 interface CustomTeamBuilderProps {
   side: 'a' | 'b';
@@ -76,6 +82,10 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
   const [searchLoading, setSearchLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [addingToSlot, setAddingToSlot] = useState<number | null>(null);
+  // Matchup center is league-independent, so we expose a lightweight format
+  // toggle. Tier badges in search results are resolved from the bundled tier
+  // list for the selected format rather than the format-agnostic API tier.
+  const [tierFormat, setTierFormat] = useState<CostFormat>(DEFAULT_FORMAT);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { colorblindMode } = useAuth();
@@ -176,11 +186,29 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
   return (
     <div className={cn('rounded-lg border bg-surface-raised p-3 space-y-3', borderColor)}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: accentColor }}>
           Custom Team ({filledCount}/12)
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Format selector — affects tier badge display in search results */}
+          <div className="flex items-center gap-px rounded border border-border-subtle overflow-hidden">
+            {(['natdexplus', 'natdex'] as CostFormat[]).map(f => (
+              <button
+                key={f}
+                onClick={() => setTierFormat(f)}
+                className={cn(
+                  'px-2 py-0.5 text-[9px] font-medium transition-colors',
+                  tierFormat === f
+                    ? 'bg-surface-overlay text-text-primary'
+                    : 'text-text-muted hover:bg-surface-overlay/40 hover:text-text-secondary',
+                )}
+                title={`Show tiers for ${FORMAT_LABELS[f]}`}
+              >
+                {FORMAT_LABELS[f]}
+              </button>
+            ))}
+          </div>
           <button
             onClick={handleConfirm}
             disabled={filledCount === 0}
@@ -264,17 +292,28 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
           </div>
           {searchResults.length > 0 && (
             <div className="max-h-32 overflow-y-auto rounded-md bg-surface border border-border-subtle">
-              {searchResults.map(p => (
-                <button
-                  key={p.name}
-                  onClick={() => handleAddFromSearch(p.name)}
-                  className="w-full flex items-center gap-2 px-2 py-1 text-left hover:bg-surface-overlay/50 transition-colors"
-                >
-                  <PokemonSprite name={p.name} size="xs" className="shrink-0" />
-                  <span className="text-[11px] text-text-primary flex-1 truncate">{p.name}</span>
-                  {p.tier > 0 && <span className="text-[9px] text-text-muted font-mono">T{p.tier}</span>}
-                </button>
-              ))}
+              {searchResults.map(p => {
+                // Resolve tier from bundled data for the selected format; fall
+                // back to API tier if the bundled entry isn't found (e.g. new
+                // mons not yet in the local tier list).
+                const bundledEntry = getTierEntry(p.name, tierFormat);
+                const displayTier = bundledEntry?.tier ?? (p.tier > 0 ? p.tier : null);
+                return (
+                  <button
+                    key={p.name}
+                    onClick={() => handleAddFromSearch(p.name)}
+                    className="w-full flex items-center gap-2 px-2 py-1 text-left hover:bg-surface-overlay/50 transition-colors"
+                  >
+                    <PokemonSprite name={p.name} size="xs" className="shrink-0" />
+                    <span className="text-[11px] text-text-primary flex-1 truncate">{p.name}</span>
+                    {displayTier != null && (
+                      <span className="text-[9px] text-text-muted font-mono" title={FORMAT_LABELS[tierFormat]}>
+                        T{displayTier}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
           {searchLoading && <div className="text-[10px] text-text-muted">Searching...</div>}

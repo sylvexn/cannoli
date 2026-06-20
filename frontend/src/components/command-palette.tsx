@@ -307,6 +307,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     >
                       <PokemonSprite name={entry.name} size="xs" />
                       <span className="font-medium text-text-primary">{entry.name}</span>
+                      {/* TODO: TIER_LIST defaults to natdexplus — no single format is
+                          correct here since the palette is cross-league. Consider
+                          omitting the tier or showing "varies" if multi-format diverges. */}
                       <TierBadge points={entry.tier} />
                       {pokeData?.types && <TypeChip types={pokeData.types} size="sm" />}
                     </CommandItem>
