@@ -10,8 +10,22 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
-import { createBattle, cancelBattle, isBotConnected, onBotConnectionChange } from '../lib/ps-bot';
+import { createBattle, cancelBattle, isBotConnected, onBotConnectionChange, effectivePsUserid } from '../lib/ps-bot';
 import { toUserid } from '../lib/ps-login';
+
+/**
+ * PS userid a Cannoli player logs into Showdown as. Prefers their custom
+ * `psUsername` (acronym) over the account name — the same resolution the SSO
+ * login (getPsUserid) and the bot's team map use, so scrim battle creation
+ * targets the name PS actually knows them by. Falls back to normalizing the
+ * username if the user row is somehow missing.
+ */
+function psUseridFor(username: string): string {
+  if (!username) return '';
+  const u = db.select({ username: schema.users.username, psUsername: schema.users.psUsername })
+    .from(schema.users).where(eq(schema.users.username, username)).get();
+  return u ? effectivePsUserid(u) : toUserid(username);
+}
 import { getLeague } from '../lib/queries';
 import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
@@ -223,9 +237,10 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
   for (const [lobbyId, lobby] of scrimLobbies) {
     if (lobby.status !== 'ready') continue;
     // Match by comparing PS userids of both lobby players against p1/p2.
-    // Lobby stores Cannoli usernames; toUserid normalizes them the same way PS does.
-    const lp1 = toUserid(lobby.players[0] ?? '');
-    const lp2 = toUserid(lobby.players[1] ?? '');
+    // Lobby stores Cannoli usernames; resolve each to its effective PS userid
+    // (psUsername-aware) exactly as the battle was created.
+    const lp1 = psUseridFor(lobby.players[0] ?? '');
+    const lp2 = psUseridFor(lobby.players[1] ?? '');
     const matched =
       (lp1 === p1 && lp2 === p2) ||
       (lp1 === p2 && lp2 === p1);
@@ -746,10 +761,11 @@ export const arenaRoutes = new Elysia()
               // the lobby stays 'ready' and the live battle is observed once it
               // starts. Pass the lobby format explicitly so the scrim is
               // unambiguously created in the correct PS format.
-              // Normalize player names to PS userids (lowercase alnum) so
-              // Users.get() on the PS server finds them regardless of how the
-              // Cannoli username is cased or punctuated.
-              createBattle(toUserid(lobby.players[0]), toUserid(lobby.players[1]), lobby.format);
+              // Resolve each player to the PS userid they actually logged in as
+              // (psUsername-aware — a coach using an acronym logs in under that,
+              // not their account name), so Users.get() on the PS server finds
+              // them. Pass the lobby format explicitly.
+              createBattle(psUseridFor(lobby.players[0]), psUseridFor(lobby.players[1]), lobby.format);
             }
 
             publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({

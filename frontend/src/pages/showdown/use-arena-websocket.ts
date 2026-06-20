@@ -46,6 +46,8 @@ export interface ScrimLobby {
   players: string[];
   ready: boolean[];
   status: 'waiting' | 'ready' | 'in_progress';
+  /** Transient: set when a battle failed to start, cleared on the next update. */
+  error?: string;
 }
 
 export interface LiveMatchStats {
@@ -214,7 +216,28 @@ export function useArenaWebSocket() {
               ...s,
               scrimLobbies: s.scrimLobbies.map(l =>
                 l.id === msg.lobbyId
-                  ? { ...l, players: msg.players, ready: msg.ready, status: msg.status }
+                  ? { ...l, players: msg.players, ready: msg.ready, status: msg.status, error: undefined }
+                  : l,
+              ),
+            }));
+            break;
+
+          case 'scrim_error':
+            // Battle couldn't be created (bot offline / player not found on PS).
+            // The lobby reverted to 'waiting' server-side; reflect that and show
+            // the reason on the lobby so players know to try again.
+            console.warn('[Arena WS] scrim_error', msg.message);
+            setState(s => ({
+              ...s,
+              scrimLobbies: s.scrimLobbies.map(l =>
+                l.id === msg.lobbyId
+                  ? {
+                      ...l,
+                      players: msg.players ?? l.players,
+                      ready: msg.ready ?? l.ready,
+                      status: msg.status ?? 'waiting',
+                      error: msg.message ?? 'Couldn\'t start battle — try again.',
+                    }
                   : l,
               ),
             }));

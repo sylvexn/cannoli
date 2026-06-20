@@ -3,7 +3,7 @@
  * Extracted from arena-tab.tsx for the Showdown footer.
  */
 import { useEffect, useState } from 'react';
-import { Users, Plus, Loader2, Search, ArrowUp, ClipboardCheck } from 'lucide-react';
+import { Users, Plus, Loader2, Search, ArrowUp, ClipboardCheck, AlertCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -168,6 +168,12 @@ function ScrimLobbyRow({
           Both ready — open the Showdown panel above and pick a team. The battle
           starts once both players choose.
         </span>
+      </div>
+    )}
+    {lobby.error && !awaitingTeamPick && (
+      <div className="flex items-center gap-1.5 px-3 pb-2 text-xs text-red-400">
+        <AlertCircle size={11} className="shrink-0" />
+        <span>{lobby.error}</span>
       </div>
     )}
     </div>
