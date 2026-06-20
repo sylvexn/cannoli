@@ -59,14 +59,50 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   const { draftTimerEnabled, draftDemoVisible } = useDraftSettings();
 
   // ─── Season data (historical picks from API) ─────────────────────
-  const [draftPicks, setDraftPicks] = useState<ApiDraftPick[]>([]);
+  // Track both the picks AND the league they belong to so we can detect
+  // and reject stale picks from a previous league during transitions.
+  const [draftPicksState, setDraftPicksState] = useState<{
+    leagueId: string;
+    picks: ApiDraftPick[];
+  }>({ leagueId: league.id, picks: [] });
 
   useEffect(() => {
-    api.getDraftPicks(league.id).then(setDraftPicks);
+    // Clear immediately on league change so the board never shows stale
+    // ownership from a previous league while the new fetch is in-flight.
+    setDraftPicksState({ leagueId: league.id, picks: [] });
+    let cancelled = false;
+    api.getDraftPicks(league.id).then(picks => {
+      if (!cancelled) {
+        setDraftPicksState({ leagueId: league.id, picks });
+      }
+    });
+    return () => { cancelled = true; };
   }, [league.id]);
 
+  // Only use picks that belong to the CURRENT league. If standings and picks
+  // are from different leagues (can happen briefly during league switch), the
+  // team IDs won't match and generateDraftOrder would produce an empty list,
+  // making everything appear as a free agent.
+  const draftPicks = draftPicksState.leagueId === league.id ? draftPicksState.picks : [];
+
   const seasonPicks = useMemo(
-    () => draftPicks.length > 0 ? generateDraftOrder(standings, draftPicks) : [],
+    () => {
+      if (draftPicks.length === 0) return [];
+      const result = generateDraftOrder(standings, draftPicks);
+      // Defensive: if we got non-empty draftPicks but resolved zero picks,
+      // the team IDs didn't match standings — log a clear warning so it's
+      // visible in devtools rather than silently showing everything as free agent.
+      if (result.length === 0 && draftPicks.length > 0) {
+        const pickTeamIds = [...new Set(draftPicks.map(p => p.teamId))];
+        const standingsIds = standings.map(s => s.id);
+        console.warn(
+          '[DraftBoard] ownership resolution produced no picks despite non-empty draftPicks. ' +
+          'This usually means standings and draftPicks are from different leagues. ' +
+          `draftPicks teamIds: ${pickTeamIds.join(', ')} | standings ids: ${standingsIds.join(', ')}`,
+        );
+      }
+      return result;
+    },
     [standings, draftPicks],
   );
 

@@ -14,15 +14,28 @@ export function generateDraftOrder(
 ): DraftPickEntry[] {
   // Draft order: worst record picks first
   const draftOrder = [...standings].reverse();
+  const standingsIdSet = new Set(standings.map(p => p.id));
 
-  // Build per-team pick queues sorted by pick number
+  // Build per-team pick queues sorted by pick number.
+  // Include ALL teams referenced by draftPicks — not just those in standings.
+  // This is the defensive fallback: if draftPicks arrive while standings is
+  // still empty or belongs to a different league, ownership is still resolved
+  // correctly from the picks' own teamIds rather than silently dropping them.
   const queues = new Map<string, ApiDraftPick[]>();
+
+  // First seed queues for all teams in standings (preserves snake ordering).
   for (const p of draftOrder) {
     const teamPicks = draftPicks
       .filter(dp => dp.teamId === p.id)
       .sort((a, b) => a.pickNumber - b.pickNumber);
     queues.set(p.id, teamPicks);
   }
+
+  // Then capture any picks whose teamId isn't in standings (stale-standings
+  // guard). These will be appended at the end in pickNumber order.
+  const orphanPicks = draftPicks
+    .filter(dp => !standingsIdSet.has(dp.teamId))
+    .sort((a, b) => a.pickNumber - b.pickNumber);
 
   const picks: DraftPickEntry[] = [];
   const maxRounds = Math.max(...[...queues.values()].map(q => q.length), 0);
@@ -47,6 +60,23 @@ export function generateDraftOrder(
         isTeraCaptain: false,
       });
     }
+  }
+
+  // Append orphan picks (teams not in standings) at the end so ownership is
+  // still resolved. Round/pick numbers are approximate (just sequential after
+  // the last structured pick), which is fine — ownership is the only thing
+  // that matters for the history view when standings are mismatched.
+  for (let i = 0; i < orphanPicks.length; i++) {
+    const dp = orphanPicks[i];
+    picks.push({
+      round: 0,
+      pick: i + 1,
+      overallPick: picks.length + 1,
+      playerId: dp.teamId,
+      pokemonName: dp.pokemonName,
+      tier: dp.tier,
+      isTeraCaptain: false,
+    });
   }
 
   return picks;
