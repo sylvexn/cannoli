@@ -29,6 +29,26 @@ export const configRoutes = new Elysia()
     return { success: true };
   })
 
+  // ─── Rules content (admin write) ────────────────────────────────────
+
+  .put('/api/rules', ({ body, user, set }) => {
+    const { rulesText } = body as { rulesText: string | null };
+    if (rulesText !== null && typeof rulesText !== 'string') {
+      set.status = 400; return { error: 'rulesText must be a string or null' };
+    }
+    const value = typeof rulesText === 'string' ? rulesText.slice(0, 32_000) : null;
+    db.update(schema.siteSettings).set({ rulesText: value }).where(eq(schema.siteSettings.id, 1)).run();
+    db.insert(schema.activityLog).values({
+      type: 'rules_updated',
+      category: 'config',
+      actor: user!.username,
+      leagueId: null,
+      description: value === null ? 'Cleared custom rules text' : `Updated rules text (${value.length} chars)`,
+      metadata: null,
+    }).run();
+    return { success: true };
+  })
+
   // ─── Tier List ──────────────────────────────────────────────────────
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {

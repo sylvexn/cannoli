@@ -33,12 +33,13 @@ import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
 import { AdminAnnouncements } from './announcements';
+import { AdminRules } from './admin-rules';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
-  UsersRound, Megaphone,
+  UsersRound, Megaphone, BookOpen,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -139,6 +140,10 @@ export const AdminPinsLegacyRedirect = () => <Navigate to="/admin/pins" replace 
 
 export const AdminAnnouncementsRoute = () => (
   <AdminSection icon={Megaphone} title="Announcements"><AdminAnnouncements /></AdminSection>
+);
+
+export const AdminRulesRoute = () => (
+  <AdminSection icon={BookOpen} title="Rules"><AdminRules /></AdminSection>
 );
 
 /**

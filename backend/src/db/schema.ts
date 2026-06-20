@@ -481,6 +481,9 @@ export const siteSettings = sqliteTable('site_settings', {
    *  up costs 1 slot; drops are free). Enforced per-team against the fa
    *  transactions table. Default 6. */
   faPickupsPerSeason: integer('fa_pickups_per_season').notNull().default(6),
+  /** Admin-authored rules prose rendered on the public /rules page.
+   *  NULL = no custom text; frontend falls back to hard-coded defaults. */
+  rulesText: text('rules_text'),
 });
 
 // ─── Draft State (tracks active/completed drafts per league) ────────────────

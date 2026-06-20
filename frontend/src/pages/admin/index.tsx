@@ -21,7 +21,7 @@ import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
-  UsersRound, Megaphone,
+  UsersRound, Megaphone, BookOpen,
 } from 'lucide-react';
 
 interface NavItem {
@@ -67,6 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { slug: 'moves',     label: 'Move Categories', icon: Swords },
       { slug: 'pins',          label: 'Pins',          icon: Award },
       { slug: 'announcements', label: 'Announcements', icon: Megaphone },
+      { slug: 'rules',         label: 'Rules',         icon: BookOpen },
       { slug: 'settings',      label: 'Settings',      icon: Settings },
     ],
   },

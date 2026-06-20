@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollText, Swords, Star, ShieldOff } from 'lucide-react';
 import { getTeraBanned, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 const FORMAT_LABELS: Record<CostFormat, string> = {
@@ -59,6 +60,11 @@ const BANNED_MOVES = [
 export function RulesPage() {
   const [format, setFormat] = useState<CostFormat>(DEFAULT_FORMAT);
   const teraBanned = getTeraBanned(format);
+  const [customText, setCustomText] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getRules().then(r => setCustomText(r.rulesText)).catch(() => {});
+  }, []);
 
   return (
     <div className="space-y-3">
@@ -70,6 +76,23 @@ export function RulesPage() {
         </h1>
         <p className="text-xs text-text-muted">Cannoli draft and battle rules — read before drafting.</p>
       </div>
+
+      {/* Admin-authored custom text (if set) */}
+      {customText && customText.trim() && (
+        <Card className="bg-surface-raised border-border-default">
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <ScrollText size={14} className="text-neon" />
+              Additional Notes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-3">
+            <p className="text-xs text-text-secondary whitespace-pre-line leading-relaxed">
+              {customText}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Three-column row: Draft / Battle / Bans */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">

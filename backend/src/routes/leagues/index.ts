@@ -184,6 +184,14 @@ export const leagueRoutes = new Elysia()
     };
   })
 
+  // ─── Rules content (public) ─────────────────────────────────────────
+  // Returns the admin-authored rules text. NULL when no custom content has
+  // been saved yet — the frontend falls back to its hard-coded defaults.
+  .get('/api/rules', () => {
+    const row = db.select({ rulesText: schema.siteSettings.rulesText }).from(schema.siteSettings).get();
+    return { rulesText: row?.rulesText ?? null };
+  })
+
   .use(standingsRoutes)
   .use(teamRoutes)
   .use(pokemonRoutes)

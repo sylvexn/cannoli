@@ -1782,6 +1782,11 @@ export const api = {
 
   simResetMatch: (matchId: string) =>
     postJson<{ ok: boolean; matchId: string }>(`/api/admin/sim/reset-match/${matchId}`),
+
+  // ─── Rules content ───────────────────────────────────────────────────
+  getRules: () => fetchJson<{ rulesText: string | null }>('/api/rules'),
+  saveRules: (rulesText: string | null) =>
+    putJson<{ success: boolean }>('/api/rules', { rulesText }),
 };
 
 // ─── Simulator types ─────────────────────────────────────────────────────────

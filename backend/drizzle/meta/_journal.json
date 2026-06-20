@@ -414,6 +414,13 @@
       "when": 1783000000000,
       "tag": "0058_ps_username",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1783100000000,
+      "tag": "0059_rules_text",
+      "breakpoints": true
     }
   ]
 }
