@@ -1715,6 +1715,7 @@ export function refreshUserMap() {
     teamId: schema.teams.id,
     leagueId: schema.teams.leagueId,
     username: schema.users.username,
+    psUsername: schema.users.psUsername,
   })
     .from(schema.teams)
     .innerJoin(schema.users, eq(schema.teams.userId, schema.users.id))
@@ -1726,7 +1727,7 @@ export function refreshUserMap() {
     .all();
 
   for (const row of rows) {
-    const userid = toUserid(row.username);
+    const userid = effectivePsUserid(row);
     if (useridToTeam.has(userid)) continue; // first (current-season) row wins
     useridToTeam.set(userid, { teamId: row.teamId, leagueId: row.leagueId });
   }
@@ -1741,24 +1742,22 @@ export function refreshUserMap() {
  */
 function teamPsUserid(team: { userId: number | null } | null | undefined): string {
   if (!team?.userId) return '';
-  const user = db.select({ username: schema.users.username })
+  const user = db.select({ username: schema.users.username, psUsername: schema.users.psUsername })
     .from(schema.users)
     .where(eq(schema.users.id, team.userId))
     .get();
-  return user ? toUserid(user.username) : '';
+  return user ? effectivePsUserid(user) : '';
 }
 
 /**
  * Resolve the canonical PS userid for a user record.
  *
- * TODAY this is `toUserid(users.username)` because that is what the SSO login
- * server signs assertions for. Once the `users.psUsername` column is added
- * (separate migration), prefer that field — it lets coaches use a different PS
- * handle from their Cannoli account name.
- *
- * // TODO: prefer psUsername once available (check if non-null / non-empty first)
+ * Prefers the coach's custom `users.psUsername` (lets them use a different PS
+ * handle — e.g. a team acronym — from their Cannoli account name); falls back
+ * to the account `username`. This is the same identity the SSO login server
+ * signs assertions for (see `getPsUserid` in ps-login.ts), so the bot's
+ * userid→team join key stays in lockstep with what shows up in battle.
  */
-export function effectivePsUserid(user: { username: string }): string {
-  // TODO: when psUsername column exists: return user.psUsername ? toUserid(user.psUsername) : toUserid(user.username);
-  return toUserid(user.username);
+export function effectivePsUserid(user: { username: string; psUsername?: string | null }): string {
+  return toUserid(user.psUsername ?? user.username);
 }
