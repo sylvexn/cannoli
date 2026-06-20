@@ -252,7 +252,18 @@ export function ManageRosterModal(props: {
                 )}
               >
                 <div className="flex items-center gap-2.5 px-2.5 py-2">
-                  <PokemonSprite name={mon.name} size="sm" shiny={shiny[i]} className="shrink-0" />
+                  {/* Sprite with shiny badge overlay */}
+                  <div className="relative shrink-0">
+                    <PokemonSprite name={mon.name} size="md" shiny={shiny[i]} className="shrink-0" />
+                    {shiny[i] && (
+                      <span
+                        title="Shiny"
+                        className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-yellow-500/90 ring-1 ring-surface-base shadow"
+                      >
+                        <Sparkles className="size-2.5 text-white" />
+                      </span>
+                    )}
+                  </div>
 
                   {/* Name + cost */}
                   <div className="w-[150px] shrink-0 min-w-0">
