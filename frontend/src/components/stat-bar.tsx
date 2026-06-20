@@ -8,12 +8,11 @@ interface StatBarProps {
 }
 
 function statColor(value: number): string {
-  if (value >= 150) return '#ff4444';
-  if (value >= 120) return '#ff8822';
-  if (value >= 100) return '#ffcc00';
-  if (value >= 80) return '#88cc44';
-  if (value >= 60) return '#3388bb';
-  return '#6655cc';
+  if (value >= 130) return '#4ade80';
+  if (value >= 100) return '#86efac';
+  if (value >= 80) return '#a3e635';
+  if (value >= 60) return '#fbbf24';
+  return '#f87171';
 }
 
 export function StatBar({ label, value, max = 255, className }: StatBarProps) {

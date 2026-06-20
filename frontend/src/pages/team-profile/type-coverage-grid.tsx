@@ -48,10 +48,18 @@ export function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
 
             {/* Counts by multiplier */}
             <div className="w-[52px] shrink-0 flex items-center justify-end gap-[3px] pr-1.5 font-mono text-[9px] tabular-nums">
-              {p.x4.length > 0 && <span className="text-loss font-bold">{p.x4.length}</span>}
+              {p.x4.length > 0 && (
+                <span className="text-loss font-black text-[10px] leading-none px-[3px] py-px rounded ring-1 ring-loss/60 bg-loss/10">
+                  {p.x4.length}
+                </span>
+              )}
               {p.x2.length > 0 && <span className="text-loss">{p.x2.length}</span>}
               {p.x05.length > 0 && <span className="text-win">{p.x05.length}</span>}
-              {p.x025.length > 0 && <span className="text-win font-bold">{p.x025.length}</span>}
+              {p.x025.length > 0 && (
+                <span className="text-win font-black text-[10px] leading-none px-[3px] py-px rounded ring-1 ring-win/60 bg-win/10">
+                  {p.x025.length}
+                </span>
+              )}
               {p.x0.length > 0 && <span className="text-neon font-bold">{p.x0.length}</span>}
               {!hasAny && <span className="text-text-muted/40">—</span>}
             </div>

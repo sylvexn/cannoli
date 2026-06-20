@@ -187,7 +187,7 @@ export function PokemonCompactCard({
       className={cn(
         'pkmn-card group relative flex flex-col items-center justify-start gap-0.5 rounded-md',
         (hasConflict || (unaffordable && !owner)) ? 'cursor-not-allowed' : 'cursor-pointer',
-        'p-1 pl-1.5 pb-[6px]',
+        'p-1 pl-1.5 pt-[6px]',
         'bg-surface',
         'border transition-[box-shadow,border-color,transform,opacity] duration-180 ease-out',
         'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neon',
@@ -230,7 +230,7 @@ export function PokemonCompactCard({
       {/* Tier cost pill — top-left, ALWAYS visible (canonical cost indicator) */}
       {showTier && tier != null && (
         <span className={cn(
-          'absolute top-0.5 left-0.5 z-10 min-w-[18px] h-[16px] px-1',
+          'absolute top-0.5 left-0.5 z-30 min-w-[18px] h-[16px] px-1',
           'flex items-center justify-center rounded-sm text-[9px] font-mono font-bold leading-none',
           'bg-surface/90 backdrop-blur-sm border',
           unaffordable
@@ -245,7 +245,7 @@ export function PokemonCompactCard({
 
       {/* Queue position — top-right corner, persistent (queue is user-driven, must be visible) */}
       {queuePosition && !owner && (
-        <span className="absolute top-0.5 right-0.5 z-10 w-[14px] h-[14px] flex items-center justify-center rounded-sm bg-pink text-white text-[9px] font-mono font-bold leading-none">
+        <span className="absolute top-0.5 right-0.5 z-30 w-[14px] h-[14px] flex items-center justify-center rounded-sm bg-pink text-white text-[9px] font-mono font-bold leading-none">
           {queuePosition}
         </span>
       )}
@@ -253,7 +253,7 @@ export function PokemonCompactCard({
       {/* Conflict warning — single small dot, persistent */}
       {hasConflict && !queuePosition && (
         <span
-          className="absolute top-0.5 right-0.5 z-10 w-[14px] h-[14px] flex items-center justify-center rounded-full bg-loss/85 text-white"
+          className="absolute top-0.5 right-0.5 z-30 w-[14px] h-[14px] flex items-center justify-center rounded-full bg-loss/85 text-white"
           title={
             conflictKind === 'mega-cap' ? 'Already at mega cap'
             : conflictKind === 'duplicate-species' ? 'Already on roster (same species)'
@@ -264,14 +264,14 @@ export function PokemonCompactCard({
         </span>
       )}
 
-      {/* Status icons cluster — top-right, REVEALED ON HOVER (and persistent for queued slot pushes them down) */}
+      {/* Status icons cluster — top-right, REVEALED ON HOVER (pushed below the top strip so they don't overlap it) */}
       {(isMega || isCaptainEligible || isTeraBanned) && !hasConflict && (
         <div
           className={cn(
-            'absolute right-0.5 z-10 flex flex-col items-end gap-0.5',
+            'absolute right-0.5 z-30 flex flex-col items-end gap-0.5',
             'opacity-0 -translate-y-0.5 transition-[opacity,transform] duration-180',
             'group-hover:opacity-100 group-hover:translate-y-0 group-focus-visible:opacity-100 group-focus-visible:translate-y-0',
-            queuePosition ? 'top-[18px]' : 'top-0.5',
+            queuePosition ? 'top-[18px]' : 'top-[16px]',
           )}
         >
           {isMega && (
@@ -350,12 +350,13 @@ export function PokemonCompactCard({
         </div>
       )}
 
-      {/* Bottom ownership strip — 4px coloured for owners, 1px subtle for FAs.
-          The text content (owner abbrev / action label) appears on hover. */}
+      {/* Top ownership strip — 4px coloured for owners, 1px subtle for FAs.
+          The text content (owner abbrev / action label) appears on hover.
+          Sits at the top so it never overlaps the Pokémon name at the bottom. */}
       <span
         aria-hidden
         className={cn(
-          'absolute left-0 right-0 bottom-0 rounded-b-md pointer-events-none',
+          'absolute left-0 right-0 top-0 rounded-t-md pointer-events-none',
           'transition-[height,background-color] duration-180',
           owner
             ? 'h-[4px] bg-[color:var(--owner)] group-hover:h-[14px] group-focus-visible:h-[14px]'
@@ -372,11 +373,11 @@ export function PokemonCompactCard({
         style={ownerColor ? { backgroundColor: ownerColor } : undefined}
       />
 
-      {/* Hover label — sits over the strip, fades in. Owner abbrev wins for owned cards;
-          action label otherwise. */}
+      {/* Hover label — sits over the top strip, fades in. Owner abbrev wins for owned cards;
+          action label otherwise. z-20 so it clears the tier pill (z-10) on overlap. */}
       <span
         className={cn(
-          'absolute left-0 right-0 bottom-0 z-10 flex items-center justify-center gap-1',
+          'absolute left-0 right-0 top-0 z-20 flex items-center justify-center gap-1',
           'h-[14px] px-1 text-[8.5px] font-mono leading-none uppercase tracking-wider',
           'opacity-0 transition-opacity duration-180',
           'group-hover:opacity-100 group-focus-visible:opacity-100',
