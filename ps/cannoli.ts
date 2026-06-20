@@ -77,15 +77,19 @@ export const commands: Chat.ChatCommands = {
 		const user2 = Users.get(p2Name);
 
 		if (!user1) {
+			pmBot(`cannoli-battle-failed|Player not found or offline: ${p1Name}|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`Player not found or offline: ${p1Name}`);
 		}
 		if (!user2) {
+			pmBot(`cannoli-battle-failed|Player not found or offline: ${p2Name}|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`Player not found or offline: ${p2Name}`);
 		}
 		if (!user1.named) {
+			pmBot(`cannoli-battle-failed|${p1Name} is not logged in|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`${p1Name} is not logged in.`);
 		}
 		if (!user2.named) {
+			pmBot(`cannoli-battle-failed|${p2Name} is not logged in|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`${p2Name} is not logged in.`);
 		}
 
@@ -163,7 +167,7 @@ export const commands: Chat.ChatCommands = {
 				} catch {}
 			}
 			const reason = err instanceof Error ? err.message : String(err);
-			pmBot(`cannoli-battle-failed|${reason}`);
+			pmBot(`cannoli-battle-failed|${reason}|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`Failed to create battle: ${reason}`);
 		}
 

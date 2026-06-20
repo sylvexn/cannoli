@@ -18,7 +18,7 @@ import { toUserid, signAssertion } from './ps-login';
 import { getLeagueCostFormat } from './league-costs';
 import { db, schema } from '../db';
 import { eq, and, sql, inArray } from 'drizzle-orm';
-import { getArenaBroadcaster, clearReadyTimerForMatch } from '../routes/arena';
+import { getArenaBroadcaster, clearReadyTimerForMatch, handleScrimBattleFailed } from '../routes/arena';
 import { runAutoAwards } from './pins/auto-award';
 import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
@@ -512,6 +512,24 @@ function handleBotPm(sender: string, message: string) {
   const senderId = toUserid(sender);
   // Only honour signals from the system identity injected by cannoli.ts.
   if (senderId !== 'cannoli') return;
+
+  if (message.startsWith('cannoli-battle-failed|')) {
+    // cannoli-battle-failed|<reason>|<p1userid>|<p2userid>
+    // Sent by the PS plugin when it can't find a player or create the room.
+    // Notify the Arena so the scrim lobby can be reverted and the players
+    // see an error rather than being stuck in a permanent 'ready' hang.
+    const parts = message.split('|');
+    const reason = parts[1] || 'unknown error';
+    const p1 = parts[2] ? toUserid(parts[2]) : '';
+    const p2 = parts[3] ? toUserid(parts[3]) : '';
+    console.warn(`[PS Bot] Battle creation failed — ${reason} (${p1} vs ${p2})`);
+    try {
+      handleScrimBattleFailed(p1, p2, reason);
+    } catch (err) {
+      console.error('[PS Bot] handleScrimBattleFailed threw:', err);
+    }
+    return;
+  }
 
   if (!message.startsWith('cannoli-battle-created|')) return;
 

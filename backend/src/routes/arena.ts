@@ -11,6 +11,7 @@ import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { parseSessionToken, validateSession } from '../lib/auth';
 import { createBattle, cancelBattle, isBotConnected, onBotConnectionChange } from '../lib/ps-bot';
+import { toUserid } from '../lib/ps-login';
 import { getLeague } from '../lib/queries';
 import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs, hasBroadcastServer } from '../lib/ws-broadcast';
@@ -208,6 +209,54 @@ export function clearReadyTimerForMatch(matchId: string) {
 export function getArenaBroadcaster(): { publish: (topic: string, data: string) => void } | null {
   if (!hasBroadcastServer()) return null;
   return { publish: (topic, data) => { publishWs(topic, data); } };
+}
+
+/**
+ * Called by ps-bot when the PS plugin fails to create a scrim battle
+ * (cannoli-battle-failed PM). Finds the matching scrim lobby by player
+ * userids, reverts it to 'waiting' (resets ready flags), and broadcasts
+ * a scrim_error event so the UI shows "couldn't start — try again".
+ *
+ * p1/p2 are PS userids (toUserid-normalized).
+ */
+export function handleScrimBattleFailed(p1: string, p2: string, reason: string) {
+  for (const [lobbyId, lobby] of scrimLobbies) {
+    if (lobby.status !== 'ready') continue;
+    // Match by comparing PS userids of both lobby players against p1/p2.
+    // Lobby stores Cannoli usernames; toUserid normalizes them the same way PS does.
+    const lp1 = toUserid(lobby.players[0] ?? '');
+    const lp2 = toUserid(lobby.players[1] ?? '');
+    const matched =
+      (lp1 === p1 && lp2 === p2) ||
+      (lp1 === p2 && lp2 === p1);
+    if (!matched) continue;
+
+    // Revert to waiting so both players can try again.
+    lobby.status = 'waiting';
+    lobby.ready[0] = false;
+    lobby.ready[1] = false;
+
+    console.log(`[arena] scrim ${lobbyId} battle creation failed (${reason}) — reverted to waiting`);
+
+    publishWs(`arena:scrim:${lobbyId}`, JSON.stringify({
+      type: 'scrim_error',
+      lobbyId,
+      message: `Couldn't start battle — try again (${reason})`,
+      players: lobby.players,
+      ready: lobby.ready,
+      status: lobby.status,
+    }));
+    publishWs('arena:global', JSON.stringify({
+      type: 'lobby_list',
+      lobbies: Array.from(scrimLobbies.values()).map(l => ({
+        id: l.id, format: l.format, creator: l.creatorUsername,
+        invitee: l.invitee, players: l.players, ready: l.ready, status: l.status,
+      })),
+    }));
+    return;
+  }
+  // No matching lobby found — already cleaned up or was a match battle.
+  console.log(`[arena] cannoli-battle-failed for ${p1} vs ${p2} (${reason}) — no matching scrim lobby`);
 }
 
 /**
@@ -670,6 +719,24 @@ export const arenaRoutes = new Elysia()
 
             // Check if both ready
             if (lobby.players.length === 2 && lobby.ready[0] && lobby.ready[1]) {
+              if (!isBotConnected()) {
+                // Bot offline — reset ready flags so players can try again;
+                // do NOT advance lobby.status so we never strand the lobby
+                // in 'ready' with no battle behind it.
+                lobby.ready[0] = false;
+                lobby.ready[1] = false;
+                publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
+                  type: 'scrim_error',
+                  lobbyId: msg.lobbyId,
+                  message: 'Showdown bot is offline — try again shortly',
+                  players: lobby.players,
+                  ready: lobby.ready,
+                  status: lobby.status,
+                }));
+                broadcastScrimList(ws);
+                break;
+              }
+
               lobby.status = 'ready';
               // Create scrim battle via bot. Scrims go through the same INVITE/
               // team-pick flow as official matches now: createBattle sends an
@@ -677,10 +744,12 @@ export const arenaRoutes = new Elysia()
               // accept; the battle starts once both accept). Scrims have no DB
               // match lifecycle, so there's no in_progress transition to defer —
               // the lobby stays 'ready' and the live battle is observed once it
-              // starts.
-              if (isBotConnected()) {
-                createBattle(lobby.players[0], lobby.players[1]);
-              }
+              // starts. Pass the lobby format explicitly so the scrim is
+              // unambiguously created in the correct PS format.
+              // Normalize player names to PS userids (lowercase alnum) so
+              // Users.get() on the PS server finds them regardless of how the
+              // Cannoli username is cased or punctuated.
+              createBattle(toUserid(lobby.players[0]), toUserid(lobby.players[1]), lobby.format);
             }
 
             publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({

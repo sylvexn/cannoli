@@ -118,32 +118,6 @@ function resolveTeamPsUsername(teamId: string | null, sideLabel: 'home' | 'away'
 }
 
 /**
- * Map a league's `format` column value to the PS battle format slug.
- * Leagues store e.g. `gen9natdex`; the PS battle format adds `draft`.
- * Returns the default `gen9natdexdraft` for any unrecognised value.
- */
-function leagueToPsFormat(leagueFormat: string | null | undefined): string {
-  if (!leagueFormat) return 'gen9natdexdraft';
-  // If the league format already ends in 'draft', use it as-is.
-  if (leagueFormat.endsWith('draft')) return leagueFormat;
-  return `${leagueFormat}draft`;
-}
-
-/**
- * Ask the PS bot to send an INVITE for a both-ready match. Resolves p1/p2
- * usernames (owning user → coachName → teamId fallback) exactly as the
- * match_ready handler used to inline. Shared by the ready-up handler and the
- * bot-reconnect auto-resume path so the resolution logic lives in one place.
- * Passes the match id so the PS plugin can forward it in the PM, enabling
- * deterministic room→match linking in handleBotPm (backward-compatible with
- * PS forks that still emit the old 5-field form).
- *
- * INVITE FLOW: the PS plugin creates the battle room with both player slots
- * empty + invited — each player then picks a team in their native Showdown
- * team-picker and accepts. The battle (and the match's in_progress transition)
- * only starts once BOTH players accept; this call just kicks off that invite.
- */
-/**
  * Map a Cannoli league `format` label to the Pokemon Showdown battle-format id
  * its matches play under. Today every league resolves to `gen9natdexdraft`:
  * `format` is a moveset-display label and `costFormat` (natdex/natdexplus) is a
