@@ -559,26 +559,27 @@ export const teamRoutes = new Elysia()
           );
         }
 
-        // ── Transaction records (one row per pokemon moved) ──
-        for (const { name: pokemonName, tier } of pickupCosts) {
+        // ── Transaction records ──
+        // Pair each pickup with a drop so the common "drop X, add Y" pickup is
+        // ONE row carrying both sides (pokemonOut + pokemonIn). Writing them as
+        // two half-empty rows made the activity feeds render "— for Y" and
+        // "X for —" on separate lines (feedback #41). Unequal counts leave the
+        // leftovers as legitimate one-sided rows (pure add / pure drop).
+        const dropCostOf = (name: string) =>
+          droppedCosts.get(name) ?? leagueCosts.get(name)?.tier ?? null;
+        const rowCount = Math.max(pickupCosts.length, dropNames.length);
+        for (let i = 0; i < rowCount; i++) {
+          const pickup = pickupCosts[i];
+          const drop = dropNames[i];
           db.insert(schema.transactions).values({
             leagueId: params.leagueId,
             week,
             type: 'fa',
             teamId,
-            pokemonIn: pokemonName,
-            pointsIn: tier,
-          }).run();
-        }
-        for (const dropPokemonName of dropNames) {
-          const dropCost = droppedCosts.get(dropPokemonName) ?? leagueCosts.get(dropPokemonName)?.tier ?? null;
-          db.insert(schema.transactions).values({
-            leagueId: params.leagueId,
-            week,
-            type: 'fa',
-            teamId,
-            pokemonOut: dropPokemonName,
-            pointsOut: dropCost,
+            pokemonOut: drop ?? null,
+            pointsOut: drop ? dropCostOf(drop) : null,
+            pokemonIn: pickup?.name ?? null,
+            pointsIn: pickup?.tier ?? null,
           }).run();
         }
 

@@ -192,11 +192,24 @@ function HistoryRow({
         )}
       </div>
 
-      {/* Mon names */}
+      {/* Mon names — only join the two sides with "for" when both exist, so a
+          pure FA pickup / drop reads as just the mon, not "— for Y". */}
       <div className="flex-1 min-w-0 text-[11px] text-text-secondary truncate">
-        <span className="text-text-primary font-medium font-mono">{trade.offering.join(', ') || '—'}</span>
-        <span className="text-text-muted mx-1">for</span>
-        <span className="text-text-primary font-medium font-mono">{trade.requesting.join(', ') || '—'}</span>
+        {trade.offering.length === 0 && trade.requesting.length === 0 ? (
+          <span className="text-text-muted">—</span>
+        ) : (
+          <>
+            {trade.offering.length > 0 && (
+              <span className="text-text-primary font-medium font-mono">{trade.offering.join(', ')}</span>
+            )}
+            {trade.offering.length > 0 && trade.requesting.length > 0 && (
+              <span className="text-text-muted mx-1">for</span>
+            )}
+            {trade.requesting.length > 0 && (
+              <span className="text-text-primary font-medium font-mono">{trade.requesting.join(', ')}</span>
+            )}
+          </>
+        )}
       </div>
 
       {/* Tiny status badge */}

@@ -65,21 +65,56 @@ export function TradeDeskPage() {
         resolvedAt: t.resolvedAt || '',
       }));
 
-    const fromTransactions: Trade[] = transactions
-      .filter(t => t.type === 'fa' || t.type === 'trade')
+    // Trades map 1:1 — each accepted-trade transaction already carries both
+    // sides for one team's perspective.
+    const fromTrades: Trade[] = transactions
+      .filter(t => t.type === 'trade')
       .map(t => ({
         id: `t${t.id}`,
         week: t.week,
         status: 'accepted' as const,
         proposer: t.teamId,
-        recipient: t.type === 'fa' ? 'pool' : (t.otherTeamId || 'pool'),
+        recipient: t.otherTeamId || 'pool',
         offering: t.pokemonOut ? [t.pokemonOut] : [],
         requesting: t.pokemonIn ? [t.pokemonIn] : [],
         proposedAt: '',
         resolvedAt: '',
       }));
 
-    return [...fromApi, ...fromTransactions];
+    // FA pickups: new ones are a single combined row, but legacy data split a
+    // "drop X, add Y" pickup into a drop-only row and a pickup-only row, which
+    // rendered as two broken "— for Y" / "X for —" lines (feedback #41). Per
+    // team+week, keep combined rows as-is and zip the leftover one-sided rows
+    // back into single entries.
+    const fromFa: Trade[] = [];
+    const faByTeamWeek = new Map<string, typeof transactions>();
+    for (const t of transactions.filter(t => t.type === 'fa')) {
+      const key = `${t.teamId}:${t.week}`;
+      const list = faByTeamWeek.get(key) ?? [];
+      list.push(t);
+      faByTeamWeek.set(key, list);
+    }
+    for (const [key, rows] of faByTeamWeek) {
+      const team = rows[0].teamId;
+      const week = rows[0].week;
+      const mkTrade = (id: string, out: string[], inn: string[]): Trade => ({
+        id, week, status: 'accepted', proposer: team, recipient: 'pool',
+        offering: out, requesting: inn, proposedAt: '', resolvedAt: '',
+      });
+      const outOnly = rows.filter(r => r.pokemonOut && !r.pokemonIn);
+      const inOnly = rows.filter(r => !r.pokemonOut && r.pokemonIn);
+      for (const r of rows.filter(r => r.pokemonOut && r.pokemonIn)) {
+        fromFa.push(mkTrade(`fa${r.id}`, [r.pokemonOut!], [r.pokemonIn!]));
+      }
+      const pairs = Math.max(outOnly.length, inOnly.length);
+      for (let i = 0; i < pairs; i++) {
+        const out = outOnly[i]?.pokemonOut ? [outOnly[i].pokemonOut!] : [];
+        const inn = inOnly[i]?.pokemonIn ? [inOnly[i].pokemonIn!] : [];
+        fromFa.push(mkTrade(`fa-${key}-${i}`, out, inn));
+      }
+    }
+
+    return [...fromApi, ...fromTrades, ...fromFa];
   }, [apiTrades, transactions]);
 
   // ── Composer ─────────────────────────────────────────────────────────────
