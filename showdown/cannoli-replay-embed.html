@@ -155,6 +155,33 @@
     font-size: 10px;
     margin-right: 2px;
   }
+  #volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 64px;
+    height: 4px;
+    border-radius: 2px;
+    background: #2c2c34;
+    cursor: pointer;
+    margin: 0 2px;
+  }
+  #volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #00d9ff;
+    cursor: pointer;
+  }
+  #volume-slider::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border: none;
+    border-radius: 50%;
+    background: #00d9ff;
+    cursor: pointer;
+  }
   #turn-display {
     color: #888;
     font-variant-numeric: tabular-nums;
@@ -213,6 +240,8 @@
       <button data-action="mute" title="Mute / unmute" aria-label="Mute / unmute">
         <i class="fa fa-volume-up" id="sound-icon"></i>
       </button>
+      <input type="range" id="volume-slider" min="0" max="100" value="50"
+             title="Volume" aria-label="Volume" />
       <button data-action="switch" title="Switch sides" aria-label="Switch sides">
         <i class="fa fa-random"></i>
       </button>
@@ -330,18 +359,54 @@
     var turnDisplay = document.querySelector('#turn-display strong');
     controls.style.display = 'flex';
 
-    var muted = false;
+    var volumeSlider = document.getElementById('volume-slider');
+
+    // Replay volume (0–100, persisted across replays). 0 is treated as muted;
+    // the mute button toggles between the slider's level and silence.
+    var VOLUME_KEY = 'cannoli-replay-volume';
+    var volume = 50;
+    try {
+      var savedVol = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+      if (!isNaN(savedVol) && savedVol >= 0 && savedVol <= 100) volume = savedVol;
+    } catch (e) { /* private mode / no storage */ }
+    var muted = volume === 0;
+
+    function applyVolume() {
+      var effective = muted ? 0 : volume;
+      if (window.BattleSound) {
+        if (BattleSound.setBgmVolume) BattleSound.setBgmVolume(effective);
+        if (BattleSound.setEffectVolume) BattleSound.setEffectVolume(effective);
+      }
+      if (battle.setMute) battle.setMute(effective === 0);
+    }
+
+    function soundIconClass() {
+      if (muted || volume === 0) return 'fa fa-volume-off';
+      if (volume < 50) return 'fa fa-volume-down';
+      return 'fa fa-volume-up';
+    }
 
     function refresh() {
-      if (battle.paused) {
-        playIcon.className = 'fa fa-play';
-      } else {
-        playIcon.className = 'fa fa-pause';
-      }
-      soundIcon.className = muted ? 'fa fa-volume-off' : 'fa fa-volume-up';
+      playIcon.className = battle.paused ? 'fa fa-play' : 'fa fa-pause';
+      soundIcon.className = soundIconClass();
+      if (volumeSlider) volumeSlider.value = muted ? 0 : volume;
       var t = battle.turn != null && battle.turn >= 0 ? battle.turn : 0;
       turnDisplay.textContent = t;
     }
+
+    if (volumeSlider) {
+      volumeSlider.value = muted ? 0 : volume;
+      volumeSlider.addEventListener('input', function () {
+        volume = parseInt(volumeSlider.value, 10) || 0;
+        muted = volume === 0;
+        try { localStorage.setItem(VOLUME_KEY, String(volume)); } catch (e) { /* ignore */ }
+        applyVolume();
+        soundIcon.className = soundIconClass();
+      });
+    }
+
+    // Push the persisted volume to the freshly-wired battle.
+    applyVolume();
 
     controls.addEventListener('click', function (e) {
       var btn = e.target.closest('button');
@@ -385,8 +450,15 @@
           break;
         }
         case 'mute':
-          muted = !muted;
-          battle.setMute(muted);
+          if (muted || volume === 0) {
+            // Unmute → restore the slider's level (or a sensible default).
+            muted = false;
+            if (volume === 0) volume = 50;
+          } else {
+            muted = true;
+          }
+          try { localStorage.setItem(VOLUME_KEY, String(muted ? 0 : volume)); } catch (e) { /* ignore */ }
+          applyVolume();
           break;
         case 'switch':
           battle.switchViewpoint();
