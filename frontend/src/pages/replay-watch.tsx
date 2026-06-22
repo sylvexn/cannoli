@@ -59,7 +59,7 @@ export function ReplayWatchPage() {
   }
 
   return (
-    <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-40 bg-surface p-4')}>
+    <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-[60] bg-surface p-4')}>
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <button

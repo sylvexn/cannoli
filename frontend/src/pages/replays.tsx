@@ -314,7 +314,7 @@ export function ReplaysPage() {
   }
 
   return (
-    <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-40 bg-surface p-6')}>
+    <div className={cn('flex flex-col h-full', theater && 'fixed inset-0 z-[60] bg-surface p-6')}>
       <div className="flex items-center justify-between mb-3 gap-4">
         <h1 className="font-mono text-xl font-bold uppercase tracking-widest shrink-0">
           <span className="text-neon">Replay</span>{' '}
