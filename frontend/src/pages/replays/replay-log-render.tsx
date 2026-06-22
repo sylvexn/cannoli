@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { PokemonLink } from '@/components/pokemon-link';
 import { TIER_LIST } from '@/data/tier-list';
 import { MOVE_TYPES } from '@/data/move-types';
 import { TYPE_COLORS } from '@/lib/constants';
-import { pokemonRoute } from '@/lib/pokemon-route';
 
 /**
  * Turns a PS battle-log line (sanitized HTML string from the embed bridge)
@@ -53,16 +52,7 @@ function linkifySpecies(text: string): ReactNode {
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const name = m[0];
-    out.push(
-      <Link
-        key={`s${_key++}`}
-        to={pokemonRoute(name)}
-        onClick={e => e.stopPropagation()}
-        className="replay-mon-link"
-      >
-        {name}
-      </Link>,
-    );
+    out.push(<PokemonLink key={`s${_key++}`} name={name} className="replay-mon-link" />);
     last = m.index + name.length;
     if (re.lastIndex === m.index) re.lastIndex++;
   }
