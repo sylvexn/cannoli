@@ -64,15 +64,26 @@ export function ReplaysPage() {
       .sort((a, b) => b.seasonNumber - a.seasonNumber);
   }, [leagues]);
 
-  // Pick the highest active (non-archived) currentWeek — the natural target
-  // for a "this-week stream". Archived seasons sit at week 11 and must not
-  // hijack the stream button. Falls back to the highest week with a replay.
+  // Stream target = the latest week of the ACTIVE season that actually has
+  // matches to stream (a stored replay), NOT the calendar-advanced currentWeek.
+  // A league streams a week once its games are played, regardless of weekday —
+  // currentWeek rolling to 2 on a Monday shouldn't make the button say "Week 2"
+  // while Week 1 is still being streamed (feedback #47). Archived seasons sit at
+  // the final week, so restrict to active leagues. Falls back to the active
+  // season's currentWeek before any match is played, then week 1.
   const streamWeek = useMemo(() => {
-    const active = leagues.filter(l => !l.season?.archived);
-    const fromLeagues = active.reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
-    if (fromLeagues > 0) return fromLeagues;
-    const fromReplays = entries.reduce((max, e) => Math.max(max, e.match.week), 0);
-    return fromReplays > 0 ? fromReplays : 1;
+    const activeLeagueIds = new Set(
+      leagues.filter(l => !l.season?.archived).map(l => l.id),
+    );
+    const fromReplays = entries.reduce(
+      (max, e) => (activeLeagueIds.has(e.league.id) ? Math.max(max, e.match.week) : max),
+      0,
+    );
+    if (fromReplays > 0) return fromReplays;
+    const fromLeagues = leagues
+      .filter(l => !l.season?.archived)
+      .reduce((max, l) => Math.max(max, l.season?.currentWeek ?? 0), 0);
+    return fromLeagues > 0 ? fromLeagues : 1;
   }, [leagues, entries]);
 
   // The broadcast cockpit button targets the ACTIVE season's current week, so
