@@ -12,7 +12,14 @@ import type { League } from '@/lib/types';
 
 export type PhaseFilter = 'all' | 'regular' | 'playoffs';
 
+export interface SeasonOpt {
+  id: string;
+  seasonNumber: number;
+  archived: boolean;
+}
+
 export interface MatchFilters {
+  seasonFilter: string;
   leagueFilter: string;
   statusFilter: string;
   phaseFilter: PhaseFilter;
@@ -23,11 +30,14 @@ export interface MatchFilters {
 
 interface MatchFilterBarProps {
   filters: MatchFilters;
+  /** Seasons (desc) for the season axis; the league list is scoped to one. */
+  seasons: SeasonOpt[];
   leagues: League[];
   /** Distinct weeks present in the current league-filtered data, ascending. */
   weeks: number[];
   /** Whether any non-league filter is active (drives the Clear button). */
   isFiltered: boolean;
+  onSeasonChange: (v: string) => void;
   onLeagueChange: (v: string) => void;
   onStatusChange: (v: string) => void;
   onPhaseChange: (v: PhaseFilter) => void;
@@ -41,9 +51,11 @@ interface MatchFilterBarProps {
 
 export function MatchFilterBar({
   filters,
+  seasons,
   leagues,
   weeks,
   isFiltered,
+  onSeasonChange,
   onLeagueChange,
   onStatusChange,
   onPhaseChange,
@@ -54,10 +66,24 @@ export function MatchFilterBar({
   onExpandAll,
   onCollapseAll,
 }: MatchFilterBarProps) {
-  const { leagueFilter, statusFilter, phaseFilter, weekFilter, teamSearch, attentionOnly } = filters;
+  const { seasonFilter, leagueFilter, statusFilter, phaseFilter, weekFilter, teamSearch, attentionOnly } = filters;
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Select value={seasonFilter} onValueChange={(v) => onSeasonChange(v ?? 'all')}>
+        <SelectTrigger className="w-[130px] h-8 text-xs bg-surface-overlay">
+          <SelectValue placeholder="Season" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all" className="text-xs">All Seasons</SelectItem>
+          {seasons.map(s => (
+            <SelectItem key={s.id} value={s.id} className="text-xs">
+              Season {s.seasonNumber}{s.archived ? ' (archived)' : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       <Select value={leagueFilter} onValueChange={(v) => onLeagueChange(v ?? 'all')}>
         <SelectTrigger className="w-[160px] h-8 text-xs bg-surface-overlay">
           <SelectValue placeholder="All Leagues" />

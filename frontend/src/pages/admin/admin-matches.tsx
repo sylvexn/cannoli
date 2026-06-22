@@ -3,7 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { api } from '@/lib/api';
 import type { ApiAdminMatch } from '@/lib/api';
-import { useAppData } from '@/lib/app-data-context';
+import { mapLeagues } from '@/lib/app-data-context';
+import type { League } from '@/lib/types';
 import { useTeamNames } from '@/lib/use-team-names';
 import { useFormatDateTime } from '@/lib/format';
 import { toast } from 'sonner';
@@ -12,19 +13,46 @@ import { SpoilerToggle } from '@/components/spoiler-toggle';
 import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import { matchNeedsAttention, matchIsSettled } from './matches/match-status-badges';
 import { MatchEntryDialog, type ResultMode } from './matches/match-entry-dialog';
-import { MatchFilterBar, type MatchFilters, type PhaseFilter } from './matches/match-filter-bar';
+import { MatchFilterBar, type MatchFilters, type PhaseFilter, type SeasonOpt } from './matches/match-filter-bar';
 import { MatchWeekSection } from './matches/match-week-section';
 import { getErrorMessage } from '@/lib/errors';
 
 export function AdminMatches() {
-  const { leagues } = useAppData();
   const teamNames = useTeamNames();
   const fmtDateTime = useFormatDateTime();
+
+  // All-season leagues (not just the active season) so matches from archived
+  // seasons resolve their league/season and the season filter can list them.
+  // null = not yet loaded (gates the first fetch until the default season is set).
+  const [allLeagues, setAllLeagues] = useState<League[] | null>(null);
+  useEffect(() => {
+    api.getLeagues(true).then(a => setAllLeagues(mapLeagues(a))).catch(() => setAllLeagues([]));
+  }, []);
+  const leagues = useMemo(() => allLeagues ?? [], [allLeagues]);
+  // Real league rows only — PS bot-invite battles spawn throwaway "leagues"
+  // (botinvite-*) that shouldn't appear in the season/league pickers.
+  const realLeagues = useMemo(() => leagues.filter(l => !l.id.startsWith('botinvite-')), [leagues]);
+
+  // Seasons (desc) for the season axis; default the view to the active one.
+  const seasons = useMemo<SeasonOpt[]>(() => {
+    const m = new Map<string, SeasonOpt>();
+    for (const l of realLeagues) {
+      const s = l.season;
+      if (!s || s.seasonNumber === 0) continue;
+      if (!m.has(s.id)) m.set(s.id, { id: s.id, seasonNumber: s.seasonNumber, archived: !!s.archived });
+    }
+    return [...m.values()].sort((a, b) => b.seasonNumber - a.seasonNumber);
+  }, [realLeagues]);
+  const activeSeasonId = useMemo(() => {
+    const active = seasons.find(s => !s.archived);
+    return active?.id ?? seasons[0]?.id ?? 'all';
+  }, [seasons]);
 
   const [matches, setMatches] = useState<ApiAdminMatch[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters — league is a server param; everything else is client-side.
+  // Filters — season + league are server params; everything else is client-side.
+  const [seasonFilter, setSeasonFilter] = useState('');
   const [leagueFilter, setLeagueFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>('all');
@@ -43,21 +71,44 @@ export function AdminMatches() {
   const [resultMatch, setResultMatch] = useState<ApiAdminMatch | null>(null);
   const [resultMode, setResultMode] = useState<ResultMode>('enter');
 
-  // Fetch matches once per league change — status/phase/week/search all filter
-  // client-side for instant response. League meaningfully shrinks the payload.
+  // Default the season scope to the active season once leagues load.
+  useEffect(() => {
+    if (allLeagues !== null && !seasonFilter) setSeasonFilter(activeSeasonId);
+  }, [allLeagues, activeSeasonId, seasonFilter]);
+
+  // Fetch matches per season/league change — status/phase/week/search all
+  // filter client-side for instant response. Season/league shrink the payload
+  // server-side. Wait for the default season before the first fetch.
   const fetchMatches = useCallback(() => {
+    if (!seasonFilter) return;
     setLoading(true);
     api.getAdminMatches({
       leagueId: leagueFilter !== 'all' ? leagueFilter : undefined,
+      seasonId: seasonFilter !== 'all' ? seasonFilter : undefined,
     }).then(data => {
       setMatches(data);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [leagueFilter]);
+  }, [leagueFilter, seasonFilter]);
 
   useEffect(() => { fetchMatches(); }, [fetchMatches]);
 
+  // Changing season resets the league filter so a stale league from another
+  // season doesn't linger.
+  const onSeasonChange = useCallback((v: string) => {
+    setSeasonFilter(v);
+    setLeagueFilter('all');
+  }, []);
+
   const leagueMap = useMemo(() => new Map(leagues.map(l => [l.id, l])), [leagues]);
+
+  // Leagues for the dropdown are scoped to the selected season.
+  const leaguesForSeason = useMemo(
+    () => (seasonFilter && seasonFilter !== 'all'
+      ? realLeagues.filter(l => l.season?.id === seasonFilter)
+      : realLeagues),
+    [realLeagues, seasonFilter],
+  );
 
   // Distinct weeks present in the league-filtered data (ascending) — drives the
   // week select.
@@ -104,7 +155,7 @@ export function AdminMatches() {
   // Recomputed when the league fetch produces a new dataset, not on every filter.
   useEffect(() => {
     if (loading) return;
-    const sig = `${leagueFilter}:${matches.length}`;
+    const sig = `${seasonFilter}:${leagueFilter}:${matches.length}`;
     if (sig === autoExpandedFor) return;
 
     const currentWeek = leagueFilter !== 'all'
@@ -124,7 +175,7 @@ export function AdminMatches() {
     }
     setExpandedWeeks(next);
     setAutoExpandedFor(sig);
-  }, [loading, matches, leagueFilter, leagueMap, autoExpandedFor]);
+  }, [loading, matches, seasonFilter, leagueFilter, leagueMap, autoExpandedFor]);
 
   // When "Needs attention" is toggled on, expand every shown week so the items
   // are immediately visible.
@@ -187,7 +238,7 @@ export function AdminMatches() {
   }
 
   const filters: MatchFilters = {
-    leagueFilter, statusFilter, phaseFilter, weekFilter, teamSearch, attentionOnly,
+    seasonFilter, leagueFilter, statusFilter, phaseFilter, weekFilter, teamSearch, attentionOnly,
   };
 
   return (
@@ -229,9 +280,11 @@ export function AdminMatches() {
       {/* Filters */}
       <MatchFilterBar
         filters={filters}
-        leagues={leagues}
+        seasons={seasons}
+        leagues={leaguesForSeason}
         weeks={weeks}
         isFiltered={isFiltered}
+        onSeasonChange={onSeasonChange}
         onLeagueChange={setLeagueFilter}
         onStatusChange={setStatusFilter}
         onPhaseChange={setPhaseFilter}

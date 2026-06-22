@@ -1579,9 +1579,10 @@ export const api = {
   },
 
   // Match management
-  getAdminMatches: (params?: { leagueId?: string; status?: string }) => {
+  getAdminMatches: (params?: { leagueId?: string; seasonId?: string; status?: string }) => {
     const q = new URLSearchParams();
     if (params?.leagueId) q.set('leagueId', params.leagueId);
+    if (params?.seasonId) q.set('seasonId', params.seasonId);
     if (params?.status) q.set('status', params.status);
     return fetchJson<ApiAdminMatch[]>(`/api/admin/matches?${q}`);
   },

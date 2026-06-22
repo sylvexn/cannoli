@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq, and, sql, asc, desc } from 'drizzle-orm';
+import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
@@ -367,11 +367,29 @@ export const matchRoutes = new Elysia()
     // is only needed as a boolean here; SELECTing it for every match across all
     // seasons was the load-time bottleneck. Order ascending by week (1→N).
     const leagueId = query.leagueId as string | undefined;
+    const seasonId = query.seasonId as string | undefined;
     const status = query.status as string | undefined;
 
     const conds = [];
     if (leagueId && leagueId !== 'all') {
       conds.push(eq(schema.matches.leagueId, leagueId));
+    } else if (seasonId && seasonId !== 'all') {
+      // No specific league: scope to every league in the requested season so
+      // the admin matches tab doesn't pull every season at once. The leagues
+      // API exposes season.id as a synthetic "s<seasonNumber>" (routes/leagues),
+      // NOT the raw seasons.id FK — which is numeric in the sim and a string on
+      // live — so resolve by season NUMBER to work in both.
+      const seasonNum = parseInt(String(seasonId).replace(/^s/i, ''), 10);
+      const seasonLeagueIds = Number.isFinite(seasonNum)
+        ? db.select({ id: schema.leagues.id })
+            .from(schema.leagues)
+            .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+            .where(eq(schema.seasons.seasonNumber, seasonNum))
+            .all()
+            .map(r => r.id)
+        : [];
+      // An empty list must match nothing (not everything).
+      conds.push(seasonLeagueIds.length ? inArray(schema.matches.leagueId, seasonLeagueIds) : sql`0 = 1`);
     }
     if (status && status !== 'all') {
       conds.push(eq(schema.matches.status, status as typeof schema.matches.$inferSelect.status));
