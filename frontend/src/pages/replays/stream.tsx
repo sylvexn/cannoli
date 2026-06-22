@@ -25,7 +25,7 @@ import {
   type StreamPhase,
   storageKey,
 } from './stream-types';
-import { replayEmbedUrl } from './replay-types';
+import { ReplayPlayer } from './replay-player';
 import { initialStreamState, streamReducer } from './stream-reducer';
 import { leagueGem } from '@/lib/constants';
 
@@ -385,7 +385,6 @@ function LiveView(props: LiveProps) {
   } = props;
 
   if (!active) return null;
-  const replayUrl = replayEmbedUrl(active.match.id);
   const isFeatured = featured.has(active.id);
 
   return (
@@ -412,7 +411,7 @@ function LiveView(props: LiveProps) {
       )}
 
       {phase === 'replay' && (
-        <ReplayFrame url={replayUrl} onDone={onReplayDone} />
+        <ReplayFrame matchId={active.match.id} onDone={onReplayDone} />
       )}
 
       {phase === 'postroll' && (
@@ -455,13 +454,15 @@ function LiveView(props: LiveProps) {
   );
 }
 
-function ReplayFrame({ url, onDone: _onDone }: { url: string; onDone: () => void }) {
+function ReplayFrame({ matchId, onDone: _onDone }: { matchId: string; onDone: () => void }) {
+  // Full-viewport broadcast stage: the same cropped battle + custom scrolling
+  // log layout as the watch page (ReplayPlayer), so the stream matches every
+  // other replay surface. `fixed inset-0` gives ReplayPlayer a bounded height
+  // so the log scrolls and the battle canvas stays put; the lower-third
+  // (bottom-left) and controls (bottom-center) overlay on top at higher z.
   return (
-    <iframe
-      src={url}
-      title="Replay"
-      className="fixed inset-0 w-screen h-screen z-20 bg-[#0e0e10] border-0"
-      sandbox="allow-scripts allow-same-origin"
-    />
+    <div className="fixed inset-0 z-20 bg-[#0e0e10] p-3">
+      <ReplayPlayer matchId={matchId} className="h-full w-full" />
+    </div>
   );
 }
