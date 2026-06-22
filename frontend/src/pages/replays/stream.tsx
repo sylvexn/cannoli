@@ -27,6 +27,18 @@ import {
 } from './stream-types';
 import { replayEmbedUrl } from './replay-types';
 import { initialStreamState, streamReducer } from './stream-reducer';
+import { leagueGem } from '@/lib/constants';
+
+/**
+ * Default broadcast order for the watch-together queue: Emerald → Ruby →
+ * Sapphire (feedback #40). Leagues are season-prefixed, so compare on the
+ * bare gem. Unknown gems sort last. The coach can still drag to reorder.
+ */
+const STREAM_GEM_ORDER = ['emerald', 'ruby', 'sapphire'];
+const gemRank = (leagueId: string): number => {
+  const i = STREAM_GEM_ORDER.indexOf(leagueGem(leagueId));
+  return i === -1 ? STREAM_GEM_ORDER.length : i;
+};
 
 /**
  * Theater-mode broadcast cockpit. The page is mounted *outside* the
@@ -96,7 +108,13 @@ export function StreamPage() {
           });
       }),
     ).then(results => {
-      dispatch({ type: 'entries-loaded', entries: results.flat() });
+      // Order the combined queue by league (Emerald → Ruby → Sapphire), then
+      // by match id within a league (the per-league sort above is preserved).
+      const entries = results.flat().sort((a, b) => {
+        const r = gemRank(a.league.id) - gemRank(b.league.id);
+        return r !== 0 ? r : a.id.localeCompare(b.id);
+      });
+      dispatch({ type: 'entries-loaded', entries });
     });
   }, [leagues, leaguesLoading, week]);
 
