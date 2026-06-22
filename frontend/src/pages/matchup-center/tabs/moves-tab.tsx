@@ -134,11 +134,14 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
   const colW = 'min-w-[38px] max-w-[56px] flex-1';
 
   return (
-    <div className="border border-border-default rounded-lg w-full overflow-x-auto">
+    // Own scroll box (both axes) so the sprite header can truly stick on
+    // vertical scroll and the label column can stick on horizontal scroll —
+    // previously the sprites scrolled out of view (feedback #43).
+    <div className="border border-border-default rounded-lg w-full overflow-auto max-h-[70vh]">
       {/* ── Sticky sprite header ───────────────────────────── */}
-      <div className="sticky top-0 z-10 flex items-center border-b border-border-default bg-surface-raised rounded-t-lg min-w-max">
-        {/* Label column */}
-        <div className="w-40 shrink-0 px-3 py-2 text-[10px] text-text-muted font-medium uppercase tracking-wider">
+      <div className="sticky top-0 z-20 flex items-center border-b border-border-default bg-surface-raised rounded-t-lg min-w-max">
+        {/* Label column — frozen top-left corner, above both sticky axes */}
+        <div className="w-40 shrink-0 px-3 py-2 text-[10px] text-text-muted font-medium uppercase tracking-wider sticky left-0 z-30 bg-surface-raised">
           Move / Ability
         </div>
 
@@ -201,24 +204,27 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
             {/* Category header row */}
             <button
               onClick={() => toggleCategory(category.id)}
-              className="w-full min-w-max flex items-center gap-2 px-3 py-1.5 bg-surface-overlay/40 hover:bg-surface-overlay/60 transition-colors text-left border-b border-border-subtle/50"
+              className="w-full min-w-max flex items-center px-3 py-1.5 bg-surface-overlay/40 hover:bg-surface-overlay/60 transition-colors text-left border-b border-border-subtle/50"
             >
-              <ChevronDown
-                size={12}
-                className={cn(
-                  'text-text-muted transition-transform shrink-0',
-                  isCollapsed && '-rotate-90',
-                )}
-              />
-              <span className="text-xs font-semibold text-text-primary w-32 shrink-0">
-                {category.name}
-              </span>
-              <span className="text-[10px] text-[#3b82f6] font-mono tabular-nums">
-                {aCount}/{entries.length}
-              </span>
-              <span className="mx-1 text-text-muted text-[10px]">·</span>
-              <span className="text-[10px] text-[#ef4444] font-mono tabular-nums">
-                {bCount}/{entries.length}
+              {/* Keep the category label + counts pinned left on horizontal scroll */}
+              <span className="sticky left-3 z-10 flex items-center gap-2">
+                <ChevronDown
+                  size={12}
+                  className={cn(
+                    'text-text-muted transition-transform shrink-0',
+                    isCollapsed && '-rotate-90',
+                  )}
+                />
+                <span className="text-xs font-semibold text-text-primary w-32 shrink-0">
+                  {category.name}
+                </span>
+                <span className="text-[10px] text-[#3b82f6] font-mono tabular-nums">
+                  {aCount}/{entries.length}
+                </span>
+                <span className="mx-1 text-text-muted text-[10px]">·</span>
+                <span className="text-[10px] text-[#ef4444] font-mono tabular-nums">
+                  {bCount}/{entries.length}
+                </span>
               </span>
             </button>
 
@@ -234,8 +240,8 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                     'hover:bg-surface-overlay/10 transition-colors',
                   )}
                 >
-                  {/* Move / Ability name */}
-                  <div className="w-40 shrink-0 px-3 py-[5px]">
+                  {/* Move / Ability name — frozen left column on horizontal scroll */}
+                  <div className="w-40 shrink-0 px-3 py-[5px] sticky left-0 z-10 bg-surface-raised">
                     {entry.isAbility ? (
                       <AbilityChip name={entry.name} />
                     ) : (
