@@ -8,6 +8,7 @@ import { getLeagueCostMap } from '../../lib/league-costs';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 import { validateRosterLegality } from '../../lib/roster-legality';
+import { applyFaPickup } from '../../lib/free-agency';
 import { refreshUserMap } from '../../lib/ps-bot';
 
 export const teamRoutes = new Elysia()
@@ -365,6 +366,41 @@ export const teamRoutes = new Elysia()
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
       set.status = 403;
       return { error: 'Not your team' };
+    }
+
+    // Non-staff pickups are queued for admin approval (feedback #42): validate
+    // against the live rules with a dry run (no mutation), park the request as
+    // pending, and return. An admin applies it later via the approve endpoint.
+    // Staff (admin tool / acting-as) fall through to immediate apply below.
+    if (!isStaff(user)) {
+      if (pickupNames.length === 0) {
+        set.status = 400;
+        return { error: 'At least one Pokemon to pick up is required' };
+      }
+      const check = applyFaPickup({
+        leagueId: params.leagueId, teamId, pickupNames, dropNames,
+        actorUsername: user.username, dryRun: true,
+      });
+      if (!check.ok) { set.status = check.status; return { error: check.error, code: check.code }; }
+
+      const reqWeek = db.select().from(schema.leagues)
+        .where(eq(schema.leagues.id, params.leagueId)).get()?.currentWeek ?? 0;
+      const row = db.insert(schema.faRequests).values({
+        leagueId: params.leagueId, week: reqWeek, teamId, status: 'pending',
+        pickups: JSON.stringify(pickupNames), drops: JSON.stringify(dropNames),
+        requestedBy: user.username,
+      }).returning().get();
+
+      db.insert(schema.activityLog).values({
+        type: 'fa_requested', category: 'fa', actor: user.username, leagueId: params.leagueId,
+        description: `FA request: ${team.teamName} requested ${pickupNames.join(', ')}${dropNames.length ? `, dropping ${dropNames.join(', ')}` : ''}`,
+        metadata: JSON.stringify({ teamId, pickupNames, dropNames, requestId: row.id }),
+      }).run();
+
+      return {
+        success: true, pending: true, requestId: row.id,
+        faUsed: check.faUsed, faRemaining: check.faRemaining, faPerSeason: check.faPerSeason,
+      };
     }
 
     // Verify all pickups exist and are draftable in THIS league's format.

@@ -443,6 +443,29 @@ export const trades = sqliteTable('trades', {
   rejectReason: text('reject_reason'),
 });
 
+// ─── Free-Agency Requests (admin approval queue) ────────────────────────────
+// Non-staff FA pickups land here as `pending` instead of mutating rosters
+// immediately; an admin approves (applies) or rejects them (feedback #42).
+export const faRequests = sqliteTable('fa_requests', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  leagueId: text('league_id').notNull().references(() => leagues.id),
+  week: integer('week').notNull(),
+  teamId: text('team_id').notNull().references(() => teams.id),
+  status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  /** JSON array of pokemon names to pick up */
+  pickups: text('pickups').notNull(),
+  /** JSON array of pokemon names to drop */
+  drops: text('drops').notNull(),
+  requestedBy: text('requested_by'),
+  requestedAt: text('requested_at').default(sql`(datetime('now'))`),
+  resolvedBy: text('resolved_by'),
+  resolvedAt: text('resolved_at'),
+  rejectReason: text('reject_reason'),
+}, (t) => ({
+  faRequestsLeagueWeekIdx: index('fa_requests_league_week_idx').on(t.leagueId, t.week),
+  faRequestsStatusIdx: index('fa_requests_status_idx').on(t.status),
+}));
+
 // ─── Trade Block Listings ───────────────────────────────────────────────────
 
 export const tradeBlockListings = sqliteTable('trade_block_listings', {

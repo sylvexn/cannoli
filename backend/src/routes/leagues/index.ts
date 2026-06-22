@@ -4,6 +4,7 @@ import { eq, desc, sql, and, isNull, inArray } from 'drizzle-orm';
 import { defaultRulesFor, normalizeRules } from '../../lib/rules-defaults';
 import { standingsRoutes } from './standings';
 import { teamRoutes } from './teams';
+import { faRequestRoutes } from './fa-requests';
 import { pokemonRoutes } from './pokemon';
 import { archiveRoutes } from './archive';
 import { speedTierRoutes } from './speed-tiers';
@@ -216,6 +217,7 @@ export const leagueRoutes = new Elysia()
 
   .use(standingsRoutes)
   .use(teamRoutes)
+  .use(faRequestRoutes)
   .use(pokemonRoutes)
   .use(archiveRoutes)
   .use(speedTierRoutes);
