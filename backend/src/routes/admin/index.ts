@@ -7,6 +7,7 @@ import { teamAdminRoutes } from './teams';
 import { membershipRoutes } from './membership';
 import { templateAdminRoutes } from './templates';
 import { miscRoutes } from './misc';
+import { psReplaysRoutes } from './ps-replays';
 import { observabilityRoutes } from './observability';
 import { announcementsRoutes } from './announcements';
 import { adminNotificationsRoutes } from './notifications';
@@ -25,6 +26,7 @@ export const adminRoutes = new Elysia()
   .use(membershipRoutes)
   .use(templateAdminRoutes)
   .use(miscRoutes)
+  .use(psReplaysRoutes)
   .use(observabilityRoutes)
   .use(announcementsRoutes)
   .use(adminNotificationsRoutes)

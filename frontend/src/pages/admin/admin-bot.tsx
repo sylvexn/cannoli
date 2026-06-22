@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { EmptyState } from '@/components/empty-state';
 import { getErrorMessage } from '@/lib/errors';
+import { RecordedBattles } from './bot/recorded-battles';
 
 const HEALTH_COLORS: Record<ApiBotStatus['health'], string> = {
   green: 'bg-win',
@@ -183,6 +184,9 @@ export function AdminBot() {
           </ul>
         )}
       </section>
+
+      {/* Recorded battles (autosaved replays on the PS server) */}
+      <RecordedBattles />
 
       {/* Last error */}
       {status.lastError && (

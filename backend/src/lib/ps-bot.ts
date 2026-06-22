@@ -617,11 +617,17 @@ export function formatFromRoomId(roomId: string): string | null {
   return m ? m[1] : null;
 }
 
+/** Resolved root directory PS writes autosaved replays to (re-exported for the
+ *  replay-archive lib so it doesn't recompute the env/default logic). */
+export function getPsLogsDir(): string {
+  return PS_LOGS_DIR;
+}
+
 /**
  * Parse a single `{roomId}.log.json` file and return its `log: string[]`,
  * or null if the file is missing / unreadable / has no log array.
  */
-function parseReplayLogFile(path: string): string[] | null {
+export function parseReplayLogFile(path: string): string[] | null {
   try {
     const raw = readFileSync(path, 'utf-8');
     const parsed = JSON.parse(raw) as { log?: string[] };
@@ -661,24 +667,24 @@ function findReplayFileRecursive(dir: string, fileName: string, maxDepth: number
 }
 
 /**
- * Look for a saved replay log on disk. PS autosaves every battle's protocol
- * log to:
+ * Locate the on-disk path of a saved replay log for `roomId`. PS autosaves
+ * every battle's protocol log to:
  *   {PS_LOGS_DIR}/{YYYY-MM}/{tier}/{YYYY-MM-DD}/{roomId}.log.json
  * where `tier` is the format id (e.g. `gen9natdexdraft`). Confirmed in
  * showdown/server/server/room-battle.ts and showdown/monitor.ts.
  *
  * We don't know the date a-priori (a match could span midnight or have been
- * abandoned days ago), so we walk the year-month and day dirs looking for the
- * file. Both segments are date-named so this is bounded — newest-first so the
- * common case (a recent match) hits almost immediately.
+ * abandoned days ago), so we walk the year-month and day dirs newest-first so
+ * the common case (a recent match) hits almost immediately, then fall back to a
+ * bounded recursive search. Returns the absolute path, or null if not found.
  *
- * Returns the parsed `log: string[]` from the JSON, or null if not found /
- * unreadable.
+ * Shared by `readReplayLogFromDisk` (parsed `log[]`) and the replay-archive lib
+ * (raw bytes for download) so the locate strategy lives in exactly one place.
  */
-export function readReplayLogFromDisk(
+export function locateReplayFile(
   roomId: string,
   rootDir: string = PS_LOGS_DIR,
-): string[] | null {
+): string | null {
   const tier = formatFromRoomId(roomId);
   if (!tier) return null;
 
@@ -714,17 +720,27 @@ export function readReplayLogFromDisk(
 
     for (const day of dayDirs) {
       const candidate = join(tierDir, day, fileName);
-      if (existsSync(candidate)) return parseReplayLogFile(candidate);
+      if (existsSync(candidate)) return candidate;
     }
   }
 
   // ── Safety fallback: bounded recursive search for the named file. ──
   // Catches non-standard layouts the deterministic scan can't anticipate.
   // Depth 4 covers {YYYY-MM}/{tier}/{YYYY-MM-DD}/{file} plus a little slack.
-  const hit = findReplayFileRecursive(rootDir, fileName, 4);
-  if (hit) return parseReplayLogFile(hit);
+  return findReplayFileRecursive(rootDir, fileName, 4);
+}
 
-  return null;
+/**
+ * Look for a saved replay log on disk and return its parsed `log: string[]`,
+ * or null if not found / unreadable. Thin wrapper over `locateReplayFile`.
+ */
+export function readReplayLogFromDisk(
+  roomId: string,
+  rootDir: string = PS_LOGS_DIR,
+): string[] | null {
+  const path = locateReplayFile(roomId, rootDir);
+  if (!path) return null;
+  return parseReplayLogFile(path);
 }
 
 /**

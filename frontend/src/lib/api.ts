@@ -467,6 +467,29 @@ export interface ApiBotStatus {
   health: 'green' | 'yellow' | 'red';
 }
 
+// ─── PS recorded battles (autosaved replays) ────────────────────────────────
+
+export type PsReplayLinkStatus = 'attached' | 'recoverable' | 'unlinked';
+
+export interface PsReplayRow {
+  roomId: string; format: string; formatId: string;
+  playedAt: string | null; p1: string; p2: string;
+  winner: string | null; turns: number | null; score: [number, number] | null;
+  matchId: string | null; leagueId: string | null;
+  attached: boolean; linkStatus: PsReplayLinkStatus;
+}
+
+export interface PsReplayListResponse {
+  available: boolean; dir: string; total: number; truncated: boolean;
+  replays: PsReplayRow[];
+}
+
+export interface PsReplayDetail extends PsReplayRow {
+  endType: string | null;
+  p1Brought: string[]; p2Brought: string[];
+  pokemon: { species: string; player: 'p1' | 'p2'; kills: number; deaths: number; teraUsed: boolean; teraType: string | null }[];
+}
+
 // ─── Admin types ────────────────────────────────────────────────────────────
 
 export interface ApiActivityEvent {
@@ -1324,6 +1347,14 @@ export const api = {
   // PS Bot
   getBotStatus: () => fetchJson<ApiBotStatus>('/api/admin/bot-status'),
   reconnectBot: () => postJson<{ success: boolean }>('/api/admin/bot/reconnect'),
+
+  // PS recorded battles (autosaved replays on the PS server)
+  listPsReplays: (limit = 100) =>
+    fetchJson<PsReplayListResponse>('/api/admin/ps-replays?limit=' + limit),
+  getPsReplayDetail: (roomId: string) =>
+    fetchJson<PsReplayDetail>('/api/admin/ps-replays/' + encodeURIComponent(roomId)),
+  psReplayDownloadUrl: (roomId: string) =>
+    API_BASE + '/api/admin/ps-replays/' + encodeURIComponent(roomId) + '/download',
 
   // Pin audit-log backfill (idempotent)
   backfillPinAudit: () =>
