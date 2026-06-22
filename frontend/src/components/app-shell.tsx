@@ -27,8 +27,10 @@ import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
 import { AnnouncementBanners } from './announcement-banners';
 
-// Routes that need full-width layout (no max-w constraint)
-const WIDE_ROUTES = ['/draft', '/matchup', '/showdown'];
+// Routes that need full-width layout (no max-w constraint). The trailing
+// slash on '/replay/' targets the full-bleed replay watch page (/replay/:id)
+// while leaving the scrollable '/replays' gallery on the normal layout.
+const WIDE_ROUTES = ['/draft', '/matchup', '/showdown', '/replay/'];
 
 export function AppShell() {
   const { pathname } = useLocation();

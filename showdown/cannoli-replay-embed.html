@@ -87,6 +87,20 @@
      strip can't poke out beneath the log. */
   #player .battle-log-add { display: none !important; }
 
+  /* ─── External-log mode (?log=ext) ─── */
+  /* The Cannoli site renders its own play-by-play panel beside the iframe
+     (see frontend replay-log.tsx) and bridges the log out via postMessage.
+     In that mode we drop PS's marooned 540px log sidebar entirely and let
+     the battle stage fill the frame, so the iframe is JUST the battle. The
+     `.battle-log` stays in the DOM (display:none) because PS still needs to
+     write into it — a MutationObserver mirrors those writes to the parent. */
+  body.external-log #player { width: 640px; }
+  body.external-log #player .battle {
+    border-radius: 8px;
+    border-color: #26262e;
+  }
+  body.external-log #player .battle-log { display: none !important; }
+
   /* ─── Control bar ─── */
   /* Sticky to the top of the iframe scroll context — when the embed page
      is taller than its iframe (the common case in non-theater mode where
@@ -294,6 +308,22 @@
   var FADE_TABLE = { hyperfast: 40, fast: 50, normal: 300, slow: 500, reallyslow: 1000 };
   var DELAY_TABLE = { hyperfast: 1, fast: 1, normal: 1, slow: 1000, reallyslow: 3000 };
 
+  // External-log mode: the Cannoli site renders its own log panel beside the
+  // iframe and we mirror PS's battle log out via postMessage (see
+  // setupLogBridge). Enabled with ?log=ext on the embed URL.
+  var EXTERNAL_LOG = new URLSearchParams(window.location.search).get('log') === 'ext';
+  var BRIDGE_MATCH_ID = null;
+  var MSG_OUT = 'cannoli-replay';      // iframe → parent
+  var MSG_IN = 'cannoli-replay-cmd';   // parent → iframe
+
+  function postToParent(msg) {
+    msg.source = MSG_OUT;
+    msg.matchId = BRIDGE_MATCH_ID;
+    // Replay logs are public match data — '*' target is fine (no secrets),
+    // and the parent origin varies (mock/live/localhost).
+    try { window.parent.postMessage(msg, '*'); } catch (e) { /* sandboxed */ }
+  }
+
   function ready(fn) {
     if (document.readyState !== 'loading') return fn();
     document.addEventListener('DOMContentLoaded', fn);
@@ -329,7 +359,7 @@
   // blowing up past ~1.9× (sprite blur) or vanishing on tiny embeds. PS's
   // own autoresize only ever scales DOWN below 640px, so it can't fill a
   // wide frame — this replaces it (battle is created with autoresize:false).
-  var STAGE_W = 1180, STAGE_H = 372;
+  var STAGE_W = EXTERNAL_LOG ? 640 : 1180, STAGE_H = 372;
   function fitStage() {
     var wrap = document.getElementById('stage-wrap');
     var stage = document.getElementById('player');
@@ -481,12 +511,88 @@
     refresh();
   }
 
+  // Mirror PS's battle log to the parent window so the Cannoli site can render
+  // its own play-by-play panel. PS appends each message as an element inside
+  // `.battle-log .inner.message-log` (turn boundaries are <h2> headers); we
+  // observe that container and forward every added node verbatim. On reset /
+  // seek-backward PS empties the container, which we relay as a 'clear' so the
+  // parent rebuilds. Also relays playback state and accepts seek/play commands.
+  function setupLogBridge(battle, $player) {
+    var logEl = $player.find('.battle-log .inner.message-log')[0]
+             || $player.find('.battle-log .inner')[0]
+             || $player.find('.battle-log')[0];
+    if (!logEl || typeof MutationObserver !== 'function') return;
+
+    var seen = (typeof WeakSet === 'function') ? new WeakSet() : null;
+    var currentTurn = 0;
+
+    function forwardNode(node) {
+      if (!node || node.nodeType !== 1) return;       // element nodes only
+      if (seen) { if (seen.has(node)) return; seen.add(node); }
+      if (node.tagName === 'H2') {
+        var m = /(\d+)/.exec(node.textContent || '');
+        if (m) currentTurn = parseInt(m[1], 10);
+        postToParent({ type: 'log', kind: 'turn', turn: currentTurn, html: node.outerHTML });
+      } else {
+        postToParent({ type: 'log', kind: 'line', turn: currentTurn, html: node.outerHTML });
+      }
+    }
+
+    var obs = new MutationObserver(function (mutations) {
+      // PS only removes log rows when it resets the log (reset / seek-backward,
+      // which clears then replays to the target turn); during normal forward
+      // play it only appends. Mirror a removal as a wipe — but gate on the
+      // mutation RECORD, not the live DOM: the observer batches async, so by
+      // callback time PS may have already re-added the early nodes (checking
+      // `childNodes.length === 0` here misses the clear and the log doubles up).
+      var cleared = false;
+      for (var i = 0; i < mutations.length; i++) {
+        var mut = mutations[i];
+        if (!cleared && mut.removedNodes && mut.removedNodes.length) {
+          cleared = true;
+          currentTurn = 0;
+          seen = (typeof WeakSet === 'function') ? new WeakSet() : null;
+          postToParent({ type: 'log', kind: 'clear' });
+        }
+        for (var j = 0; j < mut.addedNodes.length; j++) forwardNode(mut.addedNodes[j]);
+      }
+    });
+    obs.observe(logEl, { childList: true });
+
+    // Flush anything PS rendered before the observer attached (format, rules,
+    // team preview, turn 1). The WeakSet dedupes against observer overlap.
+    for (var k = 0; k < logEl.childNodes.length; k++) forwardNode(logEl.childNodes[k]);
+
+    battle.subscribe(function () {
+      postToParent({
+        type: 'state',
+        turn: (battle.turn != null && battle.turn >= 0) ? battle.turn : 0,
+        paused: !!battle.paused,
+        ended: !!battle.ended,
+      });
+    });
+
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.source !== MSG_IN) return;
+      switch (d.cmd) {
+        case 'seekTurn': if (typeof d.turn === 'number') battle.seekTurn(d.turn); break;
+        case 'play': battle.play(); break;
+        case 'pause': battle.pause(); break;
+        case 'reset': battle.reset(); break;
+      }
+    });
+
+    postToParent({ type: 'ready' });
+  }
+
   ready(function () {
     var matchId = getMatchId();
     if (!matchId) {
       showError('Missing ?match=<id>');
       return;
     }
+    BRIDGE_MATCH_ID = matchId;
 
     // Wait until all the deferred PS scripts have parsed and Battle is
     // defined on window. `defer` resolves before DOMContentLoaded so by
@@ -547,6 +653,10 @@
         window.battle = battle;
 
         attachControls(battle);
+        if (EXTERNAL_LOG) {
+          document.body.classList.add('external-log');
+          setupLogBridge(battle, $player);
+        }
         fitStage();
         // Re-fit once layout/fonts settle (sprite sheet + log content can
         // nudge the toolbar height on the first frame).

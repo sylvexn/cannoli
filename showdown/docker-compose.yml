@@ -76,6 +76,12 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "8080:80"
+    volumes:
+      # Live-mount the Cannoli replay embed so local edits show up on a plain
+      # iframe refresh (no image rebuild). Production bakes it in via
+      # Dockerfile.client (COPY … /replay/embed.html); this override is for
+      # local dev iteration only.
+      - ./cannoli-replay-embed.html:/usr/share/nginx/html/replay/embed.html:ro
     depends_on:
       ps-server:
         condition: service_healthy

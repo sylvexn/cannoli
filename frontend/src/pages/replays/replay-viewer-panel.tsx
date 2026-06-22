@@ -1,7 +1,7 @@
 import { Play, X, Maximize2, Minimize2, Link2, FlaskConical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReplayEntry } from './replay-types';
-import { replayEmbedUrl } from './replay-types';
+import { ReplayPlayer } from './replay-player';
 
 /**
  * Simulated matches (mock.cannoli.live season simulator) carry a synthetic
@@ -33,7 +33,6 @@ export function ReplayViewerPanel({
   onClose,
 }: ReplayViewerPanelProps) {
   const { match, league, homeTeam, awayTeam } = entry;
-  const embedUrl = replayEmbedUrl(match.id);
   const synthetic = isSyntheticReplay(match.replayUrl);
 
   return (
@@ -102,13 +101,12 @@ export function ReplayViewerPanel({
           </div>
         </div>
       ) : (
-        <iframe
-          src={embedUrl}
-          className={cn('w-full border-0 bg-[#0e0e10]', theater ? 'flex-1' : '')}
+        <div
+          className={cn('flex bg-[#0e0e10] p-2', theater ? 'flex-1' : '')}
           style={!theater ? { height: '600px' } : undefined}
-          title="Replay viewer"
-          sandbox="allow-scripts allow-same-origin"
-        />
+        >
+          <ReplayPlayer matchId={match.id} className="flex-1" />
+        </div>
       )}
     </div>
   );

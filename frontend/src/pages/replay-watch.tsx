@@ -3,7 +3,7 @@ import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Link2, Maximize2, Minimize2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { replayEmbedUrl } from './replays/replay-types';
+import { ReplayPlayer } from './replays/replay-player';
 
 /**
  * Optional context handed in via router `state` when navigating from a match
@@ -109,14 +109,7 @@ export function ReplayWatchPage() {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 rounded-lg border border-neon/20 bg-[#0e0e10] overflow-hidden">
-        <iframe
-          src={replayEmbedUrl(matchId)}
-          className="w-full h-full border-0"
-          title="Replay viewer"
-          sandbox="allow-scripts allow-same-origin"
-        />
-      </div>
+      <ReplayPlayer matchId={matchId} className="flex-1" />
     </div>
   );
 }
