@@ -58,7 +58,7 @@ export function ShowdownPage() {
           src={PS_URL}
           className="absolute inset-0 block h-full w-full border-0"
           allow="clipboard-write"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-popups-to-escape-sandbox allow-downloads"
           title="Pokemon Showdown"
         />
       </div>
