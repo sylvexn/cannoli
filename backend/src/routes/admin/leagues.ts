@@ -32,7 +32,7 @@ export const leagueAdminRoutes = new Elysia()
     const {
       name, color, draftDate, pointCap, teraCaptainSlots, tradeDeadlineWeek,
       weekDates, weekDatesAutoFilled, maxTeams: _maxTeams, rosterSize, paused, forfeitPolicy,
-      playoffTeamCount, format,
+      playoffTeamCount, format, minRosterSize, maxRosterSize,
     } = body as Record<string, unknown>;
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
@@ -101,6 +101,41 @@ export const leagueAdminRoutes = new Elysia()
         return { error: 'rosterSize must be an integer between 2 and 20' };
       }
       leagueUpdates.rosterSize = n;
+    }
+
+    // Roster BAND (min/max). Unlike rosterSize these are editable in ANY phase —
+    // the whole point is tuning the allowed range mid-season. Each is an
+    // optional integer in [1, 20]. We validate the post-update invariant
+    // minRosterSize <= rosterSize <= maxRosterSize using the incoming value when
+    // provided, else the league's current value, else rosterSize itself.
+    if (minRosterSize !== undefined) {
+      const n = Number(minRosterSize);
+      if (!Number.isInteger(n) || n < 1 || n > 20) {
+        set.status = 400;
+        return { error: 'minRosterSize must be an integer between 1 and 20' };
+      }
+      leagueUpdates.minRosterSize = n;
+    }
+    if (maxRosterSize !== undefined) {
+      const n = Number(maxRosterSize);
+      if (!Number.isInteger(n) || n < 1 || n > 20) {
+        set.status = 400;
+        return { error: 'maxRosterSize must be an integer between 1 and 20' };
+      }
+      leagueUpdates.maxRosterSize = n;
+    }
+    if (minRosterSize !== undefined || maxRosterSize !== undefined || rosterSize !== undefined) {
+      const effRoster = rosterSize !== undefined ? Number(rosterSize) : league.rosterSize;
+      const effMin = minRosterSize !== undefined
+        ? Number(minRosterSize)
+        : (league.minRosterSize ?? effRoster);
+      const effMax = maxRosterSize !== undefined
+        ? Number(maxRosterSize)
+        : (league.maxRosterSize ?? effRoster);
+      if (!(effMin <= effRoster && effRoster <= effMax)) {
+        set.status = 400;
+        return { error: 'Roster band invalid: require minRosterSize <= rosterSize <= maxRosterSize' };
+      }
     }
 
     // pointCap and teraCaptainSlots remain season-wide settings.

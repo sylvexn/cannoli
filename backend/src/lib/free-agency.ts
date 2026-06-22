@@ -162,8 +162,17 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
 
       // ── Post-swap roster legality re-check ──
       const newRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, teamId)).all();
-      if (league && newRoster.length > league.rosterSize) {
-        throw Object.assign(new Error(`Pickup would put roster at ${newRoster.length} (max ${league.rosterSize}) — additional drops are required`), { _status: 400, _code: 'fa_roster_size_exceeded' });
+      if (league) {
+        // Effective band: a per-league min/max range. NULL falls back to
+        // rosterSize, so an unbanded league still requires exactly rosterSize.
+        const effMax = league.maxRosterSize ?? league.rosterSize;
+        const effMin = league.minRosterSize ?? league.rosterSize;
+        if (newRoster.length > effMax) {
+          throw Object.assign(new Error(`Pickup would put roster at ${newRoster.length} (max ${effMax}) — additional drops are required`), { _status: 400, _code: 'fa_roster_size_exceeded' });
+        }
+        if (newRoster.length < effMin) {
+          throw Object.assign(new Error(`Roster would drop to ${newRoster.length} (min ${effMin}) — keep at least ${effMin} Pokemon`), { _status: 400, _code: 'fa_roster_below_min' });
+        }
       }
 
       const newPokemonRows = db.select().from(schema.pokemon)

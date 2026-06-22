@@ -435,6 +435,13 @@
       "when": 1783300000000,
       "tag": "0061_fa_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1783400000000,
+      "tag": "0062_league_roster_band",
+      "breakpoints": true
     }
   ]
 }

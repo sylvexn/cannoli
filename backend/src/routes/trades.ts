@@ -44,17 +44,16 @@ function validateProposedTrade(opts: {
   requesting: string[];
   pointCap: number;
   leagueId: string;
-  rosterSize?: number;
+  minRosterSize?: number;
+  maxRosterSize?: number;
 }): string | null {
-  const { proposerId, recipientId, offering, requesting, pointCap, leagueId, rosterSize } = opts;
+  const { proposerId, recipientId, offering, requesting, pointCap, leagueId, minRosterSize, maxRosterSize } = opts;
 
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
 
-  // Symmetric count check: both sides must offer the same number of mons.
-  if (offering.length !== requesting.length) {
-    return `Both sides must offer the same number of Pokemon (offering ${offering.length}, requesting ${requesting.length})`;
-  }
+  // Uneven (N-for-M) trades are allowed — each side just needs >= 1 Pokemon
+  // (checked above). The post-trade roster band below enforces final counts.
 
   // Up-front duplicate-name guard: reject if either list contains a name twice.
   const offeringSet = new Set(offering);
@@ -106,13 +105,23 @@ function validateProposedTrade(opts: {
     ...proposerRoster.filter(r => offering.includes(r.pokemonName)).map(r => ({ ...r, isTeraCaptain: false })),
   ];
 
-  // Roster size cap: neither team may end up with more than rosterSize mons.
-  if (rosterSize != null) {
-    if (postProposer.length > rosterSize) {
-      return `Proposer would have ${postProposer.length} Pokemon after the trade (max ${rosterSize})`;
+  // Roster band: each post-trade roster must stay within [minRosterSize,
+  // maxRosterSize]. Callers pass the effective bounds (NULL columns already
+  // resolved to rosterSize), so an unbanded league pins both to rosterSize.
+  if (maxRosterSize != null) {
+    if (postProposer.length > maxRosterSize) {
+      return `Proposer would have ${postProposer.length} Pokemon after the trade (max ${maxRosterSize})`;
     }
-    if (postRecipient.length > rosterSize) {
-      return `Recipient would have ${postRecipient.length} Pokemon after the trade (max ${rosterSize})`;
+    if (postRecipient.length > maxRosterSize) {
+      return `Recipient would have ${postRecipient.length} Pokemon after the trade (max ${maxRosterSize})`;
+    }
+  }
+  if (minRosterSize != null) {
+    if (postProposer.length < minRosterSize) {
+      return `Proposer would have ${postProposer.length} Pokemon after the trade (min ${minRosterSize})`;
+    }
+    if (postRecipient.length < minRosterSize) {
+      return `Recipient would have ${postRecipient.length} Pokemon after the trade (min ${minRosterSize})`;
     }
   }
 
@@ -314,7 +323,8 @@ export const tradeRoutes = new Elysia()
         offering, requesting,
         pointCap: season?.pointCap ?? 110,
         leagueId: trade.leagueId,
-        rosterSize: league?.rosterSize,
+        minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
+        maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
       });
       if (legalityErr) {
         set.status = 409;
@@ -392,7 +402,8 @@ export const tradeRoutes = new Elysia()
       offering, requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
-      rosterSize: league?.rosterSize,
+      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
+      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
     });
     if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
 
@@ -572,7 +583,8 @@ export const tradeRoutes = new Elysia()
       proposerId, recipientId, offering, requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: params.leagueId,
-      rosterSize: league?.rosterSize,
+      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
+      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
@@ -692,7 +704,8 @@ export const tradeRoutes = new Elysia()
       requesting,
       pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
-      rosterSize: league?.rosterSize,
+      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
+      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 

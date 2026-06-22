@@ -104,6 +104,14 @@ export const leagues = sqliteTable('leagues', {
    *  10 mirrors the historic hardcoded value. Surfaced in the season wizard
    *  and per-league admin UI. */
   rosterSize: integer('roster_size').notNull().default(10),
+  /** Optional per-league roster BAND (min/max number of Pokemon a team may
+   *  hold post-draft). NULL = unset → fall back to rosterSize, i.e. the roster
+   *  must hold exactly rosterSize mons (historic behavior). When set (e.g.
+   *  min 10, max 12) free-agency adds/drops and trades must keep each team's
+   *  roster within [effMin, effMax] where effMin = minRosterSize ?? rosterSize
+   *  and effMax = maxRosterSize ?? rosterSize. Editable in any phase. */
+  minRosterSize: integer('min_roster_size'),
+  maxRosterSize: integer('max_roster_size'),
   /** Battle format for THIS league. Drives the draft board's moveset display
    *  + matchup-center coverage scan: a gen9-only format hides past-gen-only
    *  moves (Hidden Power, etc), gen9natdex shows the full sheet. See

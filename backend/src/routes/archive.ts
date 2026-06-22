@@ -187,6 +187,8 @@ export const archiveDeepRoutes = new Elysia()
         archived: !!season?.archived,
         phase: league.phase,
         rosterSize: league.rosterSize,
+        minRosterSize: league.minRosterSize,
+        maxRosterSize: league.maxRosterSize,
         playoffTeamCount: league.playoffTeamCount,
       },
       teams,

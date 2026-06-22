@@ -19,6 +19,8 @@ export const seasonRoutes = new Elysia()
       teraCaptainSlots = 2,
       tradeDeadlineWeek = 7,
       rosterSize = 10,
+      minRosterSize = null,
+      maxRosterSize = null,
       forfeitPolicy = 'double_forfeit',
       format = 'gen9natdex',
       weekDates = null,
@@ -31,6 +33,8 @@ export const seasonRoutes = new Elysia()
       teraCaptainSlots?: number;
       tradeDeadlineWeek?: number;
       rosterSize?: number;
+      minRosterSize?: number | null;
+      maxRosterSize?: number | null;
       forfeitPolicy?: 'double_forfeit' | 'admin_review';
       format?: string;
       weekDates?: Record<string, string> | null;
@@ -118,6 +122,8 @@ export const seasonRoutes = new Elysia()
             weekDates: weekDatesJson,
             tradeDeadlineWeek,
             rosterSize,
+            minRosterSize,
+            maxRosterSize,
             forfeitPolicy,
             format,
           }).run();

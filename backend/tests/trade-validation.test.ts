@@ -57,6 +57,12 @@ function pickRegularLeague(): { id: string; seasonId: number } | null {
 }
 
 const host = pickRegularLeague();
+// Effective roster band floor for the host league (NULL band → rosterSize).
+// Tests pad rosters to this size so the band minimum is satisfied and the
+// trade keeps each side within [effMin, effMax].
+const HOST_ROSTER = host
+  ? (db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()?.rosterSize ?? 10)
+  : 10;
 
 // ── Fixture lifecycle: every test uses the PFX teams/mons; tear them all down
 //    after each test so we never pollute the seeded DB.
@@ -76,9 +82,30 @@ function cleanupFixtures() {
 
 afterEach(() => cleanupFixtures());
 
+// Inert filler: cost-0, base-form, unique National-Dex mons used to pad a
+// roster up to the league's roster band minimum so the OTHER validators
+// (point cap / mega / dup-dex) are the thing under test, not the band floor.
+// (Before the roster band feature these tests ran on tiny rosters; now every
+// post-trade roster must hold >= effMin mons.)
+let fillerDex = 9990000;
+function padRoster(teamId: string, count: number) {
+  for (let i = 0; i < count; i++) {
+    const name = `${PFX}pad-${teamId}-${i}`;
+    const dex = fillerDex++;
+    ensurePokemon(name, { tier: 0, dex });
+    db.insert(schema.rosters).values({
+      teamId, pokemonName: name, tier: 0, costAtDraft: 0,
+      isTeraCaptain: false, acquiredVia: 'draft',
+    }).run();
+  }
+}
+
 function seedTeams(leagueId: string, opts: {
   proposerMons: { name: string; cost: number; isCaptain?: boolean }[];
   recipientMons: { name: string; cost: number; isCaptain?: boolean }[];
+  // Pad BOTH rosters with inert cost-0 fillers up to this size so the roster
+  // band minimum is satisfied. Leave undefined to seed exactly the given mons.
+  padTo?: number;
 }) {
   const teamA = `${PFX}A`;
   const teamB = `${PFX}B`;
@@ -97,6 +124,10 @@ function seedTeams(leagueId: string, opts: {
       teamId: teamB, pokemonName: m.name, tier: m.cost, costAtDraft: m.cost,
       isTeraCaptain: m.isCaptain ?? false, acquiredVia: 'draft',
     }).run();
+  }
+  if (opts.padTo != null) {
+    padRoster(teamA, Math.max(0, opts.padTo - opts.proposerMons.length));
+    padRoster(teamB, Math.max(0, opts.padTo - opts.recipientMons.length));
   }
   return { teamA, teamB };
 }
@@ -125,6 +156,7 @@ describe('trade validation — combined roster legality (multi-Pokemon)', () => 
     const { teamA, teamB } = seedTeams(host.id, {
       proposerMons: [{ name: `${PFX}p1`, cost: 5 }, { name: `${PFX}p2`, cost: 4 }],
       recipientMons: [{ name: `${PFX}r1`, cost: 5 }, { name: `${PFX}r2`, cost: 4 }],
+      padTo: HOST_ROSTER,
     });
     const { status, json } = await propose(host.id, {
       proposerId: teamA, recipientId: teamB,
@@ -143,6 +175,7 @@ describe('trade validation — combined roster legality (multi-Pokemon)', () => 
     const { teamA, teamB } = seedTeams(host.id, {
       proposerMons: [{ name: `${PFX}cheap`, cost: 1 }, ...fillers],   // 1 + 100 = 101
       recipientMons: [{ name: `${PFX}huge`, cost: cap + 50 }],
+      padTo: HOST_ROSTER,
     });
     const { status, json } = await propose(host.id, {
       proposerId: teamA, recipientId: teamB,
@@ -160,6 +193,7 @@ describe('trade validation — combined roster legality (multi-Pokemon)', () => 
     const { teamA, teamB } = seedTeams(host.id, {
       proposerMons: [{ name: `${PFX}mega1`, cost: 10 }, { name: `${PFX}plain`, cost: 10 }],
       recipientMons: [{ name: `${PFX}mega2`, cost: 10 }],
+      padTo: HOST_ROSTER,
     });
     const { status, json } = await propose(host.id, {
       proposerId: teamA, recipientId: teamB,
@@ -177,6 +211,7 @@ describe('trade validation — combined roster legality (multi-Pokemon)', () => 
     const { teamA, teamB } = seedTeams(host.id, {
       proposerMons: [{ name: `${PFX}dexA`, cost: 8 }, { name: `${PFX}give`, cost: 8 }],
       recipientMons: [{ name: `${PFX}dexA_alt`, cost: 8 }],
+      padTo: HOST_ROSTER,
     });
     const { status, json } = await propose(host.id, {
       proposerId: teamA, recipientId: teamB,
@@ -187,20 +222,67 @@ describe('trade validation — combined roster legality (multi-Pokemon)', () => 
     expect(json.error).toMatch(/dex/i);
   });
 
-  test('rejects asymmetric trade (offer count != request count)', async () => {
-    ensurePokemon(`${PFX}o1`, { tier: 5, dex: 9501 });
-    ensurePokemon(`${PFX}o2`, { tier: 5, dex: 9502 });
-    ensurePokemon(`${PFX}q1`, { tier: 5, dex: 9503 });
-    const { teamA, teamB } = seedTeams(host.id, {
-      proposerMons: [{ name: `${PFX}o1`, cost: 5 }, { name: `${PFX}o2`, cost: 5 }],
-      recipientMons: [{ name: `${PFX}q1`, cost: 5 }],
-    });
-    const { status, json } = await propose(host.id, {
-      proposerId: teamA, recipientId: teamB,
-      offering: [`${PFX}o1`, `${PFX}o2`], requesting: [`${PFX}q1`],
-    });
-    expect(status).toBe(400);
-    expect(json.error).toMatch(/same number/i);
+  // Uneven (N-for-M) trades are now ALLOWED as long as BOTH post-trade rosters
+  // stay within the league roster band [minRosterSize, maxRosterSize]. We set a
+  // band of 9–11 on the host for this test (restored afterward).
+  test('accepts uneven (2-for-1) trade when both rosters stay within the band', async () => {
+    const saved = db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()!;
+    try {
+      db.update(schema.leagues)
+        .set({ minRosterSize: 9, maxRosterSize: 11 })
+        .where(eq(schema.leagues.id, host.id)).run();
+      ensurePokemon(`${PFX}o1`, { tier: 5, dex: 9501 });
+      ensurePokemon(`${PFX}o2`, { tier: 5, dex: 9502 });
+      ensurePokemon(`${PFX}q1`, { tier: 5, dex: 9503 });
+      // Both start at 10. Proposer gives 2 / gets 1 → 9 (>= min 9). Recipient
+      // gives 1 / gets 2 → 11 (<= max 11).
+      const { teamA, teamB } = seedTeams(host.id, {
+        proposerMons: [{ name: `${PFX}o1`, cost: 5 }, { name: `${PFX}o2`, cost: 5 }],
+        recipientMons: [{ name: `${PFX}q1`, cost: 5 }],
+        padTo: 10,
+      });
+      const { status, json } = await propose(host.id, {
+        proposerId: teamA, recipientId: teamB,
+        offering: [`${PFX}o1`, `${PFX}o2`], requesting: [`${PFX}q1`],
+      });
+      expect(status).toBe(200);
+      expect(json.id).toBeDefined();
+    } finally {
+      db.update(schema.leagues)
+        .set({ minRosterSize: saved.minRosterSize, maxRosterSize: saved.maxRosterSize })
+        .where(eq(schema.leagues.id, host.id)).run();
+    }
+  });
+
+  // The roster band floor is enforced: an uneven trade that would push a side
+  // below minRosterSize is rejected.
+  test('rejects trade that would drop a roster below the band minimum', async () => {
+    const saved = db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()!;
+    try {
+      db.update(schema.leagues)
+        .set({ minRosterSize: 10, maxRosterSize: 12 })
+        .where(eq(schema.leagues.id, host.id)).run();
+      ensurePokemon(`${PFX}o1`, { tier: 5, dex: 9501 });
+      ensurePokemon(`${PFX}o2`, { tier: 5, dex: 9502 });
+      ensurePokemon(`${PFX}q1`, { tier: 5, dex: 9503 });
+      // Proposer at 10 gives 2 / gets 1 → 9 (< min 10) → rejected.
+      const { teamA, teamB } = seedTeams(host.id, {
+        proposerMons: [{ name: `${PFX}o1`, cost: 5 }, { name: `${PFX}o2`, cost: 5 }],
+        recipientMons: [{ name: `${PFX}q1`, cost: 5 }],
+        padTo: 10,
+      });
+      const { status, json } = await propose(host.id, {
+        proposerId: teamA, recipientId: teamB,
+        offering: [`${PFX}o1`, `${PFX}o2`], requesting: [`${PFX}q1`],
+      });
+      expect(status).toBe(400);
+      expect(json.code).toBe('TRADE_INVALID');
+      expect(json.error).toMatch(/min 10/i);
+    } finally {
+      db.update(schema.leagues)
+        .set({ minRosterSize: saved.minRosterSize, maxRosterSize: saved.maxRosterSize })
+        .where(eq(schema.leagues.id, host.id)).run();
+    }
   });
 });
 
@@ -231,6 +313,7 @@ describe('trade validation — captain markup point-cap accounting', () => {
         ...fillers,
       ],
       recipientMons: [{ name: `${PFX}swapin`, cost: 1 }],
+      padTo: HOST_ROSTER,
     });
     const { status, json } = await propose(host.id, {
       proposerId: teamA, recipientId: teamB,
