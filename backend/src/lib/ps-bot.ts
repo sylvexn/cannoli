@@ -645,7 +645,7 @@ export function parseReplayLogFile(path: string): string[] | null {
  * whole PS logs tree — a stray giant directory can't hang the request.
  * Returns the first matching path found, or null.
  */
-function findReplayFileRecursive(dir: string, fileName: string, maxDepth: number): string | null {
+function findReplayFileRecursive(dir: string, fileNames: string[], maxDepth: number): string | null {
   if (maxDepth < 0) return null;
   let entries: import('fs').Dirent[];
   try {
@@ -655,11 +655,11 @@ function findReplayFileRecursive(dir: string, fileName: string, maxDepth: number
   }
   // Files first — a hit at this level wins before we descend.
   for (const e of entries) {
-    if (e.isFile() && e.name === fileName) return join(dir, e.name);
+    if (e.isFile() && fileNames.includes(e.name)) return join(dir, e.name);
   }
   for (const e of entries) {
     if (e.isDirectory()) {
-      const hit = findReplayFileRecursive(join(dir, e.name), fileName, maxDepth - 1);
+      const hit = findReplayFileRecursive(join(dir, e.name), fileNames, maxDepth - 1);
       if (hit) return hit;
     }
   }
@@ -693,9 +693,15 @@ export function locateReplayFile(
     return null;
   }
 
-  const fileName = `${roomId}.log.json`;
+  // PS names the file by the REPLAY id — the room id with the "battle-" prefix
+  // stripped — e.g. room "battle-gen9natdexdraft-78" → "gen9natdexdraft-78.log.json".
+  // Accept both forms so callers can pass either the room id or the replay id.
+  const fileNames = Array.from(new Set([
+    `${roomId}.log.json`,
+    `${roomId.replace(/^battle-/, '')}.log.json`,
+  ]));
 
-  // ── Deterministic scan: {YYYY-MM}/{tier}/{YYYY-MM-DD}/{roomId}.log.json ──
+  // ── Deterministic scan: {YYYY-MM}/{tier}/{YYYY-MM-DD}/{replayId}.log.json ──
   // List year-month dirs, newest first.
   let monthDirs: string[];
   try {
@@ -719,15 +725,17 @@ export function locateReplayFile(
     }
 
     for (const day of dayDirs) {
-      const candidate = join(tierDir, day, fileName);
-      if (existsSync(candidate)) return candidate;
+      for (const fileName of fileNames) {
+        const candidate = join(tierDir, day, fileName);
+        if (existsSync(candidate)) return candidate;
+      }
     }
   }
 
   // ── Safety fallback: bounded recursive search for the named file. ──
   // Catches non-standard layouts the deterministic scan can't anticipate.
   // Depth 4 covers {YYYY-MM}/{tier}/{YYYY-MM-DD}/{file} plus a little slack.
-  return findReplayFileRecursive(rootDir, fileName, 4);
+  return findReplayFileRecursive(rootDir, fileNames, 4);
 }
 
 /**
