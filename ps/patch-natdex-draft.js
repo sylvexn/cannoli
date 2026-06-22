@@ -46,6 +46,18 @@ let changed = false;
 	if (res.changed) { src = res.src; changed = true; }
 }
 
+// ── Patch 3: enforce Tera Preview in NatDex Draft ───────────────────────────
+// Cannoli battles are created server-side via /cannoli-battle, which never
+// touches the client's challenge UI — so `teraPreviewDefault` (a client-only
+// pre-check flag) does nothing and Ready Up games ran with Tera Preview off.
+// Put the rule IN the ruleset so it's always enforced and can't be turned off
+// (feedback #44). 'Tera Type Preview' is the exact rule the client's box
+// appends; Standard Draft already includes the required Team Preview.
+{
+	const res = patchTeraPreview(src);
+	if (res.changed) { src = res.src; changed = true; }
+}
+
 // ── Patch 2: guard the empty Tera Captains team-preview line ─────────────────
 // onTeamPreview() builds `buf` only for sides that have Tera Captains, then
 // unconditionally `this.add(`${buf}`)`. A side with none adds an empty line.
@@ -63,6 +75,27 @@ if (src.includes(TERA_FIXED)) {
 
 if (changed) fs.writeFileSync(absTarget, src);
 process.exit(0);
+
+function patchTeraPreview(src) {
+	// Match the NatDex Draft block's own ruleset array (non-greedy from its name
+	// to the first ruleset: after it).
+	const re = /(name:\s*"\[Gen 9\] NatDex Draft",[\s\S]*?ruleset:\s*\[)([^\]]*)(\])/m;
+	const m = re.exec(src);
+	if (!m) {
+		console.warn(`[patch] NatDex Draft ruleset not found for Tera Preview — skipping`);
+		return { src, changed: false };
+	}
+	if (/['"]Tera Type Preview['"]/.test(m[2])) {
+		console.log(`[patch] Tera Type Preview already in ruleset — skipping`);
+		return { src, changed: false };
+	}
+	// Insert right after 'Standard Draft' (fall back to prepending).
+	let newInner = m[2].replace(/(['"]Standard Draft['"])/, `$1, 'Tera Type Preview'`);
+	if (newInner === m[2]) newInner = `'Tera Type Preview', ${m[2]}`;
+	const updated = src.slice(0, m.index) + m[1] + newInner + m[3] + src.slice(m.index + m[0].length);
+	console.log(`[patch] formats.ts: added Tera Type Preview to NatDex Draft ruleset`);
+	return { src: updated, changed: true };
+}
 
 function patchBanlist(src) {
 // The banlist follows plan/rules: clauses-of-record + per-Pokemon move bans.
