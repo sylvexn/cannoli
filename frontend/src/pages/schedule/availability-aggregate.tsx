@@ -1,6 +1,7 @@
 /**
  * Read-only week-at-a-glance availability grid for the schedule page. Each
- * row is a team in the league; each column is a day Mon-Sun for the
+ * row is a team in the league; each column is a day Tue-Mon (the league week
+ * runs Tuesday→Monday) for the
  * selected week. Cells render a colored bar tinted by status (available /
  * maybe / busy) so coordinators can eyeball when most teams overlap.
  *

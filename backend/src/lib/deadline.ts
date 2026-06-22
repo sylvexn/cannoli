@@ -6,10 +6,10 @@
  * advance-week job reads it: the league stays in week W until weekDates[W+1]
  * arrives). So a week W match is due at the END of its week — the moment week
  * W+1 begins — NOT on week W's own start date. We anchor the cutoff to the end
- * of the day BEFORE the next week starts (e.g. week 1 starting Mon 06-15 with
- * week 2 on Mon 06-22 is due end of Sun 06-21), evaluated in the league
- * timezone. This keeps auto-forfeit consistent with advance-week and gives
- * coaches their whole week to play.
+ * of the day BEFORE the next week starts. League weeks run Tuesday→Monday, so
+ * e.g. week 1 starting Tue 06-16 with week 2 on Tue 06-23 is due end of Mon
+ * 06-22, evaluated in the league timezone. This keeps auto-forfeit consistent
+ * with advance-week and gives coaches their whole week to play.
  *
  * The schedule is the source of truth. We deliberately do NOT trust a date
  * baked onto the match row at creation time: editing the schedule must move the

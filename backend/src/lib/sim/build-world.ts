@@ -211,6 +211,14 @@ function createFictionalSeason(opts: {
   });
 }
 
+/** Snap a date BACK to the most-recent Tuesday — the start of a league week,
+ *  which runs Tuesday→Monday. */
+function snapToTuesday(d: Date): Date {
+  const out = new Date(d);
+  out.setUTCDate(out.getUTCDate() - ((out.getUTCDay() - 2 + 7) % 7));
+  return out;
+}
+
 /** Build a {week → ISO date} map: week 1 on `week1`, +7d per week. */
 function buildWeekDates(week1: Date, weeks: number): Record<string, string> {
   const out: Record<string, string> = {};
@@ -353,7 +361,8 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
   {
     const seasonNumber = 1;
     console.log(`\n── Finished season (S${seasonNumber}) ──`);
-    const weekDates = buildWeekDates(new Date(Date.UTC(2025, 8, 8)), TEAMS_PER_LEAGUE - 1);
+    // 2025-09-09 is a Tuesday — league weeks run Tuesday→Monday.
+    const weekDates = buildWeekDates(new Date(Date.UTC(2025, 8, 9)), TEAMS_PER_LEAGUE - 1);
     const { seasonId, leagues } = createFictionalSeason({
       seasonNumber,
       rng,
@@ -427,8 +436,9 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
   {
     const seasonNumber = 2;
     console.log(`\n── Live season (S${seasonNumber}) ──`);
-    // Week 1 sits ~3 weeks in the past so week 4 reads as "this week".
-    const week1 = new Date();
+    // Week 1 sits ~3 weeks in the past so week 4 reads as "this week". Anchor
+    // to a Tuesday so the sim's weeks run Tuesday→Monday like the live league.
+    const week1 = snapToTuesday(new Date());
     week1.setUTCDate(week1.getUTCDate() - (LIVE_THROUGH_WEEK - 1) * 7);
     week1.setUTCHours(0, 0, 0, 0);
     const weekDates = buildWeekDates(week1, TEAMS_PER_LEAGUE - 1);

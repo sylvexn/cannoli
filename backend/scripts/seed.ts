@@ -482,9 +482,11 @@ function seedMockData(coachTeamIds: Map<string, string>) {
       return prngState / 0xffffffff;
     }
 
-    function getMonday(d: Date): Date {
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    function getTuesday(d: Date): Date {
+      // Most-recent Tuesday on/before d — the start of the league week, which
+      // runs Tuesday→Monday. (Used only when a week has no configured date.)
+      const day = d.getDay(); // 0=Sun..6=Sat
+      const diff = d.getDate() - ((day - 2 + 7) % 7);
       return new Date(d.setDate(diff));
     }
 
@@ -529,7 +531,7 @@ function seedMockData(coachTeamIds: Map<string, string>) {
 
       for (const week of weeksToSeed) {
         const weekDate = weekDatesMap[String(week)];
-        const start = weekDate ? new Date(weekDate + 'T00:00:00') : getMonday(new Date());
+        const start = weekDate ? new Date(weekDate + 'T00:00:00') : getTuesday(new Date());
         for (let i = 0; i < 7; i++) {
           const d = new Date(start);
           d.setDate(d.getDate() + i);

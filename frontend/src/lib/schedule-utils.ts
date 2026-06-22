@@ -8,7 +8,11 @@
  * week to show the same "today's week" columns.
  */
 
-const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+// League weeks run Tuesday → Monday, so a week's days start on Tuesday and the
+// final day is Monday. These labels are only used for placeholder (dates-TBD)
+// weeks; weeks with a real `weekDates` entry re-derive each column's label from
+// the actual calendar date in formatWeekDay().
+const WEEKDAY_SHORT = ['Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon'] as const;
 
 export interface WeekDay {
   /** Real calendar date — null when the week has no configured date. */
@@ -26,8 +30,8 @@ export interface WeekDay {
  * Return 7 WeekDay descriptors for `week` in `weekDates`.
  *
  * - If `weekDates[week]` exists: returns real Date objects anchored to that
- *   Monday (local midnight).
- * - If absent: returns generic Mon–Sun labels with `date: null`.
+ *   week-start date (a Tuesday; local midnight).
+ * - If absent: returns generic Tue–Mon labels with `date: null`.
  */
 export function getWeekDays(
   weekDates: Record<string, string> | null | undefined,
@@ -49,7 +53,7 @@ export function getWeekDays(
     });
   }
 
-  // No date configured — generic Mon-Sun placeholders.
+  // No date configured — generic Tue-Mon placeholders.
   return WEEKDAY_SHORT.map((label, i) => ({
     date: null,
     label,
