@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useMarket } from '@/pages/market';
-import { api } from '@/lib/api';
+import { api, type ApiFaRequest } from '@/lib/api';
 import { toast } from 'sonner';
 import { getEffectiveCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import type { RosterPokemon } from '@/lib/types';
@@ -66,6 +66,15 @@ export function FreeAgentsPage() {
   const [faBudget, setFaBudget] = useState<FaBudget | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // This team's FA requests awaiting / resolved by admin approval (feedback #42)
+  const [faRequests, setFaRequests] = useState<ApiFaRequest[]>([]);
+  function fetchFaRequests() {
+    if (!myTeam) return;
+    api.getFaRequests(league.id)
+      .then(rows => setFaRequests(rows.filter(r => r.teamId === myTeam.id)))
+      .catch(() => { /* non-fatal */ });
+  }
+
   function fetchFreeAgents() {
     if (phase === 'predraft' || phase === 'draft' || !myTeam) return;
     setLoading(true);
@@ -85,6 +94,7 @@ export function FreeAgentsPage() {
 
   useEffect(() => {
     fetchFreeAgents();
+    fetchFaRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [league.id, phase, myTeam?.id]);
 
@@ -167,26 +177,36 @@ export function FreeAgentsPage() {
       });
       const pickupStr = pendingPickups.map(p => p.name).join(', ');
       const dropStr = pendingDrops.size > 0 ? `, dropped ${[...pendingDrops].join(', ')}` : '';
-      toast.success(`Picked up ${pickupStr}${dropStr}`);
 
-      // Update FA budget from response
-      if ('faRemaining' in result) {
-        setFaBudget({
-          faUsed: result.faUsed,
-          faRemaining: result.faRemaining,
-          faPerSeason: result.faPerSeason,
-        });
+      // Queued for admin approval (non-staff): nothing is applied yet, so don't
+      // touch the roster, FA pool, or budget — just surface the pending request.
+      if (result.pending) {
+        toast.success(`Submitted for admin approval: ${pickupStr}${dropStr}`);
+        setPendingPickups([]);
+        setPendingDrops(new Set());
+        fetchFaRequests();
+      } else {
+        toast.success(`Picked up ${pickupStr}${dropStr}`);
+
+        // Update FA budget from response
+        if ('faRemaining' in result) {
+          setFaBudget({
+            faUsed: result.faUsed,
+            faRemaining: result.faRemaining,
+            faPerSeason: result.faPerSeason,
+          });
+        }
+
+        // Optimistically remove pickups from FA list + clear selections
+        const pickedNames = new Set(pendingPickups.map(p => p.name));
+        setFreeAgents(prev => prev.filter(p => !pickedNames.has(p.name)));
+        setPendingPickups([]);
+        setPendingDrops(new Set());
+
+        // Refresh roster data
+        await refresh();
+        fetchFreeAgents();
       }
-
-      // Optimistically remove pickups from FA list + clear selections
-      const pickedNames = new Set(pendingPickups.map(p => p.name));
-      setFreeAgents(prev => prev.filter(p => !pickedNames.has(p.name)));
-      setPendingPickups([]);
-      setPendingDrops(new Set());
-
-      // Refresh roster data
-      await refresh();
-      fetchFreeAgents();
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, 'Pickup failed'));
     } finally {
@@ -458,6 +478,41 @@ export function FreeAgentsPage() {
                     {faBudget.faUsed + pendingPickups.length} / {faBudget.faPerSeason}
                     <span className="text-text-muted ml-1">({Math.max(0, faBudget.faRemaining - pendingPickups.length)} left)</span>
                   </span>
+                </div>
+              )}
+
+              {/* Requests awaiting / rejected by an admin (feedback #42) */}
+              {faRequests.filter(r => r.status !== 'approved').length > 0 && (
+                <div className="mb-3 space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                    Awaiting approval
+                  </div>
+                  {faRequests.filter(r => r.status !== 'approved').map(r => (
+                    <div
+                      key={r.id}
+                      className={cn(
+                        'text-[11px] rounded border px-2 py-1.5',
+                        r.status === 'pending'
+                          ? 'border-draw/30 bg-draw/5'
+                          : 'border-loss/30 bg-loss/5',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-text-secondary truncate">
+                          {r.pickups.join(', ')}{r.drops.length ? ` for ${r.drops.join(', ')}` : ''}
+                        </span>
+                        <span className={cn(
+                          'shrink-0 text-[9px] uppercase font-bold px-1 py-0.5 rounded',
+                          r.status === 'pending' ? 'bg-draw/15 text-draw' : 'bg-loss/15 text-loss',
+                        )}>
+                          {r.status === 'pending' ? 'Pending' : 'Rejected'}
+                        </span>
+                      </div>
+                      {r.status === 'rejected' && r.rejectReason && (
+                        <div className="text-[10px] text-loss/80 mt-0.5">{r.rejectReason}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 

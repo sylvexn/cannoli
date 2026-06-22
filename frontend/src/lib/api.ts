@@ -616,6 +616,21 @@ export interface ApiTradeBlockListing {
   note: string | null;
 }
 
+export interface ApiFaRequest {
+  id: number;
+  leagueId: string;
+  week: number;
+  teamId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  pickups: string[];
+  drops: string[];
+  requestedBy: string | null;
+  requestedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  rejectReason: string | null;
+}
+
 export interface ApiTierListEntry {
   name: string;
   tier: number;
@@ -1623,10 +1638,20 @@ export const api = {
     leagueId: string,
     data: { teamId: string; pickupNames: string[]; dropNames?: string[] },
   ) =>
-    postJson<{ success: boolean; faUsed: number; faRemaining: number; faPerSeason: number }>(
+    // `pending: true` when the pickup was queued for admin approval (non-staff)
+    // rather than applied immediately (feedback #42).
+    postJson<{ success: boolean; pending?: boolean; requestId?: number; faUsed: number; faRemaining: number; faPerSeason: number }>(
       `/api/leagues/${leagueId}/free-agents/pickup`,
       data,
     ),
+
+  // ── FA approval queue (feedback #42) ──
+  getFaRequests: (leagueId: string) =>
+    fetchJson<ApiFaRequest[]>(`/api/leagues/${leagueId}/fa-requests`),
+  approveFaRequest: (id: number) =>
+    postJson<{ success: boolean }>(`/api/fa-requests/${id}/approve`, {}),
+  rejectFaRequest: (id: number, reason?: string) =>
+    postJson<{ success: boolean }>(`/api/fa-requests/${id}/reject`, { reason }),
 
   // Speed tiers (rostered pokemon + base speed + ability list, league-wide)
   getSpeedTiers: (leagueId: string) =>

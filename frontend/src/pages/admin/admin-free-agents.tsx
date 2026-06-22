@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api } from '@/lib/api';
+import { api, type ApiFaRequest } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -51,6 +51,47 @@ export function AdminFreeAgents() {
   const [pickupPokemon, setPickupPokemon] = useState<string | null>(null);
   const [pickupTeam, setPickupTeam] = useState('');
   const [dropPokemon, setDropPokemon] = useState('');
+
+  // Pending FA approval queue (feedback #42)
+  const [faReqs, setFaReqs] = useState<ApiFaRequest[]>([]);
+  function fetchFaReqs(leagueId: string) {
+    if (!leagueId) return;
+    api.getFaRequests(leagueId)
+      .then(setFaReqs)
+      .catch(() => { /* non-fatal */ });
+  }
+  useEffect(() => { if (selectedLeague) fetchFaReqs(selectedLeague); }, [selectedLeague]);
+  const pendingReqs = useMemo(() => faReqs.filter(r => r.status === 'pending'), [faReqs]);
+  const teamName = (id: string) => teams.find(t => t.id === id)?.teamAbbrev ?? id;
+
+  async function refreshAfterResolve() {
+    fetchFaReqs(selectedLeague);
+    const faRes = await api.getFreeAgents(selectedLeague);
+    const fa = Array.isArray(faRes) ? faRes : (faRes as { freeAgents: FreeAgent[] }).freeAgents;
+    setFreeAgents(fa as FreeAgent[]);
+    const t = await api.getTeams(selectedLeague);
+    setTeams(t.map(tm => ({ id: tm.id, teamName: tm.teamName, teamAbbrev: tm.teamAbbrev, teamColor: tm.teamColor, roster: tm.roster.map(r => ({ name: r.name, tier: r.tier })) })));
+  }
+
+  async function approveReq(id: number) {
+    try {
+      await api.approveFaRequest(id);
+      toast.success('FA request approved');
+      await refreshAfterResolve();
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Approve failed'));
+    }
+  }
+  async function rejectReq(id: number) {
+    const reason = window.prompt('Reason for rejection (optional):') ?? undefined;
+    try {
+      await api.rejectFaRequest(id, reason);
+      toast.success('FA request rejected');
+      await refreshAfterResolve();
+    } catch (e: unknown) {
+      toast.error(getErrorMessage(e, 'Reject failed'));
+    }
+  }
 
   // Auto-select first league
   useEffect(() => {
@@ -189,6 +230,41 @@ export function AdminFreeAgents() {
           </button>
         ))}
       </div>
+
+      {/* Pending approval queue (feedback #42) */}
+      {pendingReqs.length > 0 && (
+        <div className="rounded-lg border border-draw/40 bg-draw/[0.04] overflow-hidden">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-draw/20 bg-draw/10">
+            <UserPlus size={14} className="text-draw shrink-0" />
+            <span className="text-xs font-heading font-semibold uppercase tracking-wider text-text-primary">
+              Pending FA requests
+            </span>
+            <span className="text-[11px] px-1.5 py-0 rounded bg-draw/15 text-draw font-mono">
+              {pendingReqs.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border-subtle/20">
+            {pendingReqs.map(r => (
+              <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                <span className="text-[11px] font-bold font-mono text-text-secondary shrink-0 w-12 truncate" title={teamName(r.teamId)}>
+                  {teamName(r.teamId)}
+                </span>
+                <span className="flex-1 min-w-0 text-[11px] text-text-secondary truncate font-mono">
+                  <span className="text-win">+ {r.pickups.join(', ')}</span>
+                  {r.drops.length > 0 && <span className="text-loss ml-2">− {r.drops.join(', ')}</span>}
+                  {r.requestedBy && <span className="text-text-muted ml-2">· {r.requestedBy}</span>}
+                </span>
+                <Button size="sm" className="h-6 px-2 text-[11px] bg-win/15 text-win hover:bg-win/25 border border-win/30" onClick={() => approveReq(r.id)}>
+                  Approve
+                </Button>
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-loss hover:bg-loss/10" onClick={() => rejectReq(r.id)}>
+                  Reject
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Search + Sort row */}
       <div className="flex items-center gap-2">
