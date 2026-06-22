@@ -114,6 +114,8 @@ export interface ApiLeague {
     teraCaptainSlots: number;
     tradeDeadlineWeek: number;
     rosterSize: number;
+    minRosterSize: number | null;
+    maxRosterSize: number | null;
     forfeitPolicy?: 'double_forfeit' | 'admin_review';
     paused?: boolean;
     archived?: boolean;

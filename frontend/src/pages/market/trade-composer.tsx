@@ -101,9 +101,15 @@ export function TradeComposer({
     setFn(next);
   }
 
-  // Gate Send: validator must pass AND both sides must have picks.
+  // Gate Send: validator must pass AND both sides must have picks. Pass the
+  // effective roster band (effMin/effMax) so the gate matches the LegalityMeter.
+  const effMax = league.season.maxRosterSize ?? league.season.rosterSize;
+  const effMin = league.season.minRosterSize ?? league.season.rosterSize;
   const issues = partnerTeam
-    ? validateTrade({ proposer: proposerTeam, recipient: partnerTeam, offering, requesting, pointCap })
+    ? validateTrade({
+        proposer: proposerTeam, recipient: partnerTeam, offering, requesting, pointCap,
+        maxRosterSize: effMax, minRosterSize: effMin,
+      })
     : [];
   const canSubmit =
     !!partnerTeam &&

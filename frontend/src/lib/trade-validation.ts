@@ -7,7 +7,8 @@
  *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft)
  *   - max 1 mega per team
  *   - no duplicate species (proxy for the national-dex check)
- *   - roster size: neither team may exceed their roster cap after the swap
+ *   - roster band: neither team may exceed its max NOR drop below its min after
+ *     the swap (min/max default to the league rosterSize when the band is unset)
  *
  * Unequal (N-for-M) trades are allowed — each side just needs ≥1 and a legal
  * resulting roster.
@@ -31,12 +32,16 @@ export interface ValidateTradeOpts {
   offering: Set<string>;
   requesting: Set<string>;
   pointCap: number;
-  /** League roster size cap. If provided, validates neither side goes over. */
-  rosterSize?: number;
+  /** League roster band — effective max a side may hold after the swap.
+   *  If provided, validates neither side goes over. */
+  maxRosterSize?: number;
+  /** League roster band — effective min a side may hold after the swap.
+   *  If provided, validates neither side falls below. */
+  minRosterSize?: number;
 }
 
 export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
-  const { proposer, recipient, offering, requesting, pointCap, rosterSize } = opts;
+  const { proposer, recipient, offering, requesting, pointCap, maxRosterSize, minRosterSize } = opts;
   const issues: ValidationIssue[] = [];
 
   // Nothing selected on a side yet → not-yet-legal, but don't nag.
@@ -55,10 +60,13 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     ...offered,
   ];
 
-  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[], rosterMax?: number) {
-    // Roster size
-    if (rosterMax != null && roster.length > rosterMax) {
-      issues.push({ side, message: `${label} would have ${roster.length} Pokemon (max ${rosterMax})` });
+  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[], max?: number, min?: number) {
+    // Roster band (max / min)
+    if (max != null && roster.length > max) {
+      issues.push({ side, message: `${label} would have ${roster.length} Pokemon (max ${max})` });
+    }
+    if (min != null && roster.length < min) {
+      issues.push({ side, message: `${label} would have ${roster.length} Pokemon (min ${min})` });
     }
 
     // Point cap
@@ -86,8 +94,8 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     }
   }
 
-  check('offering', 'Your team', postProposer, rosterSize);
-  check('requesting', recipient.teamAbbrev, postRecipient, rosterSize);
+  check('offering', 'Your team', postProposer, maxRosterSize, minRosterSize);
+  check('requesting', recipient.teamAbbrev, postRecipient, maxRosterSize, minRosterSize);
 
   return issues;
 }

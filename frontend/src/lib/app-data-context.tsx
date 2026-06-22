@@ -22,6 +22,8 @@ export function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>
       teraCaptainSlots: a.season.teraCaptainSlots ?? 2,
       tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
       rosterSize: a.season.rosterSize ?? 10,
+      minRosterSize: a.season.minRosterSize ?? null,
+      maxRosterSize: a.season.maxRosterSize ?? null,
       forfeitPolicy: a.season.forfeitPolicy,
       paused: a.season.paused,
       archived: a.season.archived,
@@ -37,6 +39,8 @@ export function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>
       teraCaptainSlots: 2,
       tradeDeadlineWeek: 7,
       rosterSize: 10,
+      minRosterSize: null,
+      maxRosterSize: null,
     };
     return {
       id: a.id,

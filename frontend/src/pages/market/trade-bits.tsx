@@ -207,8 +207,11 @@ export function LegalityMeter({
   rosterSize?: number;
 }) {
   const league = useLeague();
-  const effectiveRosterSize = rosterSize ?? league.season.rosterSize;
-  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, rosterSize: effectiveRosterSize });
+  // Effective roster band — fall back to the draft rosterSize when unset, and
+  // honor an explicit `rosterSize` prop override as the max.
+  const effMax = rosterSize ?? league.season.maxRosterSize ?? league.season.rosterSize;
+  const effMin = league.season.minRosterSize ?? league.season.rosterSize;
+  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, maxRosterSize: effMax, minRosterSize: effMin });
   const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap);
   const hasSelections = offering.size > 0 && requesting.size > 0;
   const isLegal = hasSelections && issues.length === 0;

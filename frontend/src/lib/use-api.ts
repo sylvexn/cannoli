@@ -94,6 +94,8 @@ function toLeague(a: ApiLeague): League {
     teraCaptainSlots: a.season.teraCaptainSlots ?? 2,
     tradeDeadlineWeek: a.season.tradeDeadlineWeek ?? 7,
     rosterSize: a.season.rosterSize ?? 10,
+    minRosterSize: a.season.minRosterSize ?? null,
+    maxRosterSize: a.season.maxRosterSize ?? null,
     forfeitPolicy: a.season.forfeitPolicy,
     paused: a.season.paused,
   } : {
@@ -106,6 +108,8 @@ function toLeague(a: ApiLeague): League {
     teraCaptainSlots: 2,
     tradeDeadlineWeek: 7,
     rosterSize: 10,
+    minRosterSize: null,
+    maxRosterSize: null,
   };
 
   return {

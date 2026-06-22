@@ -151,6 +151,11 @@ export interface LeagueSeason {
    *  from `leagues.roster_size` but surfaced under `season` for backwards-compat
    *  with existing readers. */
   rosterSize: number;
+  /** Per-league roster BAND (min/max a team may hold post-draft via trades/FA).
+   *  Nullable — when null, effective bound falls back to `rosterSize`
+   *  (effMin = minRosterSize ?? rosterSize, effMax = maxRosterSize ?? rosterSize). */
+  minRosterSize: number | null;
+  maxRosterSize: number | null;
   forfeitPolicy?: 'double_forfeit' | 'admin_review';
   paused?: boolean;
   archived?: boolean;

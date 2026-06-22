@@ -75,15 +75,28 @@ describe('validateTrade', () => {
   test('flags a roster-size violation on a 1-for-2 when recipient would exceed cap', () => {
     const a = team('a', 'AAA', [mon('Gengar', 16)]);
     const b = team('b', 'BBB', [mon('A', 4), mon('B', 4), mon('C', 4)]);
-    // a gives 1, gets 2 → postA has 2 mons, postB has 2 mons. With rosterSize=2 → postB=2, ok.
-    // With rosterSize=1 → postA=2 > 1, should flag.
+    // a gives 1, gets 2 → postA has 2 mons, postB has 2 mons. With maxRosterSize=2 → postB=2, ok.
+    // With maxRosterSize=1 → postA=2 > 1, should flag.
     const issues = validateTrade({
       proposer: a, recipient: b,
       offering: new Set(['Gengar']), requesting: new Set(['A', 'B']),
       pointCap: cap,
-      rosterSize: 1,
+      maxRosterSize: 1,
     });
     expect(issues.some(i => /max/i.test(i.message))).toBe(true);
+  });
+
+  test('flags a side that would fall below the roster minimum', () => {
+    // a gives 2, gets 1 → postA has 1 mon. With minRosterSize=2 → postA=1 < 2, flag.
+    const a = team('a', 'AAA', [mon('Gengar', 8), mon('Spare', 4)]);
+    const b = team('b', 'BBB', [mon('Garchomp', 8)]);
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Gengar', 'Spare']), requesting: new Set(['Garchomp']),
+      pointCap: cap,
+      minRosterSize: 2,
+    });
+    expect(issues.some(i => /min/i.test(i.message))).toBe(true);
   });
 
   test('flags a side that would exceed the point cap', () => {

@@ -24,6 +24,9 @@ interface LeagueSettings {
   teraCaptainSlots: number;
   tradeDeadlineWeek: number;
   rosterSize: number;
+  /** Roster band (min/max a team may hold post-draft). Editable in any phase. */
+  minRosterSize: number;
+  maxRosterSize: number;
   playoffTeamCount: number;
   paused: boolean;
   forfeitPolicy: 'double_forfeit' | 'admin_review';
@@ -116,11 +119,16 @@ export function AdminLeagues() {
       const next = { ...prev };
       for (const l of leagues) {
         if (next[l.id]) continue;
+        const baseRoster = l.season.rosterSize ?? 11;
         next[l.id] = {
           pointCap: l.season.pointCap ?? 110,
           teraCaptainSlots: l.season.teraCaptainSlots ?? 2,
           tradeDeadlineWeek: l.season.tradeDeadlineWeek ?? 7,
-          rosterSize: (l as any).rosterSize ?? 11,
+          rosterSize: baseRoster,
+          // Roster band — null in the API means "no band"; show rosterSize so the
+          // inputs aren't empty (saving these establishes an explicit band).
+          minRosterSize: l.season.minRosterSize ?? baseRoster,
+          maxRosterSize: l.season.maxRosterSize ?? baseRoster,
           playoffTeamCount: l.playoffTeamCount ?? 6,
           paused: !!l.season.paused,
           forfeitPolicy: l.season.forfeitPolicy ?? 'double_forfeit',
@@ -148,6 +156,8 @@ export function AdminLeagues() {
         teraCaptainSlots: s.teraCaptainSlots,
         tradeDeadlineWeek: s.tradeDeadlineWeek,
         rosterSize: s.rosterSize,
+        minRosterSize: s.minRosterSize,
+        maxRosterSize: s.maxRosterSize,
         playoffTeamCount: s.playoffTeamCount,
         paused: s.paused,
         forfeitPolicy: s.forfeitPolicy,
@@ -291,6 +301,25 @@ export function AdminLeagues() {
                     locked={locks.rosterSize}
                     lockReason="Locked once draft has begun"
                   />
+                  {/* Roster band — editable in ANY phase (no draft-phase lock). */}
+                  <SettingField
+                    label="Min Roster"
+                    value={s.minRosterSize}
+                    onChange={v => updateSetting(league.id, 'minRosterSize', v)}
+                    min={1}
+                    max={20}
+                    locked={false}
+                    lockReason=""
+                  />
+                  <SettingField
+                    label="Max Roster"
+                    value={s.maxRosterSize}
+                    onChange={v => updateSetting(league.id, 'maxRosterSize', v)}
+                    min={1}
+                    max={30}
+                    locked={false}
+                    lockReason=""
+                  />
                   <SettingField
                     label="Bracket Size"
                     icon={<TrophyIcon size={10} />}
@@ -304,6 +333,14 @@ export function AdminLeagues() {
                     lockReason="Locked after season ends"
                   />
                 </div>
+
+                {/* Roster-band ordering hint — backend also enforces this. */}
+                {(s.minRosterSize > s.rosterSize || s.rosterSize > s.maxRosterSize) && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-loss">
+                    <AlertTriangle size={11} className="shrink-0" />
+                    <span>Roster band must satisfy min ≤ roster size ≤ max ({s.minRosterSize} ≤ {s.rosterSize} ≤ {s.maxRosterSize}).</span>
+                  </div>
+                )}
 
                 {/* Operational toggles — format + paused + forfeit policy */}
                 <div className="grid grid-cols-3 gap-4 pt-2 border-t border-border-subtle">
@@ -412,7 +449,7 @@ export function AdminLeagues() {
                   <Button
                     size="sm"
                     onClick={() => handleSave(league.id)}
-                    disabled={saving[league.id]}
+                    disabled={saving[league.id] || s.minRosterSize > s.rosterSize || s.rosterSize > s.maxRosterSize}
                     className="bg-neon text-surface-base hover:bg-neon/90"
                   >
                     <Save size={14} />

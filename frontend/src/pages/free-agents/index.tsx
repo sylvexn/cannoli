@@ -136,9 +136,12 @@ export function FreeAgentsPage() {
     return myTeam.roster.length - pendingDrops.size + pendingPickups.length;
   }, [myTeam, pendingPickups, pendingDrops]);
 
-  const rosterSize = league.season.rosterSize;
+  // Effective roster band — fall back to the draft rosterSize when unset.
+  const effMax = league.season.maxRosterSize ?? league.season.rosterSize;
+  const effMin = league.season.minRosterSize ?? league.season.rosterSize;
   const overCap = projectedAfter > pointCap;
-  const overRoster = projectedRosterSize > rosterSize;
+  const overRoster = projectedRosterSize > effMax;
+  const underRoster = projectedRosterSize < effMin;
   const faRemaining = faBudget?.faRemaining ?? null;
   const overFaBudget = faRemaining !== null && pendingPickups.length > faRemaining;
 
@@ -147,6 +150,7 @@ export function FreeAgentsPage() {
     !submitting &&
     !overCap &&
     !overRoster &&
+    !underRoster &&
     !overFaBudget;
 
   function togglePickup(fa: FreeAgent) {
@@ -554,10 +558,11 @@ export function FreeAgentsPage() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-mono text-text-muted">
-                    <span>Roster after</span>
-                    <span className={cn('font-semibold', overRoster ? 'text-loss' : 'text-text-primary')}>
-                      {projectedRosterSize} / {rosterSize}
-                      {overRoster && <span className="text-loss ml-1">— drop {projectedRosterSize - rosterSize} more</span>}
+                    <span>Roster after{effMin !== effMax && <span className="ml-1 text-text-muted/70">(band {effMin}–{effMax})</span>}</span>
+                    <span className={cn('font-semibold', overRoster || underRoster ? 'text-loss' : 'text-text-primary')}>
+                      {projectedRosterSize} / {effMax}
+                      {overRoster && <span className="text-loss ml-1">— drop {projectedRosterSize - effMax} more</span>}
+                      {underRoster && <span className="text-loss ml-1">— add {effMin - projectedRosterSize} more (min {effMin})</span>}
                     </span>
                   </div>
 
