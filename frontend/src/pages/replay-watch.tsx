@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, Link2, Maximize2, Minimize2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,12 @@ export function ReplayWatchPage() {
   const { matchId } = useParams<{ matchId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [theater, setTheater] = useState(false);
+
+  // Deep link: /replay/:id?t=N opens the replay seeked to turn N.
+  const turnParam = Number(searchParams.get('t'));
+  const initialTurn = Number.isFinite(turnParam) && turnParam > 0 ? turnParam : undefined;
 
   const state = (location.state ?? {}) as ReplayWatchState;
   const hasMatchup = !!(state.homeLabel && state.awayLabel);
@@ -109,7 +114,7 @@ export function ReplayWatchPage() {
         </div>
       </div>
 
-      <ReplayPlayer matchId={matchId} className="flex-1" />
+      <ReplayPlayer matchId={matchId} initialTurn={initialTurn} className="flex-1" />
     </div>
   );
 }

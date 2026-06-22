@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { replayEmbedUrl, showdownOrigin } from './replay-types';
 import { ReplayLog } from './replay-log';
@@ -9,16 +9,43 @@ import { ReplayLog } from './replay-log';
  * mirrors its battle log out by postMessage; this component owns the iframe
  * ref so it can post commands back (seek-to-turn when a log divider is
  * clicked). Stacks vertically on narrow screens, side-by-side on lg+.
+ *
+ * `initialTurn` (from a /replay/:id?t=N deep link) seeks there once the embed
+ * signals it's ready.
  */
-export function ReplayPlayer({ matchId, className }: { matchId: string; className?: string }) {
+export function ReplayPlayer({
+  matchId,
+  initialTurn,
+  className,
+}: {
+  matchId: string;
+  initialTurn?: number;
+  className?: string;
+}) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const onSeek = useCallback((turn: number) => {
+  const seek = useCallback((turn: number) => {
     iframeRef.current?.contentWindow?.postMessage(
       { source: 'cannoli-replay-cmd', cmd: 'seekTurn', turn },
       showdownOrigin(),
     );
   }, []);
+
+  // Deep link: wait for the embed's `ready` (the battle exists and can accept
+  // commands), then jump to the requested turn.
+  useEffect(() => {
+    if (!initialTurn || initialTurn < 1) return;
+    const expected = showdownOrigin();
+    function onMessage(e: MessageEvent) {
+      if (expected !== '*' && e.origin !== expected) return;
+      const d = e.data as { source?: string; type?: string; matchId?: string };
+      if (d?.source === 'cannoli-replay' && d.type === 'ready' && d.matchId === matchId) {
+        seek(initialTurn as number);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [initialTurn, matchId, seek]);
 
   return (
     <div className={cn('flex flex-col lg:flex-row gap-2 min-h-0', className)}>
@@ -33,7 +60,7 @@ export function ReplayPlayer({ matchId, className }: { matchId: string; classNam
       </div>
       <ReplayLog
         matchId={matchId}
-        onSeek={onSeek}
+        onSeek={seek}
         className="h-64 shrink-0 lg:h-full lg:w-[340px]"
       />
     </div>
