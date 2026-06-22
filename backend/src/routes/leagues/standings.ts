@@ -163,27 +163,42 @@ export const standingsRoutes = new Elysia()
   // ─── Schedule ────────────────────────────────────────────────────────
 
   .get('/api/leagues/:leagueId/schedule', ({ params }) => {
+    // Results-reveal gate: when an admin has set resultsRevealedThrough on this
+    // league, scores for later (unrevealed) weeks are withheld so the schedule
+    // can't be used to spoil who won before standings catch up. Same gate the
+    // standings/stats endpoints already honor (NULL = gate off = full scores).
+    const league = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, params.leagueId)).get();
+    const maxWeek = league?.resultsRevealedThrough ?? null;
+
     const matches = db.select().from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
       .orderBy(asc(schema.matches.week))
       .all()
-      .map(m => ({
-        id: m.id,
-        week: m.week,
-        homePlayer: m.homeTeamId,
-        awayPlayer: m.awayTeamId,
-        homeScore: m.homeScore,
-        awayScore: m.awayScore,
-        replayUrl: m.replayUrl,
-        // True when a battle log is stored, even if there's no live PS room
-        // URL (imported replays). The in-site viewer plays by match id.
-        hasReplay: m.replayLog != null,
-        status: m.status,
-        phase: m.phase,
-        playoffRound: m.playoffRound,
-        homeSeed: m.homeSeed,
-        awaySeed: m.awaySeed,
-      }));
+      .map(m => {
+        // Withhold the score line for unrevealed weeks. Nulling both scores
+        // makes every consumer treat the match as "not yet final" (the
+        // standings recent-results card and team schedule both gate their
+        // W/L badge on homeScore/awayScore != null).
+        const gated = maxWeek != null && m.week > maxWeek;
+        return {
+          id: m.id,
+          week: m.week,
+          homePlayer: m.homeTeamId,
+          awayPlayer: m.awayTeamId,
+          homeScore: gated ? null : m.homeScore,
+          awayScore: gated ? null : m.awayScore,
+          replayUrl: m.replayUrl,
+          // True when a battle log is stored, even if there's no live PS room
+          // URL (imported replays). The in-site viewer plays by match id.
+          hasReplay: m.replayLog != null,
+          status: m.status,
+          phase: m.phase,
+          playoffRound: m.playoffRound,
+          homeSeed: m.homeSeed,
+          awaySeed: m.awaySeed,
+        };
+      });
     const byes = db.select().from(schema.byeWeeks)
       .where(eq(schema.byeWeeks.leagueId, params.leagueId))
       .orderBy(asc(schema.byeWeeks.week))
