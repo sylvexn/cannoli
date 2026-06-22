@@ -538,23 +538,40 @@
       }
     }
 
+    // Wipe the parent panel and re-forward the log container from scratch.
+    // Replaying the live DOM verbatim is robust to BOTH kinds of removal PS
+    // does (see observer note), so nothing already rendered is silently lost.
+    function resync() {
+      currentTurn = 0;
+      seen = (typeof WeakSet === 'function') ? new WeakSet() : null;
+      postToParent({ type: 'log', kind: 'clear' });
+      for (var k = 0; k < logEl.childNodes.length; k++) forwardNode(logEl.childNodes[k]);
+    }
+
     var obs = new MutationObserver(function (mutations) {
-      // PS only removes log rows when it resets the log (reset / seek-backward,
-      // which clears then replays to the target turn); during normal forward
-      // play it only appends. Mirror a removal as a wipe — but gate on the
-      // mutation RECORD, not the live DOM: the observer batches async, so by
-      // callback time PS may have already re-added the early nodes (checking
-      // `childNodes.length === 0` here misses the clear and the log doubles up).
-      var cleared = false;
+      // PS removes log rows in two distinct ways, and they need the same care:
+      //   • full reset — reset / seek-backward / switch-viewpoint do
+      //     innerHTML='' then replay forward to the target turn;
+      //   • partial removal — changeUhtml() swaps a single |uhtml| node out
+      //     mid-turn (battle-log.js), leaving every other row in place.
+      // The old code relayed a bare 'clear' on any removal and then re-sent
+      // only THIS batch's added nodes. That happens to work for a full reset
+      // (everything gets re-rendered as fresh adds) but on a partial removal it
+      // wiped the parent and never re-sent the survivors — so the battle-start
+      // preamble + "Turn 1" header vanished and the log looked like it began
+      // mid-turn-1 (the "turn 0 disappeared" bug). Resync from the live DOM
+      // instead: by callback time the container holds exactly the rows that
+      // should be on screen, whichever removal happened. We gate on the
+      // mutation RECORD (not childNodes.length), since the observer batches
+      // async and PS may have re-added rows before this callback runs.
+      var removed = false;
       for (var i = 0; i < mutations.length; i++) {
-        var mut = mutations[i];
-        if (!cleared && mut.removedNodes && mut.removedNodes.length) {
-          cleared = true;
-          currentTurn = 0;
-          seen = (typeof WeakSet === 'function') ? new WeakSet() : null;
-          postToParent({ type: 'log', kind: 'clear' });
-        }
-        for (var j = 0; j < mut.addedNodes.length; j++) forwardNode(mut.addedNodes[j]);
+        if (mutations[i].removedNodes && mutations[i].removedNodes.length) { removed = true; break; }
+      }
+      if (removed) { resync(); return; }
+      for (var a = 0; a < mutations.length; a++) {
+        var added = mutations[a].addedNodes;
+        for (var j = 0; j < added.length; j++) forwardNode(added[j]);
       }
     });
     obs.observe(logEl, { childList: true });
