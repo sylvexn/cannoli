@@ -841,3 +841,104 @@ describe('ReplayParser — malformed / truncated lines', () => {
     expect(result.winner).toBe('Alice');
   });
 });
+
+describe('ReplayParser — hidden-forme team-preview placeholders (feedback #52)', () => {
+  // PS hides certain formes in team preview behind a "Species-*" placeholder
+  // (Battle-Bond Greninja, Urshifu, etc.). The `|poke|` line registers a
+  // brought entry under the placeholder; the real `|switch|` resolves the
+  // forme. Without reconciliation that yields TWO entries for one mon — the
+  // never-appeared placeholder inflates `brought − deaths`, so a clean sweep
+  // mis-scores as 5-1 / 4-1.
+
+  test('base-forme reveal merges (Greninja-* -> Greninja) so a clean sweep scores N-0', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Snorlax, M|',
+      '|poke|p2|Greninja-*, F|', // hidden Battle-Bond forme
+      '|teampreview',
+      '|start',
+      '|switch|p1a: Lax|Snorlax, M|100/100',
+      '|switch|p2a: Frog|Greninja, F|100/100', // resolves to base species
+      '|turn|1',
+      '|move|p1a: Lax|Body Slam|p2a: Frog',
+      '|-damage|p2a: Frog|0 fnt',
+      '|faint|p2a: Frog',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    const p2 = result.pokemon.filter(p => p.player === 'p2');
+    // Exactly one p2 entry — no phantom "Greninja-*".
+    expect(p2.length).toBe(1);
+    expect(p2[0].species).toBe('Greninja');
+    expect(p2[0].brought).toBe(true);
+    expect(p2[0].appeared).toBe(true);
+    expect(p2[0].deaths).toBe(1);
+    expect(result.pokemon.some(p => p.species.endsWith('-*'))).toBe(false);
+    // Bob's only mon fainted: Alice (winner) 1-0.
+    expect(result.winner).toBe('Alice');
+    expect(result.winnerScore).toBe(1);
+    expect(result.loserScore).toBe(0);
+  });
+
+  test('alternate-forme reveal merges (Urshifu-* -> Urshifu-Rapid-Strike)', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Snorlax, M|',
+      '|poke|p2|Urshifu-*, M|',
+      '|teampreview',
+      '|start',
+      '|switch|p1a: Lax|Snorlax, M|100/100',
+      '|switch|p2a: Fist|Urshifu-Rapid-Strike, M|100/100',
+      '|turn|1',
+      '|move|p1a: Lax|Body Slam|p2a: Fist',
+      '|-damage|p2a: Fist|0 fnt',
+      '|faint|p2a: Fist',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    const p2 = result.pokemon.filter(p => p.player === 'p2');
+    expect(p2.length).toBe(1);
+    expect(p2[0].species).toBe('Urshifu-Rapid-Strike');
+    expect(p2[0].deaths).toBe(1);
+    expect(result.loserScore).toBe(0);
+  });
+
+  test('a brought-but-benched placeholder keeps its slot and is renamed to base', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Snorlax, M|',
+      '|poke|p2|Greninja-*, F|', // never switches in — genuinely benched/alive
+      '|poke|p2|Gengar, F|',
+      '|teampreview',
+      '|start',
+      '|switch|p1a: Lax|Snorlax, M|100/100',
+      '|switch|p2a: Ghost|Gengar, F|100/100',
+      '|turn|1',
+      '|move|p1a: Lax|Body Slam|p2a: Ghost',
+      '|-damage|p2a: Ghost|0 fnt',
+      '|faint|p2a: Ghost',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    const p2 = result.pokemon.filter(p => p.player === 'p2');
+    // Two brought mons; the benched placeholder is renamed but still counts as alive.
+    expect(p2.filter(p => p.brought).length).toBe(2);
+    expect(result.pokemon.some(p => p.species.endsWith('-*'))).toBe(false);
+    const benched = p2.find(p => p.species === 'Greninja');
+    expect(benched?.brought).toBe(true);
+    expect(benched?.appeared).toBe(false);
+    expect(benched?.deaths).toBe(0);
+    // Bob brought 2, lost 1 -> 1 survivor. Alice 1-1.
+    expect(result.winnerScore).toBe(1);
+    expect(result.loserScore).toBe(1);
+  });
+});

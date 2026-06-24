@@ -202,6 +202,14 @@ export class ReplayParser {
    * Get the final parsed result.
    */
   getResult(): ParsedMatchResult {
+    // A hidden-forme mon that was brought but never switched in keeps its
+    // "Species-*" preview placeholder name (reconcilePreviewForme only fires on
+    // switch-in). Strip the suffix so the species reads cleanly and matches the
+    // Cannoli roster name — it survived (never appeared), so the count is right.
+    for (const st of this.stats.values()) {
+      if (st.species.endsWith('-*')) st.species = st.species.slice(0, -2);
+    }
+
     const allStats = Array.from(this.stats.values());
     const p1Deaths = allStats.filter(s => s.player === 'p1' && s.deaths > 0).length;
     const p2Deaths = allStats.filter(s => s.player === 'p2' && s.deaths > 0).length;
@@ -321,6 +329,13 @@ export class ReplayParser {
     const species = this.parseSpecies(speciesRaw);
     const side = this.parseSide(nick);
 
+    // Reconcile a team-preview hidden-forme placeholder ("Species-*") with the
+    // resolved species now entering battle, so brought + deaths land on ONE
+    // stats entry. Otherwise the phantom placeholder is counted as a separate
+    // brought-but-never-fainted mon, inflating the survivor count by one and
+    // mis-scoring clean sweeps as 5-1 / 4-1 (feedback #52).
+    this.reconcilePreviewForme(side, species);
+
     this.nickToSpecies.set(nick, species);
     this.nickToSide.set(nick, side);
 
@@ -334,6 +349,38 @@ export class ReplayParser {
     stats.brought = true;
 
     return true;
+  }
+
+  /**
+   * Pokemon Showdown hides a Pokemon's forme in team preview behind a "-*"
+   * placeholder (e.g. Battle-Bond Greninja previews as "Greninja-*", Urshifu
+   * as "Urshifu-*"). The `|poke|` line therefore registers a brought entry
+   * under the placeholder name, but the real `|switch|` resolves the forme
+   * ("Greninja", "Urshifu-Rapid-Strike", …) and would create a SECOND entry.
+   * The placeholder is brought-but-never-appeared, so `brought − deaths`
+   * over-counts survivors by one — a clean 6-0 reads as 5-1 (feedback #52).
+   *
+   * Re-key the matching placeholder onto the resolved species before its stats
+   * entry is created, so brought + appeared + deaths all accrue to one entry.
+   */
+  private reconcilePreviewForme(side: 'p1' | 'p2', incoming: string): void {
+    if (incoming.endsWith('-*')) return;
+    for (const [key, st] of this.stats) {
+      if (st.player !== side || st.appeared || !st.species.endsWith('-*')) continue;
+      const base = st.species.slice(0, -2); // drop the "-*" placeholder suffix
+      if (incoming === base || incoming.startsWith(`${base}-`)) {
+        this.stats.delete(key);
+        const newKey = `${side}:${incoming}`;
+        const target = this.stats.get(newKey);
+        if (target) {
+          target.brought = target.brought || st.brought;
+        } else {
+          st.species = incoming;
+          this.stats.set(newKey, st);
+        }
+        return;
+      }
+    }
   }
 
   /** |detailschange|p1a: Nickname|Species-Mega, Gender — mega evolution, form change */
