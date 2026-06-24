@@ -237,7 +237,7 @@ export function AdminFreeAgents() {
           <div className="flex items-center gap-2 px-3 py-2 border-b border-draw/20 bg-draw/10">
             <UserPlus size={14} className="text-draw shrink-0" />
             <span className="text-xs font-heading font-semibold uppercase tracking-wider text-text-primary">
-              Pending FA requests
+              Pending FA &amp; tera requests
             </span>
             <span className="text-[11px] px-1.5 py-0 rounded bg-draw/15 text-draw font-mono">
               {pendingReqs.length}
@@ -249,11 +249,27 @@ export function AdminFreeAgents() {
                 <span className="text-[11px] font-bold font-mono text-text-secondary shrink-0 w-12 truncate" title={teamName(r.teamId)}>
                   {teamName(r.teamId)}
                 </span>
-                <span className="flex-1 min-w-0 text-[11px] text-text-secondary truncate font-mono">
-                  <span className="text-win">+ {r.pickups.join(', ')}</span>
-                  {r.drops.length > 0 && <span className="text-loss ml-2">− {r.drops.join(', ')}</span>}
-                  {r.requestedBy && <span className="text-text-muted ml-2">· {r.requestedBy}</span>}
-                </span>
+                {r.requestType === 'tera_change' ? (
+                  <span className="flex-1 min-w-0 text-[11px] text-text-secondary truncate font-mono flex items-center gap-1.5">
+                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1 py-0.5 rounded bg-pink/15 text-pink">
+                      Tera
+                    </span>
+                    <span className="text-pink truncate">
+                      {(r.teraChanges ?? []).length === 0
+                        ? 'clear captains'
+                        : (r.teraChanges ?? [])
+                            .map(c => `${c.pokemonName}${c.teraTypes.length ? ` (${c.teraTypes.join('/')})` : ''}`)
+                            .join(', ')}
+                    </span>
+                    {r.requestedBy && <span className="text-text-muted ml-1 shrink-0">· {r.requestedBy}</span>}
+                  </span>
+                ) : (
+                  <span className="flex-1 min-w-0 text-[11px] text-text-secondary truncate font-mono">
+                    <span className="text-win">+ {r.pickups.join(', ')}</span>
+                    {r.drops.length > 0 && <span className="text-loss ml-2">− {r.drops.join(', ')}</span>}
+                    {r.requestedBy && <span className="text-text-muted ml-2">· {r.requestedBy}</span>}
+                  </span>
+                )}
                 <Button size="sm" className="h-6 px-2 text-[11px] bg-win/15 text-win hover:bg-win/25 border border-win/30" onClick={() => approveReq(r.id)}>
                   Approve
                 </Button>

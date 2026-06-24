@@ -502,8 +502,23 @@ export function FreeAgentsPage() {
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-text-secondary truncate">
-                          {r.pickups.join(', ')}{r.drops.length ? ` for ${r.drops.join(', ')}` : ''}
+                        <span className="font-mono text-text-secondary truncate flex items-center gap-1.5">
+                          {r.requestType === 'tera_change' ? (
+                            <>
+                              <span className="shrink-0 text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded bg-pink/15 text-pink">
+                                Tera
+                              </span>
+                              <span className="text-pink truncate">
+                                {(r.teraChanges ?? []).length === 0
+                                  ? 'clear captains'
+                                  : (r.teraChanges ?? [])
+                                      .map(c => `${c.pokemonName}${c.teraTypes.length ? ` (${c.teraTypes.join('/')})` : ''}`)
+                                      .join(', ')}
+                              </span>
+                            </>
+                          ) : (
+                            <>{r.pickups.join(', ')}{r.drops.length ? ` for ${r.drops.join(', ')}` : ''}</>
+                          )}
                         </span>
                         <span className={cn(
                           'shrink-0 text-[9px] uppercase font-bold px-1 py-0.5 rounded',

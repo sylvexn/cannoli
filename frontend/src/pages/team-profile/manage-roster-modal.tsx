@@ -10,6 +10,8 @@ import type { CostFormat } from '@/data/tier-list';
 import { api } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/auth-context';
+import { isStaff } from '@/lib/permissions';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +54,13 @@ export function ManageRosterModal(props: {
   const { open, onOpenChange, player, config, costFormat, onSaved } = props;
   // season is part of the contract but not needed for the current edit flow.
   void props.season;
+
+  const { user } = useAuth();
+  // Once captains are locked, a coach can no longer apply tera changes directly
+  // — they REQUEST the change for admin approval (feedback #51). Staff always
+  // apply directly; an owner whose captains aren't locked is still in the
+  // initial captain-gate setup and saves directly.
+  const teraNeedsApproval = !isStaff(user) && !!player.captainsLocked;
 
   // Frozen snapshot of the roster captured when the modal opens.
   const roster = player.roster;
@@ -183,16 +192,25 @@ export function ManageRosterModal(props: {
           .map((mon, i) => ({ mon, i }))
           .filter(x => captain[x.i])
           .map(x => ({ pokemonName: x.mon.name, teraTypes: teraTypes[x.i] as string[] }));
-        const result = (await api.saveTerraCaptains(player.id, captains)) as {
-          phaseAdvanced?: boolean;
-          captainsLocked?: boolean;
-        };
-        if (result.phaseAdvanced) {
-          toast.success('Captains locked — league advanced to regular season!');
+
+        if (teraNeedsApproval) {
+          // Captains are locked: file a request for admin approval instead of
+          // applying. Nothing changes on the roster until an admin approves.
+          await api.requestTeraChange(player.id, captains);
+          toast.success('Tera change submitted for admin approval');
           captainSuccessToast = true;
-        } else if (result.captainsLocked) {
-          toast.success('Captains locked. Waiting on remaining teams to advance the league.');
-          captainSuccessToast = true;
+        } else {
+          const result = (await api.saveTerraCaptains(player.id, captains)) as {
+            phaseAdvanced?: boolean;
+            captainsLocked?: boolean;
+          };
+          if (result.phaseAdvanced) {
+            toast.success('Captains locked — league advanced to regular season!');
+            captainSuccessToast = true;
+          } else if (result.captainsLocked) {
+            toast.success('Captains locked. Waiting on remaining teams to advance the league.');
+            captainSuccessToast = true;
+          }
         }
       }
 
@@ -230,6 +248,12 @@ export function ManageRosterModal(props: {
               Tera {captainCount}/{config.teraCaptainSlots}
             </span>
           </div>
+          {teraNeedsApproval && (
+            <p className="text-[11px] text-draw mt-1">
+              Captains are locked — tera captain changes are submitted to an admin
+              for approval. Nicknames and shinies still save instantly.
+            </p>
+          )}
         </DialogHeader>
 
         {/* Scrollable roster body */}

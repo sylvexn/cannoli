@@ -647,8 +647,12 @@ export interface ApiFaRequest {
   week: number;
   teamId: string;
   status: 'pending' | 'approved' | 'rejected';
+  /** 'pickup' = free-agent pickup; 'tera_change' = locked-captain tera change (feedback #51). */
+  requestType: 'pickup' | 'tera_change';
   pickups: string[];
   drops: string[];
+  /** Requested captains for a tera_change request; null for pickups. */
+  teraChanges?: { pokemonName: string; teraTypes: string[] }[] | null;
   requestedBy: string | null;
   requestedAt: string | null;
   resolvedBy: string | null;
@@ -1644,6 +1648,13 @@ export const api = {
   saveTerraCaptains: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
     putJson<{ success: boolean; captainsLocked?: boolean; phaseAdvanced?: boolean }>(
       `/api/teams/${teamId}/tera-captains`, { captains },
+    ),
+
+  // Coach tera-change REQUEST (locked teams) — queued for admin approval, reusing
+  // the FA approval queue infrastructure (feedback #51).
+  requestTeraChange: (teamId: string, captains: { pokemonName: string; teraTypes: string[] }[]) =>
+    postJson<{ success: boolean; pending: boolean; requestId: number }>(
+      `/api/teams/${teamId}/tera-captain-request`, { captains },
     ),
 
   toggleShiny: (teamId: string, pokemonName: string, isShiny: boolean) =>
