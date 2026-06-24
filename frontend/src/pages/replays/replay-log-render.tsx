@@ -3,6 +3,7 @@ import { PokemonLink } from '@/components/pokemon-link';
 import { TIER_LIST } from '@/data/tier-list';
 import { MOVE_TYPES } from '@/data/move-types';
 import { TYPE_COLORS } from '@/lib/constants';
+import type { PokemonType } from '@/lib/pokemon';
 
 /**
  * Turns a PS battle-log line (sanitized HTML string from the embed bridge)
@@ -60,8 +61,33 @@ function linkifySpecies(text: string): ReactNode {
   return out.length === 0 ? text : out.length === 1 ? out[0] : out;
 }
 
+// Tera line from PS battle-text: "<Pokemon> has Terastallized into the
+// <Type>-type!" (a .battle-history line, type as plain text). Color the type
+// word with TYPE_COLORS to match how moves are tinted — case-insensitive so it
+// survives the leading-space <small> wrap and any tone class. Captures the
+// type, then re-linkifies the surrounding text so the species still links.
+const TERA_RE = /(.*Terastallized into the )([A-Za-z]+)(-type!.*)/s;
+
+function colorizeTera(text: string): ReactNode | null {
+  const m = TERA_RE.exec(text);
+  if (!m) return null;
+  const type = m[2].toLowerCase() as PokemonType;
+  const color = TYPE_COLORS[type];
+  if (!color) return null;
+  return (
+    <>
+      {linkifySpecies(m[1])}
+      <strong style={{ color }}>{m[2]}</strong>
+      {m[3]}
+    </>
+  );
+}
+
 function nodeToReact(node: ChildNode): ReactNode {
-  if (node.nodeType === Node.TEXT_NODE) return linkifySpecies(node.textContent || '');
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent || '';
+    return colorizeTera(text) ?? linkifySpecies(text);
+  }
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
   const el = node as HTMLElement;
   const key = `e${_key++}`;
