@@ -94,12 +94,15 @@ function seedSystemAccounts() {
     active: true,
   }).run();
 
-  // Root system/bot account
+  // Root system/bot account — also the standing automation/service account for
+  // backend API scripting. Password 'admin', no forced change so it stays
+  // permanent and headless-usable. (The PS bot logs into Showdown with its own
+  // CannoliBot/cannolibot env creds — unrelated to this password.)
   db.insert(schema.users).values({
     username: 'root',
-    passwordHash: hashSync('root', 10),
+    passwordHash: hashSync('admin', 10),
     role: 'bot',
-    mustChangePassword: true,
+    mustChangePassword: false,
     active: true,
   }).run();
 

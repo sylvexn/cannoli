@@ -35,11 +35,15 @@ export function seedSystemAccounts(sqlite: Database, db: DB): void {
     active: true,
   }).run();
 
+  // root (bot) doubles as the standing automation/service account (used for
+  // backend API scripting); password 'admin', no forced change so it stays
+  // permanent and usable headlessly. The PS bot authenticates to Showdown with
+  // its own CannoliBot/cannolibot env creds — unrelated to this password.
   db.insert(schema.users).values({
     username: 'root',
-    passwordHash: hashSync('root', 10),
+    passwordHash: hashSync('admin', 10),
     role: 'bot',
-    mustChangePassword: true,
+    mustChangePassword: false,
     active: true,
   }).run();
 
