@@ -8,7 +8,7 @@ import { getLeagueCostMap } from '../../lib/league-costs';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 import { validateRosterLegality } from '../../lib/roster-legality';
-import { applyFaPickup } from '../../lib/free-agency';
+import { applyFaPickup, validateTeraCaptains } from '../../lib/free-agency';
 import { refreshUserMap } from '../../lib/ps-bot';
 
 export const teamRoutes = new Elysia()
@@ -28,6 +28,16 @@ export const teamRoutes = new Elysia()
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
       set.status = 403;
       return { error: 'Not your team' };
+    }
+
+    // Once captains are locked (post-draft gate cleared), a coach can no longer
+    // apply tera changes directly — they must REQUEST the change via Free Agents
+    // for admin approval (feedback #51). Staff always apply directly; an owner
+    // whose captains are NOT yet locked is in the initial captain-gate flow and
+    // keeps the direct-save behavior.
+    if (!isStaff(user) && team.captainsLocked) {
+      set.status = 403;
+      return { error: 'Captains are locked — submit a tera change request via Free Agents for admin approval.', code: 'tera_locked' };
     }
 
     const { captains } = body as {
@@ -201,6 +211,68 @@ export const teamRoutes = new Elysia()
         phaseAdvanced,
       };
     });
+  })
+
+  // ─── Tera Captain Change Request (locked teams, feedback #51) ──────
+  // When a coach's captains are locked, the direct PUT is forbidden; instead
+  // they submit a tera-change REQUEST that an admin approves (approval applies
+  // the change). Reuses the FA approval queue infrastructure (feedback #42).
+  .post('/api/teams/:teamId/tera-captain-request', ({ params, query, body, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+
+    const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+
+    const archived = checkTeamArchived(params.teamId, query.force);
+    if (archived) { set.status = 409; return archived; }
+
+    // Owner or staff may file the request.
+    if (!isStaff(user) && team.userId !== parseInt(user.id)) {
+      set.status = 403;
+      return { error: 'Not your team' };
+    }
+
+    const { captains } = body as {
+      captains: { pokemonName: string; teraTypes: string[] }[];
+    };
+    if (!Array.isArray(captains)) {
+      set.status = 400;
+      return { error: 'captains array required' };
+    }
+
+    // Validate the proposed set up-front so a coach gets immediate feedback on an
+    // illegal request rather than a silent pending row that later fails approval.
+    const check = validateTeraCaptains(params.teamId, captains);
+    if (!check.ok) {
+      set.status = check.status;
+      return { error: check.error, code: check.code };
+    }
+
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
+    const week = league?.currentWeek ?? 0;
+
+    const row = db.insert(schema.faRequests).values({
+      leagueId: team.leagueId,
+      week,
+      teamId: params.teamId,
+      status: 'pending',
+      requestType: 'tera_change',
+      pickups: '[]',
+      drops: '[]',
+      teraChanges: JSON.stringify(captains),
+      requestedBy: user.username,
+    }).returning().get();
+
+    db.insert(schema.activityLog).values({
+      type: 'tera_change_requested',
+      category: 'team',
+      actor: user.username,
+      leagueId: team.leagueId,
+      description: `Tera change request: ${team.teamName} requested ${captains.map(c => c.pokemonName).join(', ')}`,
+      metadata: JSON.stringify({ teamId: params.teamId, captains, requestId: row.id }),
+    }).run();
+
+    return { success: true, pending: true, requestId: row.id };
   })
 
   // ─── Shiny Toggle ─────────────────────────────────────────────────

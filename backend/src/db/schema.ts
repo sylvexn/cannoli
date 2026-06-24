@@ -460,10 +460,15 @@ export const faRequests = sqliteTable('fa_requests', {
   week: integer('week').notNull(),
   teamId: text('team_id').notNull().references(() => teams.id),
   status: text('status', { enum: ['pending', 'approved', 'rejected'] }).notNull().default('pending'),
+  /** Distinguishes an FA pickup request from a tera-captain change request
+   *  (feedback #51). Tera requests carry `teraChanges` instead of pickups/drops. */
+  requestType: text('request_type', { enum: ['pickup', 'tera_change'] }).notNull().default('pickup'),
   /** JSON array of pokemon names to pick up */
   pickups: text('pickups').notNull(),
   /** JSON array of pokemon names to drop */
   drops: text('drops').notNull(),
+  /** JSON of `{ pokemonName, teraTypes }[]` for a tera_change request (null otherwise). */
+  teraChanges: text('tera_changes'),
   requestedBy: text('requested_by'),
   requestedAt: text('requested_at').default(sql`(datetime('now'))`),
   resolvedBy: text('resolved_by'),

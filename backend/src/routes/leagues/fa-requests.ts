@@ -11,7 +11,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, and, desc } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
-import { applyFaPickup } from '../../lib/free-agency';
+import { applyFaPickup, applyTeraCaptains, type TeraCaptainInput } from '../../lib/free-agency';
 import { refreshUserMap } from '../../lib/ps-bot';
 import { notifyUser } from '../../lib/notifications/notify';
 
@@ -21,8 +21,10 @@ interface FaRequestRow {
   week: number;
   teamId: string;
   status: string;
+  requestType: string;
   pickups: string;
   drops: string;
+  teraChanges: string | null;
   requestedBy: string | null;
   requestedAt: string | null;
   resolvedBy: string | null;
@@ -34,14 +36,21 @@ const parseList = (json: string): string[] => {
   try { const v = JSON.parse(json); return Array.isArray(v) ? v : []; } catch { return []; }
 };
 
+const parseTera = (json: string | null): TeraCaptainInput[] => {
+  if (!json) return [];
+  try { const v = JSON.parse(json); return Array.isArray(v) ? v : []; } catch { return []; }
+};
+
 const shape = (r: FaRequestRow) => ({
   id: r.id,
   leagueId: r.leagueId,
   week: r.week,
   teamId: r.teamId,
   status: r.status,
+  requestType: (r.requestType ?? 'pickup') as 'pickup' | 'tera_change',
   pickups: parseList(r.pickups),
   drops: parseList(r.drops),
+  teraChanges: r.teraChanges ? parseTera(r.teraChanges) : null,
   requestedBy: r.requestedBy,
   requestedAt: r.requestedAt,
   resolvedBy: r.resolvedBy,
@@ -87,6 +96,35 @@ export const faRequestRoutes = new Elysia()
     if (!req) { set.status = 404; return { error: 'FA request not found' }; }
     if (req.status !== 'pending') { set.status = 409; return { error: `Request already ${req.status}`, code: 'fa_request_resolved' }; }
 
+    // ── Tera-change request (feedback #51) ──
+    // Re-validate + apply via the shared tera applier. A request that became
+    // illegal since submission (tier-list edit, cap change) fails cleanly and is
+    // left pending so the admin can reject/retry.
+    if (req.requestType === 'tera_change') {
+      const captains = parseTera(req.teraChanges);
+      const teraResult = applyTeraCaptains(req.teamId, captains, req.requestedBy ?? user.username);
+      if (!teraResult.ok) {
+        set.status = teraResult.status;
+        return { error: teraResult.error, code: teraResult.code };
+      }
+
+      db.update(schema.faRequests).set({
+        status: 'approved',
+        resolvedBy: user.username,
+        resolvedAt: new Date().toISOString(),
+      }).where(eq(schema.faRequests.id, id)).run();
+
+      try { refreshUserMap(); } catch { /* best-effort */ }
+
+      const names = captains.map(c => c.pokemonName).join(', ');
+      notifyRequester(req.teamId, req.leagueId, {
+        title: 'Tera change approved',
+        body: `Your tera captain change (${names}) was approved.`,
+      });
+
+      return { success: true };
+    }
+
     const result = applyFaPickup({
       leagueId: req.leagueId,
       teamId: req.teamId,
@@ -129,6 +167,7 @@ export const faRequestRoutes = new Elysia()
     if (req.status !== 'pending') { set.status = 409; return { error: `Request already ${req.status}`, code: 'fa_request_resolved' }; }
 
     const reason = ((body as { reason?: string } | null)?.reason ?? '').trim() || null;
+    const isTera = req.requestType === 'tera_change';
 
     db.update(schema.faRequests).set({
       status: 'rejected',
@@ -138,10 +177,20 @@ export const faRequestRoutes = new Elysia()
     }).where(eq(schema.faRequests.id, id)).run();
 
     db.insert(schema.activityLog).values({
-      type: 'fa_rejected', category: 'fa', actor: user.username, leagueId: req.leagueId,
-      description: `FA request rejected for team ${req.teamId}${reason ? `: ${reason}` : ''}`,
+      type: isTera ? 'tera_change_rejected' : 'fa_rejected',
+      category: isTera ? 'team' : 'fa', actor: user.username, leagueId: req.leagueId,
+      description: `${isTera ? 'Tera change' : 'FA'} request rejected for team ${req.teamId}${reason ? `: ${reason}` : ''}`,
       metadata: JSON.stringify({ requestId: id, teamId: req.teamId }),
     }).run();
+
+    if (isTera) {
+      const names = parseTera(req.teraChanges).map(c => c.pokemonName).join(', ');
+      notifyRequester(req.teamId, req.leagueId, {
+        title: 'Tera change rejected',
+        body: `Your tera captain change (${names}) was rejected${reason ? `: ${reason}` : '.'}`,
+      });
+      return { success: true };
+    }
 
     const picks = parseList(req.pickups).join(', ');
     notifyRequester(req.teamId, req.leagueId, {

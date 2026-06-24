@@ -15,6 +15,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { tx } from './tx';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
+import { effectiveCost } from './tera-cost';
 
 export interface FaPickupInput {
   leagueId: string;
@@ -236,4 +237,151 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
     if (e?._status) return err(e._status, e.message, e._code);
     throw e;
   }
+}
+
+// ─── Tera-captain change core (feedback #51) ────────────────────────────────
+// Coaches can change their tera captains (which mons, and each captain's up-to-3
+// tera types) freely BEFORE the captain-gate lock. Once locked, the change must
+// be requested and an admin approves it. Both the direct PUT (staff / pre-lock)
+// and the approval path share one validator + one applier so a queued request is
+// checked against exactly the same rules a direct save enforces.
+
+export interface TeraCaptainInput { pokemonName: string; teraTypes: string[] }
+
+export type TeraValidateResult = { ok: true } | { ok: false; status: number; error: string; code?: string };
+
+/**
+ * Validate a proposed tera-captain set against the team's current roster.
+ * Mirrors the rules of the direct PUT: tera-ban, tier ≤ 9, max 3 types per
+ * captain, captain-slot limit, and point-cap (using the `costAtDraft` snapshot
+ * so a later tier-list edit can't retroactively bust a pending request).
+ */
+export function validateTeraCaptains(teamId: string, captains: TeraCaptainInput[]): TeraValidateResult {
+  if (!Array.isArray(captains)) {
+    return { ok: false, status: 400, error: 'captains array required' };
+  }
+
+  const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
+  if (!team) return { ok: false, status: 404, error: 'Team not found' };
+
+  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
+  const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+
+  const maxCaptains = season?.teraCaptainSlots ?? 2;
+  if (captains.length > maxCaptains) {
+    return { ok: false, status: 400, error: `Max ${maxCaptains} tera captains allowed` };
+  }
+
+  // Eligibility: not tera-banned, tier ≤ 9, ≤ 3 tera types — resolved from THIS
+  // league's cost format so format-specific overrides are respected.
+  const leagueCosts = getLeagueCostMap(team.leagueId);
+  for (const c of captains) {
+    const resolved = leagueCosts.get(c.pokemonName);
+    if (resolved?.teraBanned) {
+      return { ok: false, status: 400, error: `${c.pokemonName} is tera-banned` };
+    }
+    if (resolved && resolved.tier > 9) {
+      return { ok: false, status: 400, error: `${c.pokemonName} is tier ${resolved.tier} — captains must be tier 9 or below` };
+    }
+    if (c.teraTypes.length > 3) {
+      return { ok: false, status: 400, error: `Max 3 tera types per captain` };
+    }
+  }
+
+  // Every proposed captain must actually be on the roster.
+  const roster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, teamId)).all();
+  const rosterNames = new Set(roster.map(r => r.pokemonName));
+  for (const c of captains) {
+    if (!rosterNames.has(c.pokemonName)) {
+      return { ok: false, status: 400, error: `${c.pokemonName} is not on this team's roster` };
+    }
+  }
+
+  // Point-cap markup check against the proposed captain set. Use costAtDraft so
+  // a tier-list edit between request and approval can't invalidate it.
+  const captainSet = new Set(captains.map(c => c.pokemonName));
+  const totalCost = roster.reduce(
+    (sum, r) => sum + effectiveCost(r.costAtDraft || r.tier, captainSet.has(r.pokemonName)),
+    0,
+  );
+  const cap = season?.pointCap ?? 110;
+  if (totalCost > cap) {
+    return { ok: false, status: 400, error: `Tera captain markup would exceed point cap (${totalCost} > ${cap})`, code: 'POINT_CAP_EXCEEDED' };
+  }
+
+  return { ok: true };
+}
+
+export type TeraApplyResult =
+  | { ok: true }
+  | { ok: false; status: number; error: string; code?: string };
+
+/**
+ * Validate + apply a tera-captain set to a team's roster: clears all existing
+ * captains, then sets `isTeraCaptain` + `teraType1/2/3` on the chosen mons.
+ * Records `tera_change` transactions and an activity entry. Used by both the
+ * direct PUT (staff / pre-lock) and the FA approval path.
+ *
+ * Does NOT touch `captainsLocked` or advance the league phase — the captain
+ * gate's auto-lock/advance lives only in the PUT handler (it must not fire on
+ * an approved mid-season change).
+ */
+export function applyTeraCaptains(
+  teamId: string,
+  captains: TeraCaptainInput[],
+  actorUsername: string,
+): TeraApplyResult {
+  const check = validateTeraCaptains(teamId, captains);
+  if (!check.ok) return check;
+
+  const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
+  if (!team) return { ok: false, status: 404, error: 'Team not found' };
+  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
+
+  tx(() => {
+    // Clear all existing tera captains for this team.
+    db.update(schema.rosters).set({
+      isTeraCaptain: false,
+      teraType1: null,
+      teraType2: null,
+      teraType3: null,
+    }).where(eq(schema.rosters.teamId, teamId)).run();
+
+    // Set new captains.
+    for (const c of captains) {
+      db.update(schema.rosters).set({
+        isTeraCaptain: true,
+        teraType1: c.teraTypes[0] ?? null,
+        teraType2: c.teraTypes[1] ?? null,
+        teraType3: c.teraTypes[2] ?? null,
+      }).where(and(
+        eq(schema.rosters.teamId, teamId),
+        eq(schema.rosters.pokemonName, c.pokemonName),
+      )).run();
+    }
+
+    if (league) {
+      const week = league.currentWeek ?? 0;
+      for (const c of captains) {
+        db.insert(schema.transactions).values({
+          leagueId: team.leagueId,
+          week,
+          type: 'tera_change',
+          teamId,
+          teraPokemon: c.pokemonName,
+        }).run();
+      }
+
+      db.insert(schema.activityLog).values({
+        type: 'tera_captains_updated',
+        category: 'team',
+        actor: actorUsername,
+        leagueId: team.leagueId,
+        description: `Updated tera captains: ${captains.map(c => c.pokemonName).join(', ')}`,
+        metadata: JSON.stringify({ teamId, captains }),
+      }).run();
+    }
+  });
+
+  return { ok: true };
 }

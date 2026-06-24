@@ -442,6 +442,13 @@
       "when": 1783400000000,
       "tag": "0062_league_roster_band",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "6",
+      "when": 1783500000000,
+      "tag": "0063_tera_change_requests",
+      "breakpoints": true
     }
   ]
 }
