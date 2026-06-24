@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { ApiActivityEvent, ApiTeam } from '@/lib/api';
 import { CoachLink } from '@/components/coach-link';
 import { TeamLink } from '@/components/team-link';
+import { Spoiler } from '@/components/spoiler';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { asTypedMetadata, isTypedEventName } from '@/lib/activity-events';
 
@@ -105,10 +106,31 @@ export function EventDescription({ event, teamsPerLeague, stripActorPrefix = tru
     const m = asTypedMetadata('match_result', event.metadata);
     if (!m) return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
     const sweep = (m.homeScore === 6 && m.awayScore === 0) || (m.awayScore === 6 && m.homeScore === 0);
+    // Score + the sweep/result word are the spoiler (a 6-0 "sweep" leaks the
+    // outcome by itself), so both sit inside the veil. The "recorded a" lead-in
+    // and the warning-count badge (not a result spoiler) stay outside.
     return (
-      <>recorded a <span className="text-text-primary tabular-nums">{m.homeScore}-{m.awayScore}</span>
-        {sweep ? <> sweep</> : ' result'}
+      <>recorded a{' '}
+        <Spoiler matchId={m.matchId} as="span">
+          <span className="text-text-primary tabular-nums">{m.homeScore}-{m.awayScore}</span>
+          {sweep ? ' sweep' : ' result'}
+        </Spoiler>
         {m.warningCount && m.warningCount > 0 ? <> <span className="text-loss">({m.warningCount} warning{m.warningCount === 1 ? '' : 's'})</span></> : null}
+      </>
+    );
+  }
+
+  if (event.type === 'battle_imported') {
+    const m = asTypedMetadata('battle_imported', event.metadata);
+    // Legacy rows may lack the structured metadata — without a matchId the
+    // <Spoiler> reveal can't sync, so fall back to the (redaction-gated) prose.
+    if (!m || !m.matchId) return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
+    return (
+      <>imported a battle —{' '}
+        <Spoiler matchId={m.matchId} as="span">
+          <span className="text-text-primary tabular-nums">{m.homeScore}-{m.awayScore}</span>
+        </Spoiler>
+        {m.pokemonCount ? <span className="text-text-muted"> ({m.pokemonCount} Pokemon)</span> : null}
       </>
     );
   }

@@ -70,11 +70,15 @@ interface ActivityFeedProps {
   limit?: number;
   /** Hide the count badge in the header. */
   hideCount?: boolean;
+  /** Optional right-aligned header control (e.g. a spoiler toggle). Ignored
+   *  when `bare` since bare mode renders no header chrome. */
+  headerAction?: React.ReactNode;
 }
 
 export function ActivityFeed({
   activity, teamsPerLeague, variant = 'dense',
   title = 'Recent Activity', bare = false, limit, hideCount = false,
+  headerAction,
 }: ActivityFeedProps) {
   const events = limit != null ? activity.slice(0, limit) : activity;
 
@@ -124,6 +128,7 @@ export function ActivityFeed({
               {events.length}
             </span>
           )}
+          {headerAction && <span className="ml-auto">{headerAction}</span>}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">{body}</CardContent>

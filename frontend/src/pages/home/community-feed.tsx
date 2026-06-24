@@ -5,6 +5,8 @@ import { TeamLink } from '@/components/team-link';
 import { RecordDisplay } from '@/components/record-display';
 import { EmptyState } from '@/components/empty-state';
 import { ActivityFeed } from '@/components/activity-feed';
+import { SpoilerToggle } from '@/components/spoiler-toggle';
+import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { PHASE_COLORS } from '@/lib/constants';
 import { Users, Swords, ArrowLeftRight, Trophy } from 'lucide-react';
@@ -53,6 +55,9 @@ export function CommunityFeed({
   totalMatches: number;
   tradesLoading: boolean;
 }) {
+  // Logged-in viewers can flip spoiler mode straight from the feed header;
+  // guests have no persisted preference to toggle, so the chip is hidden.
+  const { isAuthenticated } = useAuth();
   return (
     <div className="space-y-6">
       <HeadlinesStrip headlines={headlines} />
@@ -88,6 +93,7 @@ export function CommunityFeed({
           activity={recentActivity}
           teamsPerLeague={teamsPerLeague}
           variant="dense"
+          headerAction={isAuthenticated ? <SpoilerToggle /> : undefined}
         />
       </div>
     </div>

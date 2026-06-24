@@ -73,6 +73,16 @@ export interface MatchResultMetadata {
   warningCount?: number;
 }
 
+export interface BattleImportedMetadata {
+  matchId: string;
+  source: 'replay' | 'disk' | string;
+  homeScore: number;
+  awayScore: number;
+  pokemonCount?: number;
+  status?: string;
+  sidesUncertain?: boolean;
+}
+
 export interface MatchVoidedMetadata {
   matchId: string;
   previousStatus: string;
@@ -131,6 +141,7 @@ export interface EventMetadataMap {
   trade_counterparty_accepted: TradeCounterpartyDecidedMetadata;
   trade_counterparty_rejected: TradeCounterpartyDecidedMetadata;
   match_result: MatchResultMetadata;
+  battle_imported: BattleImportedMetadata;
   match_voided: MatchVoidedMetadata;
   match_rescheduled: MatchRescheduledMetadata;
   fa_pickup: FaPickupMetadata;
@@ -173,6 +184,7 @@ const TYPED_EVENT_NAME_SET: Record<TypedEventName, true> = {
   trade_counterparty_accepted: true,
   trade_counterparty_rejected: true,
   match_result: true,
+  battle_imported: true,
   match_voided: true,
   match_rescheduled: true,
   fa_pickup: true,
