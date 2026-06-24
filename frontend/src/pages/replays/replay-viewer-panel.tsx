@@ -38,7 +38,7 @@ export function ReplayViewerPanel({
   return (
     <div className={cn(
       'mb-4 rounded-lg border border-neon/20 bg-surface-raised overflow-hidden',
-      theater && 'flex-1 flex flex-col mb-0',
+      theater && 'flex-1 min-h-0 flex flex-col mb-0',
     )}>
       <div className="flex items-center justify-between px-3 py-2 bg-surface-overlay border-b border-border-subtle">
         <div className="flex items-center gap-2 text-xs">
@@ -102,10 +102,10 @@ export function ReplayViewerPanel({
         </div>
       ) : (
         <div
-          className={cn('flex bg-[#0e0e10] p-2', theater ? 'flex-1' : '')}
+          className={cn('flex bg-[#0e0e10] p-2', theater ? 'flex-1 min-h-0' : '')}
           style={!theater ? { height: '600px' } : undefined}
         >
-          <ReplayPlayer matchId={match.id} className="flex-1" />
+          <ReplayPlayer matchId={match.id} className="flex-1 min-h-0" />
         </div>
       )}
     </div>

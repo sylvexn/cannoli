@@ -114,7 +114,7 @@ export function ReplayWatchPage() {
         </div>
       </div>
 
-      <ReplayPlayer matchId={matchId} initialTurn={initialTurn} className="flex-1" />
+      <ReplayPlayer matchId={matchId} initialTurn={initialTurn} className="flex-1 min-h-0" />
     </div>
   );
 }
