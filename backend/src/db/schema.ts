@@ -907,6 +907,26 @@ export const notifications = sqliteTable('notifications', {
   dedupeIdx: uniqueIndex('notifications_user_dedupe_idx').on(t.userId, t.dedupeKey),
 }));
 
+// ─── Changelog ("What's New" release feed) ─────────────────────────────────
+// User-facing release feed. DB-backed (was a hand-edited JSON file shipped in
+// the image) so releases can be published through the admin API — and later CI —
+// without a redeploy. Seeded once at boot from src/content/changelog.json when
+// the table is empty, which preserves existing history on the first migrate; the
+// DB is the runtime source thereafter.
+export const changelog = sqliteTable('changelog', {
+  /** Stable kebab slug, e.g. 'v1-1-2026-06'. Also the notification composite id. */
+  id: text('id').primaryKey(),
+  /** ISO-8601 UTC. Drives BOTH newest-first ordering and the unread-pulse compare. */
+  date: text('date').notNull(),
+  category: text('category', { enum: ['feature', 'improvement', 'fix'] }).notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+}, (t) => ({
+  dateIdx: index('changelog_date_idx').on(t.date),
+}));
+
 // ─── Announcements (BROADCAST — one global row, seen via a per-user stamp) ──
 // Admin-authored site-wide broadcasts. NOT the same as site_settings.announcement
 // (that is the single persistent home-page banner). Unread per user = rows with

@@ -12,9 +12,9 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
-// Re-use the parsed + sorted ENTRIES array from changelog.ts.
-// ENTRIES is sorted newest-first and computed once at boot.
-import { ENTRIES as changelogEntries } from './changelog';
+// Read the changelog feed from the DB (newest-first) via the shared helper in
+// changelog.ts, so the bell reflects entries published through the admin API.
+import { getChangelogEntries } from './changelog';
 import { getCurrentMatchReminder } from '../lib/arena-state';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -97,7 +97,7 @@ export const notificationRoutes = new Elysia()
       changelogSeenAt = row?.seen ?? null;
     }
 
-    for (const entry of changelogEntries) {
+    for (const entry of getChangelogEntries()) {
       const read = changelogSeenAt != null && entry.date <= changelogSeenAt;
       items.push({
         id: `changelog:${entry.id}`,
@@ -211,7 +211,7 @@ export const notificationRoutes = new Elysia()
     // if the newest entry is ahead of wall-clock, stamp to that date so it
     // can't stay permanently "unread" after the user opens the panel.
     const now = new Date().toISOString();
-    const newestEntry = changelogEntries[0]?.date;
+    const newestEntry = getChangelogEntries()[0]?.date;
     const seenAt = newestEntry && newestEntry > now ? newestEntry : now;
 
     const existing = db.select({ userId: schema.userPreferences.userId })
