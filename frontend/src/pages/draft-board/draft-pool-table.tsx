@@ -181,7 +181,7 @@ export function DraftPoolTable({
               <TableCell className="px-2 py-1">
                 {abilities.length > 0 && (
                   <div className="flex flex-wrap gap-0.5">
-                    {abilities.slice(0, 2).map(a => (
+                    {abilities.map(a => (
                       <Badge key={a} variant="outline" className="text-[9px] h-4 px-1 border-border-subtle text-text-muted">
                         {a}
                       </Badge>

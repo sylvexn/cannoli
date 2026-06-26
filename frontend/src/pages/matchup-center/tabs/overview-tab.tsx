@@ -130,7 +130,7 @@ function RosterTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' })
               </TableCell>
               <TableCell className="py-1">
                 <div className="flex flex-wrap gap-0.5 justify-end">
-                  {pokemon.abilities.slice(0, 2).map(a => (
+                  {pokemon.abilities.map(a => (
                     <AbilityChip key={a} name={a} />
                   ))}
                 </div>
