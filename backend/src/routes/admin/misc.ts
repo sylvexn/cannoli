@@ -72,16 +72,42 @@ export const miscRoutes = new Elysia()
   .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
-    const { homeScore, awayScore, forfeitedBy, note, pokemonData } = body as {
+    const { homeScore, awayScore, forfeitedBy, note, pokemonData, homeTeamId, awayTeamId } = body as {
       homeScore: number; awayScore: number;
       forfeitedBy?: 'home' | 'away' | 'both' | null;
       note?: string;
       /** Optional K/D rewrite — if provided, replaces existing match_pokemon
        *  rows for this match. Snapshot of prior rows still goes to activity log. */
       pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
+      /** Optional team reassignment — fixes "teams on the wrong side" while
+       *  force-setting a result. Each must reference a team in the match's league. */
+      homeTeamId?: string;
+      awayTeamId?: string;
     };
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    // Optional team reassignment, applied BEFORE the winner is derived. When a
+    // side is supplied it must be a real team in this match's league, and the
+    // two sides can't be the same team. Absent → keep the current assignment.
+    const reassign = homeTeamId != null || awayTeamId != null;
+    const newHomeTeamId = homeTeamId ?? match.homeTeamId;
+    const newAwayTeamId = awayTeamId ?? match.awayTeamId;
+    if (reassign) {
+      for (const tid of [homeTeamId, awayTeamId]) {
+        if (tid == null) continue;
+        const team = db.select({ leagueId: schema.teams.leagueId })
+          .from(schema.teams).where(eq(schema.teams.id, tid)).get();
+        if (!team || team.leagueId !== match.leagueId) {
+          set.status = 400;
+          return { error: `Team ${tid} is not in this match's league` };
+        }
+      }
+      if (newHomeTeamId && newAwayTeamId && newHomeTeamId === newAwayTeamId) {
+        set.status = 400;
+        return { error: 'Home and away must be different teams' };
+      }
+    }
 
     // If overwriting a previously-recorded result, snapshot prior K/D rows so
     // history isn't silently destroyed. Activity log metadata is the system of
@@ -99,14 +125,16 @@ export const miscRoutes = new Elysia()
     const hs = homeScore ?? 0;
     const as = awayScore ?? 0;
     let forceWinnerTeamId: string | null;
-    if (forfeitedBy === 'home') forceWinnerTeamId = match.awayTeamId;
-    else if (forfeitedBy === 'away') forceWinnerTeamId = match.homeTeamId;
+    if (forfeitedBy === 'home') forceWinnerTeamId = newAwayTeamId;
+    else if (forfeitedBy === 'away') forceWinnerTeamId = newHomeTeamId;
     else if (forfeitedBy === 'both') forceWinnerTeamId = null;
-    else forceWinnerTeamId = hs > as ? match.homeTeamId : as > hs ? match.awayTeamId : null;
+    else forceWinnerTeamId = hs > as ? newHomeTeamId : as > hs ? newAwayTeamId : null;
 
     tx(() => {
       db.update(schema.matches).set({
         status: 'completed',
+        homeTeamId: newHomeTeamId,
+        awayTeamId: newAwayTeamId,
         homeScore: hs,
         awayScore: as,
         forfeitedBy: forfeitedBy ?? null,
@@ -156,8 +184,50 @@ export const miscRoutes = new Elysia()
         category: 'admin',
         actor: user.username,
         leagueId: match.leagueId,
-        description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${note ? ' — ' + note : ''}`,
-        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note, pokemonRewritten: !!pokemonData }),
+        description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${reassign ? ` (teams reassigned: ${newHomeTeamId} vs ${newAwayTeamId})` : ''}${note ? ' — ' + note : ''}`,
+        metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note, pokemonRewritten: !!pokemonData, teamsReassigned: reassign, homeTeamId: newHomeTeamId, awayTeamId: newAwayTeamId }),
+      }).run();
+    });
+
+    return { success: true };
+  })
+
+  // ─── Swap match home/away sides (fix teams on the wrong side) ───────
+  //
+  // Flips which column each team sits in WITHOUT changing the result. Swaps
+  // homeTeamId↔awayTeamId, homeScore↔awayScore, and homeSeed↔awaySeed (playoff
+  // bracket seeds). winnerTeamId is a team id, so it stays correct as-is, and
+  // match_pokemon rows are keyed by teamId so they need no change. Works on both
+  // unplayed and completed matches — the result stays semantically identical.
+
+  .post('/api/admin/matches/:matchId/swap-sides', ({ params, query, user, set }) => {
+    const archived = checkMatchArchived(params.matchId, query.force);
+    if (archived) { set.status = 409; return archived; }
+    const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
+    if (!match) { set.status = 404; return { error: 'Match not found' }; }
+
+    tx(() => {
+      db.update(schema.matches).set({
+        homeTeamId: match.awayTeamId,
+        awayTeamId: match.homeTeamId,
+        homeScore: match.awayScore,
+        awayScore: match.homeScore,
+        homeSeed: match.awaySeed,
+        awaySeed: match.homeSeed,
+      }).where(eq(schema.matches.id, params.matchId)).run();
+
+      db.insert(schema.activityLog).values({
+        type: 'match_sides_swapped',
+        category: 'admin',
+        actor: user.username,
+        leagueId: match.leagueId,
+        description: `Swapped home/away for ${params.matchId}: ${match.homeTeamId ?? 'TBD'} ↔ ${match.awayTeamId ?? 'TBD'}`,
+        metadata: JSON.stringify({
+          matchId: params.matchId,
+          previous: { homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, homeScore: match.homeScore, awayScore: match.awayScore, homeSeed: match.homeSeed, awaySeed: match.awaySeed },
+          new: { homeTeamId: match.awayTeamId, awayTeamId: match.homeTeamId, homeScore: match.awayScore, awayScore: match.homeScore, homeSeed: match.awaySeed, awaySeed: match.homeSeed },
+          by: user.username,
+        }),
       }).run();
     });
 
