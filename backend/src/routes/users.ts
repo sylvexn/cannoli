@@ -18,6 +18,7 @@ import { isStaff } from '../lib/auth';
 import { writeUpload, uploadsPath } from '../lib/uploads';
 import { isR2Configured, r2Delete } from '../lib/r2';
 import { toUserid } from '../lib/ps-login';
+import { refreshUserMap } from '../lib/ps-bot';
 
 /** Best-effort cleanup of a previously stored asset.
  *  - If the key looks like an R2 public URL (starts with http) and R2 is configured,
@@ -211,6 +212,16 @@ export const userRoutes = new Elysia()
     }
 
     db.update(schema.users).set(updates).where(eq(schema.users.id, parseInt(user.id))).run();
+
+    // A psUsername change alters the coach's effective PS userid, so the PS
+    // monitor bot's userid→team map must be rebuilt — otherwise the bot can't
+    // link this coach's battles back to their team (logged as
+    // bot_unmatched_battle). `'psUsername' in updates` is true for both set and
+    // clear (clear writes `null`), false when psUsername was left untouched.
+    if ('psUsername' in updates) {
+      try { refreshUserMap(); } catch { /* best-effort */ }
+    }
+
     return { success: true };
   })
 

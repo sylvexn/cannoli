@@ -10,7 +10,7 @@
 import { db, schema } from '../db';
 import { eq, and, sql } from 'drizzle-orm';
 import { getLeague } from './queries';
-import { createBattle } from './ps-bot';
+import { createBattle, effectivePsUserid } from './ps-bot';
 
 // ─── Team resolution ─────────────────────────────────────────────────────────
 
@@ -109,12 +109,17 @@ function resolveTeamPsUsername(teamId: string | null, sideLabel: 'home' | 'away'
     ? db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get()
     : null;
   const user = team?.userId
-    ? db.select({ username: schema.users.username })
+    ? db.select({ username: schema.users.username, psUsername: schema.users.psUsername })
         .from(schema.users)
         .where(eq(schema.users.id, team.userId))
         .get()
     : null;
-  return user?.username || team?.coachName || teamId || sideLabel;
+  // Use the coach's EFFECTIVE PS userid (their custom psUsername if set, else
+  // their canonical username) — this is the name they're actually logged into
+  // Showdown as via SSO. Returning the bare username meant /cannoli-battle
+  // invited a name nobody was logged in under for any coach with a custom PS
+  // nickname, so the battle never created ("Player not found or offline").
+  return user ? effectivePsUserid(user) : (team?.coachName || teamId || sideLabel);
 }
 
 /**
