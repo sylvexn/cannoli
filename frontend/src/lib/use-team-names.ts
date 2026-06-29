@@ -23,6 +23,8 @@ export interface TeamNameResolver {
   get: (teamId: string | null | undefined) => ResolvedTeam | null;
   /** Display name for an ID — falls back to the raw ID when unresolved. */
   name: (teamId: string | null | undefined) => string;
+  /** All resolved teams in a league, sorted by name (for team selectors). */
+  list: (leagueId: string | null | undefined) => ResolvedTeam[];
   loading: boolean;
 }
 
@@ -69,6 +71,9 @@ export function useTeamNames(): TeamNameResolver {
   return useMemo<TeamNameResolver>(() => ({
     get: id => (id ? teams.get(id) ?? null : null),
     name: id => (id ? teams.get(id)?.name ?? id : '—'),
+    list: leagueId => (leagueId
+      ? [...teams.values()].filter(t => t.leagueId === leagueId).sort((a, b) => a.name.localeCompare(b.name))
+      : []),
     loading,
   }), [teams, loading]);
 }

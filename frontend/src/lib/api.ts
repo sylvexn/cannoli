@@ -1372,8 +1372,15 @@ export const api = {
     forfeitedBy?: 'home' | 'away' | 'both' | null;
     note?: string;
     pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
+    /** Optional team reassignment — fix swapped sides while force-setting a result. */
+    homeTeamId?: string;
+    awayTeamId?: string;
   }) =>
     postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/force-result`, data),
+
+  /** Flip a match's home/away sides (teams, scores, seeds) — result unchanged. */
+  swapMatchSides: (matchId: string) =>
+    postJson<{ success: boolean }>(`/api/admin/matches/${matchId}/swap-sides`),
 
   importMatchBattle: (matchId: string, data: {
     roomId?: string;

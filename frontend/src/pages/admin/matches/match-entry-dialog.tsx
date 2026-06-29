@@ -39,8 +39,13 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
-  const homeName = match ? teamNames.name(match.homeTeamId) : '';
-  const awayName = match ? teamNames.name(match.awayTeamId) : '';
+  // Force mode can reassign which team sits on each side; enter mode tracks the
+  // match's own home/away. selHome/selAway always hold the *effective* sides.
+  const [selHomeTeamId, setSelHomeTeamId] = useState('');
+  const [selAwayTeamId, setSelAwayTeamId] = useState('');
+  const leagueTeams = match ? teamNames.list(match.leagueId) : [];
+  const homeName = teamNames.name(selHomeTeamId);
+  const awayName = teamNames.name(selAwayTeamId);
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
   const [replayUrl, setReplayUrl] = useState('');
@@ -53,6 +58,8 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
 
   useEffect(() => {
     if (open && match) {
+      setSelHomeTeamId(match.homeTeamId);
+      setSelAwayTeamId(match.awayTeamId);
       setHomeScore(match.homeScore ?? 0);
       setAwayScore(match.awayScore ?? 0);
       setReplayUrl(match.replayUrl ?? '');
@@ -66,12 +73,16 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
 
   async function submitResult() {
     if (!match) return;
+    if (mode === 'force' && selHomeTeamId === selAwayTeamId) {
+      toast.error('Home and away must be different teams');
+      return;
+    }
     setSubmitting(true);
     try {
       const pokemonData = showPokemonData
         ? [
             ...homePokemon.filter(p => p.name.trim()).map(p => ({
-              teamId: match.homeTeamId,
+              teamId: selHomeTeamId,
               pokemonName: p.name.trim(),
               kills: p.kills,
               deaths: p.deaths,
@@ -79,7 +90,7 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
               teraType: p.teraType || undefined,
             })),
             ...awayPokemon.filter(p => p.name.trim()).map(p => ({
-              teamId: match.awayTeamId,
+              teamId: selAwayTeamId,
               pokemonName: p.name.trim(),
               kills: p.kills,
               deaths: p.deaths,
@@ -96,6 +107,8 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
           forfeitedBy: forceForfeit === 'none' ? null : forceForfeit,
           note: forceNote.trim() || undefined,
           pokemonData,
+          homeTeamId: selHomeTeamId,
+          awayTeamId: selAwayTeamId,
         });
         toast.success('Result force-recorded (audit logged)');
       } else {
@@ -144,6 +157,36 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
         </DialogHeader>
 
         <div className="space-y-3">
+          {mode === 'force' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Home Team</label>
+                <Select value={selHomeTeamId} onValueChange={(v) => setSelHomeTeamId(v ?? '')}>
+                  <SelectTrigger className="h-8 text-xs bg-surface-overlay">
+                    <SelectValue placeholder="Select team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leagueTeams.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs">{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Away Team</label>
+                <Select value={selAwayTeamId} onValueChange={(v) => setSelAwayTeamId(v ?? '')}>
+                  <SelectTrigger className="h-8 text-xs bg-surface-overlay">
+                    <SelectValue placeholder="Select team..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leagueTeams.map(t => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs">{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">
@@ -223,12 +266,12 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
           {showPokemonData && match && (
             <div className="grid grid-cols-2 gap-4">
               <PokemonKDSection
-                label={`${match.homeTeamId} (Home)`}
+                label={`${homeName} (Home)`}
                 entries={homePokemon}
                 onChange={setHomePokemon}
               />
               <PokemonKDSection
-                label={`${match.awayTeamId} (Away)`}
+                label={`${awayName} (Away)`}
                 entries={awayPokemon}
                 onChange={setAwayPokemon}
               />
