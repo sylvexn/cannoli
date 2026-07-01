@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { getBaseFormName, getFormCategory, toCannoliSpeciesName } from '../src/lib/pokedex';
+import {
+  getBaseFormName,
+  getFormCategory,
+  resolveRosterPokemonName,
+  toCannoliSpeciesName,
+} from '../src/lib/pokedex';
 
 describe('getFormCategory', () => {
   test('classifies megas', () => {
@@ -62,6 +67,59 @@ describe('getBaseFormName', () => {
     // This is the rule we enforce in validatePick:
     expect(getBaseFormName('Mega Charizard X')).toBe(getBaseFormName('Mega Charizard Y'));
     expect(getBaseFormName('Mega Charizard X')).toBe(getBaseFormName('Charizard'));
+  });
+
+  test('in-battle transform formes reduce to the base species', () => {
+    expect(getBaseFormName('Palafin-Hero')).toBe('Palafin');
+    expect(getBaseFormName('Palafin-Zero')).toBe('Palafin');
+    expect(getBaseFormName('Aegislash-Blade')).toBe('Aegislash');
+    expect(getBaseFormName('Mimikyu-Busted')).toBe('Mimikyu');
+    expect(getBaseFormName('Minior-Meteor')).toBe('Minior');
+  });
+
+  test('battle transform on a regional keeps the region', () => {
+    expect(getBaseFormName('Darmanitan-Zen')).toBe('Darmanitan');
+    expect(getBaseFormName('Darmanitan-Galar-Zen')).toBe('Darmanitan-Galar');
+  });
+
+  test('getBaseFormName is idempotent', () => {
+    expect(getBaseFormName(getBaseFormName('Palafin-Hero'))).toBe('Palafin');
+    expect(getBaseFormName(getBaseFormName('Mega Charizard X'))).toBe('Charizard');
+  });
+});
+
+describe('resolveRosterPokemonName', () => {
+  test('in-battle transform resolves to the drafted base name (the reported bug)', () => {
+    // garrett's Palafin: stored "Palafin-Hero", roster has "Palafin".
+    expect(resolveRosterPokemonName(['Palafin', 'Garchomp'], 'Palafin-Hero')).toBe('Palafin');
+    expect(resolveRosterPokemonName(['Palafin'], 'Palafin-Zero')).toBe('Palafin');
+  });
+
+  test('mega base + Showdown suffix both resolve to the Cannoli roster name', () => {
+    const roster = ['Mega Lopunny', 'Landorus-Therian'];
+    expect(resolveRosterPokemonName(roster, 'Lopunny')).toBe('Mega Lopunny');
+    expect(resolveRosterPokemonName(roster, 'Lopunny-Mega')).toBe('Mega Lopunny');
+    expect(resolveRosterPokemonName(['Mega Alakazam'], 'Alakazam-Mega')).toBe('Mega Alakazam');
+    expect(resolveRosterPokemonName(['Mega Alakazam'], 'Alakazam')).toBe('Mega Alakazam');
+  });
+
+  test('default-forme collapse resolves to the drafted forme name', () => {
+    expect(resolveRosterPokemonName(['Indeedee-F'], 'Indeedee')).toBe('Indeedee-F');
+    expect(resolveRosterPokemonName(['Thundurus-Therian'], 'Thundurus')).toBe('Thundurus-Therian');
+    expect(resolveRosterPokemonName(['Enamorus-Therian'], 'Enamorus')).toBe('Enamorus-Therian');
+  });
+
+  test('exact match wins and is returned verbatim', () => {
+    expect(resolveRosterPokemonName(['Garchomp', 'Palafin'], 'Garchomp')).toBe('Garchomp');
+    expect(resolveRosterPokemonName(['Marowak-Alola'], 'Marowak-Alola')).toBe('Marowak-Alola');
+  });
+
+  test('no-match falls back to toCannoliSpeciesName (unchanged-from-today)', () => {
+    // A traded-away / never-rostered mon: roster has nothing on its dex number.
+    expect(resolveRosterPokemonName(['Garchomp', 'Dragapult'], 'Pikachu')).toBe('Pikachu');
+    // Fallback still normalizes Mega/Primal convention even with no roster hit.
+    expect(resolveRosterPokemonName(['Garchomp'], 'Altaria-Mega')).toBe('Mega Altaria');
+    expect(resolveRosterPokemonName([], 'Palafin-Hero')).toBe('Palafin-Hero');
   });
 });
 
