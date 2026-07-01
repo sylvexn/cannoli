@@ -12,7 +12,7 @@
 
 import { ReplayParser } from './replay-parser';
 import { validateMatchResult } from './replay-parser';
-import { toCannoliSpeciesName } from './pokedex';
+import { resolveRosterPokemonName } from './pokedex';
 import { broughtSidesFromResult } from './brought-preview';
 import { toUserid, signAssertion } from './ps-login';
 import { getLeagueCostFormat } from './league-costs';
@@ -1576,6 +1576,22 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         .where(eq(schema.matchPokemon.matchId, matchId))
         .run();
 
+      // Cache each team's drafted roster names once so a battle-log mon name
+      // resolves to its exact roster slot (Mega/Primal + in-battle transforms).
+      const rosterNameCache = new Map<string, string[]>();
+      const rosterNamesFor = (teamId: string): string[] => {
+        let names = rosterNameCache.get(teamId);
+        if (!names) {
+          names = db.select({ name: schema.rosters.pokemonName })
+            .from(schema.rosters)
+            .where(eq(schema.rosters.teamId, teamId))
+            .all()
+            .map(r => r.name);
+          rosterNameCache.set(teamId, names);
+        }
+        return names;
+      };
+
       for (const mon of result.pokemon) {
         const side = mon.player;
         const homeSide = battle.homeSide
@@ -1587,9 +1603,10 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           db.insert(schema.matchPokemon).values({
             matchId,
             teamId,
-            // Store in Cannoli convention ("Mega Altaria"), not Showdown's
-            // "Altaria-Mega", so per-Pokemon K/D JOINs to the roster entry.
-            pokemonName: toCannoliSpeciesName(mon.species),
+            // Resolve to the team's exact drafted roster name so per-Pokemon K/D
+            // JOINs to the roster entry (handles "Altaria-Mega" → "Mega Altaria"
+            // and in-battle transforms like "Palafin-Hero" → "Palafin").
+            pokemonName: resolveRosterPokemonName(rosterNamesFor(teamId), mon.species),
             kills: mon.kills,
             deaths: mon.deaths,
             teraUsed: mon.teraUsed,
