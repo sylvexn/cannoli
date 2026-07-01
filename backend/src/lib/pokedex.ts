@@ -29,6 +29,35 @@ const COSMETIC_SUFFIXES = new Set([
   'X', 'Y',
 ]);
 
+/**
+ * In-battle transform formes a Pokemon flips INTO mid-battle (ability / item /
+ * HP-triggered) but which are never separately draftable. Showdown's battle log
+ * emits these forme names (via |detailschange|), yet the roster only ever stores
+ * the base species. Stripping the trailing segment lets a battle-log name reduce
+ * to the same species key as its drafted roster slot (e.g. "Palafin-Hero" →
+ * "Palafin", "Aegislash-Blade" → "Aegislash").
+ *
+ * This is deliberately SEPARATE from COSMETIC_SUFFIXES: those (Therian, regional,
+ * etc.) are draftable-distinct species and must keep their identity. Only the
+ * *final* dash-segment is stripped, so a regional that also transforms keeps its
+ * region (e.g. "Darmanitan-Galar-Zen" → "Darmanitan-Galar").
+ */
+const BATTLE_ONLY_SUFFIXES = new Set([
+  'Zero', 'Hero',        // Palafin (Zero to Hero)
+  'Blade', 'Shield',     // Aegislash (Stance Change)
+  'Busted',              // Mimikyu (Disguise)
+  'Hangry',              // Morpeko (Hunger Switch)
+  'Noice',               // Eiscue (Ice Face)
+  'School',              // Wishiwashi (Schooling)
+  'Complete',            // Zygarde (Power Construct)
+  'Zen',                 // Darmanitan / Darmanitan-Galar (Zen Mode)
+  'Sunshine',            // Cherrim (Flower Gift)
+  'Pirouette',           // Meloetta (Relic Song)
+  'Terastal', 'Stellar', // Terapagos (Tera Shift / Tera Form)
+  'Gulping', 'Gorging',  // Cramorant (Gulp Missile)
+  'Meteor',              // Minior (Shields Down)
+]);
+
 function stripTeraSuffix(name: string): string {
   return name.replace(/\s*\(T\)\s*$/, '').trim();
 }
@@ -58,8 +87,29 @@ export function getFormCategory(rawName: string): FormCategory {
  * - "Charizard" and "Mega Charizard" both → "Charizard"
  * - Regional forms keep their suffix (different species for our purposes)
  */
-export function getBaseFormName(rawName: string): string {
+/**
+ * Undo in-battle transform formes a mon flips INTO mid-battle but that are never
+ * separately draftable — Showdown emits them, the roster stores the base:
+ *   - stripBattleOnlySuffixes("Palafin-Hero")          → "Palafin"
+ *   - stripBattleOnlySuffixes("Darmanitan-Galar-Zen")  → "Darmanitan-Galar"
+ * Only the trailing dash-segment(s) are removed, so a regional keeps its region.
+ * Idempotent — a base species has no battle suffix, so re-running is a no-op.
+ * (Tera `(T)` display suffix is stripped first, mirroring the other helpers.)
+ */
+export function stripBattleOnlySuffixes(rawName: string): string {
   let name = stripTeraSuffix(rawName);
+  let dash = name.lastIndexOf('-');
+  while (dash > 0 && BATTLE_ONLY_SUFFIXES.has(name.slice(dash + 1))) {
+    name = name.slice(0, dash);
+    dash = name.lastIndexOf('-');
+  }
+  return name;
+}
+
+export function getBaseFormName(rawName: string): string {
+  // Strip in-battle transform formes first (Palafin-Hero → Palafin,
+  // Darmanitan-Galar-Zen → Darmanitan-Galar) before the mega/regional logic.
+  let name = stripBattleOnlySuffixes(rawName);
 
   // "Mega <species> [X|Y]" → "<species>"
   const megaPrefix = name.match(/^Mega\s+(.+?)(?:\s+[XY])?$/i);
@@ -130,4 +180,83 @@ export function toCannoliSpeciesName(rawName: string): string {
   if (primalSuffix) return `Primal ${primalSuffix[1]}${tera}`;
 
   return rawName;
+}
+
+/**
+ * Resolve a Showdown battle-log Pokemon name to the EXACT drafted name on a
+ * single team's roster, so per-Pokemon match stats (games/kills/deaths) attach
+ * to the roster slot by exact-string JOIN. Called at WRITE time when storing a
+ * `match_pokemon` row, replacing the older `toCannoliSpeciesName(species)` so no
+ * read-side change is needed.
+ *
+ * A team's roster carries at most ONE slot per National-Dex number (league
+ * rule), so a battle mon can be unambiguously mapped to its drafted slot by
+ * reducing both sides to a species key. Layered strategy, first hit wins:
+ *   1. exact match on `battleName`;
+ *   2. exact match on `toCannoliSpeciesName(battleName)` (Showdown Mega/Primal
+ *      suffix → Cannoli prefix, e.g. "Lopunny-Mega" → "Mega Lopunny");
+ *   3. species-key match — `getBaseFormName(roster) === getBaseFormName(battle)`
+ *      AND a true battle-representation of the drafted mon (see
+ *      `isLegitBattleRepresentation`) — covers in-battle transforms and
+ *      base↔mega / default-forme collapse, e.g. battle "Palafin-Hero"/"Lopunny"/
+ *      "Indeedee" → roster "Palafin"/"Mega Lopunny"/"Indeedee-F". A genuine forme
+ *      DISCREPANCY (both sides carry a distinct qualifier — "Mega Charizard Y"
+ *      vs roster "Mega Charizard X", "Rotom-Mow" vs "Rotom-Heat") is REJECTED so
+ *      a mis-recorded forme is never silently rewritten to the drafted one.
+ * If nothing matches, fall back to `toCannoliSpeciesName(battleName)` — the exact
+ * value stored today — so trades / free-agents / illegal mons (species not on
+ * this roster) and genuine discrepancies behave exactly as before (stored raw,
+ * visible as an orphan).
+ *
+ * Pure: no DB access. `rosterNames` is the caller-supplied list of one team's
+ * drafted `rosters.pokemonName` values. A trailing ` (T)` tera suffix is handled
+ * consistently with the underlying helpers (dropped when a roster name — which
+ * never carries it — is returned; preserved by the fallback).
+ */
+/**
+ * True when a battle-log name is just an in-battle / convention REPRESENTATION of
+ * a drafted roster name (same actual mon), rather than a genuinely different forme
+ * that happens to share a species key.
+ *
+ * - Same mon once in-battle transforms are undone and Mega/Primal convention is
+ *   normalized (`Palafin-Hero` vs `Palafin`, `Charizard-Mega-Y` vs `Mega
+ *   Charizard Y`) → true.
+ * - Otherwise same base species but a differing qualifier: legit ONLY when one
+ *   side is the bare base species (base↔mega, bare↔default-forme like
+ *   `Indeedee` vs `Indeedee-F`). Reject when BOTH carry a distinct forme/variant
+ *   qualifier (`Mega Charizard X` vs `Mega Charizard Y`, `Rotom-Mow` vs
+ *   `Rotom-Heat`) — those are real discrepancies, not representations.
+ */
+function isLegitBattleRepresentation(battle: string, roster: string): boolean {
+  const bC = toCannoliSpeciesName(stripBattleOnlySuffixes(battle));
+  const rC = toCannoliSpeciesName(stripBattleOnlySuffixes(roster));
+  if (bC === rC) return true;
+  const isBareBase = (x: string) => getBaseFormName(x) === toCannoliSpeciesName(x);
+  return isBareBase(battle) || isBareBase(roster);
+}
+
+export function resolveRosterPokemonName(rosterNames: string[], battleName: string): string {
+  if (!battleName) return battleName;
+
+  // 1. exact match on the raw battle name
+  if (rosterNames.includes(battleName)) return battleName;
+
+  // 2. exact match on the Cannoli-normalized battle name (Mega/Primal)
+  const cannoli = toCannoliSpeciesName(battleName);
+  if (cannoli !== battleName && rosterNames.includes(cannoli)) return cannoli;
+
+  // 3. species-key match — accept ONLY a true battle-representation of the
+  //    drafted mon; a genuine forme discrepancy (Mega Charizard Y vs roster X,
+  //    Rotom-Mow vs Rotom-Heat) is skipped and falls through to the raw fallback.
+  const battleKey = getBaseFormName(battleName);
+  for (const rosterName of rosterNames) {
+    if (getBaseFormName(rosterName) === battleKey
+        && isLegitBattleRepresentation(battleName, rosterName)) {
+      return rosterName;
+    }
+  }
+
+  // 4. fallback — unchanged-from-today behavior for mons not on this roster and
+  //    for genuine discrepancies (stored raw, surfaced as an orphan for review)
+  return cannoli;
 }

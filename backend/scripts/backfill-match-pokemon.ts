@@ -28,6 +28,7 @@ import { Database } from 'bun:sqlite';
 import { resolve } from 'node:path';
 import { ReplayParser } from '../src/lib/replay-parser';
 import { toUserid } from '../src/lib/ps-login';
+import { resolveRosterPokemonName } from '../src/lib/pokedex';
 
 const DB_PATH = process.env.DB_PATH || resolve(import.meta.dir, '../data/cannoli.db');
 
@@ -113,6 +114,19 @@ export function backfillMatchPokemon(database?: Database, opts: BackfillOptions 
   let skippedAmbiguous = 0;
   let skippedNoMons = 0;
   const ambiguousSamples: string[] = [];
+
+  // Cache each team's drafted roster names so a battle-log mon name resolves to
+  // its exact roster slot (Mega/Primal + in-battle transform formes). Rosters
+  // don't change during the run, so this is safe to memoize across matches.
+  const rosterNameCache = new Map<string, string[]>();
+  const rosterNamesFor = (teamId: string): string[] => {
+    let names = rosterNameCache.get(teamId);
+    if (!names) {
+      names = (rosterByTeam.all(teamId) as { pokemonName: string }[]).map(r => r.pokemonName);
+      rosterNameCache.set(teamId, names);
+    }
+    return names;
+  };
 
   // Wrap in a single transaction — fast + atomic.
   const tx = db.transaction((rows: MatchRow[]) => {
@@ -203,7 +217,9 @@ export function backfillMatchPokemon(database?: Database, opts: BackfillOptions 
         insertMon.run(
           m.id,
           teamId,
-          mon.species,
+          // Resolve to the team's exact drafted roster name so per-Pokemon K/D
+          // JOINs the roster entry by exact string.
+          resolveRosterPokemonName(rosterNamesFor(teamId), mon.species),
           mon.kills,
           mon.deaths,
           mon.teraUsed ? 1 : 0,

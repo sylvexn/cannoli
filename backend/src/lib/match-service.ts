@@ -16,7 +16,7 @@ import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
 import { runAutoAwards } from './pins/auto-award';
 import { validatePokemonDataForMatch } from './match-validation';
-import { toCannoliSpeciesName } from './pokedex';
+import { resolveRosterPokemonName } from './pokedex';
 import { matchWinner } from './standings';
 
 export interface PokemonDataEntry {
@@ -147,12 +147,29 @@ export function recordMatchResult(
       // Clear existing pokemon data for this match
       db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.matchId, matchId)).run();
 
+      // Cache each team's drafted roster names so a battle-log mon name resolves
+      // to its exact roster slot (Mega/Primal + in-battle transform formes).
+      const rosterCache = new Map<string, string[]>();
+      const rosterNamesFor = (teamId: string): string[] => {
+        let names = rosterCache.get(teamId);
+        if (!names) {
+          names = db.select({ name: schema.rosters.pokemonName })
+            .from(schema.rosters)
+            .where(eq(schema.rosters.teamId, teamId))
+            .all()
+            .map(r => r.name);
+          rosterCache.set(teamId, names);
+        }
+        return names;
+      };
+
       for (const p of pokemonData) {
         db.insert(schema.matchPokemon).values({
           matchId,
           teamId: p.teamId,
-          // Normalize Mega/Primal to Cannoli convention so K/D JOINs the roster.
-          pokemonName: toCannoliSpeciesName(p.pokemonName),
+          // Resolve to the team's exact drafted roster name so per-Pokemon K/D
+          // JOINs the roster entry by exact string.
+          pokemonName: resolveRosterPokemonName(rosterNamesFor(p.teamId), p.pokemonName),
           kills: p.kills,
           deaths: p.deaths,
           teraUsed: p.teraUsed ?? false,
