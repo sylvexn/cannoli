@@ -121,6 +121,24 @@ describe('resolveRosterPokemonName', () => {
     expect(resolveRosterPokemonName(['Garchomp'], 'Altaria-Mega')).toBe('Mega Altaria');
     expect(resolveRosterPokemonName([], 'Palafin-Hero')).toBe('Palafin-Hero');
   });
+
+  test('genuine forme discrepancies are NOT rewritten (both sides carry a distinct qualifier)', () => {
+    // X and Y are different megas — a mis-recorded forme, not a representation.
+    expect(resolveRosterPokemonName(['Mega Charizard X'], 'Mega Charizard Y'))
+      .toBe('Mega Charizard Y');
+    // Different appliance formes.
+    expect(resolveRosterPokemonName(['Rotom-Heat'], 'Rotom-Mow')).toBe('Rotom-Mow');
+  });
+
+  test('base↔mega and default-forme representations still resolve to the drafted name', () => {
+    expect(resolveRosterPokemonName(['Scizor'], 'Mega Scizor')).toBe('Scizor');
+    expect(resolveRosterPokemonName(['Mega Sableye'], 'Sableye')).toBe('Mega Sableye');
+    // Base roster mon that battled as one of its megas resolves to the base.
+    expect(resolveRosterPokemonName(['Charizard'], 'Mega Charizard Y')).toBe('Charizard');
+    expect(resolveRosterPokemonName(['Indeedee-M'], 'Indeedee')).toBe('Indeedee-M');
+    expect(resolveRosterPokemonName(['Darmanitan-Galar'], 'Darmanitan-Galar-Zen'))
+      .toBe('Darmanitan-Galar');
+  });
 });
 
 describe('toCannoliSpeciesName', () => {
