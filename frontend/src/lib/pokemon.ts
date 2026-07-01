@@ -47,8 +47,7 @@ const SPRITE_OVERRIDES: Record<string, string> = {
   'nidoran-f': 'nidoranf',
   'nidoran-m': 'nidoranm',
 
-  // Squawkabilly — yellow isn't in gen5 sprites, use base
-  'squawkabilly-yellow': 'squawkabilly',
+  // (Squawkabilly plumage variants resolve correctly via the default hyphen rule)
 
   // Sirfetch'd apostrophe
   "sirfetch'd": 'sirfetchd',
@@ -60,11 +59,11 @@ const SPRITE_OVERRIDES: Record<string, string> = {
   // Flabébé accent
   'flabébé': 'flabebe',
 
-  // Paldean Tauros — no gen5 sprites, fall back to base tauros
-  'tauros-paldea': 'tauros',
-  'tauros-paldea-aqua': 'tauros',
-  'tauros-paldea-blaze': 'tauros',
-  'tauros-paldea-combat': 'tauros',
+  // Paldean Tauros — Showdown IDs drop the inner hyphen (Combat is the base breed)
+  'tauros-paldea': 'tauros-paldeacombat',
+  'tauros-paldea-aqua': 'tauros-paldeaaqua',
+  'tauros-paldea-blaze': 'tauros-paldeablaze',
+  'tauros-paldea-combat': 'tauros-paldeacombat',
 
   // Urshifu
   'urshifu-rapid-strike': 'urshifu-rapidstrike',

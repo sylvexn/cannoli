@@ -3,6 +3,7 @@ import { ChevronRight, Sparkles, Swords, Zap } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
 import { TeamCoachVs } from '@/components/team-coach-vs';
 import { api } from '@/lib/api';
+import { spriteUrl } from '@/lib/pokemon';
 import type { ApiMatch, ApiMatchPokemon, ApiTeam } from '@/lib/api';
 import type { League } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -127,7 +128,7 @@ export function StreamPostroll({ match, league, homeTeam, awayTeam, durationMs, 
           <div className="flex items-center gap-4 px-5 py-3 rounded-lg border border-neon/20 bg-surface-raised">
             <Sparkles size={18} className="text-neon shrink-0" />
             <img
-              src={`https://play.pokemonshowdown.com/sprites/gen5/${slugForSprite(stats.mvp.name)}.png`}
+              src={spriteUrl(stats.mvp.name)}
               alt={stats.mvp.name}
               className="w-12 h-12 object-contain pixelated"
               style={{ imageRendering: 'pixelated' }}
@@ -260,13 +261,3 @@ function ScoreSide({
   );
 }
 
-/**
- * Showdown sprite filenames are lowercase, with hyphens preserved and
- * apostrophes / dots removed. Forms like 'Tapu Koko' become 'tapukoko'.
- */
-function slugForSprite(name: string): string {
-  return name.toLowerCase()
-    .replace(/[.'’]/g, '')
-    .replace(/[\s_]/g, '')
-    .replace(/[^a-z0-9-]/g, '');
-}
