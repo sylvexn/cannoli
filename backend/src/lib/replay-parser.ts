@@ -125,6 +125,12 @@ export class ReplayParser {
 
   // Kill attribution
   private lastAttacker = new Map<string, string>(); // target nick → attacker nick
+  // Status source tracking: target nick → who inflicted its CURRENT major status
+  // (burn/poison/toxic). A value of null means self-inflicted (Flame Orb / Toxic
+  // Orb) — an explicit "no credit" decision, distinct from "never recorded".
+  // Whoever inflicted the status is credited when the target later faints to
+  // that status's residual damage, rather than whoever last hit it.
+  private statusInflictor = new Map<string, string | null>();
   // Hazard source tracking: "p1" side → who set each hazard
   private hazardSetters = new Map<string, Map<string, string>>(); // side → hazard name → setter nick
 
@@ -187,6 +193,7 @@ export class ReplayParser {
       case 'replace': return this.handleReplace(parts);
       case 'swap': return this.handleSwap(parts);
       case 'move': return this.handleMove(parts);
+      case '-status': return this.handleStatus(parts);
       case '-damage': return this.handleDamage(parts);
       case 'faint': return this.handleFaint(parts);
       case '-terastallize': return this.handleTera(parts);
@@ -522,6 +529,48 @@ export class ReplayParser {
   }
 
   /**
+   * |-status|p2a: Nick|brn  (optionally |[from] item: Flame Orb / |[from]
+   * ability: Flame Body|[of] p1a: Nick)
+   *
+   * Record WHO inflicted a major status (burn/poison/toxic) on the target, so a
+   * later residual-status faint credits the inflictor rather than whoever last
+   * hit the victim. Attribution mirrors handleDamage:
+   *   - [of] tag present            → that Pokemon (contact ability, e.g. Flame
+   *                                    Body burning the attacker).
+   *   - [from] item:/ability:       → self-inflicted (Flame Orb / Toxic Orb /
+   *                                    Comatose) → null, an explicit "no credit".
+   *   - otherwise (move-inflicted,   → the current attacker of record — the mon
+   *     e.g. Scald/Flamethrower/Toxic) whose move line just resolved against the
+   *                                    target (lastAttacker).
+   *
+   * Only the residual-damage statuses (brn/psn/tox) can KO, so only they matter
+   * here; we still record any status the same way — harmless for the non-damaging
+   * ones (par/slp/frz) since they never trigger a `[from] <status>` faint.
+   */
+  private handleStatus(parts: string[]): boolean {
+    const target = parts[2];
+    if (!target) return false;
+
+    const fromTag = this.findTag(parts, 'from');
+    const ofTag = this.findTag(parts, 'of');
+
+    let inflictor: string | null;
+    if (ofTag) {
+      inflictor = ofTag;
+    } else if (fromTag && (fromTag.startsWith('item:') || fromTag.startsWith('ability:'))) {
+      // Self-inflicted from own item/ability (Flame Orb, Toxic Orb) — no credit.
+      inflictor = null;
+    } else {
+      // Move-inflicted (Scald, Flamethrower, Toxic, …) — the attacker whose move
+      // just landed on the target. lastAttacker is set by the preceding |move|.
+      inflictor = this.lastAttacker.get(target) ?? null;
+    }
+
+    this.statusInflictor.set(target, inflictor);
+    return false;
+  }
+
+  /**
    * |-damage|p2a: Nick|HP/MAXHP or |-damage|p2a: Nick|0 fnt
    * Optional: |[from] source|[of] p1a: Nick
    */
@@ -560,8 +609,15 @@ export class ReplayParser {
         // Hazard damage — credit whoever set the hazard
         killerNick = this.getHazardSetter(target, fromTag);
       } else if (fromTag === 'psn' || fromTag === 'tox' || fromTag === 'brn') {
-        // Status damage — credit whoever last attacked
-        killerNick = this.lastAttacker.get(target) ?? null;
+        // Residual status damage — credit whoever INFLICTED the status (the mon
+        // whose Scald/Toxic/Flamethrower/Flame-Body applied it), not whoever last
+        // hit the victim. When we recorded a decision (including the explicit
+        // null of a self-inflicted Flame/Toxic Orb) use it; otherwise fall back
+        // to lastAttacker for logs where the `|-status|` line wasn't observed
+        // (e.g. a live parse that joined mid-battle).
+        killerNick = this.statusInflictor.has(target)
+          ? this.statusInflictor.get(target) ?? null
+          : this.lastAttacker.get(target) ?? null;
       } else if (fromTag.startsWith('move:')) {
         // Residual move damage (e.g., Leech Seed)
         if (ofTag) {
