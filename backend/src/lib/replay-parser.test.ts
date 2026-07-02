@@ -200,4 +200,150 @@ describe('ReplayParser', () => {
         .toEqual(liveP1Home.home.pokemon.map(p => p.species).sort());
     });
   });
+
+  // Passive/residual-status kill attribution (feedback: Gaffz, S11 Emerald).
+  // A burn/poison/toxic faint must credit whoever INFLICTED the status, not
+  // whoever last hit the victim — and self-inflicted (Flame/Toxic Orb) status
+  // gives NO enemy credit.
+  describe('status-kill attribution', () => {
+    // Build a minimal battle from raw protocol lines.
+    const run = (lines: string[]) => ReplayParser.parse(lines.join('\n'));
+    const kills = (r: ReturnType<typeof ReplayParser.parse>, species: string) =>
+      r.pokemon.find(p => p.species === species)?.kills ?? 0;
+
+    test('burn KO credits the burner, not the last mon to hit the victim', () => {
+      const r = run([
+        '|player|p1|Ash|',
+        '|player|p2|Gary|',
+        '|switch|p1a: Dragapult|Dragapult, M|100/100',
+        '|switch|p2a: Skarmory|Skarmory, F|100/100',
+        '|move|p1a: Dragapult|Flamethrower|p2a: Skarmory',
+        '|-damage|p2a: Skarmory|30/100',
+        '|-status|p2a: Skarmory|brn',
+        '|switch|p1a: Muk|Muk-Alola, M|100/100',        // different attacker enters
+        '|move|p1a: Muk|Body Press|p2a: Skarmory',        // Muk becomes lastAttacker
+        '|-damage|p2a: Skarmory|10/100 brn',
+        '|-damage|p2a: Skarmory|0 fnt|[from] brn',        // dies to the burn
+        '|faint|p2a: Skarmory',
+        '|win|Ash',
+      ]);
+      expect(kills(r, 'Dragapult')).toBe(1);
+      expect(kills(r, 'Muk-Alola')).toBe(0);
+    });
+
+    test('burn KO credits the burner even when the victim self-targets last (Destiny Bond)', () => {
+      const r = run([
+        '|player|p1|Ash|',
+        '|player|p2|Gary|',
+        '|switch|p1a: Milotic|Milotic, F|100/100',
+        '|switch|p2a: Gengar|Gengar, F|100/100',
+        '|move|p1a: Milotic|Scald|p2a: Gengar',
+        '|-damage|p2a: Gengar|20/100',
+        '|-status|p2a: Gengar|brn',
+        '|move|p2a: Gengar|Destiny Bond|p2a: Gengar',     // self-target ⇒ lastAttacker=self
+        '|-damage|p2a: Gengar|0 fnt|[from] brn',
+        '|faint|p2a: Gengar',
+        '|win|Ash',
+      ]);
+      // Old bug: self-attacker was filtered by the same-side guard → kill lost.
+      expect(kills(r, 'Milotic')).toBe(1);
+      const total = r.pokemon.reduce((s, p) => s + p.kills, 0);
+      const deaths = r.pokemon.reduce((s, p) => s + p.deaths, 0);
+      expect(total).toBe(deaths);
+    });
+
+    test('toxic KO credits the Toxic user even after they switch out', () => {
+      const r = run([
+        '|player|p1|Ash|',
+        '|player|p2|Gary|',
+        '|switch|p1a: Toxapex|Toxapex, F|100/100',
+        '|switch|p2a: Snorlax|Snorlax, M|100/100',
+        '|move|p1a: Toxapex|Toxic|p2a: Snorlax',
+        '|-status|p2a: Snorlax|tox',
+        '|switch|p1a: Blissey|Blissey, F|100/100',        // toxic-setter leaves
+        '|move|p1a: Blissey|Seismic Toss|p2a: Snorlax',   // Blissey = lastAttacker
+        '|-damage|p2a: Snorlax|20/100 tox',
+        '|-damage|p2a: Snorlax|0 fnt|[from] psn',          // toxic residual reads as psn
+        '|faint|p2a: Snorlax',
+        '|win|Ash',
+      ]);
+      expect(kills(r, 'Toxapex')).toBe(1);
+      expect(kills(r, 'Blissey')).toBe(0);
+    });
+
+    test('self-inflicted Flame Orb burn KO credits no one', () => {
+      const r = run([
+        '|player|p1|Ash|',
+        '|player|p2|Gary|',
+        '|switch|p1a: Weavile|Weavile, M|100/100',
+        '|switch|p2a: Conkeldurr|Conkeldurr, M|100/100',
+        '|move|p1a: Weavile|Ice Shard|p2a: Conkeldurr',    // Weavile = lastAttacker
+        '|-damage|p2a: Conkeldurr|90/100',
+        '|-status|p2a: Conkeldurr|brn|[from] item: Flame Orb',
+        '|-damage|p2a: Conkeldurr|0 fnt|[from] brn',
+        '|faint|p2a: Conkeldurr',
+        '|win|Gary',
+      ]);
+      expect(kills(r, 'Weavile')).toBe(0);
+    });
+
+    test('a statused mon KO’d by a DIRECT hit still credits the attacker (no status hijack)', () => {
+      const r = run([
+        '|player|p1|Ash|',
+        '|player|p2|Gary|',
+        '|switch|p1a: Muk|Muk-Alola, M|100/100',
+        '|switch|p2a: Arboliva|Arboliva, M|100/100',
+        '|move|p1a: Muk|Toxic|p2a: Arboliva',
+        '|-status|p2a: Arboliva|tox',
+        '|switch|p1a: Dragapult|Dragapult, M|100/100',
+        '|move|p1a: Dragapult|Flamethrower|p2a: Arboliva',
+        '|-damage|p2a: Arboliva|0 fnt',                    // DIRECT KO, no [from]
+        '|faint|p2a: Arboliva',
+        '|win|Ash',
+      ]);
+      expect(kills(r, 'Dragapult')).toBe(1);
+      expect(kills(r, 'Muk-Alola')).toBe(0);
+    });
+  });
+
+  // Real S11 Emerald replay (jarret vs quintonius, battle-68) — the exact match
+  // from the feedback report. Locks in the corrected passive-burn attribution
+  // and the clean team-preview reconciliation (no phantom Greninja-*, Mega
+  // Lopunny present with its death).
+  describe('S11 Emerald jarret vs quintonius (real replay)', () => {
+    const log = readFileSync(
+      join(replayDir, 'Gen9NatDexDraft-2026-s11-emerald-jarret-quintonius.log'),
+      'utf-8',
+    );
+    const result = ReplayParser.parse(log);
+    const mon = (species: string) => result.pokemon.find(p => p.species === species);
+
+    test('every death has a killer (total kills equals total deaths)', () => {
+      const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
+      const totalDeaths = result.pokemon.reduce((s, p) => s + p.deaths, 0);
+      expect(totalDeaths).toBe(8);
+      expect(totalKills).toBe(8);
+    });
+
+    test('Dragapult gets the Skarmory burn kill (3 total)', () => {
+      expect(mon('Dragapult')?.kills).toBe(3);
+    });
+
+    test('Milotic gets the Gengar burn kill (1 total)', () => {
+      expect(mon('Milotic')?.kills).toBe(1);
+    });
+
+    test('Muk-Alola no longer over-credited (2, not 3)', () => {
+      expect(mon('Muk-Alola')?.kills).toBe(2);
+    });
+
+    test('Mega Lopunny appears with its death (no phantom placeholder mons)', () => {
+      expect(mon('Lopunny-Mega')?.deaths).toBe(1);
+      expect(mon('Lopunny-Mega')?.appeared).toBe(true);
+      // Greninja's Battle-Bond team-preview placeholder must be reconciled away.
+      expect(result.pokemon.some(p => p.species.endsWith('-*'))).toBe(false);
+      // Exactly six brought per side (12 total), no duplicate/phantom entries.
+      expect(result.pokemon.filter(p => p.player === 'p2' && p.brought).length).toBe(6);
+    });
+  });
 });
