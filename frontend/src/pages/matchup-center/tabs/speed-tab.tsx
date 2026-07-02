@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import type { RosterPokemon } from '@/lib/types';
 import type { SpeedCalcSlot } from '../use-matchup-state';
+import { calcSpeed } from '@/lib/speed';
 import { Plus, X } from 'lucide-react';
 
 interface SpeedTabProps {
@@ -20,29 +21,6 @@ interface SpeedTabProps {
   onAddSlot: () => void;
   onRemoveSlot: (id: string) => void;
   onUpdateSlot: (id: string, updates: Partial<SpeedCalcSlot>) => void;
-}
-
-function calcSpeed(
-  baseSpe: number, level: number, evs: number, ivs: number,
-  nature: 'positive' | 'neutral' | 'negative', boosts: number,
-  scarf: boolean, stickyWeb: boolean,
-): number {
-  const raw = Math.floor((2 * baseSpe + ivs + Math.floor(evs / 4)) * level / 100 + 5);
-  const natureMult = nature === 'positive' ? 1.1 : nature === 'negative' ? 0.9 : 1.0;
-  const natured = Math.floor(raw * natureMult);
-
-  // Apply sticky web as -1 speed stage
-  const effectiveBoosts = stickyWeb ? boosts - 1 : boosts;
-
-  let result: number;
-  if (effectiveBoosts === 0) result = natured;
-  else if (effectiveBoosts > 0) result = Math.floor(natured * (2 + effectiveBoosts) / 2);
-  else result = Math.floor(natured * 2 / (2 - effectiveBoosts));
-
-  // Choice Scarf: 1.5x
-  if (scarf) result = Math.floor(result * 1.5);
-
-  return result;
 }
 
 export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdateSlot }: SpeedTabProps) {
