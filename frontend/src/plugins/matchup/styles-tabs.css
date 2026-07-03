@@ -500,12 +500,12 @@
 }
 
 .matchup-stats-a .matchup-stats-headrow th {
-  background: rgba(59, 130, 246, 0.1);
+  background: color-mix(in srgb, var(--mu-you) 10%, transparent);
   color: var(--mu-you);
 }
 
 .matchup-stats-b .matchup-stats-headrow th {
-  background: rgba(239, 68, 68, 0.1);
+  background: color-mix(in srgb, var(--mu-opp) 10%, transparent);
   color: var(--mu-opp);
 }
 
@@ -595,13 +595,20 @@
 .matchup-stat-mid { color: #fbbf24; }
 .matchup-stat-low { color: #f87171; }
 
+/* colorblind mode: stat ramp -> getMatchupColors(true) (green->blue,
+   red->orange; the amber midband is already deuteranopia-safe) */
+.matchup-cb .matchup-stat-hi { color: #60a5fa; }
+.matchup-cb .matchup-stat-good { color: #93c5fd; }
+.matchup-cb .matchup-stat-mid { color: #fbbf24; }
+.matchup-cb .matchup-stat-low { color: #fdba74; }
+
 .matchup-stats-avgrow td {
   border-top: 1px solid var(--mu-line);
   font-weight: 600;
 }
 
-.matchup-stats-a .matchup-stats-avgrow td { background: rgba(59, 130, 246, 0.05); }
-.matchup-stats-b .matchup-stats-avgrow td { background: rgba(239, 68, 68, 0.05); }
+.matchup-stats-a .matchup-stats-avgrow td { background: color-mix(in srgb, var(--mu-you) 5%, transparent); }
+.matchup-stats-b .matchup-stats-avgrow td { background: color-mix(in srgb, var(--mu-opp) 5%, transparent); }
 
 .matchup-stats-avglabel {
   padding: 6px 8px;

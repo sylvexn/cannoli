@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants'
+import { getTypeColors, TYPE_LABELS } from '@/lib/constants'
 import { POKEMON_TYPES, type PokemonType } from '@/lib/pokemon'
 import { getDefensiveMatchups } from '@/lib/type-effectiveness'
 import type { RosterPokemon } from '@/lib/types'
 import { PokeSprite } from '../components/sprite'
+import { useCb } from '../lib/colorblind'
 import { sitePokemonUrl } from '../lib/links'
 
 // Parity port of the site's typechart-tab.tsx: per-mon defensive matchups via
@@ -122,6 +123,7 @@ function TypeGrid({
   chart: ChartRow[]
   mode: ChartMode
 }) {
+  const typeColors = getTypeColors(useCb())
   const summary = useMemo(
     () =>
       POKEMON_TYPES.map(type => {
@@ -164,7 +166,7 @@ function TypeGrid({
                 <th className="matchup-tc-mon matchup-tc-monhead">Pokemon</th>
                 {POKEMON_TYPES.map(type => (
                   <th key={type} className="matchup-tc-th">
-                    <span className="matchup-tc-typechip" style={{ backgroundColor: TYPE_COLORS[type] }} title={type}>
+                    <span className="matchup-tc-typechip" style={{ backgroundColor: typeColors[type] }} title={type}>
                       {TYPE_LABELS[type] ?? type.slice(0, 3)}
                     </span>
                   </th>

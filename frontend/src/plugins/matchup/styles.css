@@ -124,10 +124,10 @@
   line-height: 1.4;
 }
 
-.matchup-picker-a .matchup-picker-btn { border-color: rgba(59, 130, 246, 0.5); }
-.matchup-picker-b .matchup-picker-btn { border-color: rgba(239, 68, 68, 0.5); }
-.matchup-picker-a .matchup-picker-btn:hover { border-color: rgba(59, 130, 246, 0.85); }
-.matchup-picker-b .matchup-picker-btn:hover { border-color: rgba(239, 68, 68, 0.85); }
+.matchup-picker-a .matchup-picker-btn { border-color: color-mix(in srgb, var(--mu-you) 50%, transparent); }
+.matchup-picker-b .matchup-picker-btn { border-color: color-mix(in srgb, var(--mu-opp) 50%, transparent); }
+.matchup-picker-a .matchup-picker-btn:hover { border-color: color-mix(in srgb, var(--mu-you) 85%, transparent); }
+.matchup-picker-b .matchup-picker-btn:hover { border-color: color-mix(in srgb, var(--mu-opp) 85%, transparent); }
 
 .matchup-picker-role {
   font-size: 9px;
@@ -1005,6 +1005,45 @@
 .matchup-brand-mark {
   color: var(--mu-brand);
   font-weight: 700;
+}
+
+/* ---------- colorblind mode ---------- */
+
+/* Deuteranopia-safe accent flip (mirrors MATCHUP_COLORS_CB): everything
+   var-driven — bars, dots, borders, headers — follows automatically. Inline
+   style colors (type chips, move names, stat values) follow via CbContext. */
+.matchup-cb {
+  --mu-opp: #f97316;
+}
+
+.matchup-cb-pill {
+  margin-left: auto;
+  font-family: var(--mu-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--mu-line);
+  background: none;
+  color: var(--mu-faint);
+  cursor: pointer;
+}
+
+.matchup-cb-pill:hover {
+  color: var(--mu-muted);
+  border-color: var(--mu-muted);
+}
+
+.matchup-cb-pill-on {
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.matchup-cb-pill-on:hover {
+  color: #f97316;
+  border-color: #f97316;
 }
 
 /* ---------- narrow room ---------- */
