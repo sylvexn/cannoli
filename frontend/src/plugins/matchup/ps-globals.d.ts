@@ -44,12 +44,52 @@ interface PSRoomClass {
   prototype: PSRoom
 }
 
+/**
+ * One teambuilder set (`Storage.unpackTeam` output / `curSetList` entry,
+ * js/storage.js:1000). Only the fields the bridge reads; a brand-new
+ * in-progress slot can be `{}` with no species yet.
+ */
+interface PSPokemonSet {
+  name?: string
+  species?: string
+}
+
+/** A saved team row in `Storage.teams` (js/storage.js importTeam/packTeam). */
+interface PSTeam {
+  name: string
+  format: string
+  /** Packed team string (or a set list before re-packing). */
+  team: string | PSPokemonSet[]
+  capacity: number
+  folder: string
+  iconCache?: string
+  gen?: number
+}
+
+/** The teambuilder room (`app.rooms['teambuilder']`, js/client-teambuilder.js).
+ *  `curSetList` is the LIVE set list while a team is open for editing;
+ *  `curTeam` the team being edited (null on the team-list view). */
+interface PSTeambuilderRoom extends PSRoom {
+  curSetList?: PSPokemonSet[] | null
+  curTeam?: PSTeam | null
+  edit?(i: number): void
+}
+
+/** `app.user` — Backbone model; fires 'saveteams' on team save/delete/back. */
+interface PSUser {
+  get(key: string): unknown
+  on(event: string, cb: (...args: unknown[]) => void, context?: unknown): void
+  off(event: string, cb?: (...args: unknown[]) => void, context?: unknown): void
+  trigger(event: string, ...args: unknown[]): void
+}
+
 /** The legacy Backbone client app (`window.app`). */
 interface PSApp {
   rooms: Record<string, PSRoom | undefined>
   roomList: PSRoom[]
   sideRoomList: PSRoom[]
   curRoom?: PSRoom | null
+  user?: PSUser
   topbar: { updateTabbar(): void }
   /** `type` may be a shorthand string ('html' | 'battle' | 'chat') or a Room subclass. */
   addRoom(id: string, type?: string | PSRoomClass | null, nojoin?: boolean, title?: string): void
@@ -57,6 +97,20 @@ interface PSApp {
   joinRoom(id: string, type?: string | PSRoomClass | null, nojoin?: boolean): PSRoom
   leaveRoom(id: string): boolean
   removeRoom(id: string, alreadyLeft?: boolean): boolean
+}
+
+/** The PS client's global `Storage` (js/storage.js) — bridge surface only.
+ *  NOTE: the client SHADOWS the DOM `Storage` constructor with this plain
+ *  object. Not declared on `Window` (it would conflict with lib.dom's
+ *  `Storage` typing) — ps-bridge.ts reads it through a cast helper. */
+interface PSStorage {
+  /** Mirrors `curSetList` while a team is open in the teambuilder. */
+  activeSetList?: PSPokemonSet[] | null
+  teams?: PSTeam[]
+  saveTeams(): void
+  packTeam(team: PSPokemonSet[]): string
+  unpackTeam(buf: string): PSPokemonSet[]
+  importTeam(buffer: string, teams?: boolean): PSPokemonSet[]
 }
 
 interface Window {
