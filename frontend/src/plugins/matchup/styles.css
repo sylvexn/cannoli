@@ -928,7 +928,7 @@
 .matchup-mname {
   font-family: var(--mu-mono);
   font-size: 10px;
-  color: var(--mu-faint);
+  color: var(--mu-muted);
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
