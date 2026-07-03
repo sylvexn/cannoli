@@ -556,7 +556,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     return (
                       <div key={`${mon.name}-${i}`} className="flex items-center gap-2 px-1 rounded hover:bg-surface-overlay/50 transition-colors flex-1 min-h-[28px]">
                         <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
-                        <span className="text-[11px] text-text-secondary font-medium w-20 truncate">{mon.name}</span>
+                        <span className="text-[11px] text-text-secondary font-medium w-24 truncate">{mon.name}</span>
                         <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">
                           <div className="h-full rounded-full bg-neon/50 transition-all" style={{ width: `${pct}%` }} />
                         </div>

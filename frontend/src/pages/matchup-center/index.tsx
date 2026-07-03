@@ -175,14 +175,17 @@ export function MatchupCenterPage() {
   return (
     <div className="flex flex-col h-full gap-3">
       {/* Header + Team Pickers */}
-      <div className="flex items-center gap-4">
+      {/* flex-wrap + basis floor: at high browser zoom (effectively narrow
+          viewports) the pickers drop below the title instead of crushing or
+          overflowing the row. */}
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="shrink-0">
           <h1 className="text-2xl font-mono font-bold tracking-tight uppercase">
             <span className="text-neon">Matchup</span>{' '}
             <span className="text-text-primary">Center</span>
           </h1>
         </div>
-        <div className="flex-1 grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
+        <div className="flex-1 basis-80 min-w-0 grid grid-cols-[1fr_auto_1fr] gap-3 items-center">
           <TeamPicker
             source={state.teamASource}
             onSelect={(roster, source) => dispatch({ type: 'SET_TEAM_A', roster, source })}
