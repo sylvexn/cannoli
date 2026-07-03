@@ -1,0 +1,72 @@
+/* Matchup plugin styles — injected at runtime as a <style> tag by main.tsx.
+   Everything is scoped under cannoli-matchup-* / matchup-* class prefixes so
+   nothing leaks into (or is clobbered by) the PS client's global styles. */
+
+.cannoli-matchup-room {
+  background: #0b0e14;
+}
+
+.matchup-host {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.matchup-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: #0b0e14;
+  color: #d7dae0;
+  font-family: 'Space Grotesk', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.matchup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1e2530;
+  background: #0e121a;
+}
+
+.matchup-wordmark {
+  font-family: 'Berkeley Mono', ui-monospace, 'JetBrains Mono', Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #e5e9f0;
+  white-space: nowrap;
+}
+
+.matchup-wordmark-accent {
+  color: #3b82f6;
+}
+
+.matchup-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.matchup-placeholder-title {
+  font-family: 'Berkeley Mono', ui-monospace, 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8b93a1;
+}
+
+.matchup-placeholder-sub {
+  font-size: 13px;
+  color: #5c6470;
+  max-width: 420px;
+  line-height: 1.5;
+}
