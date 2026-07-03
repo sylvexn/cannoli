@@ -3,13 +3,13 @@ import { useMatchupState, type MatchupTab } from '@/pages/matchup-center/use-mat
 import { TeamPicker } from './components/team-picker'
 import { apiHost } from './lib/api-plugin'
 import { useBuilderSync, type BuilderSyncMode } from './lib/use-builder-sync'
-import { ComingSoonTab } from './tabs/coming-soon'
+import { MovesTab } from './tabs/moves'
 import { OverviewTab } from './tabs/overview'
 import { SpeedTab } from './tabs/speed'
 import { StatsTab } from './tabs/stats'
 import { TypeChartTab } from './tabs/typechart'
 
-// Tab strip order matches the mockup. Moves is the last placeholder (P4).
+// Tab strip order matches the mockup.
 const TABS: { id: MatchupTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'typechart', label: 'Type Chart' },
@@ -126,7 +126,7 @@ function MatchupRoomInner() {
         ) : state.activeTab === 'stats' ? (
           <StatsTab teamA={activeTeamA} teamB={activeTeamB} />
         ) : (
-          <ComingSoonTab tab={state.activeTab} />
+          <MovesTab teamA={activeTeamA} teamB={activeTeamB} />
         )}
       </div>
 
