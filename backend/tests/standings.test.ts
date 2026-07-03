@@ -41,18 +41,37 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     expect(out[2].tiebreaker).toBeNull();
   });
 
-  test('3-way tie at wins=4 resolved by H2H sub-bucket (a > b > c)', () => {
-    // 3 teams 4-3; H2H within the set: a=2, b=1, c=0
+  test('3-way tie at wins=4 resolved by differential (H2H ignored for 3+ way ties)', () => {
+    // 3 teams 4-3 with distinct diffs: b=+9, a=+5, c=+1.
+    // H2H within the set favors a (a=2, b=1, c=0) but for a 3-way tie H2H is
+    // skipped entirely, so differential decides: b > a > c.
     const out = orderRecords(
       [
-        record('a', 4, 3, 30, 25),
-        record('b', 4, 3, 32, 26),
-        record('c', 4, 3, 28, 22),
+        record('a', 4, 3, 30, 25), // diff +5
+        record('b', 4, 3, 34, 25), // diff +9
+        record('c', 4, 3, 26, 25), // diff +1
       ],
       staticH2h({ a: 2, b: 1, c: 0 }),
     );
-    expect(out.map(r => r.id)).toEqual(['a', 'b', 'c']);
-    expect(out.every(r => r.tiebreaker?.rule === 'h2h')).toBe(true);
+    expect(out.map(r => r.id)).toEqual(['b', 'a', 'c']);
+    expect(out.every(r => r.tiebreaker?.rule === 'diff')).toBe(true);
+  });
+
+  test('multi-way tie: differential outranks h2h (feedback #62)', () => {
+    // Early-season 1-1 tie among 3+ teams: x has a strong +4 differential but
+    // 0 in-set H2H wins (hasn't played the others yet); y has a losing -1
+    // differential but 1 in-set H2H win. Before the fix, H2H ran first even
+    // in this 3-way tie and ranked y above x — exactly the reported bug.
+    const out = orderRecords(
+      [
+        record('x', 1, 1, 14, 10), // diff +4, h2h 0
+        record('y', 1, 1, 9, 10),  // diff -1, h2h 1
+        record('z', 1, 1, 10, 10), // diff 0,  h2h 0
+      ],
+      staticH2h({ x: 0, y: 1, z: 0 }),
+    );
+    expect(out.map(r => r.id)).toEqual(['x', 'z', 'y']);
+    expect(out.every(r => r.tiebreaker?.rule === 'diff')).toBe(true);
   });
 
   test('tied W-L with equal H2H resolved by differential', () => {
