@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:dist": "vite build",
+    "build:plugin": "vite build -c vite.plugin.config.ts",
     "check": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
