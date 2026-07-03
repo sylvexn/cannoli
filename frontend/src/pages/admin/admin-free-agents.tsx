@@ -243,7 +243,7 @@ export function AdminFreeAgents() {
               {pendingReqs.length}
             </span>
           </div>
-          <div className="divide-y divide-border-subtle/20">
+          <div className="divide-y divide-border-subtle">
             {pendingReqs.map(r => (
               <div key={r.id} className="flex items-center gap-2 px-3 py-2">
                 <span className="text-[11px] font-bold font-mono text-text-secondary shrink-0 w-12 truncate" title={teamName(r.teamId)}>
@@ -407,7 +407,7 @@ export function AdminFreeAgents() {
                 By team
               </div>
               {teamGroups.map(t => (
-                <div key={t.id} className="rounded border border-border-subtle/40">
+                <div key={t.id} className="rounded border border-border-subtle">
                   <div
                     className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-2"
                     style={{ color: t.teamColor }}

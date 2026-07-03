@@ -124,7 +124,7 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
             {/* Category header row */}
             <button
               onClick={() => toggleCategory(category.id)}
-              className="w-full min-w-max flex items-center px-3 py-1.5 bg-surface-overlay/40 hover:bg-surface-overlay/60 transition-colors text-left border-b border-border-subtle/50"
+              className="w-full min-w-max flex items-center px-3 py-1.5 bg-surface-overlay/40 hover:bg-surface-overlay/60 transition-colors text-left border-b border-border-subtle"
             >
               {/* Keep the category label + counts pinned left on horizontal scroll */}
               <span className="sticky left-3 z-10 flex items-center gap-2">
@@ -155,7 +155,7 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                 <div
                   key={entry.moveId}
                   className={cn(
-                    'flex items-center border-b border-border-subtle/20 min-w-max',
+                    'flex items-center border-b border-border-subtle min-w-max',
                     rowIdx % 2 === 0 ? 'bg-transparent' : 'bg-surface-overlay/[0.04]',
                     'hover:bg-surface-overlay/10 transition-colors',
                   )}
@@ -188,7 +188,7 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                           className={cn(
                             colW,
                             'flex justify-center items-center py-[5px]',
-                            i < teamA.length - 1 && 'border-r border-border-subtle/10',
+                            i < teamA.length - 1 && 'border-r border-border-subtle',
                             has && 'bg-[#3b82f6]/[0.07]',
                           )}
                         >
@@ -218,7 +218,7 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
                           className={cn(
                             colW,
                             'flex justify-center items-center py-[5px]',
-                            i < teamB.length - 1 && 'border-r border-border-subtle/10',
+                            i < teamB.length - 1 && 'border-r border-border-subtle',
                             has && 'bg-[#ef4444]/[0.07]',
                           )}
                         >

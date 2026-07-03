@@ -185,7 +185,7 @@ export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilder
           value={pasteText}
           onChange={e => setPasteText(e.target.value)}
           placeholder="Paste Showdown / PokePaste team export here..."
-          className="w-full h-20 rounded-md bg-surface text-xs font-mono border border-border-subtle px-2.5 py-2 resize-none focus:outline-none focus:border-neon/40 placeholder:text-text-muted/50"
+          className="w-full h-20 rounded-md bg-surface text-xs font-mono border border-border-subtle px-2.5 py-2 resize-none focus:outline-none focus:border-neon/40 placeholder:text-text-muted"
         />
         <button
           onClick={handlePasteImport}

@@ -102,7 +102,7 @@ export function NotificationRowView({
         </div>
       )}
       {source === 'announcement' && body && !expanded && (
-        <div className="mt-0.5 text-[10px] text-text-muted/60">Tap to expand</div>
+        <div className="mt-0.5 text-[10px] text-text-muted">Tap to expand</div>
       )}
     </>
   );
@@ -140,7 +140,7 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
         'px-3 py-2.5 transition-colors outline-none',
         (isClickable && hasLink) || item.source === 'announcement'
           ? 'cursor-pointer hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/40'
-          : 'hover:bg-surface-overlay/20',
+          : 'hover:bg-surface-overlay/50',
       )}
     >
       <NotificationRowView

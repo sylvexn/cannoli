@@ -119,7 +119,7 @@ export function RosterTable({
                 return (
                   <tr
                     key={`${originalIndex}-${mon.name}`}
-                    className={`group border-b border-border-subtle/50 transition-colors ${isSwapped ? 'bg-pink/5' : 'hover:bg-surface-overlay/40'}`}
+                    className={`group border-b border-border-subtle transition-colors ${isSwapped ? 'bg-pink/5' : 'hover:bg-surface-overlay/40'}`}
                   >
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
@@ -199,7 +199,7 @@ export function RosterTable({
                             <div className="text-[9px] font-mono text-text-muted text-right">BST {bst}</div>
                             {/* Abilities */}
                             {mon.abilities.length > 0 && (
-                              <div className="flex flex-wrap gap-0.5 mt-1.5 pt-1.5 border-t border-border-subtle/50">
+                              <div className="flex flex-wrap gap-0.5 mt-1.5 pt-1.5 border-t border-border-subtle">
                                 {mon.abilities.map(a => <AbilityChip key={a} name={a} />)}
                               </div>
                             )}

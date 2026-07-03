@@ -91,7 +91,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
               'px-2.5 py-1 transition-colors',
               mode === 'defensive'
                 ? 'bg-[#0d3320] text-[#4ade80] font-semibold'
-                : 'bg-transparent text-text-muted hover:text-text-primary hover:bg-surface-overlay/30',
+                : 'bg-transparent text-text-muted hover:text-text-primary hover:bg-surface-overlay/50',
             )}
           >
             Defensive
@@ -104,7 +104,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
               'px-2.5 py-1 transition-colors',
               mode === 'offensive'
                 ? 'bg-[#0a4a28] text-[#4ade80] font-semibold'
-                : 'bg-transparent text-text-muted hover:text-text-primary hover:bg-surface-overlay/30',
+                : 'bg-transparent text-text-muted hover:text-text-primary hover:bg-surface-overlay/50',
             )}
           >
             Offensive
@@ -191,7 +191,7 @@ function TypeGrid({
         <tbody>
           {chart.map(p => (
             <tr key={p.name} className="group/row">
-              <td className="sticky left-0 z-10 bg-surface-raised group-hover/row:bg-surface-overlay/40 px-1.5 py-[3px] border-b border-r border-border-subtle/30 transition-colors">
+              <td className="sticky left-0 z-10 bg-surface-raised group-hover/row:bg-surface-overlay/40 px-1.5 py-[3px] border-b border-r border-border-subtle transition-colors">
                 <Link
                   to={pokemonRoute(p.name)}
                   title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
@@ -208,7 +208,7 @@ function TypeGrid({
                   <td
                     key={type}
                     className={cn(
-                      'py-[3px] text-center font-mono font-bold text-[11px] border-b border-border-subtle/30',
+                      'py-[3px] text-center font-mono font-bold text-[11px] border-b border-border-subtle',
                       multColor(mult, mode),
                     )}
                   >

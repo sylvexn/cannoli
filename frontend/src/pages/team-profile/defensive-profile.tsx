@@ -88,7 +88,7 @@ export function DefSegment({ name, mult, pct, types }: { name: string; mult: num
       />
       <TooltipContent side="top" className="bg-surface-overlay border-border-default p-0 max-w-[260px]">
         {/* Header: sprite + name + mult + types */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border-subtle/30">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-border-subtle">
           <PokemonSprite name={name} size="xs" />
           <span className="text-[11px] text-text-primary font-medium">{name}</span>
           <MultChip mult={mult} />

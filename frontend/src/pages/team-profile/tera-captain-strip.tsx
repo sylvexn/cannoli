@@ -145,7 +145,7 @@ export function TeraCaptainStrip({
         )}
         {canEdit && !theorycraftMode && captainsLocked && teraEdits.length === 0 && (
           <span
-            className="text-[9px] uppercase tracking-wider text-text-muted/60 font-semibold"
+            className="text-[9px] uppercase tracking-wider text-text-muted font-semibold"
             title="Captains lock at draft end"
           >
             Locked
@@ -178,7 +178,7 @@ export function TeraCaptainStrip({
                   )}
                   <div className="text-[10px] text-text-muted">
                     {getTermCost(mon.tier)}pt
-                    <span className="text-text-muted/40 ml-1">(base {mon.tier})</span>
+                    <span className="text-text-muted ml-1">(base {mon.tier})</span>
                   </div>
                 </div>
 

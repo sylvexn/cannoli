@@ -428,7 +428,7 @@ function StandingsRow({
   return (
     <div
       className={cn(
-        'stagger-item row-interactive border-b border-border-subtle/50 last:border-b-0',
+        'stagger-item row-interactive border-b border-border-default last:border-b-0',
         isQualifyLine && 'border-b-neon/40 border-b-2',
         isMe && 'identity-glow-soft',
       )}
@@ -526,7 +526,7 @@ function StandingsRow({
         <div className="overflow-hidden">
           <div className="px-4 pb-4 pt-1 ml-9">
             {/* Stats + Point cap bar */}
-            <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle/20">
+            <div className="flex items-center gap-4 mb-3 pb-2 border-b border-border-subtle">
               <KDDisplay kills={totalKills} deaths={totalDeaths} className="text-xs" />
               <PointCapBar used={points} className="flex-1 max-w-[200px]" />
               {completedTrades.length > 0 && (
@@ -540,7 +540,7 @@ function StandingsRow({
             {/* Roster table */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-0">
               {player.roster.map(mon => (
-                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20 last:border-b-0 hover:bg-surface-overlay/30 rounded px-1 -mx-1 transition-colors">
+                <div key={mon.name} className="flex items-center gap-2 py-1.5 border-b border-border-subtle last:border-b-0 hover:bg-surface-overlay/50 rounded px-1 -mx-1 transition-colors">
                   <button type="button" onClick={() => openSideCard(mon.name)} className="shrink-0 cursor-pointer">
                     <PokemonSprite name={mon.name} size="xs" />
                   </button>
@@ -569,7 +569,7 @@ function StandingsRow({
 
             {/* Trade history */}
             {completedTrades.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-border-subtle/30">
+              <div className="mt-3 pt-2 border-t border-border-subtle">
                 <h4 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Transactions</h4>
                 <div className="space-y-1">
                   {completedTrades.map(trade => (

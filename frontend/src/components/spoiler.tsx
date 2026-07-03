@@ -86,7 +86,7 @@ export function Spoiler({
       {/* Reveal hint centered over the blur. */}
       <span
         aria-hidden
-        className="absolute inset-0 flex items-center justify-center text-text-muted/90"
+        className="absolute inset-0 flex items-center justify-center text-text-muted"
       >
         <Eye className="h-3.5 w-3.5" />
       </span>

@@ -125,7 +125,7 @@ export function MovepoolCard({ pokemonName, learnsetFormat = DEFAULT_FORMAT }: M
             )}
 
             {/* Full movepool — collapsible + searchable */}
-            <div className="border-t border-border-subtle/50 pt-2.5">
+            <div className="border-t border-border-subtle pt-2.5">
               <button
                 onClick={() => setFullOpen(o => !o)}
                 className="w-full flex items-center gap-2 text-left group"

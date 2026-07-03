@@ -356,7 +356,7 @@ export function SpeedTiersPage() {
                           ref={virtualizer.measureElement}
                           data-index={i}
                           className={cn(
-                            'group border-b border-border-subtle/50 transition-[background,opacity] hover:bg-surface-overlay/60',
+                            'group border-b border-border-subtle transition-[background,opacity] hover:bg-surface-overlay/60',
                             tied && 'bg-neon/[0.04]',
                             !matchesHighlight && 'opacity-40 hover:opacity-60',
                           )}

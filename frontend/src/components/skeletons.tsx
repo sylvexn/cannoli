@@ -5,7 +5,7 @@ import { LoadingSprite } from '@/components/loading-sprite';
 
 export function TableRowSkeleton({ cols = 5 }: { cols?: number }) {
   return (
-    <tr className="border-b border-border-subtle/50">
+    <tr className="border-b border-border-subtle">
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-3 py-2.5">
           <Skeleton className="h-4 w-full bg-surface-overlay/50" />
@@ -55,7 +55,7 @@ export function MatchCardSkeleton() {
 
 export function RosterRowSkeleton() {
   return (
-    <div className="flex items-center gap-2 py-1.5 border-b border-border-subtle/20">
+    <div className="flex items-center gap-2 py-1.5 border-b border-border-subtle">
       {/* Sprite */}
       <Skeleton className="h-6 w-6 rounded bg-surface-overlay/50 shrink-0" />
       {/* Name */}
@@ -89,7 +89,7 @@ export function StatsTableSkeleton({ rows = 10 }: { rows?: number }) {
             </thead>
             <tbody>
               {Array.from({ length: rows }).map((_, i) => (
-                <tr key={i} className="border-b border-border-subtle/50">
+                <tr key={i} className="border-b border-border-subtle">
                   <td className="px-3 py-2"><Skeleton className="h-4 w-4 mx-auto bg-surface-overlay/50" /></td>
                   <td className="py-2"><Skeleton className="h-6 w-6 rounded bg-surface-overlay/50" /></td>
                   <td className="px-2 py-2">
@@ -122,7 +122,7 @@ export function StandingsTableSkeleton({ rows = 10 }: { rows?: number }) {
       </CardHeader>
       <CardContent className="p-0">
         {Array.from({ length: rows }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border-subtle/50">
+          <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-border-subtle">
             {/* Rank */}
             <Skeleton className="h-5 w-5 rounded bg-surface-overlay/50 shrink-0" />
             {/* Team logo + name */}

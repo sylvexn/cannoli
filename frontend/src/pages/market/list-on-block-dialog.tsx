@@ -78,7 +78,7 @@ export function ListOnBlockDialog({
         </DialogHeader>
 
         {/* Selectable roster list */}
-        <div className="max-h-72 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle/40">
+        <div className="max-h-72 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
           {team.roster.map(mon => {
             const isListed = alreadyListed.has(mon.name);
             const isSelected = selected === mon.name;
