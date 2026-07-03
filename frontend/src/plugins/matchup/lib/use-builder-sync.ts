@@ -65,6 +65,9 @@ export function useBuilderSync(
       // while the teambuilder is empty or nothing resolved.
       if (mode === 'auto' && roster.length === 0) return
       onRosterRef.current(roster, { type: 'builder', label: builderSourceLabel(buildName) })
+      // Minimal debug marker: lets the verification harness observe syncs
+      // that don't change the visible roster (e.g. a move edit).
+      ;(window as unknown as { __cannoliMatchupLastSyncFp?: string }).__cannoliMatchupLastSyncFp = fp
     }
 
     void apply()
