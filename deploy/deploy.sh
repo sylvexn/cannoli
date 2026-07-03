@@ -78,7 +78,9 @@ deps=false; match '^(package\.json|bun\.lock)$' && deps=true
 backend=false;  { $deps || match '^backend/'; }  && backend=true
 frontend=false; { $deps || match '^frontend/'; } && frontend=true
 psserver=false; match '^(showdown/Dockerfile\.server|ps/)' && psserver=true
-psclient=false; match '^showdown/(Dockerfile\.client|nginx\.conf|ps-client-config\.js|ps-testclient-key\.js|cannoli-replay-embed\.html)' && psclient=true
+# The matchup plugin (frontend/src/plugins/matchup) is baked INTO the ps-client
+# image (Dockerfile.client runs build:plugin), so plugin changes must rebuild it.
+psclient=false; match '^(showdown/(Dockerfile\.client|nginx\.conf|ps-client-config\.js|ps-testclient-key\.js|cannoli-replay-embed\.html)|frontend/src/plugins/)' && psclient=true
 
 # ── 2. Build the ordered deploy plan ────────────────────────────────────────
 # Order = LIVE first (prod is the priority — git push should land on cannoli.live
