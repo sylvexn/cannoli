@@ -11,6 +11,7 @@ import { getMatchupColors } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { parseShowdownPaste } from '@/lib/showdown-paste';
+import { resolvePokemonByName } from '@/lib/pokemon-name-resolver';
 
 const FORMAT_LABELS: Record<CostFormat, string> = {
   natdexplus: 'NatDex+',
@@ -23,15 +24,11 @@ interface CustomTeamBuilderProps {
   onClose: () => void;
 }
 
-/** Look up a Pokemon by name from the API and convert to RosterPokemon */
+/** Resolve a (possibly Showdown-convention) species name to a Cannoli row
+ *  via the shared name resolver, converted to RosterPokemon */
 async function lookupPokemon(name: string): Promise<RosterPokemon | null> {
-  try {
-    const data = await api.getPokemonByName(name);
-    if (!data) return null;
-    return rosterMonFromPokemonRow(data);
-  } catch {
-    return null;
-  }
+  const data = await resolvePokemonByName(name, api.getPokemonByName);
+  return data ? rosterMonFromPokemonRow(data) : null;
 }
 
 export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilderProps) {

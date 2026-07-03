@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { resolvePokemonByName } from '@/lib/pokemon-name-resolver'
 import { parseShowdownPaste } from '@/lib/showdown-paste'
 import { rosterMonFromPokemonRow } from '@/lib/roster-from-api'
 import type { RosterPokemon } from '@/lib/types'
@@ -22,15 +23,11 @@ interface CustomTeamPanelProps {
   onClose: () => void
 }
 
-/** Look up a Pokemon by name from the API and convert to RosterPokemon. */
+/** Resolve a (possibly Showdown-convention) species name to a Cannoli row
+ *  via the shared name resolver, converted to RosterPokemon. */
 async function lookupPokemon(name: string): Promise<RosterPokemon | null> {
-  try {
-    const data = await pluginApi.getPokemonByName(name)
-    if (!data) return null
-    return rosterMonFromPokemonRow(data)
-  } catch {
-    return null
-  }
+  const data = await resolvePokemonByName(name, pluginApi.getPokemonByName)
+  return data ? rosterMonFromPokemonRow(data) : null
 }
 
 export function CustomTeamPanel({ side, onUse, onClose }: CustomTeamPanelProps) {

@@ -25,6 +25,7 @@
 // order — so any teambuilder edit re-syncs within one poll tick, not just
 // adds/removes.
 
+import { resolvePokemonByName } from '@/lib/pokemon-name-resolver'
 import { rosterMonFromPokemonRow } from '@/lib/roster-from-api'
 import type { RosterPokemon } from '@/lib/types'
 import { pluginApi } from './api-plugin'
@@ -151,10 +152,6 @@ export function subscribeToBuild(cb: () => void): () => void {
   }
 }
 
-/** species(lowercased) -> PRISTINE resolved mon (no build overlay). `null` =
- *  confirmed miss (API returned no row); network errors are NOT cached so a
- *  flaky fetch can retry. */
-const monCache = new Map<string, RosterPokemon | null>()
 const warnedMisses = new Set<string>()
 
 /** Overlay the ACTUAL build onto the API mon where it matters for analysis:
@@ -172,11 +169,14 @@ function overlayBuild(base: RosterPokemon, set: BuildSet): RosterPokemon {
 }
 
 /**
- * Resolve teambuilder sets to Cannoli RosterPokemon via
- * `GET /api/pokemon/:name` (exact-name match, same lookup the site's custom
- * team builder uses), then apply the per-set build overlay. Duplicate species
- * keep the FIRST set; unknown species are skipped, warned once per name, and
- * returned in `missing` for the UI's inline note.
+ * Resolve teambuilder sets to Cannoli RosterPokemon via the shared
+ * Showdown→Cannoli name resolver (lib/pokemon-name-resolver.ts — ordered
+ * candidate walk over `GET /api/pokemon/:name`, so Showdown species names
+ * like "Gardevoir-Mega" or bare "Urshifu" land on their DB rows), then apply
+ * the per-set build overlay. The resolver caches per-candidate hits AND
+ * misses (network errors stay retryable). Duplicate species keep the FIRST
+ * set; unknown species are skipped, warned once per name, and returned in
+ * `missing` for the UI's inline note.
  */
 export async function resolveToRoster(
   sets: BuildSet[],
@@ -191,20 +191,9 @@ export async function resolveToRoster(
 
   const results = await Promise.all(
     distinct.map(async set => {
-      const key = set.species.toLowerCase()
-      if (monCache.has(key)) {
-        const base = monCache.get(key) ?? null
-        return { name: set.species, mon: base ? overlayBuild(base, set) : null }
-      }
-      try {
-        const row = await pluginApi.getPokemonByName(set.species)
-        const base = row ? rosterMonFromPokemonRow(row) : null
-        monCache.set(key, base)
-        return { name: set.species, mon: base ? overlayBuild(base, set) : null }
-      } catch {
-        // Network/API failure — treat as missing for this pass, don't cache.
-        return { name: set.species, mon: null }
-      }
+      const row = await resolvePokemonByName(set.species, pluginApi.getPokemonByName)
+      const base = row ? rosterMonFromPokemonRow(row) : null
+      return { name: set.species, mon: base ? overlayBuild(base, set) : null }
     }),
   )
 
