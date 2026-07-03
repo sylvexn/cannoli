@@ -3,6 +3,19 @@ import { db, schema } from '../../db';
 import { eq, sql, asc } from 'drizzle-orm';
 import { getFormatCostMap, listCostFormats, DEFAULT_COST_FORMAT } from '../../lib/league-costs';
 
+/**
+ * Normalized Pokemon-name key: lowercase, diacritics stripped, all
+ * non-alphanumerics dropped. Must stay in sync with `normalizePokemonKey` in
+ * frontend/src/lib/pokemon-name-resolver.ts.
+ */
+function normalizePokemonKey(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
 export const pokemonRoutes = new Elysia()
 
   // ─── Pokemon reference data ──────────────────────────────────────────
@@ -19,10 +32,21 @@ export const pokemonRoutes = new Elysia()
     return q.limit(limit).offset(offset).all();
   })
 
+  // Exact-name match first; on miss, fall back to a normalized-key match so
+  // callers don't have to reproduce the DB's inconsistent punctuation
+  // ("Farfetchd-Galar" strips the apostrophe while "Sirfetch'd", "Mr. Mime"
+  // and "Type: Null" keep theirs; "Flabebe" drops its accents). Read-only —
+  // the 1195-row scan only runs on an exact miss. The frontend resolver
+  // (frontend/src/lib/pokemon-name-resolver.ts) mirrors this key.
   .get('/api/pokemon/:name', ({ params }) => {
-    return db.select().from(schema.pokemon)
+    const exact = db.select().from(schema.pokemon)
       .where(eq(schema.pokemon.name, params.name))
-      .get() || null;
+      .get();
+    if (exact) return exact;
+    const key = normalizePokemonKey(params.name);
+    if (!key) return null;
+    return db.select().from(schema.pokemon).all()
+      .find(p => normalizePokemonKey(p.name) === key) || null;
   })
 
   // ─── Move Categories ────────────────────────────────────────────────

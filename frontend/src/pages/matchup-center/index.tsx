@@ -15,8 +15,8 @@ import { MovesTab } from './tabs/moves-tab';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api, type ApiTeam } from '@/lib/api';
-import type { League, RosterPokemon } from '@/lib/types';
-import type { PokemonType } from '@/lib/pokemon';
+import { rosterFromApi } from '@/lib/roster-from-api';
+import type { League } from '@/lib/types';
 import {
   LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
 } from 'lucide-react';
@@ -319,18 +319,4 @@ function NoManagedTeamPanel() {
       </Button>
     </div>
   );
-}
-
-function rosterFromApi(roster: { name: string; types: string[]; tier: number; isTeraCaptain: boolean; teraTypes?: string[]; stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } | null; abilities: string[]; seasonStats: { kills: number; deaths: number; gp: number }; isShiny?: boolean }[]): RosterPokemon[] {
-  return roster.map(r => ({
-    name: r.name,
-    types: r.types as PokemonType[],
-    tier: r.tier,
-    isTeraCaptain: r.isTeraCaptain,
-    teraTypes: r.teraTypes as PokemonType[] | undefined,
-    stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-    abilities: r.abilities,
-    seasonStats: r.seasonStats,
-    isShiny: r.isShiny,
-  }));
 }

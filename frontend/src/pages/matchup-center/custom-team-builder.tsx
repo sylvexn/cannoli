@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { rosterMonFromPokemonRow } from '@/lib/roster-from-api';
 import type { RosterPokemon } from '@/lib/types';
-import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { X, ClipboardPaste, Plus, Search } from 'lucide-react';
@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import { getMatchupColors } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { parseShowdownPaste } from '@/lib/showdown-paste';
+import { resolvePokemonByName } from '@/lib/pokemon-name-resolver';
 
 const FORMAT_LABELS: Record<CostFormat, string> = {
   natdexplus: 'NatDex+',
@@ -22,56 +24,11 @@ interface CustomTeamBuilderProps {
   onClose: () => void;
 }
 
-/** Parse a Showdown/PokePaste team export into Pokemon names */
-function parseShowdownPaste(text: string): string[] {
-  const names: string[] = [];
-  const lines = text.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('-') || trimmed.startsWith('Ability:') ||
-        trimmed.startsWith('EVs:') || trimmed.startsWith('IVs:') ||
-        trimmed.startsWith('Level:') || trimmed.startsWith('Shiny:') ||
-        trimmed.startsWith('Tera Type:') || trimmed.startsWith('Happiness:') ||
-        /^\w+ Nature$/.test(trimmed)) continue;
-
-    // Pokemon line: "Nickname (Species) @ Item" or "Species @ Item" or just "Species"
-    let name = trimmed;
-    // Remove item
-    const atIdx = name.lastIndexOf(' @ ');
-    if (atIdx > 0) name = name.substring(0, atIdx);
-    // Remove gender
-    name = name.replace(/\s*\(M\)\s*$/, '').replace(/\s*\(F\)\s*$/, '');
-    // If has parentheses, extract species: "Nickname (Species)" → "Species"
-    const parenMatch = name.match(/\(([^)]+)\)/);
-    if (parenMatch) {
-      name = parenMatch[1].trim();
-    }
-    name = name.trim();
-    if (name && !name.includes(':') && !name.startsWith('=')) {
-      names.push(name);
-    }
-  }
-  return names;
-}
-
-/** Look up a Pokemon by name from the API and convert to RosterPokemon */
+/** Resolve a (possibly Showdown-convention) species name to a Cannoli row
+ *  via the shared name resolver, converted to RosterPokemon */
 async function lookupPokemon(name: string): Promise<RosterPokemon | null> {
-  try {
-    const data = await api.getPokemonByName(name);
-    if (!data) return null;
-    return {
-      name: data.name,
-      types: [data.type1.toLowerCase() as PokemonType, ...(data.type2 ? [data.type2.toLowerCase() as PokemonType] : [])] as PokemonType[],
-      tier: data.tier,
-      isTeraCaptain: false,
-      stats: { hp: data.hp, atk: data.atk, def: data.def, spa: data.spa, spd: data.spd, spe: data.spe },
-      abilities: [data.ability1, data.ability2, data.hiddenAbility].filter(Boolean) as string[],
-      seasonStats: { kills: 0, deaths: 0, gp: 0 },
-    };
-  } catch {
-    return null;
-  }
+  const data = await resolvePokemonByName(name, api.getPokemonByName);
+  return data ? rosterMonFromPokemonRow(data) : null;
 }
 
 export function CustomTeamBuilder({ side, onImport, onClose }: CustomTeamBuilderProps) {
