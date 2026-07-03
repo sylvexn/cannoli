@@ -35,6 +35,7 @@ interface PSRoom {
   remove(): void
   focus(): void
   blur(): void
+  hide(): void
 }
 
 /** The PS client's `Room` constructor (`window.Room`), Backbone-extendable. */
@@ -50,8 +51,14 @@ interface PSRoomClass {
  * in-progress slot can be `{}` with no species yet.
  */
 interface PSPokemonSet {
+  /** Nickname slot — falls back to the species name when unset. */
   name?: string
   species?: string
+  item?: string
+  ability?: string
+  moves?: string[]
+  level?: number
+  teraType?: string
 }
 
 /** A saved team row in `Storage.teams` (js/storage.js importTeam/packTeam). */
@@ -89,8 +96,16 @@ interface PSApp {
   roomList: PSRoom[]
   sideRoomList: PSRoom[]
   curRoom?: PSRoom | null
+  /** Intended right-panel room (client.js:1629). */
+  sideRoom?: PSRoom | null
+  /** Right-panel room currently shown, null when it doesn't fit. */
+  curSideRoom?: PSRoom | null
   user?: PSUser
   topbar: { updateTabbar(): void }
+  /** Two-panel layout pass (client.js:1821). */
+  updateLayout(): void
+  /** Pick the intended right-panel room (client.js:1940). */
+  updateSideRoom(id?: string): void
   /** `type` may be a shorthand string ('html' | 'battle' | 'chat') or a Room subclass. */
   addRoom(id: string, type?: string | PSRoomClass | null, nojoin?: boolean, title?: string): void
   focusRoom(id: string, focusTextbox?: boolean): boolean | void
