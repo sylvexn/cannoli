@@ -3,15 +3,47 @@ import { sitePokemonUrl } from '../lib/links'
 import { PokeSprite } from './sprite'
 import { TeraMark, TypeChips } from './type-chips'
 
+interface RosterRowProps {
+  pokemon: RosterPokemon
+  side: 'a' | 'b'
+  /** Sub-team state: row is part of the analyzed subset. */
+  selected?: boolean
+  /** Another row on this side is selected and this one is not. */
+  dimmed?: boolean
+  /** Toggle this mon in/out of the side's sub-team (dedicated dot — the
+   *  name link stays a plain link). */
+  onToggleSelect?: () => void
+}
+
 /**
- * One Overview roster row (mockup `.crow`): sprite · name (linked, tera
- * marker + tera chips for captains, nickname in italics) · type chips ·
- * tier badge · abilities line · base speed. The opponent side mirrors
- * horizontally via `.matchup-crow-b`.
+ * One Overview roster row (mockup `.crow`): sub-team toggle dot on the outer
+ * edge · sprite · name (linked, tera marker + tera chips for captains,
+ * nickname in italics) · type chips · tier badge · abilities line · base
+ * speed. The opponent side mirrors horizontally via `.matchup-crow-b`.
  */
-export function RosterRow({ pokemon, side }: { pokemon: RosterPokemon; side: 'a' | 'b' }) {
+export function RosterRow({ pokemon, side, selected, dimmed, onToggleSelect }: RosterRowProps) {
+  const classes = [
+    'matchup-crow',
+    side === 'b' && 'matchup-crow-b',
+    selected && 'matchup-crow-selected',
+    dimmed && 'matchup-crow-dim',
+  ].filter(Boolean).join(' ')
+
   return (
-    <div className={side === 'a' ? 'matchup-crow' : 'matchup-crow matchup-crow-b'}>
+    <div className={classes}>
+      {onToggleSelect && (
+        <button
+          type="button"
+          className={selected ? 'matchup-crow-sel matchup-crow-sel-on' : 'matchup-crow-sel'}
+          onClick={onToggleSelect}
+          aria-pressed={selected}
+          title={
+            selected
+              ? `Remove ${pokemon.name} from the analyzed sub-team`
+              : `Analyze only selected — add ${pokemon.name}`
+          }
+        />
+      )}
       <PokeSprite name={pokemon.name} shiny={pokemon.isShiny} />
       <div className="matchup-crow-info">
         <div className="matchup-crow-name">

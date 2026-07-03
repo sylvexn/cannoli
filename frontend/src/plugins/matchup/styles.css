@@ -619,6 +619,30 @@
   flex: none;
 }
 
+.matchup-col-h-reset {
+  font-family: var(--mu-mono);
+  font-size: 10px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.matchup-col-h-reset:hover { color: var(--mu-ink); }
+
+.matchup-col-subnote {
+  font-family: var(--mu-mono);
+  font-size: 9.5px;
+  color: var(--mu-faint);
+  margin: -4px 0 2px;
+}
+
+.matchup-col-b .matchup-col-subnote { text-align: right; }
+
 /* roster rows */
 
 .matchup-crow {
@@ -635,6 +659,52 @@
   flex-direction: row-reverse;
   text-align: right;
 }
+
+/* sub-team toggle dot — sits on the row's outer edge (row-reverse mirrors it
+   for the opponent side) */
+.matchup-crow-sel {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--mu-line);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel:hover {
+  border-color: var(--mu-you);
+}
+
+.matchup-crow-b .matchup-crow-sel:hover {
+  border-color: var(--mu-opp);
+}
+
+.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel-on {
+  background: var(--mu-you);
+  border-color: var(--mu-you);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--mu-you) 60%, transparent);
+}
+
+.matchup-crow-b .matchup-crow-sel-on {
+  background: var(--mu-opp);
+  border-color: var(--mu-opp);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--mu-opp) 60%, transparent);
+}
+
+.matchup-crow:not(.matchup-crow-b).matchup-crow-selected {
+  border-color: color-mix(in srgb, var(--mu-you) 55%, transparent);
+  background: color-mix(in srgb, var(--mu-you) 6%, var(--mu-panel));
+}
+
+.matchup-crow-b.matchup-crow-selected {
+  border-color: color-mix(in srgb, var(--mu-opp) 55%, transparent);
+  background: color-mix(in srgb, var(--mu-opp) 6%, var(--mu-panel));
+}
+
+.matchup-crow-dim { opacity: 0.45; }
+.matchup-crow-dim:hover { opacity: 0.8; }
 
 .matchup-crow-info {
   min-width: 0;

@@ -8,8 +8,17 @@ import { sitePokemonUrl, siteTeamUrl } from '../lib/links'
 import { computeSummary, type MatchupSummary } from '../lib/summary'
 
 interface OverviewTabProps {
+  /** Full rosters — the selection UI needs every row visible. */
   teamA: RosterPokemon[]
   teamB: RosterPokemon[]
+  /** Sub-team-narrowed rosters — drive the ladder + summary, matching what
+   *  the analysis tabs compute on. */
+  activeTeamA: RosterPokemon[]
+  activeTeamB: RosterPokemon[]
+  subTeamA: Set<string>
+  subTeamB: Set<string>
+  onToggleSub: (side: 'a' | 'b', name: string) => void
+  onResetSubs: () => void
   sourceA: TeamSource | null
   sourceB: TeamSource | null
 }
@@ -18,32 +27,40 @@ interface OverviewTabProps {
  * Overview: your roster (left, blue) · speed ladder (center) · opponent
  * roster (right, red), plus the computed summary bar when both sides are
  * populated. Same semantics as the site's overview tab, mockup layout.
+ * Each row carries a sub-team toggle dot; with a selection active the ladder,
+ * summary, and every analysis tab narrow to the selected mons.
  */
-export function OverviewTab({ teamA, teamB, sourceA, sourceB }: OverviewTabProps) {
-  const summary = useMemo(() => computeSummary(teamA, teamB), [teamA, teamB])
+export function OverviewTab({
+  teamA, teamB, activeTeamA, activeTeamB,
+  subTeamA, subTeamB, onToggleSub, onResetSubs,
+  sourceA, sourceB,
+}: OverviewTabProps) {
+  const summary = useMemo(() => computeSummary(activeTeamA, activeTeamB), [activeTeamA, activeTeamB])
 
   return (
     <div className="matchup-overview">
       <div className="matchup-cmp">
-        <div className="matchup-col matchup-col-a">
-          <ColHead source={sourceA} fallback="Your team" count={teamA.length} />
-          {teamA.length === 0 ? (
-            <EmptySide side="a" source={sourceA} />
-          ) : (
-            teamA.map(p => <RosterRow key={p.name} pokemon={p} side="a" />)
-          )}
-        </div>
+        <RosterColumn
+          side="a"
+          team={teamA}
+          subTeam={subTeamA}
+          source={sourceA}
+          fallback="Your team"
+          onToggle={name => onToggleSub('a', name)}
+          onReset={onResetSubs}
+        />
 
-        <SpeedLadder teamA={teamA} teamB={teamB} />
+        <SpeedLadder teamA={activeTeamA} teamB={activeTeamB} />
 
-        <div className="matchup-col matchup-col-b">
-          <ColHead source={sourceB} fallback="Opponent" count={teamB.length} />
-          {teamB.length === 0 ? (
-            <EmptySide side="b" source={sourceB} />
-          ) : (
-            teamB.map(p => <RosterRow key={p.name} pokemon={p} side="b" />)
-          )}
-        </div>
+        <RosterColumn
+          side="b"
+          team={teamB}
+          subTeam={subTeamB}
+          source={sourceB}
+          fallback="Opponent"
+          onToggle={name => onToggleSub('b', name)}
+          onReset={onResetSubs}
+        />
       </div>
 
       {summary && <SummaryFoot summary={summary} />}
@@ -51,7 +68,57 @@ export function OverviewTab({ teamA, teamB, sourceA, sourceB }: OverviewTabProps
   )
 }
 
-function ColHead({ source, fallback, count }: { source: TeamSource | null; fallback: string; count: number }) {
+function RosterColumn({
+  side, team, subTeam, source, fallback, onToggle, onReset,
+}: {
+  side: 'a' | 'b'
+  team: RosterPokemon[]
+  subTeam: Set<string>
+  source: TeamSource | null
+  fallback: string
+  onToggle: (name: string) => void
+  onReset: () => void
+}) {
+  const hasSub = subTeam.size > 0
+  return (
+    <div className={side === 'a' ? 'matchup-col matchup-col-a' : 'matchup-col matchup-col-b'}>
+      <ColHead
+        source={source}
+        fallback={fallback}
+        count={team.length}
+        subCount={subTeam.size}
+        onReset={onReset}
+      />
+      {hasSub && (
+        <div className="matchup-col-subnote">analyzing {subTeam.size}/{team.length}</div>
+      )}
+      {team.length === 0 ? (
+        <EmptySide side={side} source={source} />
+      ) : (
+        team.map(p => (
+          <RosterRow
+            key={p.name}
+            pokemon={p}
+            side={side}
+            selected={subTeam.has(p.name)}
+            dimmed={hasSub && !subTeam.has(p.name)}
+            onToggleSelect={() => onToggle(p.name)}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+function ColHead({
+  source, fallback, count, subCount, onReset,
+}: {
+  source: TeamSource | null
+  fallback: string
+  count: number
+  subCount: number
+  onReset: () => void
+}) {
   const label = source?.label ?? fallback
   return (
     <div className="matchup-col-h">
@@ -62,7 +129,16 @@ function ColHead({ source, fallback, count }: { source: TeamSource | null; fallb
       ) : (
         <span>{label}</span>
       )}
-      <span className="matchup-col-h-count">{count} mons</span>
+      {subCount > 0 ? (
+        <span className="matchup-col-h-count">
+          {subCount} selected ·{' '}
+          <button type="button" className="matchup-col-h-reset" onClick={onReset}>
+            Reset
+          </button>
+        </span>
+      ) : (
+        <span className="matchup-col-h-count">{count} mons</span>
+      )}
     </div>
   )
 }

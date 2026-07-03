@@ -107,8 +107,16 @@ function MatchupRoomInner() {
       <div className="matchup-body">
         {state.activeTab === 'overview' ? (
           <OverviewTab
-            teamA={activeTeamA}
-            teamB={activeTeamB}
+            teamA={state.teamA}
+            teamB={state.teamB}
+            activeTeamA={activeTeamA}
+            activeTeamB={activeTeamB}
+            subTeamA={state.subTeamA}
+            subTeamB={state.subTeamB}
+            onToggleSub={(side, name) =>
+              dispatch({ type: side === 'a' ? 'TOGGLE_SUB_A' : 'TOGGLE_SUB_B', name })
+            }
+            onResetSubs={() => dispatch({ type: 'RESET_SUB_TEAMS' })}
             sourceA={state.teamASource}
             sourceB={state.teamBSource}
           />
