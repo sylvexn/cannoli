@@ -88,7 +88,7 @@ function MatchupRoomInner() {
               </span>
             ) : (
               <span className="matchup-sync-hint">
-                Open a team in the teambuilder to sync your build
+                Waiting for a team to be selected in the teambuilder&hellip;
               </span>
             ))}
           <span className="matchup-vs">VS</span>

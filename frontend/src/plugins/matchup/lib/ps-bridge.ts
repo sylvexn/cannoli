@@ -13,23 +13,43 @@
 // - `app.user.on('saveteams')` — fired by the client on team save / delete /
 //   back / blur (js/client-teambuilder.js:42,120,783,803,1037). Catches every
 //   committed edit immediately.
-// - a light 1s poll of a cheap fingerprint (team name + species list), gated
-//   to ticks where the Matchup room is the focused room — the teambuilder
-//   only fires 'saveteams' on blur/save, so edits made mid-session are picked
-//   up the moment the user flips over to the Matchup tab.
+// - a continuous ~600ms poll that runs whenever the Matchup room EXISTS and
+//   the document is visible — the whole point of the side-by-side layout is
+//   editing in the teambuilder while the Matchup pane watches, so the poll
+//   must not depend on the Matchup room having focus. `document.hidden`
+//   pauses it (no background-tab work); a visibilitychange listener re-checks
+//   immediately on return.
+//
+// The change FINGERPRINT covers the entire build — species, chosen ability,
+// item, moves, teraType, level, nickname per set, plus team name and set
+// order — so any teambuilder edit re-syncs within one poll tick, not just
+// adds/removes.
 
 import { rosterMonFromPokemonRow } from '@/lib/roster-from-api'
 import type { RosterPokemon } from '@/lib/types'
 import { pluginApi } from './api-plugin'
 
 const MATCHUP_ROOM_ID = 'view-matchup'
-const POLL_MS = 1000
+const POLL_MS = 600
+
+/** One teambuilder set, normalized down to the fields the pane analyses. */
+export interface BuildSet {
+  /** Species display name ("Great Tusk", "Rotom-Wash"). */
+  species: string
+  /** Nickname when it differs from the species name, else null. */
+  nickname: string | null
+  ability: string | null
+  item: string | null
+  moves: string[]
+  teraType: string | null
+  level: number | null
+}
 
 export interface CurrentBuild {
   /** Team name from the teambuilder, null when unnamed. */
   name: string | null
-  /** Distinct species display names, teambuilder order, empty slots skipped. */
-  species: string[]
+  /** All non-empty sets, teambuilder order (duplicates preserved). */
+  sets: BuildSet[]
 }
 
 /** The PS client shadows the DOM `Storage` constructor with its own plain
@@ -47,30 +67,53 @@ export function getCurrentBuild(): CurrentBuild | null {
   const setList = tb?.curSetList ?? psStorage()?.activeSetList ?? null
   if (!setList) return null
 
-  const seen = new Set<string>()
-  const species: string[] = []
+  const sets: BuildSet[] = []
   for (const set of setList) {
-    const s = (set?.species || set?.name || '').trim()
-    if (!s) continue // in-progress empty slot
-    const key = s.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    species.push(s)
+    const species = (set?.species || set?.name || '').trim()
+    if (!species) continue // in-progress empty slot
+    const nick = (set?.name ?? '').trim()
+    sets.push({
+      species,
+      nickname: nick && nick !== species ? nick : null,
+      ability: (set?.ability ?? '').trim() || null,
+      item: (set?.item ?? '').trim() || null,
+      moves: (set?.moves ?? []).filter(Boolean),
+      teraType: (set?.teraType ?? '').trim() || null,
+      level: typeof set?.level === 'number' ? set.level : null,
+    })
   }
   const name = (tb?.curTeam?.name ?? '').trim() || null
-  return { name, species }
+  return { name, sets }
 }
 
-/** Cheap change fingerprint: team name + joined species list. */
+/** Whole-build change fingerprint: team name + per-set species/ability/item/
+ *  moves/teraType/level/nickname, order-sensitive. '' = no team open. */
 export function buildFingerprint(build: CurrentBuild | null): string {
-  return build ? `${build.name ?? ''}|${build.species.join(',')}` : ''
+  if (!build) return ''
+  const sets = build.sets
+    .map(
+      s =>
+        `${s.species}^${s.ability ?? ''}^${s.item ?? ''}^${s.moves.join('~')}^${
+          s.teraType ?? ''
+        }^${s.level ?? ''}^${s.nickname ?? ''}`,
+    )
+    .join(';')
+  return `${build.name ?? ''}||${sets}`
+}
+
+/** Executed (non-gated) poll ticks — read by the Playwright verification
+ *  harness to assert the poll pauses while document.hidden. */
+let pollTicks = 0
+function bumpPollDebug() {
+  pollTicks++
+  ;(window as unknown as { __cannoliMatchupPolls?: number }).__cannoliMatchupPolls = pollTicks
 }
 
 /**
  * Notify `cb` whenever the current build (may have) changed. Fingerprint-
  * deduped, so `cb` only fires on real changes. Returns an unsubscribe that
- * clears both the 'saveteams' listener and the poll interval — call it on
- * room destroy / effect cleanup.
+ * clears the 'saveteams' listener, the poll interval, and the visibility
+ * listener — call it on room destroy / effect cleanup.
  */
 export function subscribeToBuild(cb: () => void): () => void {
   const user = window.app?.user
@@ -84,46 +127,83 @@ export function subscribeToBuild(cb: () => void): () => void {
     cb()
   }
 
-  user?.on('saveteams', check, ctx)
-  const timer = window.setInterval(() => {
-    // Poll only while the Matchup room is focused — per-keystroke freshness
-    // for the teambuilder -> matchup flow without permanent background work.
-    if (window.app?.curRoom?.id !== MATCHUP_ROOM_ID) return
+  const tick = () => {
+    // Poll while the Matchup room exists and the tab is visible — edits made
+    // with the TEAMBUILDER focused (the side-by-side flow) propagate within
+    // one tick; hidden tabs do no work.
+    if (document.visibilityState === 'hidden') return
+    if (!window.app?.rooms?.[MATCHUP_ROOM_ID]) return
+    bumpPollDebug()
     check()
-  }, POLL_MS)
+  }
+
+  user?.on('saveteams', check, ctx)
+  const timer = window.setInterval(tick, POLL_MS)
+  const onVisibility = () => {
+    if (document.visibilityState === 'visible') tick()
+  }
+  document.addEventListener('visibilitychange', onVisibility)
 
   return () => {
     window.clearInterval(timer)
+    document.removeEventListener('visibilitychange', onVisibility)
     user?.off('saveteams', check, ctx)
   }
 }
 
-/** name(lowercased) -> resolved mon. `null` = confirmed miss (API returned
- *  no row); network errors are NOT cached so a flaky fetch can retry. */
+/** species(lowercased) -> PRISTINE resolved mon (no build overlay). `null` =
+ *  confirmed miss (API returned no row); network errors are NOT cached so a
+ *  flaky fetch can retry. */
 const monCache = new Map<string, RosterPokemon | null>()
 const warnedMisses = new Set<string>()
 
+/** Overlay the ACTUAL build onto the API mon where it matters for analysis:
+ *  the set's chosen ability goes first in `abilities` (falling back to the
+ *  full API list when the set has none) so the Type Chart's `abilities[0]`
+ *  override tracks the real build. Applied per-sync to a clone — the cache
+ *  keeps pristine rows, so set-detail edits never require a refetch.
+ *  Deliberately does NOT mark builder mons as tera captains: a paste-level
+ *  teraType carries no captain semantics. */
+function overlayBuild(base: RosterPokemon, set: BuildSet): RosterPokemon {
+  if (!set.ability) return base
+  const chosen = set.ability
+  const rest = base.abilities.filter(a => a.toLowerCase() !== chosen.toLowerCase())
+  return { ...base, abilities: [chosen, ...rest] }
+}
+
 /**
- * Resolve teambuilder species names to Cannoli RosterPokemon via
+ * Resolve teambuilder sets to Cannoli RosterPokemon via
  * `GET /api/pokemon/:name` (exact-name match, same lookup the site's custom
- * team builder uses). Unknown species are skipped, warned once per name, and
+ * team builder uses), then apply the per-set build overlay. Duplicate species
+ * keep the FIRST set; unknown species are skipped, warned once per name, and
  * returned in `missing` for the UI's inline note.
  */
 export async function resolveToRoster(
-  species: string[],
+  sets: BuildSet[],
 ): Promise<{ roster: RosterPokemon[]; missing: string[] }> {
+  const seen = new Set<string>()
+  const distinct = sets.filter(s => {
+    const key = s.species.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
   const results = await Promise.all(
-    species.map(async name => {
-      const key = name.toLowerCase()
-      if (monCache.has(key)) return { name, mon: monCache.get(key) ?? null }
+    distinct.map(async set => {
+      const key = set.species.toLowerCase()
+      if (monCache.has(key)) {
+        const base = monCache.get(key) ?? null
+        return { name: set.species, mon: base ? overlayBuild(base, set) : null }
+      }
       try {
-        const row = await pluginApi.getPokemonByName(name)
-        const mon = row ? rosterMonFromPokemonRow(row) : null
-        monCache.set(key, mon)
-        return { name, mon }
+        const row = await pluginApi.getPokemonByName(set.species)
+        const base = row ? rosterMonFromPokemonRow(row) : null
+        monCache.set(key, base)
+        return { name: set.species, mon: base ? overlayBuild(base, set) : null }
       } catch {
         // Network/API failure — treat as missing for this pass, don't cache.
-        return { name, mon: null }
+        return { name: set.species, mon: null }
       }
     }),
   )

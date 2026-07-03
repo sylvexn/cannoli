@@ -4,7 +4,7 @@
 // Modes (derived from the current TeamSource by MatchupRoom):
 // - 'active' — source is 'builder': every build change dispatches a fresh
 //   roster (including an EMPTY one when the teambuilder has no open team, so
-//   the panel can show the "open a team to sync" hint).
+//   the panel can show the "waiting for a team" hint).
 // - 'auto'   — nothing selected yet: silently watch the teambuilder and adopt
 //   the build as soon as it has >=1 resolvable mon. This is the plugin's
 //   auto-default for side A (replaces the site's userId-based auto-populate).
@@ -52,14 +52,14 @@ export function useBuilderSync(
       const fp = buildFingerprint(build)
       if (fp === lastAppliedFp) return
 
-      const species = build?.species ?? []
-      const { roster, missing } = await resolveToRoster(species)
+      const sets = build?.sets ?? []
+      const { roster, missing } = await resolveToRoster(sets)
       // A newer apply superseded this one (build changed mid-resolve) — drop.
       if (disposed || token !== applyToken) return
       lastAppliedFp = fp
 
       const buildName = build?.name ?? null
-      setSnap({ hasBuild: species.length > 0, buildName, missing })
+      setSnap({ hasBuild: sets.length > 0, buildName, missing })
 
       // Auto mode only ADOPTS a real build; it never clears/claims side A
       // while the teambuilder is empty or nothing resolved.

@@ -109,8 +109,8 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
             >
               <span className="matchup-menu-item-name">Your build (teambuilder)</span>
               <span className="matchup-menu-tag">
-                {build && build.species.length > 0
-                  ? `${build.species.length} mon${build.species.length === 1 ? '' : 's'}`
+                {build && build.sets.length > 0
+                  ? `${build.sets.length} mon${build.sets.length === 1 ? '' : 's'}`
                   : 'sync'}
               </span>
             </button>
