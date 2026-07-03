@@ -151,6 +151,19 @@ RUN sed -i \
     && grep -q '/showdex/main.js' play.pokemonshowdown.com/testclient.html \
     && grep -q 'family=Work+Sans' play.pokemonshowdown.com/testclient.html
 
+# Cannoli Matchup Center plugin injection. The standalone bundle is deployed
+# to /cannoli-matchup/ in the final image (built in the `matchup` stage below).
+# Same deferred-load pattern as the Showdex block above: poll for window.app,
+# then append the script. Unlike Showdex this is an ES MODULE (type="module") —
+# it lazy-loads its ~1.2MB learnsets chunk from /cannoli-matchup/chunks/ only
+# when the Moves tab first opens, so the client boot cost stays small. The
+# grep-guard fails the build if the anchor wasn't matched, so we never silently
+# ship the client without the Matchup tab.
+RUN sed -i \
+        's#</body>#<script>(function(){function go(){var s=document.createElement("script");s.type="module";s.src="/cannoli-matchup/matchup.js";document.body.appendChild(s);}var n=0,t=setInterval(function(){if(window.app||n++>200){clearInterval(t);go();}},50);})();</script></body>#' \
+        play.pokemonshowdown.com/testclient.html \
+    && grep -q '/cannoli-matchup/matchup.js' play.pokemonshowdown.com/testclient.html
+
 # Fail the build (rather than ship a broken client) if the entrypoint HTML the
 # nginx `index` directive serves wasn't produced — that's the symptom of the
 # php-less build silently dropping testclient.html.
@@ -221,6 +234,38 @@ RUN pnpm build:standalone:fast
 RUN test -f dist/standalone/main.js \
     || (echo "FATAL: showdex standalone build emitted no main.js (compile errors swallowed by scripts/build.js)" && exit 1)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Cannoli Matchup Center plugin (standalone build).
+#
+# The Showdown-native Matchup Center tab (frontend/src/plugins/matchup/) — a
+# `view-matchup` client room registered beside Showdex's Hellodex. Built from
+# the cannoli frontend workspace with its standalone vite config
+# (frontend/vite.plugin.config.ts → dist-plugin/: matchup.js entry + lazy
+# chunks). Deployed to /cannoli-matchup/ and injected into testclient.html in
+# the build stage above. Mirrors frontend/Dockerfile's workspace install
+# (manifests first for layer caching); vite build only, no tsc (typecheck is a
+# CI gate, not an image-build job — same rationale as the frontend image).
+FROM oven/bun:1 AS matchup
+WORKDIR /cannoli
+
+COPY package.json bun.lock ./
+COPY frontend/package.json frontend/package.json
+COPY backend/package.json backend/package.json
+RUN bun install --frozen-lockfile
+
+COPY frontend/ frontend/
+
+# Absolute Cannoli API origin baked into the bundle (the sim origin has no
+# /api proxy). Override at build time to point a mock-era client at
+# https://mock.cannoli.live; a page-level `window.CANNOLI_MATCHUP_API_BASE`
+# (set before the module loads) can still repoint it at runtime.
+ARG MATCHUP_API_BASE=https://cannoli.live
+RUN cd frontend && VITE_MATCHUP_API_BASE=${MATCHUP_API_BASE} bun run build:plugin
+# vite exits 0 on some config mistakes that emit nothing — fail HERE rather
+# than ship a client whose injected /cannoli-matchup/matchup.js 404s.
+RUN test -f frontend/dist-plugin/matchup.js \
+    || (echo "FATAL: matchup plugin build emitted no matchup.js" && exit 1)
+
 FROM nginx:alpine
 
 # Copy built client files
@@ -230,6 +275,11 @@ COPY --from=build /client/play.pokemonshowdown.com /usr/share/nginx/html
 # catch-all `location /` try_files serves these as static files; no routing
 # change needed. main.js is loaded by testclient.html (patched in the build stage).
 COPY --from=showdex /showdex/dist/standalone /usr/share/nginx/html/showdex
+
+# Cannoli Matchup Center plugin bundle → /cannoli-matchup/ (entry + lazy
+# chunks). Served the same static way; loaded by the module-script injection
+# patched into testclient.html in the build stage.
+COPY --from=matchup /cannoli/frontend/dist-plugin /usr/share/nginx/html/cannoli-matchup
 
 # Also copy upstream replay viewer (PHP — currently non-functional under
 # nginx-only, kept for static asset companions like /replay/style/).
