@@ -6,6 +6,7 @@ import { apiHost, type ApiLeague, type ApiTeam } from '../lib/api-plugin'
 import { getCurrentBuild } from '../lib/ps-bridge'
 import { builderSourceLabel } from '../lib/use-builder-sync'
 import { reloadLeagueTeams, useLeagueTeams } from '../lib/use-league-teams'
+import { CustomTeamPanel } from './custom-team'
 
 interface TeamPickerProps {
   side: 'a' | 'b'
@@ -24,6 +25,10 @@ interface TeamPickerProps {
 export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
   const state = useLeagueTeams()
   const [open, setOpen] = useState(false)
+  // "Custom team…" swaps the dropdown for the paste/search panel. It only
+  // closes explicitly (X / Use team / Escape) — never on outside click, so a
+  // stray click can't eat a half-built team.
+  const [customOpen, setCustomOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   // Snapshot the current teambuilder build when the menu opens (cheap read;
   // only drives the "n mons" tag on the builder entry).
@@ -69,7 +74,10 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
         className="matchup-picker-btn"
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          setCustomOpen(false)
+          setOpen(o => !o)
+        }}
       >
         <span className="matchup-picker-role">{role}</span>
         <span className={source ? 'matchup-picker-value' : 'matchup-picker-value matchup-picker-placeholder'}>
@@ -83,33 +91,49 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
       {open && (
         <div className="matchup-picker-menu" role="listbox">
           {side === 'a' && (
-            <>
-              <button
-                type="button"
-                role="option"
-                aria-selected={source?.type === 'builder'}
-                className={
-                  source?.type === 'builder'
-                    ? 'matchup-menu-item matchup-menu-item-active'
-                    : 'matchup-menu-item'
-                }
-                onClick={() => {
-                  // Hand side A to the teambuilder bridge; useBuilderSync
-                  // resolves the roster (or shows the "open a team" hint).
-                  onSelect([], { type: 'builder', label: builderSourceLabel(build?.name ?? null) })
-                  setOpen(false)
-                }}
-              >
-                <span className="matchup-menu-item-name">Your build (teambuilder)</span>
-                <span className="matchup-menu-tag">
-                  {build && build.species.length > 0
-                    ? `${build.species.length} mon${build.species.length === 1 ? '' : 's'}`
-                    : 'sync'}
-                </span>
-              </button>
-              <div className="matchup-menu-sep" />
-            </>
+            <button
+              type="button"
+              role="option"
+              aria-selected={source?.type === 'builder'}
+              className={
+                source?.type === 'builder'
+                  ? 'matchup-menu-item matchup-menu-item-active'
+                  : 'matchup-menu-item'
+              }
+              onClick={() => {
+                // Hand side A to the teambuilder bridge; useBuilderSync
+                // resolves the roster (or shows the "open a team" hint).
+                onSelect([], { type: 'builder', label: builderSourceLabel(build?.name ?? null) })
+                setOpen(false)
+              }}
+            >
+              <span className="matchup-menu-item-name">Your build (teambuilder)</span>
+              <span className="matchup-menu-tag">
+                {build && build.species.length > 0
+                  ? `${build.species.length} mon${build.species.length === 1 ? '' : 's'}`
+                  : 'sync'}
+              </span>
+            </button>
           )}
+
+          <button
+            type="button"
+            role="option"
+            aria-selected={source?.type === 'custom'}
+            className={
+              source?.type === 'custom'
+                ? 'matchup-menu-item matchup-menu-item-active'
+                : 'matchup-menu-item'
+            }
+            onClick={() => {
+              setOpen(false)
+              setCustomOpen(true)
+            }}
+          >
+            <span className="matchup-menu-item-name">Custom team&hellip;</span>
+            <span className="matchup-menu-tag">paste</span>
+          </button>
+          <div className="matchup-menu-sep" />
 
           {state.status === 'loading' && (
             <div className="matchup-menu-note">
@@ -152,6 +176,17 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
             )
           ))}
         </div>
+      )}
+
+      {customOpen && (
+        <CustomTeamPanel
+          side={side}
+          onUse={(roster, src) => {
+            onSelect(roster, src)
+            setCustomOpen(false)
+          }}
+          onClose={() => setCustomOpen(false)}
+        />
       )}
     </div>
   )
