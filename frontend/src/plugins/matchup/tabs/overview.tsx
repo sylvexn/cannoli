@@ -3,6 +3,7 @@ import type { RosterPokemon } from '@/lib/types'
 import type { PokemonType } from '@/lib/pokemon'
 import type { TeamSource } from '@/pages/matchup-center/use-matchup-state'
 import { RosterRow } from '../components/roster-row'
+import { SpeedLadder } from '../components/speed-ladder'
 import { sitePokemonUrl, siteTeamUrl } from '../lib/links'
 import { computeSummary, type MatchupSummary } from '../lib/summary'
 
@@ -19,15 +20,6 @@ interface OverviewTabProps {
  * populated. Same semantics as the site's overview tab, mockup layout.
  */
 export function OverviewTab({ teamA, teamB, sourceA, sourceB }: OverviewTabProps) {
-  const ladder = useMemo(
-    () =>
-      [
-        ...teamA.map(p => ({ p, side: 'a' as const })),
-        ...teamB.map(p => ({ p, side: 'b' as const })),
-      ].sort((x, y) => y.p.stats.spe - x.p.stats.spe),
-    [teamA, teamB],
-  )
-  const maxSpe = ladder.length > 0 ? ladder[0].p.stats.spe : 0
   const summary = useMemo(() => computeSummary(teamA, teamB), [teamA, teamB])
 
   return (
@@ -36,39 +28,18 @@ export function OverviewTab({ teamA, teamB, sourceA, sourceB }: OverviewTabProps
         <div className="matchup-col matchup-col-a">
           <ColHead source={sourceA} fallback="Your team" count={teamA.length} />
           {teamA.length === 0 ? (
-            <EmptySide side="a" />
+            <EmptySide side="a" source={sourceA} />
           ) : (
             teamA.map(p => <RosterRow key={p.name} pokemon={p} side="a" />)
           )}
         </div>
 
-        <div className="matchup-mid">
-          <div className="matchup-mid-h">Speed</div>
-          {ladder.length === 0 ? (
-            <div className="matchup-mid-hint">&mdash;</div>
-          ) : (
-            ladder.map(({ p, side }, i) => (
-              <div key={`${side}-${p.name}-${i}`} className="matchup-mrow" title={`${p.name} — ${p.stats.spe}`}>
-                {side === 'a' ? (
-                  <span className="matchup-mbar matchup-mbar-a" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
-                ) : (
-                  <span />
-                )}
-                <span className="matchup-tick">{p.stats.spe}</span>
-                {side === 'b' ? (
-                  <span className="matchup-mbar matchup-mbar-b" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
-                ) : (
-                  <span />
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <SpeedLadder teamA={teamA} teamB={teamB} />
 
         <div className="matchup-col matchup-col-b">
           <ColHead source={sourceB} fallback="Opponent" count={teamB.length} />
           {teamB.length === 0 ? (
-            <EmptySide side="b" />
+            <EmptySide side="b" source={sourceB} />
           ) : (
             teamB.map(p => <RosterRow key={p.name} pokemon={p} side="b" />)
           )}
@@ -78,12 +49,6 @@ export function OverviewTab({ teamA, teamB, sourceA, sourceB }: OverviewTabProps
       {summary && <SummaryFoot summary={summary} />}
     </div>
   )
-}
-
-function barWidth(spe: number, maxSpe: number): string {
-  if (maxSpe <= 0) return '0%'
-  // Fastest mon spans ~85% of its half-column (mockup scale), floor at 5%.
-  return `${Math.max(5, Math.round((spe / maxSpe) * 85))}%`
 }
 
 function ColHead({ source, fallback, count }: { source: TeamSource | null; fallback: string; count: number }) {
@@ -102,12 +67,17 @@ function ColHead({ source, fallback, count }: { source: TeamSource | null; fallb
   )
 }
 
-function EmptySide({ side }: { side: 'a' | 'b' }) {
+function EmptySide({ side, source }: { side: 'a' | 'b'; source: TeamSource | null }) {
+  const builderIdle = side === 'a' && source?.type === 'builder'
   return (
     <div className="matchup-empty">
-      <div className="matchup-empty-title">No team selected</div>
+      <div className="matchup-empty-title">
+        {builderIdle ? 'Waiting for your build' : 'No team selected'}
+      </div>
       <div className="matchup-empty-hint">
-        Pick a league team from the {side === 'a' ? 'You' : 'Opponent'} menu above.
+        {builderIdle
+          ? 'Open a team in the teambuilder to sync your build.'
+          : `Pick a league team from the ${side === 'a' ? 'You' : 'Opponent'} menu above.`}
       </div>
     </div>
   )
