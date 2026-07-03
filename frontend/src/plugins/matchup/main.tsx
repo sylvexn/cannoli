@@ -105,8 +105,10 @@ function getMatchupRoomClass(): PSRoomClass {
       // Fallback re-dock for non-click focus paths (keyboard room cycling):
       // restore side semantics so the next layout pass treats us as a side
       // room again. The capture-phase click listener handles the normal path
-      // BEFORE the client lays us out, so this rarely fires.
-      if (!this.isSideRoom) this.isSideRoom = true
+      // BEFORE the client lays us out, so this rarely fires. Guarded to the
+      // undocked state (still in sideRoomList) so a deliberate drag to the
+      // LEFT tab group (focusRoomLeft moves us into roomList) is respected.
+      if (!this.isSideRoom && window.app?.sideRoomList.includes(this)) this.isSideRoom = true
     },
     destroy(this: MatchupPSRoom) {
       this._matchupReactRoot?.unmount()
@@ -150,7 +152,10 @@ function installDockIntentListener() {
       const href = anchor.getAttribute('href') ?? ''
       if (!href.endsWith(ROOM_ID)) return
       const room = window.app?.rooms[ROOM_ID] as MatchupPSRoom | undefined
-      if (room?._isCannoliMatchup && !room.isSideRoom) room.isSideRoom = true
+      if (!room?._isCannoliMatchup || room.isSideRoom) return
+      // Undocked-close state only — a room the user dragged into the LEFT
+      // tab group (roomList) keeps its left placement.
+      if (window.app?.sideRoomList.includes(room)) room.isSideRoom = true
     },
     true,
   )
