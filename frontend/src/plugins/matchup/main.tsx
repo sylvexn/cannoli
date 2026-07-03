@@ -51,6 +51,10 @@ function getMatchupRoomClass(): PSRoomClass {
     type: 'html', // topbar renders the standard page-style tab for 'html'
     title: ROOM_TITLE,
     isSideRoom: false,
+    // Left-room width is capped at maxWidth || bestWidth (default 659);
+    // let the analysis panel grow when the viewport allows.
+    bestWidth: 659,
+    maxWidth: 1180,
     initialize(this: MatchupRoom) {
       this._isCannoliMatchup = true
       this.el.classList.add('cannoli-matchup-room')
