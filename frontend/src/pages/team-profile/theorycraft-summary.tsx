@@ -41,7 +41,7 @@ export function TheorycraftSummary({
   return createPortal(
     <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] pointer-events-auto">
       <div className="bg-surface-raised/95 backdrop-blur-md border border-pink/30 rounded-lg shadow-glow-lg overflow-hidden">
-        <div className="flex items-stretch gap-0 divide-x divide-border-subtle/40 text-[11px]">
+        <div className="flex items-stretch gap-0 divide-x divide-border-subtle text-[11px]">
           {/* Header */}
           <div className="flex items-center gap-2 px-3 py-2 bg-pink/5">
             <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-pink">

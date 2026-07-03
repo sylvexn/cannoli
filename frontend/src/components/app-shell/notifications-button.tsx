@@ -140,7 +140,7 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
         'px-3 py-2.5 transition-colors outline-none',
         (isClickable && hasLink) || item.source === 'announcement'
           ? 'cursor-pointer hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/40'
-          : 'hover:bg-surface-overlay/20',
+          : 'hover:bg-surface-overlay/50',
       )}
     >
       <NotificationRowView

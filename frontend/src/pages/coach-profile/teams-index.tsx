@@ -194,7 +194,7 @@ export function CoachTeamsIndexPage() {
       ) : (
         <div className="rounded-xl border border-border-default bg-surface-raised overflow-hidden">
           {/* Header row */}
-          <div className="grid grid-cols-[60px_1fr_120px_140px_28px] items-center gap-3 px-3 py-2 border-b border-border-subtle/60 text-[10px] font-mono uppercase tracking-wider text-text-muted">
+          <div className="grid grid-cols-[60px_1fr_120px_140px_28px] items-center gap-3 px-3 py-2 border-b border-border-subtle text-[10px] font-mono uppercase tracking-wider text-text-muted">
             <SortHeader label="Season" k="season" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortHeader label="Team" k="team" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortHeader label="League" k="league" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
@@ -213,7 +213,7 @@ export function CoachTeamsIndexPage() {
                       : `/archive/${t.seasonId}/${t.leagueId}/${t.teamId}`
                   }
                   viewTransition
-                  className="grid grid-cols-[60px_1fr_120px_140px_28px] items-center gap-3 px-3 py-2 border-b border-border-subtle/30 last:border-b-0 hover:bg-surface-overlay/40 transition-colors group"
+                  className="grid grid-cols-[60px_1fr_120px_140px_28px] items-center gap-3 px-3 py-2 border-b border-border-subtle last:border-b-0 hover:bg-surface-overlay/40 transition-colors group"
                 >
                   <span className="text-xs font-mono tabular-nums text-text-secondary">
                     S{t.seasonNumber || '—'}

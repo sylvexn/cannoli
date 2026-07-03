@@ -70,7 +70,7 @@ function StandingsRow({ team, rank }: { team: TeamRow; rank: number }) {
   const teamLink = `/archive/${seasonId}/${leagueId}/${team.id}`;
 
   return (
-    <div className="rounded-md hover:bg-surface-overlay/30 transition-colors">
+    <div className="rounded-md hover:bg-surface-overlay/50 transition-colors">
       <Link
         to={teamLink}
         className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem] sm:grid-cols-[2rem_1fr_4rem_4rem_4rem_4rem] gap-2 items-center px-2 py-2 text-xs"

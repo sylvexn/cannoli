@@ -112,7 +112,7 @@ export function DraftPoolTable({
               aria-disabled={blocked ? true : undefined}
               data-conflict={conflictKind ?? undefined}
               className={cn(
-                'transition-all duration-150 border-b border-border-subtle/50',
+                'transition-all duration-150 border-b border-border-subtle',
                 blocked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-surface-overlay/60',
                 isHighlighted && 'bg-surface-overlay/40 hover:bg-surface-overlay/60',
                 dimmed && 'opacity-30',

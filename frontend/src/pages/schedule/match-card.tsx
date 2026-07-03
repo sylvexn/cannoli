@@ -203,18 +203,18 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
       )}>
         <div className="overflow-hidden">
           {detailLoading && (
-            <div className="border-t border-border-subtle/50 px-4 py-6 flex items-center justify-center gap-2 text-xs text-text-muted">
+            <div className="border-t border-border-subtle px-4 py-6 flex items-center justify-center gap-2 text-xs text-text-muted">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading match detail…
             </div>
           )}
           {detailError && !detailLoading && (
-            <div className="border-t border-border-subtle/50 px-4 py-6 text-center text-xs text-text-muted">
+            <div className="border-t border-border-subtle px-4 py-6 text-center text-xs text-text-muted">
               No per-Pokemon detail available for this match.
             </div>
           )}
           {detail && !detailLoading && (
-            <div className="border-t border-border-subtle/50">
+            <div className="border-t border-border-subtle">
             <Spoiler
               as="div"
               matchId={match.id}
@@ -231,7 +231,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                   {homeWon && !winColorHidden && <span className="text-win text-[9px] ml-auto font-bold">W</span>}
                 </div>
                 <div
-                  className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 justify-end border-l border-border-subtle/30"
+                  className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 justify-end border-l border-border-subtle"
                   style={{ backgroundColor: `${awayPlayer.teamColor}15`, color: awayPlayer.teamColor }}
                 >
                   {awayWon && !winColorHidden && <span className="text-win text-[9px] mr-auto font-bold">W</span>}
@@ -266,7 +266,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               </div>
 
               {/* Summary footer */}
-              <div className="grid grid-cols-2 border-t border-border-subtle/30">
+              <div className="grid grid-cols-2 border-t border-border-subtle">
                 <TeamKDSummary entries={detail.home} teamColor={homePlayer.teamColor} />
                 <TeamKDSummary entries={detail.away} teamColor={awayPlayer.teamColor} alignRight />
               </div>
@@ -321,14 +321,14 @@ function PokemonKDColumn({
 }) {
   const { openSideCard } = usePokemonSideCard();
   return (
-    <div className={cn('divide-y divide-border-subtle/20', alignRight && 'border-l border-border-subtle/30')}>
+    <div className={cn('divide-y divide-border-subtle', alignRight && 'border-l border-border-subtle')}>
       {entries.map(entry => {
         const killWidth = maxKills > 0 ? (entry.kills / maxKills) * 100 : 0;
         return (
           <div
             key={entry.name}
             className={cn(
-              'relative flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-surface-overlay/30',
+              'relative flex items-center gap-2 px-3 py-1.5 transition-colors hover:bg-surface-overlay/50',
               alignRight && 'flex-row-reverse',
             )}
           >
@@ -394,7 +394,7 @@ function TeamKDSummary({
   return (
     <div className={cn(
       'px-3 py-1.5 flex items-center gap-2 text-[10px]',
-      alignRight && 'flex-row-reverse border-l border-border-subtle/30',
+      alignRight && 'flex-row-reverse border-l border-border-subtle',
     )}>
       <span className="tabular-nums font-medium" style={{ color: teamColor }}>
         {totalKills}K / {totalDeaths}D

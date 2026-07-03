@@ -384,7 +384,7 @@ function UnifiedTeamRow({
 
   return (
     <div className={cn(
-      'relative border-b border-border-subtle/60',
+      'relative border-b border-border-subtle',
       isUser && 'bg-gradient-to-r from-neon/[0.05] via-neon/[0.015] to-transparent',
       isDrafter && !isUser && 'bg-pink/5',
     )}>
@@ -400,7 +400,7 @@ function UnifiedTeamRow({
         onClick={forceExpand ? () => onSelect() : onSelect}
         className={cn(
           'w-full flex items-center gap-2 px-3 py-1.5 transition-colors text-left',
-          'hover:bg-surface-overlay/30',
+          'hover:bg-surface-overlay/50',
         )}
       >
         {showOnline && (

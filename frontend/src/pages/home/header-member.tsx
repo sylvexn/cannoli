@@ -36,7 +36,7 @@ export function HeaderMember({
       </Link>
 
       {leagues.length > 0 && (
-        <div className="basis-full flex flex-wrap items-center gap-1.5 pt-2 border-t border-border-subtle/50">
+        <div className="basis-full flex flex-wrap items-center gap-1.5 pt-2 border-t border-border-subtle">
           <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted shrink-0">
             Active
           </span>

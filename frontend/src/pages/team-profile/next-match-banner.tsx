@@ -36,7 +36,7 @@ export function NextMatchBanner({
 
   if (isBye) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle/40">
+      <div className="flex items-center gap-2 px-4 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle">
         <Calendar size={12} className="text-text-muted shrink-0" />
         <span className="text-xs text-text-muted">BYE — Week {cw}.</span>
         {nextMatch && (
@@ -74,7 +74,7 @@ export function NextMatchBanner({
       completed
         ? won ? 'bg-win/5 border-win/20'
           : lost ? 'bg-loss/5 border-loss/20'
-          : 'bg-surface-overlay/40 border-border-subtle/40'
+          : 'bg-surface-overlay/40 border-border-subtle'
         : 'bg-neon/5 border-neon/20',
     )}>
       <span className={cn('text-[9px] font-mono font-bold uppercase tracking-widest shrink-0', labelColor)}>

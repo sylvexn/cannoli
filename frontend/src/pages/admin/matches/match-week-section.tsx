@@ -79,7 +79,7 @@ export function MatchWeekSection({
       </CardHeader>
       {open && (
         <CardContent className="p-0">
-          <div className="divide-y divide-border-subtle/20">
+          <div className="divide-y divide-border-subtle">
             {matches.map(match => (
               <MatchRow
                 key={match.id}
@@ -131,7 +131,7 @@ function MatchRow({
       <div
         className={cn(
           'flex items-center gap-2.5 px-4 py-2 transition-colors cursor-pointer',
-          'hover:bg-surface-overlay/20',
+          'hover:bg-surface-overlay/50',
           hasWarnings && 'bg-loss/5',
         )}
         onClick={() => onToggleMatch(match.id)}

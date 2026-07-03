@@ -174,12 +174,12 @@ export function AdminUsers() {
       </div>
 
       {/* Compact user list */}
-      <div className="divide-y divide-border-subtle/30">
+      <div className="divide-y divide-border-subtle">
         {filtered.map((user: ApiAuthUser) => (
           <div
             key={user.id}
             className={cn(
-              'flex items-center gap-3 px-2 py-1.5 hover:bg-surface-overlay/20 transition-colors rounded',
+              'flex items-center gap-3 px-2 py-1.5 hover:bg-surface-overlay/50 transition-colors rounded',
               !user.active && 'opacity-40',
             )}
           >

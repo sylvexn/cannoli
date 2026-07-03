@@ -168,7 +168,7 @@ export function AdminBot() {
         ) : (
           <ul className="divide-y divide-border-subtle">
             {status.monitoredBattles.map(b => (
-              <li key={b.roomId} className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-surface-overlay/30 transition-colors">
+              <li key={b.roomId} className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-surface-overlay/50 transition-colors">
                 <span className="font-mono text-text-secondary truncate max-w-[280px]">{b.roomId}</span>
                 <span className="text-text-muted">·</span>
                 <span className="text-text-primary truncate flex-1">

@@ -322,7 +322,7 @@ function Toc({ sections, accent }: { sections: SectionDef[]; accent?: string }) 
               'flex items-center gap-2 rounded px-2 py-1 text-xs whitespace-nowrap transition-colors border-l-2',
               active
                 ? 'bg-surface-overlay/60 text-text-primary'
-                : 'border-transparent text-text-muted hover:text-text-secondary hover:bg-surface-overlay/30',
+                : 'border-transparent text-text-muted hover:text-text-secondary hover:bg-surface-overlay/50',
             )}
             style={active ? { borderLeftColor: accent ?? 'var(--color-neon)' } : undefined}
           >

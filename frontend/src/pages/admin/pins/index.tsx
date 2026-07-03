@@ -279,7 +279,7 @@ export function PinsTab() {
               {seasonRecent.map(r => {
                 const detail = formatPinMetadata(r.pinDefId, r.metadata);
                 return (
-                  <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-overlay/30 transition-colors">
+                  <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-overlay/50 transition-colors">
                     <Pin
                       def={{ id: r.pinDefId, name: r.defName, iconName: r.defIconName, color: r.defColor }}
                       size="sm"

@@ -506,7 +506,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                   const isCurrent = match.week === (season?.currentWeek ?? 0) + 1;
 
                   return (
-                    <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/30'}`}>
+                    <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/50'}`}>
                       <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{match.week}</span>
                       {hasResult ? (
                         <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
@@ -554,7 +554,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                     const maxSpe = Math.max(...activeRoster.map(m => m.stats.spe));
                     const pct = maxSpe > 0 ? (mon.stats.spe / maxSpe) * 100 : 0;
                     return (
-                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 px-1 rounded hover:bg-surface-overlay/30 transition-colors flex-1 min-h-[28px]">
+                      <div key={`${mon.name}-${i}`} className="flex items-center gap-2 px-1 rounded hover:bg-surface-overlay/50 transition-colors flex-1 min-h-[28px]">
                         <PokemonSprite name={mon.name} size="sm" className="shrink-0" />
                         <span className="text-[11px] text-text-secondary font-medium w-20 truncate">{mon.name}</span>
                         <div className="flex-1 h-2 rounded-full bg-surface-overlay overflow-hidden">

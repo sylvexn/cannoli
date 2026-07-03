@@ -53,7 +53,7 @@ export function SwapPicker({
   return (
     <div className="border-t border-border-subtle bg-surface-overlay/15">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle/30 text-[10px]">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle text-[10px]">
         <ArrowRightLeft size={10} className="text-neon shrink-0" />
         <span className="text-text-muted">Replacing</span>
         <span className="text-text-primary font-semibold">{currentMon.name}</span>
@@ -125,7 +125,7 @@ export function SwapPicker({
         </div>
 
         {/* Comparison panel */}
-        <div className="w-52 shrink-0 border-l border-border-subtle/30 p-3 flex flex-col">
+        <div className="w-52 shrink-0 border-l border-border-subtle p-3 flex flex-col">
           {hovered ? (
             <div className="space-y-2.5">
               {/* Large preview */}
@@ -226,7 +226,7 @@ export function AddPicker({
   return (
     <div className="border-t border-border-subtle bg-surface-overlay/15">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle/30 text-[10px]">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle text-[10px]">
         <Plus size={10} className="text-neon shrink-0" />
         <span className="text-text-muted">Add Pokemon</span>
         <span className="font-mono text-text-muted">({activeRoster.length}/12)</span>
@@ -299,7 +299,7 @@ export function AddPicker({
         </div>
 
         {/* Preview panel */}
-        <div className="w-52 shrink-0 border-l border-border-subtle/30 p-3 flex flex-col">
+        <div className="w-52 shrink-0 border-l border-border-subtle p-3 flex flex-col">
           {hovered ? (
             <div className="space-y-2.5">
               <div className="flex items-start gap-2.5">

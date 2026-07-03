@@ -87,8 +87,8 @@ export function ActivityFeed({
       {events.length > 0 ? (
         <div className={cn(
           variant === 'dense'
-            ? 'divide-y divide-border-subtle/40'
-            : 'divide-y divide-border-subtle/30',
+            ? 'divide-y divide-border-subtle'
+            : 'divide-y divide-border-subtle',
         )}>
           {events.map((event, i) => (
             <ActivityFeedItem
@@ -187,7 +187,7 @@ function ActivityFeedItem({ event, teamsPerLeague, variant, index }: ActivityFee
   // Dense — full narrative variant.
   return (
     <div
-      className="stagger-item row-interactive relative flex items-start gap-3 px-4 py-3 hover:bg-surface-overlay/30 transition-colors overflow-hidden border-l-2"
+      className="stagger-item row-interactive relative flex items-start gap-3 px-4 py-3 hover:bg-surface-overlay/50 transition-colors overflow-hidden border-l-2"
       style={{
         borderLeftColor: `${tone.color}80`,
         ['--i' as never]: Math.min(index, 20),

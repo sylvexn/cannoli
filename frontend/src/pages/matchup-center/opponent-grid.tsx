@@ -41,7 +41,7 @@ export function OpponentGrid({ league, teams, excludeTeamId, onSelect }: Opponen
             key={team.id}
             onClick={() => onSelect(team)}
             className={cn(
-              'card-interactive group flex items-center gap-2 rounded-md border border-border-subtle/60',
+              'card-interactive group flex items-center gap-2 rounded-md border border-border-subtle',
               'bg-surface-overlay/30 px-2 py-1.5 text-left min-w-0',
             )}
             title={`${team.teamName} (${team.record.wins}-${team.record.losses})`}
