@@ -75,4 +75,20 @@ describe('parseShowdownPaste', () => {
     const text = `\nAbility: Levitate\nEVs: 252 Spe\nIVs: 0 Atk\nLevel: 50\nShiny: Yes\nTera Type: Fairy\nHappiness: 255\nModest Nature\n- Sludge Bomb\nRotom-Wash @ Leftovers\n`;
     expect(parseShowdownPaste(text)).toEqual(['Rotom-Wash']);
   });
+
+  test('keeps Type: Null as a species despite the colon', () => {
+    expect(parseShowdownPaste('Type: Null @ Eviolite')).toEqual(['Type: Null']);
+    expect(parseShowdownPaste('Type: Null')).toEqual(['Type: Null']);
+    expect(parseShowdownPaste('Nully (Type: Null) @ Eviolite')).toEqual(['Type: Null']);
+  });
+
+  test('Type: Null set with detail lines only yields the species', () => {
+    const text = `Type: Null @ Eviolite\nAbility: Battle Armor\nTera Type: Normal\nEVs: 252 HP / 4 Atk / 252 SpD\nCareful Nature\n- Swords Dance\n- Crush Claw`;
+    expect(parseShowdownPaste(text)).toEqual(['Type: Null']);
+  });
+
+  test('still skips Gigantamax/Dynamax Level detail lines and folder headers', () => {
+    const text = `=== [gen9] Folder/My Team ===\nGigantamax: Yes\nDynamax Level: 10\nUrshifu-Rapid-Strike @ Choice Band`;
+    expect(parseShowdownPaste(text)).toEqual(['Urshifu-Rapid-Strike']);
+  });
 });

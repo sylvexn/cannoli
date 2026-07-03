@@ -1,3 +1,12 @@
+/**
+ * Set-detail lines in a Showdown/PokePaste export ("Ability: Levitate",
+ * "EVs: 252 Spe", …). Matched as an explicit keyword list instead of a
+ * blanket "contains a colon" check so the one species with a colon in its
+ * name — "Type: Null" — still parses as a species line.
+ */
+const DETAIL_LINE =
+  /^(?:Ability|EVs|IVs|Level|Shiny|Happiness|Tera Type|Gigantamax|Dynamax Level|Hidden Power|Nature):/i;
+
 /** Parse a Showdown/PokePaste team export into Pokemon names */
 export function parseShowdownPaste(text: string): string[] {
   const names: string[] = [];
@@ -5,11 +14,8 @@ export function parseShowdownPaste(text: string): string[] {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('-') || trimmed.startsWith('Ability:') ||
-        trimmed.startsWith('EVs:') || trimmed.startsWith('IVs:') ||
-        trimmed.startsWith('Level:') || trimmed.startsWith('Shiny:') ||
-        trimmed.startsWith('Tera Type:') || trimmed.startsWith('Happiness:') ||
-        /^\w+ Nature$/.test(trimmed)) continue;
+    if (!trimmed || trimmed.startsWith('-') || trimmed.startsWith('=') ||
+        DETAIL_LINE.test(trimmed) || /^\w+ Nature$/.test(trimmed)) continue;
 
     // Pokemon line: "Nickname (Species) @ Item" or "Species @ Item" or just "Species"
     let name = trimmed;
@@ -24,7 +30,7 @@ export function parseShowdownPaste(text: string): string[] {
       name = parenMatch[1].trim();
     }
     name = name.trim();
-    if (name && !name.includes(':') && !name.startsWith('=')) {
+    if (name && !name.startsWith('=') && !DETAIL_LINE.test(name)) {
       names.push(name);
     }
   }
