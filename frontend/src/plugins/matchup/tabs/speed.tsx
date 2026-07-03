@@ -21,7 +21,7 @@ interface SpeedTabProps {
 }
 
 export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdateSlot }: SpeedTabProps) {
-  const allPokemon = useMemo(() => [...teamA, ...teamB], [teamA, teamB])
+  const allPokemon = useMemo(() => [...teamA, ...teamB].sort((a, b) => b.stats.spe - a.stats.spe), [teamA, teamB])
 
   return (
     <div className="matchup-speed">

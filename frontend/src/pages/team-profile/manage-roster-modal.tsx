@@ -304,7 +304,7 @@ export function ManageRosterModal(props: {
                       <TierBadge points={effectiveCost} className="shrink-0" />
                     </div>
                     {isCaptain && (
-                      <span className="text-[10px] font-mono text-text-muted/50">
+                      <span className="text-[10px] font-mono text-text-muted">
                         (base {mon.tier})
                       </span>
                     )}

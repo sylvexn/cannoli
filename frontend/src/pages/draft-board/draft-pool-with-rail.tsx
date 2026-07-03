@@ -174,7 +174,7 @@ export function DraftPoolWithRail(props: DraftPoolWithRailProps) {
   return (
     <div className="flex-1 rounded-lg border border-border-subtle bg-surface-raised/40 backdrop-blur-sm min-w-0 min-h-0 flex overflow-hidden">
       {/* Tier rail */}
-      <div className="w-[52px] shrink-0 border-r border-border-subtle/60 bg-surface-raised/20 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
+      <div className="w-[52px] shrink-0 border-r border-border-subtle bg-surface-raised/20 flex flex-col items-center py-2 gap-0.5 overflow-y-auto">
         {bestInBudgetTier != null && (
           <button
             onClick={() => jumpToTier(bestInBudgetTier)}

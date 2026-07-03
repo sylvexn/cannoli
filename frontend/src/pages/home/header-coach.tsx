@@ -439,7 +439,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
                 <span className="text-[10px] text-text-muted inline-flex items-center gap-1">
                   <Trophy size={9} />
                   #{rank}
-                  <span className="text-text-muted/40">/ {totalTeams}</span>
+                  <span className="text-text-muted">/ {totalTeams}</span>
                 </span>
               )}
             </div>
@@ -454,7 +454,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
             {team.record.kills != null && team.record.deaths != null && (
               <div className="text-[10px] font-mono text-text-muted mt-0.5 tabular-nums">
                 <span className="text-win">{team.record.kills}</span>
-                <span className="text-text-muted/40 mx-0.5">/</span>
+                <span className="text-text-muted mx-0.5">/</span>
                 <span className="text-loss">{team.record.deaths}</span>
               </div>
             )}
@@ -512,7 +512,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
                 </span>
               ))}
               {captains.length < league.season.teraCaptainSlots && (
-                <span className="text-text-muted/60 font-mono">
+                <span className="text-text-muted font-mono">
                   {captains.length}/{league.season.teraCaptainSlots}
                 </span>
               )}
@@ -531,7 +531,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
           />
         )}
 
-        <div className="flex items-center gap-1 text-[10px] flex-wrap pt-1 border-t border-border-subtle/50">
+        <div className="flex items-center gap-1 text-[10px] flex-wrap pt-1 border-t border-border-subtle">
           <QuickLink to={`/league/${league.id}/teams/${team.id}`}>Roster</QuickLink>
           <QuickLink
             to={`/league/${league.id}/teams/${team.id}?theorycraft=1`}
@@ -597,7 +597,7 @@ function MatchupWidget({
 }) {
   if (isBye) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle/40">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle">
         <Calendar size={12} className="text-text-muted shrink-0" />
         <span className="text-xs text-text-muted">BYE this week. Next match shown below.</span>
       </div>
@@ -607,7 +607,7 @@ function MatchupWidget({
   const display = match ?? nextMatch;
   if (!display) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle/40">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-surface-overlay/30 border border-border-subtle">
         <Calendar size={12} className="text-text-muted shrink-0" />
         <span className="text-xs text-text-muted">No matches remaining.</span>
       </div>
@@ -636,7 +636,7 @@ function MatchupWidget({
       completed
         ? won ? 'bg-win/5 border-win/20'
           : lost ? 'bg-loss/5 border-loss/20'
-          : 'bg-surface-overlay/40 border-border-subtle/40'
+          : 'bg-surface-overlay/40 border-border-subtle'
         : 'bg-neon/5 border-neon/20',
     )}>
       <span className={cn('text-[9px] font-mono font-bold uppercase tracking-widest shrink-0', labelColor)}>
@@ -670,7 +670,7 @@ function MatchupWidget({
       {completed && (
         <span className="font-mono text-xs tabular-nums shrink-0">
           <span className={won ? 'text-win font-bold' : 'text-text-secondary'}>{myScore}</span>
-          <span className="text-text-muted/40 mx-0.5">-</span>
+          <span className="text-text-muted mx-0.5">-</span>
           <span className={lost ? 'text-loss font-bold' : 'text-text-secondary'}>{theirScore}</span>
         </span>
       )}

@@ -266,7 +266,7 @@ export function DraftControlBar({
                     {draftOrder.map(p => {
                       const online = connectedTeamIds.has(p.id);
                       return (
-                        <div key={p.id} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-surface-overlay/30">
+                        <div key={p.id} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-surface-overlay/50">
                           <Circle
                             size={6}
                             className={cn('shrink-0', online ? 'fill-win text-win' : 'fill-loss text-loss')}

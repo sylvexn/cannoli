@@ -106,7 +106,7 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
         </thead>
         <tbody>
           {sorted.map(pokemon => (
-            <tr key={pokemon.name} className="border-t border-border-subtle/50 hover:bg-surface-overlay/30">
+            <tr key={pokemon.name} className="border-t border-border-subtle hover:bg-surface-overlay/50">
               <td className="px-2 py-[3px] truncate max-w-[120px]">
                 <Link
                   to={pokemonRoute(pokemon.name)}

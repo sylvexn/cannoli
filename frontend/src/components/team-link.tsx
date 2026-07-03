@@ -235,7 +235,7 @@ function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: Te
             the popover doubles as a quick scouting jumpoff. */}
         {roster.length > 0 && (
           <div
-            className="border-t border-border-subtle/50 px-3 py-2 flex items-center gap-0.5 flex-wrap"
+            className="border-t border-border-subtle px-3 py-2 flex items-center gap-0.5 flex-wrap"
             style={{
               background: `linear-gradient(180deg, ${team.teamColor}08 0%, transparent 100%)`,
             }}
@@ -262,7 +262,7 @@ function TeamLinkPopover({ team, linkPath, children, asCard, cardClassName }: Te
         {/* Footer link */}
         <Link
           to={linkPath}
-          className="block border-t border-border-subtle/50 px-3 py-1.5 text-[11px] text-text-muted hover:text-neon transition-colors flex items-center justify-between"
+          className="block border-t border-border-subtle px-3 py-1.5 text-[11px] text-text-muted hover:text-neon transition-colors flex items-center justify-between"
         >
           <span className="flex items-center gap-1">
             View team

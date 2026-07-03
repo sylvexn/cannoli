@@ -45,7 +45,7 @@ const EVENT_TONES: Record<string, EventTone> = {
   match:  { color: '#fbbf24', iconClass: 'text-amber-400' },
   fa:     { color: '#a78bfa', iconClass: 'text-violet-400' },
   team:   { color: '#94a3b8', iconClass: 'text-text-secondary' },
-  admin:  { color: '#5c6070', iconClass: 'text-text-muted' },
+  admin:  { color: '#7d8296', iconClass: 'text-text-muted' },
   scrim:  { color: '#a78bfa', iconClass: 'text-violet-400' },
   pin:    { color: '#fbbf24', iconClass: 'text-amber-400' },
 };
@@ -87,8 +87,8 @@ export function ActivityFeed({
       {events.length > 0 ? (
         <div className={cn(
           variant === 'dense'
-            ? 'divide-y divide-border-subtle/40'
-            : 'divide-y divide-border-subtle/30',
+            ? 'divide-y divide-border-subtle'
+            : 'divide-y divide-border-subtle',
         )}>
           {events.map((event, i) => (
             <ActivityFeedItem
@@ -124,7 +124,7 @@ export function ActivityFeed({
           <ScrollText size={variant === 'compact' ? 12 : 14} className="text-text-muted" />
           {title}
           {!hideCount && events.length > 0 && (
-            <span className="text-[10px] font-mono text-text-muted/70 tabular-nums ml-1">
+            <span className="text-[10px] font-mono text-text-muted tabular-nums ml-1">
               {events.length}
             </span>
           )}
@@ -187,7 +187,7 @@ function ActivityFeedItem({ event, teamsPerLeague, variant, index }: ActivityFee
   // Dense — full narrative variant.
   return (
     <div
-      className="stagger-item row-interactive relative flex items-start gap-3 px-4 py-3 hover:bg-surface-overlay/30 transition-colors overflow-hidden border-l-2"
+      className="stagger-item row-interactive relative flex items-start gap-3 px-4 py-3 hover:bg-surface-overlay/50 transition-colors overflow-hidden border-l-2"
       style={{
         borderLeftColor: `${tone.color}80`,
         ['--i' as never]: Math.min(index, 20),

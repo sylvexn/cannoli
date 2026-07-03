@@ -33,7 +33,7 @@ export function PointCapBar({ used, total = 110, className }: PointCapBarProps) 
       <span className="text-[11px] font-mono tabular-nums text-text-secondary font-medium shrink-0">
         <span style={{ color: palette.bar }}>{used}</span>
         <span className="text-text-muted">/{total}</span>
-        {remaining > 0 && <span className="text-text-muted/60 ml-1 text-[10px]">{remaining} left</span>}
+        {remaining > 0 && <span className="text-text-muted ml-1 text-[10px]">{remaining} left</span>}
       </span>
     </div>
   );
@@ -54,7 +54,7 @@ export function PointCapBarLarge({ used, total = 110, className }: PointCapBarPr
       <div className="flex flex-col items-end shrink-0">
         <span className="text-[9px] font-semibold text-text-muted uppercase tracking-[0.15em] leading-none">Budget</span>
         <span className="text-lg font-mono font-bold tabular-nums leading-tight" style={{ color: palette.bar }}>
-          {used}<span className="text-text-muted/40 text-sm font-normal">/{total}</span>
+          {used}<span className="text-text-muted text-sm font-normal">/{total}</span>
         </span>
       </div>
 

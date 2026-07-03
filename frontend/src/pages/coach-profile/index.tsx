@@ -410,11 +410,11 @@ function CareerSummary({
             in only a draft-phase league). The sparkline itself owns the
             empty-data path: zero/one points still render meaningfully. */}
         {results.length >= 2 ? (
-          <div className="pt-1 border-t border-border-subtle/40 mt-1">
+          <div className="pt-1 border-t border-border-subtle mt-1">
             <WinRateSparkline results={results} color={accent} />
           </div>
         ) : (
-          <div className="pt-2 mt-1 border-t border-border-subtle/40">
+          <div className="pt-2 mt-1 border-t border-border-subtle">
             <p className="text-[10px] font-mono text-text-muted leading-snug">
               {results.length === 1
                 ? 'One match in. The sparkline shows up after match two.'
@@ -627,7 +627,7 @@ function RecentMoments({ activity }: { activity: ApiActivityEvent[] }) {
           {activity.map(e => (
             <li
               key={e.id}
-              className="flex items-start gap-3 py-2 px-2 -mx-2 rounded-md hover:bg-surface-overlay/40 transition-colors border-b border-border-subtle/30 last:border-b-0"
+              className="flex items-start gap-3 py-2 px-2 -mx-2 rounded-md hover:bg-surface-overlay/40 transition-colors border-b border-border-subtle last:border-b-0"
             >
               <span className="mt-1 w-1 h-1 rounded-full shrink-0 bg-text-muted/40" aria-hidden />
               <span className="flex-1 leading-snug text-[12px] font-heading text-text-secondary">

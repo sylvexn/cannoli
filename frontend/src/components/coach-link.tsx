@@ -318,7 +318,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
 
         {/* Current teams */}
         {merged.currentTeams.length > 0 && (
-          <div className="border-t border-border-subtle/50 px-3 py-2 space-y-1">
+          <div className="border-t border-border-subtle px-3 py-2 space-y-1">
             {merged.currentTeams.map(t => (
               <Link
                 key={t.teamId}
@@ -335,7 +335,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
 
         {/* Career stats */}
         {merged.careerSummary && (
-          <div className="border-t border-border-subtle/50 px-3 py-2 grid grid-cols-3 gap-2 text-center">
+          <div className="border-t border-border-subtle px-3 py-2 grid grid-cols-3 gap-2 text-center">
             <CareerStat
               label="Career"
               value={formatRecord(merged.careerSummary.careerWins, merged.careerSummary.careerLosses)}
@@ -359,7 +359,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
             (Pin component owns that). Caps at 6 to keep the popover compact;
             the full trophy case lives on the profile page. */}
         {pins.length > 0 && (
-          <div className="border-t border-border-subtle/50 px-3 py-2 flex items-center gap-1.5 flex-wrap">
+          <div className="border-t border-border-subtle px-3 py-2 flex items-center gap-1.5 flex-wrap">
             {pins.slice(0, 6).map(p => (
               <Pin
                 key={p.id}
@@ -380,7 +380,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
         {/* Footer link */}
         <Link
           to={linkPath}
-          className="block border-t border-border-subtle/50 px-3 py-1.5 text-[11px] text-text-muted hover:text-neon transition-colors flex items-center justify-between"
+          className="block border-t border-border-subtle px-3 py-1.5 text-[11px] text-text-muted hover:text-neon transition-colors flex items-center justify-between"
         >
           <span className="flex items-center gap-1">
             View profile

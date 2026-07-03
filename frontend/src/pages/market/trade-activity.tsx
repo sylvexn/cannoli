@@ -273,7 +273,7 @@ function TradeCard({
       )}
     >
       {/* Header strip */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-overlay/20 border-b border-border-subtle/30">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-overlay/20 border-b border-border-subtle">
         <span className="text-[11px] font-mono text-text-muted">W{trade.week}</span>
         <Badge variant="outline" className={cn('text-[11px] px-1.5 py-0', statusCfg.className)}>
           {statusCfg.label}
@@ -310,7 +310,7 @@ function TradeCard({
 
       {/* Actions */}
       {!resolved && section === 'needs-you' && (
-        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle/30 bg-surface-overlay/20">
+        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle bg-surface-overlay/20">
           <Button
             size="xs"
             variant="outline"
@@ -344,7 +344,7 @@ function TradeCard({
       )}
 
       {!resolved && section === 'your-offers' && (
-        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle/30 bg-surface-overlay/20">
+        <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-t border-border-subtle bg-surface-overlay/20">
           <Button
             size="xs"
             variant="outline"

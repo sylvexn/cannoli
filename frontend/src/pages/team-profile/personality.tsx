@@ -201,7 +201,7 @@ export function Personality({ player, onSaved }: PersonalityProps) {
             onChange={(e) => setCaptainNote(e.target.value)}
             rows={3}
             placeholder="Why this roster, what's the plan, what to fear."
-            className="w-full px-3 py-2 rounded-md border border-border-default bg-surface-overlay/40 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-neon/40 resize-y leading-snug"
+            className="w-full px-3 py-2 rounded-md border border-border-default bg-surface-overlay/40 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon/40 resize-y leading-snug"
           />
         </div>
 
@@ -240,7 +240,7 @@ export function Personality({ player, onSaved }: PersonalityProps) {
             {player.captainNote}
           </p>
         ) : isOwner ? (
-          <p className="text-[12px] font-mono italic text-text-muted/60">
+          <p className="text-[12px] font-mono italic text-text-muted">
             Drop a captain note — flavor, trash talk, plans for the season.
           </p>
         ) : null}

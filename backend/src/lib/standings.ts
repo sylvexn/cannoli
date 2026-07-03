@@ -3,8 +3,12 @@
  *
  * Tiebreaker hierarchy (applied in order):
  *   1. Wins (desc)
- *   2. Head-to-head record between tied teams. For a multi-way tie, every member's
- *      H2H record is computed only against the *other* members of the tied set.
+ *   2. Head-to-head record — ONLY applied for an exact two-team tie. With 3+
+ *      teams tied on wins, most members haven't played every other member of
+ *      the set, so an in-set H2H record is statistical noise (a team that got
+ *      lucky with one head-to-head win could rank above a team with a far
+ *      better overall record). For those larger ties this step is skipped
+ *      entirely and we fall straight through to differential.
  *   3. Point differential (kills - deaths) — desc
  *   4. Total kills (points-for) — desc
  *   5. Team ID (asc) — last-resort stable tiebreaker
@@ -83,6 +87,11 @@ function resolveBucketPure(
   const tiedIds = bucket.map(r => r.id);
   const h2h = h2hLookup(tiedIds);
 
+  // H2H is only sound for a clean two-way tie — in larger ties most teams
+  // haven't played each other, so an in-set H2H record is noise rather than
+  // a meaningful signal.
+  const useH2h = bucket.length === 2;
+
   const enriched = bucket.map(r => ({
     ...r,
     differential: r.pointsFor - r.pointsAgainst,
@@ -90,7 +99,7 @@ function resolveBucketPure(
   }));
 
   enriched.sort((a, b) => {
-    if (b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
+    if (useH2h && b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
     if (b.differential !== a.differential) return b.differential - a.differential;
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
     return a.id.localeCompare(b.id);
@@ -102,7 +111,7 @@ function resolveBucketPure(
 
   return enriched.map(r => {
     let tb: TeamStandingRow['tiebreaker'];
-    if (!allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
+    if (useH2h && !allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
     else if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
     else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
     else tb = { rule: 'id', value: r.id };

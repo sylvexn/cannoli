@@ -61,7 +61,7 @@ export function TypeCoverageGridInner({ profile, pokemonTypesMap }: {
                 </span>
               )}
               {p.x0.length > 0 && <span className="text-neon font-bold">{p.x0.length}</span>}
-              {!hasAny && <span className="text-text-muted/40">—</span>}
+              {!hasAny && <span className="text-text-muted">—</span>}
             </div>
           </div>
         );

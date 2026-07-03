@@ -89,7 +89,7 @@ export function TradeHistory({ trades, playerMap }: TradeHistoryProps) {
       <CollapsibleContent>
         {/* Team filter pills */}
         {involvedTeams.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 border-b border-border-subtle/30">
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 border-b border-border-subtle">
             <button
               type="button"
               onClick={() => setTeamFilter(null)}
@@ -131,7 +131,7 @@ export function TradeHistory({ trades, playerMap }: TradeHistoryProps) {
               <div className="px-3 py-1 bg-surface-overlay/30 text-[11px] font-mono font-bold text-text-muted uppercase tracking-widest">
                 Week {week}
               </div>
-              <div className="divide-y divide-border-subtle/20">
+              <div className="divide-y divide-border-subtle">
                 {weekTrades.map(t => (
                   <HistoryRow key={t.id} trade={t} playerMap={playerMap} leagueId={league.id} />
                 ))}
@@ -159,7 +159,7 @@ function HistoryRow({
   const recipient = fa ? null : playerMap.get(trade.recipient) ?? null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 hover:bg-surface-overlay/20 transition-colors">
+    <div className="flex items-center gap-2 px-3 py-2 hover:bg-surface-overlay/50 transition-colors">
       {/* Status glyph */}
       <span
         className="shrink-0 inline-flex"

@@ -79,7 +79,7 @@ export function NicknameEditor({
           }}
           className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         />
-        <div className="text-[10px] font-mono text-text-muted/70 text-right">
+        <div className="text-[10px] font-mono text-text-muted text-right">
           {value.length}/{MAX_LENGTH}
         </div>
         <div className="flex items-center justify-between gap-2">
