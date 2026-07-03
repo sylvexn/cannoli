@@ -90,7 +90,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               </span>
               {pokemon.nickname && (
                 <span
-                  className="text-[9px] italic font-mono leading-tight w-full truncate text-center text-text-muted/70"
+                  className="text-[9px] italic font-mono leading-tight w-full truncate text-center text-text-muted"
                   title={pokemon.nickname}
                 >
                   "{pokemon.nickname}"

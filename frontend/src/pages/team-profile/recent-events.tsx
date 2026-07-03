@@ -118,7 +118,7 @@ export function RecentEvents({ player, limit = 8 }: RecentEventsProps) {
           <ScrollText size={11} />
           Recent moves
         </h3>
-        <span className="text-[9px] font-mono text-text-muted/70">
+        <span className="text-[9px] font-mono text-text-muted">
           {tiles.length} event{tiles.length === 1 ? '' : 's'}
         </span>
       </div>
@@ -250,7 +250,7 @@ function Header({
       <Icon size={10} style={{ color: accent }} />
       <span className="text-text-muted">{label}</span>
       {!hideWeek && (
-        <span className="ml-auto text-text-muted/60 tabular-nums">w{week}</span>
+        <span className="ml-auto text-text-muted tabular-nums">w{week}</span>
       )}
     </div>
   );

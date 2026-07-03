@@ -173,7 +173,7 @@ export function SwapPicker({
               {hoveredExceeds && <div className="text-[9px] text-loss font-semibold">Over point cap</div>}
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted/50">
+            <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted">
               Hover to preview
             </div>
           )}
@@ -330,7 +330,7 @@ export function AddPicker({
               {hovered.tier > remaining && <div className="text-[9px] text-loss font-semibold">Over point cap</div>}
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted/50">
+            <div className="flex-1 flex items-center justify-center text-[10px] text-text-muted">
               Hover to preview
             </div>
           )}

@@ -488,7 +488,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
                       >
                         <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{row.week}</span>
                         <span className="w-4 text-center text-[10px] text-text-muted">—</span>
-                        <span className="text-[10px] tracking-widest font-mono uppercase text-text-muted/60 flex-1">Bye</span>
+                        <span className="text-[10px] tracking-widest font-mono uppercase text-text-muted flex-1">Bye</span>
                       </div>
                     );
                   }

@@ -102,7 +102,7 @@ export function NotificationRowView({
         </div>
       )}
       {source === 'announcement' && body && !expanded && (
-        <div className="mt-0.5 text-[10px] text-text-muted/60">Tap to expand</div>
+        <div className="mt-0.5 text-[10px] text-text-muted">Tap to expand</div>
       )}
     </>
   );

@@ -40,7 +40,7 @@ export function NextMatchBanner({
         <Calendar size={12} className="text-text-muted shrink-0" />
         <span className="text-xs text-text-muted">BYE — Week {cw}.</span>
         {nextMatch && (
-          <span className="text-[11px] text-text-muted/70 ml-auto">
+          <span className="text-[11px] text-text-muted ml-auto">
             Next: W{nextMatch.week}.
           </span>
         )}
@@ -94,7 +94,7 @@ export function NextMatchBanner({
       {completed && (
         <span className="font-mono text-xs tabular-nums shrink-0">
           <span className={won ? 'text-win font-bold' : 'text-text-secondary'}>{myScore}</span>
-          <span className="text-text-muted/40 mx-0.5">-</span>
+          <span className="text-text-muted mx-0.5">-</span>
           <span className={lost ? 'text-loss font-bold' : 'text-text-secondary'}>{theirScore}</span>
         </span>
       )}

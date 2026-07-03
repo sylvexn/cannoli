@@ -69,7 +69,7 @@ export function CoverageTab({ roster, format }: CoverageTabProps) {
                         'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors cursor-default',
                         covered
                           ? 'text-text-secondary hover:bg-surface-overlay/40'
-                          : 'text-text-muted/30',
+                          : 'text-text-muted',
                       )}>
                         <span className={covered ? '' : 'line-through'}>
                           {e.entry.name}
@@ -106,7 +106,7 @@ export function CoverageTab({ roster, format }: CoverageTabProps) {
           </div>
         );
       })}
-      <p className="text-[9px] text-text-muted/50 mt-2 inline-flex items-center gap-1">
+      <p className="text-[9px] text-text-muted mt-2 inline-flex items-center gap-1">
         <ChevronRight size={9} />
         Hover an entry to see which mons cover it.
       </p>

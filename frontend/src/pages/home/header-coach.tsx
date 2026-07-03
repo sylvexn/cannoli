@@ -439,7 +439,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
                 <span className="text-[10px] text-text-muted inline-flex items-center gap-1">
                   <Trophy size={9} />
                   #{rank}
-                  <span className="text-text-muted/40">/ {totalTeams}</span>
+                  <span className="text-text-muted">/ {totalTeams}</span>
                 </span>
               )}
             </div>
@@ -454,7 +454,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
             {team.record.kills != null && team.record.deaths != null && (
               <div className="text-[10px] font-mono text-text-muted mt-0.5 tabular-nums">
                 <span className="text-win">{team.record.kills}</span>
-                <span className="text-text-muted/40 mx-0.5">/</span>
+                <span className="text-text-muted mx-0.5">/</span>
                 <span className="text-loss">{team.record.deaths}</span>
               </div>
             )}
@@ -512,7 +512,7 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
                 </span>
               ))}
               {captains.length < league.season.teraCaptainSlots && (
-                <span className="text-text-muted/60 font-mono">
+                <span className="text-text-muted font-mono">
                   {captains.length}/{league.season.teraCaptainSlots}
                 </span>
               )}
@@ -670,7 +670,7 @@ function MatchupWidget({
       {completed && (
         <span className="font-mono text-xs tabular-nums shrink-0">
           <span className={won ? 'text-win font-bold' : 'text-text-secondary'}>{myScore}</span>
-          <span className="text-text-muted/40 mx-0.5">-</span>
+          <span className="text-text-muted mx-0.5">-</span>
           <span className={lost ? 'text-loss font-bold' : 'text-text-secondary'}>{theirScore}</span>
         </span>
       )}

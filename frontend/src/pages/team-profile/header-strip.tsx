@@ -175,7 +175,7 @@ export function HeaderStrip({
           <div className="flex-1 flex flex-col items-center justify-center py-3 px-4">
             <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
               <span className="text-win">{teamKills}</span>
-              <span className="text-text-muted/30 mx-0.5">/</span>
+              <span className="text-text-muted mx-0.5">/</span>
               <span className="text-loss">{teamDeaths}</span>
             </div>
             <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">K / D</span>

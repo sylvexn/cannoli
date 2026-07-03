@@ -124,7 +124,7 @@ export function ActivityFeed({
           <ScrollText size={variant === 'compact' ? 12 : 14} className="text-text-muted" />
           {title}
           {!hideCount && events.length > 0 && (
-            <span className="text-[10px] font-mono text-text-muted/70 tabular-nums ml-1">
+            <span className="text-[10px] font-mono text-text-muted tabular-nums ml-1">
               {events.length}
             </span>
           )}
