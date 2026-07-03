@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { rosterMonFromPokemonRow } from '@/lib/roster-from-api';
 import type { RosterPokemon } from '@/lib/types';
-import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { X, ClipboardPaste, Plus, Search } from 'lucide-react';
@@ -28,15 +28,7 @@ async function lookupPokemon(name: string): Promise<RosterPokemon | null> {
   try {
     const data = await api.getPokemonByName(name);
     if (!data) return null;
-    return {
-      name: data.name,
-      types: [data.type1.toLowerCase() as PokemonType, ...(data.type2 ? [data.type2.toLowerCase() as PokemonType] : [])] as PokemonType[],
-      tier: data.tier,
-      isTeraCaptain: false,
-      stats: { hp: data.hp, atk: data.atk, def: data.def, spa: data.spa, spd: data.spd, spe: data.spe },
-      abilities: [data.ability1, data.ability2, data.hiddenAbility].filter(Boolean) as string[],
-      seasonStats: { kills: 0, deaths: 0, gp: 0 },
-    };
+    return rosterMonFromPokemonRow(data);
   } catch {
     return null;
   }

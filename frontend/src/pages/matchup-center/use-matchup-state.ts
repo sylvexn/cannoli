@@ -2,7 +2,9 @@ import { useReducer, useMemo } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 
 export interface TeamSource {
-  type: 'league' | 'custom';
+  /** 'builder' = live-synced from the Showdown teambuilder (matchup plugin only;
+   *  the site never produces it — type-space only from the site's perspective). */
+  type: 'league' | 'custom' | 'builder';
   leagueId?: string;
   teamId?: string;
   label?: string;
