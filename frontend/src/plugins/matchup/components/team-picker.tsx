@@ -3,6 +3,8 @@ import { rosterFromApi } from '@/lib/roster-from-api'
 import type { RosterPokemon } from '@/lib/types'
 import type { TeamSource } from '@/pages/matchup-center/use-matchup-state'
 import { apiHost, type ApiLeague, type ApiTeam } from '../lib/api-plugin'
+import { getCurrentBuild } from '../lib/ps-bridge'
+import { builderSourceLabel } from '../lib/use-builder-sync'
 import { reloadLeagueTeams, useLeagueTeams } from '../lib/use-league-teams'
 
 interface TeamPickerProps {
@@ -15,13 +17,17 @@ interface TeamPickerProps {
  * Native dropdown team picker (mockup `.picker`, blue You / red Opponent).
  * Mirrors the site team picker's semantics: leagues → `TeamName (W-L)` rows,
  * selection loads the roster through the shared rosterFromApi mapping. The
- * "You" side also lists a placeholder "Your build (teambuilder)" entry that
- * the P3 teambuilder bridge wires for real.
+ * "You" side also lists "Your build (teambuilder)" — selecting it hands side
+ * A to the teambuilder bridge (live sync; MatchupRoom's useBuilderSync fills
+ * and keeps the roster fresh).
  */
 export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
   const state = useLeagueTeams()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  // Snapshot the current teambuilder build when the menu opens (cheap read;
+  // only drives the "n mons" tag on the builder entry).
+  const build = open && side === 'a' ? getCurrentBuild() : null
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -75,9 +81,28 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
         <div className="matchup-picker-menu" role="listbox">
           {side === 'a' && (
             <>
-              <button type="button" className="matchup-menu-item" disabled>
-                <span>Your build (teambuilder)</span>
-                <span className="matchup-menu-tag">soon</span>
+              <button
+                type="button"
+                role="option"
+                aria-selected={source?.type === 'builder'}
+                className={
+                  source?.type === 'builder'
+                    ? 'matchup-menu-item matchup-menu-item-active'
+                    : 'matchup-menu-item'
+                }
+                onClick={() => {
+                  // Hand side A to the teambuilder bridge; useBuilderSync
+                  // resolves the roster (or shows the "open a team" hint).
+                  onSelect([], { type: 'builder', label: builderSourceLabel(build?.name ?? null) })
+                  setOpen(false)
+                }}
+              >
+                <span className="matchup-menu-item-name">Your build (teambuilder)</span>
+                <span className="matchup-menu-tag">
+                  {build && build.species.length > 0
+                    ? `${build.species.length} mon${build.species.length === 1 ? '' : 's'}`
+                    : 'sync'}
+                </span>
               </button>
               <div className="matchup-menu-sep" />
             </>

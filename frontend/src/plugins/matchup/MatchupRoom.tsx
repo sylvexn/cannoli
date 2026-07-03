@@ -1,12 +1,15 @@
-import { Component, type ReactNode } from 'react'
+import { Component, useEffect, useRef, type ReactNode } from 'react'
 import { useMatchupState, type MatchupTab } from '@/pages/matchup-center/use-matchup-state'
 import { TeamPicker } from './components/team-picker'
 import { apiHost } from './lib/api-plugin'
+import { useBuilderSync, type BuilderSyncMode } from './lib/use-builder-sync'
 import { ComingSoonTab } from './tabs/coming-soon'
 import { OverviewTab } from './tabs/overview'
+import { SpeedTab } from './tabs/speed'
+import { StatsTab } from './tabs/stats'
+import { TypeChartTab } from './tabs/typechart'
 
-// Tab strip order matches the mockup. Only Overview has a real body in P2;
-// the others render a small placeholder until P3/P4.
+// Tab strip order matches the mockup. Moves is the last placeholder (P4).
 const TABS: { id: MatchupTab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'typechart', label: 'Type Chart' },
@@ -29,6 +32,26 @@ export function MatchupRoom() {
 function MatchupRoomInner() {
   const { state, dispatch, activeTeamA, activeTeamB } = useMatchupState()
 
+  // Teambuilder bridge: 'active' while side A is sourced from the builder,
+  // 'auto' while nothing is selected yet (adopts the current build on room
+  // open — the plugin's replacement for the site's userId auto-populate),
+  // 'off' once a league/custom team is picked.
+  const builderMode = state.teamASource?.type === 'builder'
+  const syncMode: BuilderSyncMode = builderMode ? 'active' : state.teamASource ? 'off' : 'auto'
+  const builderSync = useBuilderSync(syncMode, (roster, source) =>
+    dispatch({ type: 'SET_TEAM_A', roster, source }),
+  )
+
+  // Same as the site's index.tsx effect: seed the speed-calc slots once,
+  // the first time both teams are non-empty.
+  const speedInitRef = useRef(false)
+  useEffect(() => {
+    if (!speedInitRef.current && state.teamA.length > 0 && state.teamB.length > 0) {
+      speedInitRef.current = true
+      dispatch({ type: 'INIT_SPEED_SLOTS', teamA: state.teamA, teamB: state.teamB })
+    }
+  }, [state.teamA, state.teamB, dispatch])
+
   return (
     <div className="matchup-panel">
       <header className="matchup-head">
@@ -42,6 +65,17 @@ function MatchupRoomInner() {
             source={state.teamASource}
             onSelect={(roster, source) => dispatch({ type: 'SET_TEAM_A', roster, source })}
           />
+          {builderMode &&
+            (builderSync.hasBuild ? (
+              <span className="matchup-sync" title="Live-synced from your teambuilder">
+                <span className="matchup-sync-dot" aria-hidden="true" />
+                synced
+              </span>
+            ) : (
+              <span className="matchup-sync-hint">
+                Open a team in the teambuilder to sync your build
+              </span>
+            ))}
           <span className="matchup-vs">VS</span>
           <TeamPicker
             side="b"
@@ -50,6 +84,12 @@ function MatchupRoomInner() {
           />
         </div>
       </header>
+
+      {builderMode && builderSync.missing.length > 0 && (
+        <div className="matchup-note" role="status">
+          {builderSync.missing.length} not found: {builderSync.missing.join(', ')}
+        </div>
+      )}
 
       <nav className="matchup-rtabs">
         {TABS.map(t => (
@@ -72,6 +112,19 @@ function MatchupRoomInner() {
             sourceA={state.teamASource}
             sourceB={state.teamBSource}
           />
+        ) : state.activeTab === 'typechart' ? (
+          <TypeChartTab teamA={activeTeamA} teamB={activeTeamB} />
+        ) : state.activeTab === 'speed' ? (
+          <SpeedTab
+            teamA={activeTeamA}
+            teamB={activeTeamB}
+            slots={state.speedCalcSlots}
+            onAddSlot={() => dispatch({ type: 'ADD_SPEED_SLOT' })}
+            onRemoveSlot={id => dispatch({ type: 'REMOVE_SPEED_SLOT', id })}
+            onUpdateSlot={(id, updates) => dispatch({ type: 'UPDATE_SPEED_SLOT', id, updates })}
+          />
+        ) : state.activeTab === 'stats' ? (
+          <StatsTab teamA={activeTeamA} teamB={activeTeamB} />
         ) : (
           <ComingSoonTab tab={state.activeTab} />
         )}
