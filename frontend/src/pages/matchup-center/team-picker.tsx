@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import type { ApiTeam } from '@/lib/api';
+import { rosterFromApi } from '@/lib/roster-from-api';
 import type { RosterPokemon } from '@/lib/types';
-import type { PokemonType } from '@/lib/pokemon';
 import type { TeamSource } from './use-matchup-state';
 import { CustomTeamBuilder } from './custom-team-builder';
 import {
@@ -66,16 +66,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
     const teams = teamsPerLeague[leagueId] || [];
     const team = teams.find(t => t.id === teamId);
     if (league && team) {
-      const roster: RosterPokemon[] = team.roster.map(r => ({
-        name: r.name,
-        types: r.types as PokemonType[],
-        tier: r.tier,
-        isTeraCaptain: r.isTeraCaptain,
-        teraTypes: r.teraTypes as PokemonType[] | undefined,
-        stats: r.stats || { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-        abilities: r.abilities,
-        seasonStats: r.seasonStats,
-      }));
+      const roster: RosterPokemon[] = rosterFromApi(team.roster);
       onSelect(roster, {
         type: 'league',
         leagueId,
