@@ -25,6 +25,7 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { MatchupRoom } from './MatchupRoom'
 import matchupStyles from './styles.css?inline'
+import matchupTabStyles from './styles-tabs.css?inline'
 
 const ROOM_ID = 'view-matchup'
 const ROOM_TITLE = 'Matchup'
@@ -108,7 +109,7 @@ function injectStyles() {
   if (document.getElementById(STYLE_ID)) return
   const style = document.createElement('style')
   style.id = STYLE_ID
-  style.textContent = matchupStyles
+  style.textContent = `${matchupStyles}\n${matchupTabStyles}`
   document.head.appendChild(style)
 }
 
