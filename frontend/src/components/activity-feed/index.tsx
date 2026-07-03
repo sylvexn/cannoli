@@ -45,7 +45,7 @@ const EVENT_TONES: Record<string, EventTone> = {
   match:  { color: '#fbbf24', iconClass: 'text-amber-400' },
   fa:     { color: '#a78bfa', iconClass: 'text-violet-400' },
   team:   { color: '#94a3b8', iconClass: 'text-text-secondary' },
-  admin:  { color: '#5c6070', iconClass: 'text-text-muted' },
+  admin:  { color: '#7d8296', iconClass: 'text-text-muted' },
   scrim:  { color: '#a78bfa', iconClass: 'text-violet-400' },
   pin:    { color: '#fbbf24', iconClass: 'text-amber-400' },
 };
