@@ -63,4 +63,9 @@ interface Window {
   app?: PSApp
   Room?: PSRoomClass
   __cannoliMatchupLoaded?: boolean
+  /** Optional runtime override for the Cannoli API origin. Must be set by a
+   *  page-level script BEFORE the plugin module executes — the module reads
+   *  it once at load (the vite.plugin.config.ts define splices this global
+   *  into the api client's baked base URL). */
+  CANNOLI_MATCHUP_API_BASE?: string
 }

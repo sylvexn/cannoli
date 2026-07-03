@@ -23,7 +23,7 @@
 
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
-import { MatchupPanel } from './matchup-panel'
+import { MatchupRoom } from './MatchupRoom'
 import matchupStyles from './styles.css?inline'
 
 const ROOM_ID = 'view-matchup'
@@ -33,8 +33,8 @@ const AUTO_OPEN_KEY = 'cannoli-matchup-auto-opened'
 const POLL_INTERVAL_MS = 50
 const POLL_MAX_TRIES = 200 // ~10s cap, mirrors the Showdex injector
 
-/** Absolute Cannoli API origin, baked in at build time (consumed from P2 on). */
-export const MATCHUP_API_BASE = __MATCHUP_API_BASE__
+// The Cannoli API origin lives in lib/api-plugin.ts (baked default +
+// window.CANNOLI_MATCHUP_API_BASE runtime override).
 
 type MatchupRoom = PSRoom & {
   _isCannoliMatchup?: boolean
@@ -62,7 +62,7 @@ function getMatchupRoomClass(): PSRoomClass {
       host.className = 'matchup-host'
       this.el.appendChild(host)
       this._matchupReactRoot = createRoot(host)
-      this._matchupReactRoot.render(<MatchupPanel />)
+      this._matchupReactRoot.render(<MatchupRoom />)
     },
     // Never talk to the sim server — this room only exists client-side.
     join() {},

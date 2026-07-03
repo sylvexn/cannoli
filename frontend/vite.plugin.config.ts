@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
   // envDir is the repo root, same as the main site config.
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, 'VITE_')
+  // Bake-time default: the live site. Dev builds pass
+  // VITE_MATCHUP_API_BASE=http://localhost:3001.
+  const apiBase = env.VITE_MATCHUP_API_BASE || 'https://cannoli.live'
 
   return {
     plugins: [react()],
@@ -27,8 +30,16 @@ export default defineConfig(({ mode }) => {
     define: {
       // Absolute Cannoli API origin (e.g. https://cannoli.live or
       // http://localhost:3001). The sim origin has no /api proxy, so the
-      // plugin must call absolute URLs. Empty default until P2 consumes it.
-      __MATCHUP_API_BASE__: JSON.stringify(env.VITE_MATCHUP_API_BASE ?? ''),
+      // plugin must call absolute URLs. Defaults to the live site.
+      __MATCHUP_API_BASE__: JSON.stringify(apiBase),
+      // The site's shared API client (src/lib/api.ts) reads
+      // `import.meta.env.VITE_API_URL` once at module scope. Replace that
+      // read with a runtime expression so a page-level override
+      // (`window.CANNOLI_MATCHUP_API_BASE`, set BEFORE the plugin module
+      // executes) wins over the baked default — the plugin reuses the site's
+      // api object verbatim, zero drift, but stays repointable at runtime.
+      'import.meta.env.VITE_API_URL':
+        `(typeof window !== "undefined" && window.CANNOLI_MATCHUP_API_BASE || ${JSON.stringify(apiBase)})`,
     },
     resolve: {
       alias: {
