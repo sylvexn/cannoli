@@ -534,9 +534,14 @@
   gap: 2px;
   padding: 0 16px;
   border-bottom: 1px solid var(--mu-line);
+  /* At side-room widths (~320-640px) the five tabs outgrow the pane; the
+     strip scrolls internally so the room body never scrolls horizontally. */
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .matchup-rtab {
+  flex-shrink: 0;
   font-family: var(--mu-mono);
   font-size: 11.5px;
   letter-spacing: 0.07em;
