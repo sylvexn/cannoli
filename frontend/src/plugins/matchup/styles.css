@@ -914,19 +914,39 @@
   font-variant-numeric: tabular-nums;
 }
 
+.matchup-mside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+}
+
+.matchup-mside-a { justify-content: flex-end; }
+.matchup-mside-b { justify-content: flex-start; }
+
+.matchup-mname {
+  font-family: var(--mu-mono);
+  font-size: 10px;
+  color: var(--mu-faint);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .matchup-mbar {
   display: block;
   height: 7px;
+  flex: none;
 }
 
 .matchup-mbar-a {
-  justify-self: end;
   border-radius: 4px 0 0 4px;
   background: var(--mu-you);
 }
 
 .matchup-mbar-b {
-  justify-self: start;
   border-radius: 0 4px 4px 0;
   background: var(--mu-opp);
 }

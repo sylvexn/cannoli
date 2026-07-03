@@ -32,7 +32,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
     ].sort((a, b) => b.spe - a.spe);
   }, [teamA, teamB]);
 
-  const allPokemon = useMemo(() => [...teamA, ...teamB], [teamA, teamB]);
+  const allPokemon = useMemo(() => [...teamA, ...teamB].sort((a, b) => b.stats.spe - a.stats.spe), [teamA, teamB]);
 
   return (
     <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
