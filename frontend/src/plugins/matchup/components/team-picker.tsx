@@ -29,7 +29,10 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
   // only drives the "n mons" tag on the builder entry).
   const build = open && side === 'a' ? getCurrentBuild() : null
 
-  // Close on outside click / Escape.
+  // Close on outside click / Escape. The keydown listener MUST be capture-
+  // phase: the PS client's own document-level Escape handler (js/client.js:23)
+  // calls stopImmediatePropagation() and its jQuery listener was registered
+  // first, so a bubble-phase listener here never fires.
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
@@ -39,10 +42,10 @@ export function TeamPicker({ side, source, onSelect }: TeamPickerProps) {
       if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
+    document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('keydown', onKey, true)
     }
   }, [open])
 
