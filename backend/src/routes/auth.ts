@@ -22,6 +22,7 @@ interface RateLimitEntry {
   fails: number;
   firstFailAt: number;
   lockedUntil: number;
+  usernames: Set<string>; // usernames attempted from this IP during the window
 }
 
 const loginAttempts = new Map<string, RateLimitEntry>();
@@ -49,14 +50,16 @@ function checkLockout(ip: string): number {
   return 0;
 }
 
-function recordFailure(ip: string) {
+function recordFailure(ip: string, username: string) {
+  const key = username.toLowerCase().trim();
   const now = Date.now();
   const entry = loginAttempts.get(ip);
   if (!entry || now - entry.firstFailAt > RL_WINDOW_MS) {
-    loginAttempts.set(ip, { fails: 1, firstFailAt: now, lockedUntil: 0 });
+    loginAttempts.set(ip, { fails: 1, firstFailAt: now, lockedUntil: 0, usernames: new Set([key]) });
     return;
   }
   entry.fails += 1;
+  entry.usernames.add(key);
   if (entry.fails >= RL_MAX_FAILS) {
     entry.lockedUntil = now + RL_LOCKOUT_MS;
   }
@@ -64,6 +67,19 @@ function recordFailure(ip: string) {
 
 function clearAttempts(ip: string) {
   loginAttempts.delete(ip);
+}
+
+/**
+ * Clear any rate-limit lockout tied to a username. The limiter is keyed by IP,
+ * so we drop every tracked IP that attempted this username during its window.
+ * Called when an admin resets a user's password so a locked-out user who forgot
+ * their password can log in immediately with the new temp password.
+ */
+export function clearRateLimitForUser(username: string) {
+  const key = username.toLowerCase().trim();
+  for (const [ip, entry] of loginAttempts) {
+    if (entry.usernames.has(key)) loginAttempts.delete(ip);
+  }
 }
 
 export const authRoutes = new Elysia()
@@ -90,7 +106,7 @@ export const authRoutes = new Elysia()
       .get();
 
     if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
-      recordFailure(ip);
+      recordFailure(ip, username);
       set.status = 401;
       return { error: 'Invalid username or password' };
     }

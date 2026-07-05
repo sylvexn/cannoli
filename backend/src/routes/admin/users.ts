@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, asc } from 'drizzle-orm';
 import { hashPassword } from '../../lib/auth';
+import { clearRateLimitForUser } from '../auth';
 import { tx } from '../../lib/tx';
 import { requireStaff } from '../../lib/auth-guards';
 
@@ -140,10 +141,17 @@ export const userRoutes = new Elysia()
     const settings = db.select().from(schema.siteSettings).get();
     const password = settings?.defaultUserPassword || 'password';
 
+    const target = db.select({ username: schema.users.username })
+      .from(schema.users).where(eq(schema.users.id, userId)).get();
+
     db.update(schema.users).set({
       passwordHash: hashPassword(password),
       mustChangePassword: true,
     }).where(eq(schema.users.id, userId)).run();
+
+    // Clear any login lockout so a user who forgot their password (and got
+    // rate-limited) can sign in immediately with the new temp password.
+    if (target) clearRateLimitForUser(target.username);
 
     return { password };
   })
