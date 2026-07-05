@@ -25,7 +25,7 @@ import { describe, expect, test, afterAll } from 'bun:test';
 import { Elysia } from 'elysia';
 import { db, schema } from '../src/db';
 import { eq } from 'drizzle-orm';
-import { authRoutes } from '../src/routes/auth';
+import { authRoutes, clearRateLimitForUser } from '../src/routes/auth';
 import {
   hashPassword, createSession, deleteSession, validateSession,
   csrfTokenForSession, parseCsrfCookie, parseSessionToken,
@@ -117,6 +117,28 @@ describe('login rate-limit lockout (5 fails / 15min / IP)', () => {
     const otherIp = '10.0.0.4';
     const ok = await login(otherIp, TEST_USERNAME, TEST_PASSWORD);
     expect(ok.status).toBe(200);
+  });
+
+  test('clearRateLimitForUser unlocks the IP locked out while failing that username (admin reset path)', async () => {
+    ensureLoginUser();
+    const ip = '10.0.0.5';
+    for (let i = 0; i < 6; i++) await login(ip, TEST_USERNAME, 'wrong');
+    // Confirm locked even with the correct password.
+    const locked = await login(ip, TEST_USERNAME, TEST_PASSWORD);
+    expect(locked.status).toBe(429);
+    // Admin resets this user's password → clears the lockout for that user.
+    clearRateLimitForUser(TEST_USERNAME);
+    const ok = await login(ip, TEST_USERNAME, TEST_PASSWORD);
+    expect(ok.status).toBe(200);
+  });
+
+  test('clearRateLimitForUser is targeted: clearing a different user leaves the lockout intact', async () => {
+    ensureLoginUser();
+    const ip = '10.0.0.6';
+    for (let i = 0; i < 6; i++) await login(ip, TEST_USERNAME, 'wrong');
+    clearRateLimitForUser('some-unrelated-user');
+    const stillLocked = await login(ip, TEST_USERNAME, TEST_PASSWORD);
+    expect(stillLocked.status).toBe(429);
   });
 });
 
