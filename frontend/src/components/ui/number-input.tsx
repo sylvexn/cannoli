@@ -74,7 +74,7 @@ function NumberInput({
           tabIndex={-1}
           onClick={increment}
           disabled={disabled || (max !== undefined && value >= max)}
-          className="relative flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-input/40 transition-colors rounded-tr-lg disabled:opacity-30 disabled:pointer-events-none after:absolute after:-inset-x-1 after:-top-3 after:bottom-0"
+          className="relative flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-input/40 transition-colors rounded-tr-lg disabled:opacity-30 disabled:pointer-events-none after:absolute after:-inset-x-1 after:-top-0.5 after:bottom-0"
         >
           <ChevronUp size={12} strokeWidth={2.5} />
         </button>
@@ -84,7 +84,7 @@ function NumberInput({
           tabIndex={-1}
           onClick={decrement}
           disabled={disabled || (min !== undefined && value <= min)}
-          className="relative flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-input/40 transition-colors rounded-br-lg disabled:opacity-30 disabled:pointer-events-none after:absolute after:-inset-x-1 after:top-0 after:-bottom-3"
+          className="relative flex-1 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-input/40 transition-colors rounded-br-lg disabled:opacity-30 disabled:pointer-events-none after:absolute after:-inset-x-1 after:top-0 after:-bottom-0.5"
         >
           <ChevronDown size={12} strokeWidth={2.5} />
         </button>

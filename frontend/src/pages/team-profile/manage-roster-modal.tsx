@@ -227,7 +227,7 @@ export function ManageRosterModal(props: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-3">
+      <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col gap-3">
         <DialogHeader>
           <DialogTitle className="font-mono uppercase tracking-wide">
             Manage {player.teamAbbrev || player.teamName}

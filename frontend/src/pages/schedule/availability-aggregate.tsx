@@ -144,7 +144,6 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
                     {style ? (
                       <Popover>
                         <PopoverTrigger
-                          nativeButton={false}
                           openOnHover
                           delay={150}
                           closeDelay={120}
