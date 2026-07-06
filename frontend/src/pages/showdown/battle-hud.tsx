@@ -4,10 +4,15 @@
  * Left panel: live K/D stats (updated via WS arena_stats).
  * Right panel: opponent roster + compact type coverage (scouting cheat sheet).
  * Bottom bar: back to lobby, toggle panels, spectator count.
+ *
+ * Both rails auto-collapse under 1024px viewport width — there's no room
+ * next to the PS iframe at that size. The manual open/close toggles still
+ * work whenever the viewport is wide enough to show them.
  */
 import { ChevronLeft, ChevronRight, PanelLeftClose, PanelRightClose, ArrowLeft, Eye, Skull, Circle } from 'lucide-react';
 import type { LiveMatchStats } from './use-arena-websocket';
 import { useLocalStorageState } from '@/lib/use-local-storage-state';
+import { useMediaQuery } from '@/lib/use-media-query';
 
 const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
@@ -25,6 +30,9 @@ export function BattleHud(props: BattleHudProps) {
   const { psRoomId, isOfficial, label, liveStats, spectatorCount, onBackToLobby } = props;
   const [leftOpen, setLeftOpen] = useLocalStorageState<boolean>('arena-panel-left', true);
   const [rightOpen, setRightOpen] = useLocalStorageState<boolean>('arena-panel-right', true);
+  const isWide = useMediaQuery('(min-width: 1024px)');
+  const showLeftPanel = isWide && leftOpen;
+  const showRightPanel = isWide && rightOpen;
 
   const iframeUrl = psRoomId ? `${PS_URL}/${psRoomId}` : PS_URL;
 
@@ -32,12 +40,12 @@ export function BattleHud(props: BattleHudProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-surface-raised border-b border-border-default flex-shrink-0">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="font-mono font-bold uppercase tracking-wider text-orange-400">Arena</span>
-          <span className="text-text-muted">&mdash;</span>
-          <span className="text-text-primary font-medium">{label}</span>
+        <div className="flex items-center gap-2 text-sm min-w-0 flex-1">
+          <span className="font-mono font-bold uppercase tracking-wider text-orange-400 shrink-0">Arena</span>
+          <span className="text-text-muted shrink-0">&mdash;</span>
+          <span className="text-text-primary font-medium truncate min-w-0 flex-1">{label}</span>
           {isOfficial && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400">
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-400/15 text-orange-400 shrink-0">
               Official
             </span>
           )}
@@ -47,7 +55,7 @@ export function BattleHud(props: BattleHudProps) {
       {/* Main content: left panel + iframe + right panel */}
       <div className="flex-1 flex min-h-0">
         {/* Left panel: Live Stats */}
-        {leftOpen && (
+        {showLeftPanel && (
           <div className="w-56 flex-shrink-0 border-r border-border-default bg-surface-raised overflow-y-auto">
             <div className="p-3">
               <div className="flex items-center justify-between mb-3">
@@ -56,8 +64,9 @@ export function BattleHud(props: BattleHudProps) {
                 </h3>
                 <button
                   onClick={() => setLeftOpen(false)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
+                  className="p-1.5 -m-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"
                   title="Hide panel"
+                  aria-label="Hide live stats panel"
                 >
                   <PanelLeftClose size={14} />
                 </button>
@@ -74,11 +83,12 @@ export function BattleHud(props: BattleHudProps) {
           className="flex-1 min-w-0 min-h-0 relative"
           style={{ overflow: 'hidden', maxWidth: '100%', maxHeight: '100%' }}
         >
-          {!leftOpen && (
+          {isWide && !leftOpen && (
             <button
               onClick={() => setLeftOpen(true)}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-surface-raised border border-border-default rounded-r-md p-1 text-text-muted hover:text-text-primary transition-colors"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-surface-raised border border-border-default rounded-r-md p-2 text-text-muted hover:text-text-primary transition-colors"
               title="Show live stats"
+              aria-label="Show live stats panel"
             >
               <ChevronRight size={14} />
             </button>
@@ -106,11 +116,12 @@ export function BattleHud(props: BattleHudProps) {
             title="Pokemon Showdown Battle"
           />
 
-          {!rightOpen && (
+          {isWide && !rightOpen && (
             <button
               onClick={() => setRightOpen(true)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-surface-raised border border-border-default rounded-l-md p-1 text-text-muted hover:text-text-primary transition-colors"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-surface-raised border border-border-default rounded-l-md p-2 text-text-muted hover:text-text-primary transition-colors"
               title="Show scouting"
+              aria-label="Show scouting panel"
             >
               <ChevronLeft size={14} />
             </button>
@@ -118,7 +129,7 @@ export function BattleHud(props: BattleHudProps) {
         </div>
 
         {/* Right panel: Scouting */}
-        {rightOpen && (
+        {showRightPanel && (
           <div className="w-56 flex-shrink-0 border-l border-border-default bg-surface-raised overflow-y-auto">
             <div className="p-3">
               <div className="flex items-center justify-between mb-3">
@@ -127,8 +138,9 @@ export function BattleHud(props: BattleHudProps) {
                 </h3>
                 <button
                   onClick={() => setRightOpen(false)}
-                  className="text-text-muted hover:text-text-primary transition-colors"
+                  className="p-1.5 -m-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"
                   title="Hide panel"
+                  aria-label="Hide scouting panel"
                 >
                   <PanelRightClose size={14} />
                 </button>
@@ -150,12 +162,14 @@ export function BattleHud(props: BattleHudProps) {
         </button>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => { setLeftOpen(v => !v); setRightOpen(v => !v); }}
-            className="text-xs text-text-muted hover:text-text-primary transition-colors"
-          >
-            Toggle Panels
-          </button>
+          {isWide && (
+            <button
+              onClick={() => { setLeftOpen(v => !v); setRightOpen(v => !v); }}
+              className="text-xs text-text-muted hover:text-text-primary transition-colors"
+            >
+              Toggle Panels
+            </button>
+          )}
           <div className="flex items-center gap-1 text-xs text-text-muted" title="Spectators">
             <Eye size={12} />
             <span className="tabular-nums">{spectatorCount ?? 0}</span>
@@ -204,10 +218,10 @@ function TeamStatsBlock({ label, pokemon, teraRemaining }: {
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-semibold text-text-primary truncate">{label}</span>
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-[11px] font-semibold text-text-primary truncate min-w-0 flex-1">{label}</span>
         {!teraRemaining && (
-          <span className="text-[9px] text-text-muted">Tera used</span>
+          <span className="text-[9px] text-text-muted shrink-0">Tera used</span>
         )}
       </div>
       <div className="space-y-0.5">
@@ -218,15 +232,15 @@ function TeamStatsBlock({ label, pokemon, teraRemaining }: {
               mon.fainted ? 'opacity-40' : ''
             }`}
           >
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
               {mon.fainted ? (
                 <Skull size={10} className="text-red-400 shrink-0" data-testid="hud-fainted-icon" />
               ) : (
                 <Circle size={10} className="text-green-400 shrink-0 fill-green-400" data-testid="hud-alive-icon" />
               )}
-              <span className="text-text-primary truncate">{mon.species}</span>
+              <span className="text-text-primary truncate min-w-0 flex-1">{mon.species}</span>
               {mon.teraUsed && mon.teraType && (
-                <span className="text-[9px] text-purple-400">
+                <span className="text-[9px] text-purple-400 shrink-0">
                   T:{mon.teraType}
                 </span>
               )}
@@ -275,9 +289,9 @@ function RosterBlock({ label, pokemon }: {
         {pokemon.map(mon => (
           <div
             key={mon.species}
-            className="flex items-center justify-between px-2 py-1 text-[11px]"
+            className="flex items-center justify-between gap-2 px-2 py-1 text-[11px]"
           >
-            <span className={`text-text-primary truncate ${mon.fainted ? 'line-through opacity-40' : ''}`}>
+            <span className={`text-text-primary truncate min-w-0 flex-1 ${mon.fainted ? 'line-through opacity-40' : ''}`}>
               {mon.species}
             </span>
             <div className="flex items-center gap-1 flex-shrink-0">

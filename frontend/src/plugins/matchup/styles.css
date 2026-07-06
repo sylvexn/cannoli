@@ -140,6 +140,7 @@
 .matchup-picker-b .matchup-picker-role { color: var(--mu-opp); }
 
 .matchup-picker-value {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -161,8 +162,10 @@
   top: calc(100% + 6px);
   z-index: 60;
   min-width: 260px;
+  max-width: min(320px, 92cqi);
   max-height: 340px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--mu-raised);
   border: 1px solid var(--mu-line);
   border-radius: 10px;
@@ -216,6 +219,7 @@
 .matchup-menu-item:disabled:hover { background: none; }
 
 .matchup-menu-item-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -288,7 +292,8 @@
   position: absolute;
   top: calc(100% + 6px);
   z-index: 60;
-  width: min(400px, 92vw);
+  width: min(400px, 92cqi);
+  max-width: calc(100cqi - 24px);
   background: var(--mu-raised);
   border: 1px solid var(--mu-line);
   border-radius: 10px;
@@ -445,10 +450,10 @@
 
 .matchup-ct-remove {
   position: absolute;
-  top: -5px;
-  right: -5px;
-  width: 15px;
-  height: 15px;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--mu-raised);
   border: 1px solid var(--mu-line);
@@ -610,6 +615,7 @@
 .matchup-col-b .matchup-col-h { color: var(--mu-opp); }
 
 .matchup-col-h a {
+  min-width: 0;
   color: inherit;
   text-decoration: none;
   overflow: hidden;
@@ -666,33 +672,45 @@
 }
 
 /* sub-team toggle dot — sits on the row's outer edge (row-reverse mirrors it
-   for the opponent side) */
+   for the opponent side). The button itself is a 24px touch target; the
+   visual dot stays small via ::before so tightly-packed rows don't get a
+   bigger-looking control. */
 .matchup-crow-sel {
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
   flex: none;
-  border-radius: 50%;
-  border: 1px solid var(--mu-line);
-  background: transparent;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
   padding: 0;
   cursor: pointer;
 }
 
-.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel:hover {
+.matchup-crow-sel::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--mu-line);
+  background: transparent;
+}
+
+.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel:hover::before {
   border-color: var(--mu-you);
 }
 
-.matchup-crow-b .matchup-crow-sel:hover {
+.matchup-crow-b .matchup-crow-sel:hover::before {
   border-color: var(--mu-opp);
 }
 
-.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel-on {
+.matchup-crow:not(.matchup-crow-b) .matchup-crow-sel-on::before {
   background: var(--mu-you);
   border-color: var(--mu-you);
   box-shadow: 0 0 6px color-mix(in srgb, var(--mu-you) 60%, transparent);
 }
 
-.matchup-crow-b .matchup-crow-sel-on {
+.matchup-crow-b .matchup-crow-sel-on::before {
   background: var(--mu-opp);
   border-color: var(--mu-opp);
   box-shadow: 0 0 6px color-mix(in srgb, var(--mu-opp) 60%, transparent);

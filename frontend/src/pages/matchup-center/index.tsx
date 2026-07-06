@@ -201,7 +201,7 @@ export function MatchupCenterPage() {
       </div>
 
       {/* Roster Strip — always visible */}
-      <div className="flex gap-1.5 items-stretch">
+      <div className="flex gap-1.5 items-stretch overflow-x-auto">
         {state.teamA.length === 0 && noManagedTeam ? (
           <NoManagedTeamPanel />
         ) : (
@@ -291,7 +291,7 @@ export function MatchupCenterPage() {
               onUpdateSlot={(id, updates) => dispatch({ type: 'UPDATE_SPEED_SLOT', id, updates })}
             />
           </TabsContent>
-          <TabsContent value="moves">
+          <TabsContent value="moves" className="h-full min-h-0 flex flex-col">
             <MovesTab teamA={activeTeamA} teamB={activeTeamB} />
           </TabsContent>
         </div>

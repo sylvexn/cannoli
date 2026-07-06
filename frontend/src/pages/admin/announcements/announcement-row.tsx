@@ -80,7 +80,7 @@ export function AnnouncementRow({ item, onEdit, onRetracted }: AnnouncementRowPr
   }
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3 group">
+    <div className="flex items-start gap-3 px-4 py-3">
       {/* Category badge */}
       <Badge
         variant="outline"
@@ -149,14 +149,14 @@ export function AnnouncementRow({ item, onEdit, onRetracted }: AnnouncementRowPr
 
       {/* Actions (active only) */}
       {item.active && (
-        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 shrink-0">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onEdit(item)}
             disabled={busy}
             title="Edit this announcement"
-            className="h-7 w-7 p-0 text-text-muted hover:text-text-primary"
+            className="h-7 w-7 p-0 text-text-muted hover:text-text-primary opacity-60 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           >
             <Pencil size={12} />
           </Button>
@@ -166,7 +166,7 @@ export function AnnouncementRow({ item, onEdit, onRetracted }: AnnouncementRowPr
             onClick={handleRetract}
             disabled={busy}
             title="Retract this announcement"
-            className="h-7 w-7 p-0 text-text-muted hover:text-loss"
+            className="h-7 w-7 p-0 text-text-muted hover:text-loss opacity-60 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           >
             <X size={13} />
           </Button>

@@ -141,16 +141,20 @@ function MatchRow({
         )}
 
         <div
-          className="flex items-center gap-1.5 min-w-[220px]"
+          className="flex items-center gap-1.5 min-w-0 lg:min-w-[220px]"
           onClick={e => e.stopPropagation()}
         >
-          <AdminTeamChip teamId={match.homeTeamId} resolver={teamNames} />
-          <span className="text-[10px] text-text-muted">vs</span>
-          <AdminTeamChip teamId={match.awayTeamId} resolver={teamNames} />
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <AdminTeamChip teamId={match.homeTeamId} resolver={teamNames} />
+          </div>
+          <span className="text-[10px] text-text-muted shrink-0">vs</span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <AdminTeamChip teamId={match.awayTeamId} resolver={teamNames} />
+          </div>
         </div>
 
         <div
-          className="w-[60px] text-center"
+          className="w-[60px] shrink-0 text-center"
           onClick={e => e.stopPropagation()}
         >
           {match.homeScore !== null ? (
@@ -164,9 +168,17 @@ function MatchRow({
           )}
         </div>
 
-        <StatusBadge status={match.status} />
-        {hasWarnings && <WarningCountBadge count={match.warnings.length} />}
-        <PhaseBadge match={match} />
+        <div className="shrink-0">
+          <StatusBadge status={match.status} />
+        </div>
+        {hasWarnings && (
+          <span className="hidden lg:flex shrink-0">
+            <WarningCountBadge count={match.warnings.length} />
+          </span>
+        )}
+        <span className="hidden lg:flex shrink-0">
+          <PhaseBadge match={match} />
+        </span>
 
         <div className="flex-1" />
 

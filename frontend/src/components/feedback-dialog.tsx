@@ -108,7 +108,7 @@ export function FeedbackDialog() {
       <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
         <DialogContent
           className={cn(
-            'sm:max-w-md transition-opacity duration-75',
+            'max-w-md transition-opacity duration-75',
             capturing && 'opacity-0 pointer-events-none',
           )}
         >

@@ -271,6 +271,7 @@ export function PokemonCompactCard({
             'absolute right-0.5 z-30 flex flex-col items-end gap-0.5',
             'opacity-0 -translate-y-0.5 transition-[opacity,transform] duration-180',
             'group-hover:opacity-100 group-hover:translate-y-0 group-focus-visible:opacity-100 group-focus-visible:translate-y-0',
+            'pointer-coarse:opacity-100 pointer-coarse:translate-y-0',
             queuePosition ? 'top-[18px]' : 'top-[16px]',
           )}
         >
@@ -359,16 +360,16 @@ export function PokemonCompactCard({
           'absolute left-0 right-0 top-0 rounded-t-md pointer-events-none',
           'transition-[height,background-color] duration-180',
           owner
-            ? 'h-[4px] bg-[color:var(--owner)] group-hover:h-[14px] group-focus-visible:h-[14px]'
+            ? 'h-[4px] bg-[color:var(--owner)] group-hover:h-[14px] group-focus-visible:h-[14px] pointer-coarse:h-[14px]'
             : looksPickable
-              ? 'h-[2px] bg-neon/60 group-hover:h-[14px] group-focus-visible:h-[14px]'
+              ? 'h-[2px] bg-neon/60 group-hover:h-[14px] group-focus-visible:h-[14px] pointer-coarse:h-[14px]'
               : queuePosition
-                ? 'h-[2px] bg-pink/60 group-hover:h-[14px] group-focus-visible:h-[14px]'
+                ? 'h-[2px] bg-pink/60 group-hover:h-[14px] group-focus-visible:h-[14px] pointer-coarse:h-[14px]'
                 : hasConflict
-                  ? 'h-[2px] bg-loss/50 group-hover:h-[14px] group-focus-visible:h-[14px]'
+                  ? 'h-[2px] bg-loss/50 group-hover:h-[14px] group-focus-visible:h-[14px] pointer-coarse:h-[14px]'
                   : unaffordable
-                    ? 'h-[1px] bg-loss/30 group-hover:h-[14px] group-focus-visible:h-[14px]'
-                    : 'h-[1px] bg-border-subtle group-hover:h-[14px] group-hover:bg-surface-overlay/60 group-focus-visible:h-[14px]',
+                    ? 'h-[1px] bg-loss/30 group-hover:h-[14px] group-focus-visible:h-[14px] pointer-coarse:h-[14px]'
+                    : 'h-[1px] bg-border-subtle group-hover:h-[14px] group-hover:bg-surface-overlay/60 group-focus-visible:h-[14px] pointer-coarse:h-[14px]',
         )}
         style={ownerColor ? { backgroundColor: ownerColor } : undefined}
       />
@@ -380,7 +381,7 @@ export function PokemonCompactCard({
           'absolute left-0 right-0 top-0 z-20 flex items-center justify-center gap-1',
           'h-[14px] px-1 text-[8.5px] font-mono leading-none uppercase tracking-wider',
           'opacity-0 transition-opacity duration-180',
-          'group-hover:opacity-100 group-focus-visible:opacity-100',
+          'group-hover:opacity-100 group-focus-visible:opacity-100 pointer-coarse:opacity-100',
           owner
             ? 'text-white'
             : looksPickable

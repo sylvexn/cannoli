@@ -69,13 +69,15 @@ export function AnnouncementBannerStrip({
     <div className={cn('shrink-0 border-b', meta.bannerClass)}>
       <div className="flex items-center gap-3 px-4 py-1.5 text-[11px]">
         <Icon size={12} className="shrink-0" />
-        <span className="font-semibold">{title}</span>
-        {body && (
-          <>
-            <span className="hidden sm:inline h-3 w-px bg-current/30" />
-            <span className="hidden sm:inline text-current/70 truncate">{body}</span>
-          </>
-        )}
+        <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+          <span className="font-semibold truncate">{title}</span>
+          {body && (
+            <>
+              <span className="hidden sm:inline h-3 w-px bg-current/30 shrink-0" />
+              <span className="hidden sm:inline text-current/70 truncate min-w-0">{body}</span>
+            </>
+          )}
+        </div>
         {linkEl && <div className="ml-auto pl-2 shrink-0">{linkEl}</div>}
         {onDismiss && (
           <button

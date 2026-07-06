@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { TeamLogo } from '@/components/team-logo';
 import { api } from '@/lib/api';
 import type { ApiTeam } from '@/lib/api';
-import { Shuffle, ListOrdered, GripVertical, Save } from 'lucide-react';
+import { Shuffle, ListOrdered, GripVertical, Save, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { getErrorMessage } from '@/lib/errors';
@@ -69,6 +69,14 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
     setDragIdx(null);
   }
 
+  function moveItem(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= order.length) return;
+    const newOrder = [...order];
+    [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+    setOrder(newOrder);
+  }
+
   async function handleSave() {
     try {
       await api.saveDraftOrder(leagueId, order);
@@ -130,6 +138,24 @@ export function DraftOrderEditor({ leagueId, leagueName, leagueColor }: DraftOrd
                 <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-border-subtle text-text-muted font-mono">
                   {team.record.wins}-{team.record.losses}
                 </Badge>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    onClick={() => moveItem(idx, -1)}
+                    disabled={idx === 0}
+                    title="Move up"
+                    className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => moveItem(idx, 1)}
+                    disabled={idx === order.length - 1}
+                    title="Move down"
+                    className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
               </div>
             );
           })}

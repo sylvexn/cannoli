@@ -57,7 +57,7 @@ export function MovesTab({ teamA, teamB }: MovesTabProps) {
     // Own scroll box (both axes) so the sprite header can truly stick on
     // vertical scroll and the label column can stick on horizontal scroll —
     // previously the sprites scrolled out of view (feedback #43).
-    <div className="border border-border-default rounded-lg w-full overflow-auto max-h-[70vh]">
+    <div className="border border-border-default rounded-lg w-full overflow-auto flex-1 min-h-0">
       {/* ── Sticky sprite header ───────────────────────────── */}
       <div className="sticky top-0 z-20 flex items-center border-b border-border-default bg-surface-raised rounded-t-lg min-w-max">
         {/* Label column — frozen top-left corner, above both sticky axes */}

@@ -47,16 +47,16 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
 
   return (
     <div className={cn('flex-1 rounded-lg border p-2', colors.border, colors.bg)}>
-      <div className="flex items-center justify-between mb-1 px-1">
-        <span className={cn('text-xs font-medium', colors.text)}>
+      <div className="flex items-center justify-between gap-2 mb-1 px-1 min-w-0">
+        <span className={cn('text-xs font-medium truncate min-w-0', colors.text)}>
           {label || colors.label}
         </span>
-        <span className="text-[10px] text-text-muted">
+        <span className="text-[10px] text-text-muted shrink-0 whitespace-nowrap">
           {hasSubTeam ? `${subTeam.size}/12 selected` : `${team.length} Pokemon`}
           {!hasSubTeam && ' · click to pick up to 12'}
         </span>
       </div>
-      <div className="group/strip flex">
+      <div className="group/strip flex flex-wrap">
         {team.map(pokemon => {
           const isSelected = subTeam.has(pokemon.name);
           const isDimmed = hasSubTeam && !isSelected;
@@ -66,7 +66,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               key={pokemon.name}
               onClick={() => onToggle(pokemon.name)}
               className={cn(
-                'group/mon flex-1 min-w-0 flex flex-col items-center gap-0.5 py-1.5 px-0.5 rounded-lg border cursor-pointer',
+                'group/mon flex-1 basis-11 min-w-11 flex flex-col items-center gap-0.5 py-1.5 px-0.5 rounded-lg border cursor-pointer',
                 'transition-all duration-200 ease-out',
                 'hover:scale-110 hover:z-10 hover:bg-surface-overlay/60',
                 colors.hoverGlow,
@@ -77,8 +77,8 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               )}
               title={`${pokemon.name} · ${pokemon.types.join('/')} · ${pokemon.stats.spe} SPE`}
             >
-              <div className="w-10 h-10 flex items-center justify-center">
-                <PokemonSprite name={pokemon.name} size="md" shiny={pokemon.isShiny} className="!w-10 !h-10" />
+              <div className="w-full max-w-10 aspect-square flex items-center justify-center">
+                <PokemonSprite name={pokemon.name} size="md" shiny={pokemon.isShiny} className="!w-full !h-full" />
               </div>
               <span className={cn(
                 'text-[10px] font-mono leading-tight w-full truncate text-center transition-colors duration-200',

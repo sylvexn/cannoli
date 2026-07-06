@@ -288,7 +288,7 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
           </span>
         )}
       </div>
-      <div className="max-h-[60vh] overflow-y-auto py-1 divide-y divide-border-default/40">
+      <div className="max-h-[60dvh] overflow-y-auto py-1 divide-y divide-border-default/40">
         {items.map(item => (
           <NotificationRow
             key={item.id}

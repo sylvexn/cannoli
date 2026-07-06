@@ -116,7 +116,7 @@ export function PokemonSideCard({
 
       <div
         className={cn(
-          'fixed top-0 right-0 bottom-0 z-50 w-[380px]',
+          'fixed top-0 right-0 bottom-0 z-50 w-full max-w-[380px]',
           'bg-surface-raised border-l border-border-default shadow-card-lg',
           'flex flex-col',
           'transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',

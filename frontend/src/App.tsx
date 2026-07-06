@@ -46,6 +46,7 @@ import { PokemonDetailPage } from '@/pages/pokemon-detail';
 import { ShowdownPage } from '@/pages/showdown';
 import { CoachProfilePage } from '@/pages/coach-profile';
 import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
+import { NotFoundPage } from '@/pages/not-found';
 
 // Lazy-loaded heavy routes
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
@@ -160,6 +161,8 @@ export default function App() {
                   </Route>
                 </Route>
               </Route>
+
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
           </PokemonSideCardProvider>

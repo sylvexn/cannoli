@@ -494,11 +494,11 @@ function BattleRow({ battle: b }: { battle: ApiPokemonRecentBattle }) {
         logoOnly
         logoSize="sm"
       />
-      <span className="text-[11px] font-mono text-text-muted shrink-0">
+      <span className="hidden sm:inline text-[11px] font-mono text-text-muted shrink-0">
         {score}
       </span>
-      <div className="flex-1" />
-      <span className="text-[11px] font-mono shrink-0 flex items-center gap-1.5">
+      <div className="hidden sm:block flex-1" />
+      <span className="hidden sm:flex text-[11px] font-mono shrink-0 items-center gap-1.5">
         <span className="text-win">{b.kills}</span>
         <span className="text-text-muted">/</span>
         <span className="text-loss">{b.deaths}</span>

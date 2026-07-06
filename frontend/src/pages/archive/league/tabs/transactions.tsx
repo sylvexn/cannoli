@@ -56,7 +56,7 @@ function TransactionRowDisplay({ txn, teamMap }: { txn: TransactionRow; teamMap:
   const TypeIcon = txn.type === 'trade' ? Repeat : txn.type === 'fa' ? UserPlus : Sparkles;
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 text-[11px] rounded hover:bg-surface-overlay/40 transition-colors">
+    <div className="flex items-center gap-2 px-2 py-1 text-[11px] rounded hover:bg-surface-overlay/40 transition-colors flex-wrap">
       <Badge
         variant="outline"
         className={cn(

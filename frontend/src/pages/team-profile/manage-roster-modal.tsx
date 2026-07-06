@@ -227,7 +227,7 @@ export function ManageRosterModal(props: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-3">
+      <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col gap-3">
         <DialogHeader>
           <DialogTitle className="font-mono uppercase tracking-wide">
             Manage {player.teamAbbrev || player.teamName}
@@ -290,7 +290,7 @@ export function ManageRosterModal(props: {
                   </div>
 
                   {/* Name + cost */}
-                  <div className="w-[150px] shrink-0 min-w-0">
+                  <div className="min-w-0 shrink basis-20 sm:basis-[150px]">
                     <div className="flex items-center gap-1.5">
                       <span
                         className={cn(

@@ -28,7 +28,7 @@ function statColor(val: number): string {
 
 export function StatsTab({ teamA, teamB }: StatsTabProps) {
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <StatsTable team={teamA} side="a" />
       <StatsTable team={teamB} side="b" />
     </div>
@@ -80,7 +80,7 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
   }
 
   return (
-    <div className="rounded-lg border border-border-default overflow-hidden">
+    <div className="rounded-lg border border-border-default overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className={colors.header}>
