@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Swords, Gamepad2,
@@ -201,6 +201,16 @@ export function AppShell() {
   const collapsedRail = isDesktop && collapsed;
 
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
+
+  // Force the password change globally, not per-route. Enforcement used to rely
+  // on the user clicking into a ProtectedRoute — but on mobile the whole sidebar
+  // (and its protected nav links) is an off-canvas drawer, so a flagged user
+  // lands on the unguarded home route, never trips the guard, and gets stuck
+  // while every write silently 403s. Gate the whole shell instead.
+  // (/change-password renders outside AppShell, so this can't loop.)
+  if (user?.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
