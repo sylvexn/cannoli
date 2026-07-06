@@ -6,7 +6,8 @@
  * Click the active pill to collapse.
  *
  * BattleHud takeover: when `viewingBattle` is set, the footer expands to
- * ~50% of viewport height and renders <BattleHud> instead of the picked
+ * ~50% of the page's own available height (not the viewport — see
+ * BATTLE_HEIGHT below) and renders <BattleHud> instead of the picked
  * section. Closing the battle returns the footer to its prior state
  * (last-selected pill + height).
  *
@@ -30,7 +31,13 @@ type Pill = 'match' | 'scrims' | 'live';
 
 const COLLAPSED_PX = 32;
 const EXPANDED_PX = 280;
-const BATTLE_VH = 50; // % of viewport height when watching a battle
+// Height when watching a battle: a % of the wide-route column's own height,
+// not `vh` — `vh` ignores banners/pills above the page and squeezes the PS
+// iframe on shorter viewports. The wide-route shell (app-shell.tsx -> this
+// page's root) is a definite-height flex chain all the way to h-screen, so a
+// percentage here resolves against real remaining space. Clamped so the HUD
+// stays usable on short viewports without ballooning on tall ones.
+const BATTLE_HEIGHT = 'clamp(240px, 50%, 480px)';
 
 interface ViewingBattle {
   matchId: string;
@@ -138,14 +145,14 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
   // — the pill bar is therefore always visible and the PS client is forced to
   // lay out within a deterministic window (no full-height iframe pushing the
   // canvas below the fold).
-  // - Battle HUD takeover: ~50vh.
+  // - Battle HUD takeover: ~50% of the column's own height (see BATTLE_HEIGHT).
   // - Expanded panel: 280px.
   // - Collapsed pill bar: 32px.
   const collapsed = !viewingBattle && !isOpen;
   const containerStyle: React.CSSProperties = collapsed
     ? { height: COLLAPSED_PX }
     : viewingBattle
-      ? { height: `${BATTLE_VH}vh` }
+      ? { height: BATTLE_HEIGHT }
       : { height: `${EXPANDED_PX}px` };
 
   return (
