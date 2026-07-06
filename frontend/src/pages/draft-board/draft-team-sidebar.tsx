@@ -202,7 +202,7 @@ function BottomSheetShell(props: DraftTeamSidebarProps) {
         aria-label="Team panel"
         aria-hidden={!open}
         className={cn(
-          'fixed bottom-12 left-0 right-0 z-40 max-h-[78vh] flex flex-col',
+          'fixed bottom-12 left-0 right-0 z-40 max-h-[78dvh] flex flex-col',
           'transition-transform duration-[220ms] ease-out',
           open ? 'translate-y-0' : 'translate-y-full pointer-events-none',
         )}

@@ -68,8 +68,8 @@ export function DraftTopBar({
 
   return (
     <TooltipProvider delay={300}>
-      <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <h1 className="text-lg font-mono font-bold tracking-tight uppercase">
             <span className="text-draw">Draft</span>
             <span className="text-text-primary ml-1">Board</span>
