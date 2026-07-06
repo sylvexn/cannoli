@@ -219,9 +219,34 @@ for (const name of names) {
     continue;
   }
 
+  // Pre-evolution inheritance: Showdown stores egg moves and lower-stage moves
+  // only on the EARLIEST form that learns them (e.g. `glare` lives on `snivy`,
+  // never repeated on `servine`/`serperior`). Walk the full prevo chain from
+  // every id we resolve (own id, mega/primal base id, changesFrom id) and fold
+  // each ancestor's learnset in. `pokedex[id].prevo` is a display name, so
+  // `strip()` it to a learnset key; egg-move tags like `9E` are gen9-legal, so
+  // keeping the original PS source tags leaves per-format filtering correct.
+  const prevoVisited = new Set();
+  const prevoEntries = [];
+  for (const startId of [id, baseId, cfId]) {
+    if (!startId) continue;
+    let cursor = startId;
+    // Bounded loop also guards against cyclic / self-referential prevo data.
+    for (let hops = 0; hops < 20; hops++) {
+      const prevoName = pokedex[cursor]?.prevo;
+      if (!prevoName) break;
+      const prevoId = strip(prevoName);
+      if (!prevoId || prevoVisited.has(prevoId)) break;
+      prevoVisited.add(prevoId);
+      const prevoEntry = learnsets[prevoId];
+      if (prevoEntry) prevoEntries.push(prevoEntry);
+      cursor = prevoId;
+    }
+  }
+
   // Build move → list-of-source-tags map across own + inherited learnsets.
   const moveSources = new Map();
-  for (const src of [entry, baseEntry, cfEntry]) {
+  for (const src of [entry, baseEntry, cfEntry, ...prevoEntries]) {
     if (!src?.learnset) continue;
     for (const [moveName, sources] of Object.entries(src.learnset)) {
       if (!moveSources.has(moveName)) moveSources.set(moveName, []);
