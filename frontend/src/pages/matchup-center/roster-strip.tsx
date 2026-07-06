@@ -66,7 +66,7 @@ export function RosterStrip({ team, subTeam, onToggle, side, label }: RosterStri
               key={pokemon.name}
               onClick={() => onToggle(pokemon.name)}
               className={cn(
-                'group/mon flex-1 min-w-0 flex flex-col items-center gap-0.5 py-1.5 px-0.5 rounded-lg border cursor-pointer',
+                'group/mon flex-1 basis-11 min-w-11 flex flex-col items-center gap-0.5 py-1.5 px-0.5 rounded-lg border cursor-pointer',
                 'transition-all duration-200 ease-out',
                 'hover:scale-110 hover:z-10 hover:bg-surface-overlay/60',
                 colors.hoverGlow,

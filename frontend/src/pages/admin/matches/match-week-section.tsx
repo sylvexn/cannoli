@@ -141,7 +141,7 @@ function MatchRow({
         )}
 
         <div
-          className="flex items-center gap-1.5 min-w-0"
+          className="flex items-center gap-1.5 min-w-0 lg:min-w-[220px]"
           onClick={e => e.stopPropagation()}
         >
           <div className="min-w-0 flex-1 overflow-hidden">
