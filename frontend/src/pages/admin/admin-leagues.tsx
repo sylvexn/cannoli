@@ -253,7 +253,7 @@ export function AdminLeagues() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                   <SettingField
                     label="Point Cap"
                     icon={<Trophy size={10} />}
