@@ -410,7 +410,7 @@ export function FreeAgentsPage() {
                         </button>
                         <Link
                           to={pokemonRoute(p.name)}
-                          className="text-xs font-medium text-text-primary w-32 truncate text-left hover:text-neon hover:underline transition-colors"
+                          className="text-xs font-medium text-text-primary flex-1 min-w-0 truncate text-left hover:text-neon hover:underline transition-colors"
                         >
                           {p.name}
                         </Link>
@@ -419,8 +419,8 @@ export function FreeAgentsPage() {
                           types={[p.type1.toLowerCase() as PokemonType, ...(p.type2 ? [p.type2.toLowerCase() as PokemonType] : [])]}
                           size="xs"
                         />
-                        <span className="text-[10px] text-text-muted font-mono tabular-nums">{p.stats.spe} spe</span>
-                        <span className="text-[10px] text-text-muted/50 font-mono tabular-nums">{bst(p.stats)} bst</span>
+                        <span className="hidden md:inline text-[10px] text-text-muted font-mono tabular-nums">{p.stats.spe} spe</span>
+                        <span className="hidden md:inline text-[10px] text-text-muted/50 font-mono tabular-nums">{bst(p.stats)} bst</span>
                         {overBudget && !isPending && (
                           <span className="text-[10px] text-loss font-semibold flex items-center gap-1">
                             <AlertCircle size={10} /> needs drop
