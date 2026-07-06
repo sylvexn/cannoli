@@ -498,7 +498,7 @@ function StandingsRow({
         {showNarrative && narrativeChip && (
           <span
             className={cn(
-              'shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',
+              'shrink-0 hidden sm:inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider',
               narrativeChip.bgClass,
               narrativeChip.textClass,
             )}

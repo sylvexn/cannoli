@@ -29,13 +29,13 @@ export function StandingsTab({ data }: { data: FullLeagueData }) {
   return (
     <Card className="bg-surface-raised border-border-default">
       <CardContent className="p-3 space-y-1">
-        <div className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem] sm:grid-cols-[2rem_1fr_4rem_4rem_4rem_4rem] gap-2 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted">
+        <div className="grid grid-cols-[2rem_1fr_5rem] sm:grid-cols-[2rem_1fr_4rem_4rem_4rem_4rem] gap-2 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted">
           <span>#</span>
           <span>Team</span>
           <span className="text-right">W-L</span>
-          <span className="text-right">Diff</span>
+          <span className="text-right hidden sm:block">Diff</span>
           <span className="text-right hidden sm:block">K</span>
-          <span className="text-right">Tiebreak</span>
+          <span className="text-right hidden sm:block">Tiebreak</span>
         </div>
         {sortedTeams.map((team, i) => (
           <StandingsRow key={team.id} team={team} rank={team.finishPosition ?? i + 1} />
@@ -73,7 +73,7 @@ function StandingsRow({ team, rank }: { team: TeamRow; rank: number }) {
     <div className="rounded-md hover:bg-surface-overlay/50 transition-colors">
       <Link
         to={teamLink}
-        className="grid grid-cols-[2rem_1fr_5rem_5rem_5rem] sm:grid-cols-[2rem_1fr_4rem_4rem_4rem_4rem] gap-2 items-center px-2 py-2 text-xs"
+        className="grid grid-cols-[2rem_1fr_5rem] sm:grid-cols-[2rem_1fr_4rem_4rem_4rem_4rem] gap-2 items-center px-2 py-2 text-xs"
       >
         <span className={cn(
           'font-mono font-bold text-center',
@@ -108,13 +108,13 @@ function StandingsRow({ team, rank }: { team: TeamRow; rank: number }) {
           className="text-[10px] justify-end"
         />
         <span className={cn(
-          'text-right font-mono',
+          'text-right font-mono hidden sm:block',
           team.record.differential > 0 ? 'text-win' : team.record.differential < 0 ? 'text-loss' : 'text-text-muted',
         )}>
           {team.record.differential > 0 ? '+' : ''}{team.record.differential}
         </span>
         <span className="text-right font-mono text-text-muted hidden sm:block">{team.record.kills}</span>
-        <span className="text-right text-[10px] text-text-muted truncate">
+        <span className="text-right text-[10px] text-text-muted truncate hidden sm:block">
           {team.tiebreaker ? `${team.tiebreaker.rule}` : '—'}
         </span>
       </Link>
