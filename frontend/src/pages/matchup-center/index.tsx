@@ -291,7 +291,7 @@ export function MatchupCenterPage() {
               onUpdateSlot={(id, updates) => dispatch({ type: 'UPDATE_SPEED_SLOT', id, updates })}
             />
           </TabsContent>
-          <TabsContent value="moves">
+          <TabsContent value="moves" className="h-full min-h-0 flex flex-col">
             <MovesTab teamA={activeTeamA} teamB={activeTeamB} />
           </TabsContent>
         </div>
