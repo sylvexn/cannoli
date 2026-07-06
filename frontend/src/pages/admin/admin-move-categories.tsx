@@ -339,7 +339,7 @@ export function AdminMoveCategories() {
                             </span>
                             <X
                               size={10}
-                              className="text-text-muted opacity-0 group-hover/entry:opacity-100 transition-opacity ml-0.5 hover:text-loss"
+                              className="text-text-muted opacity-60 hover:opacity-100 focus-visible:opacity-100 transition-opacity ml-0.5 hover:text-loss"
                               onClick={e => { e.stopPropagation(); confirmDeleteEntry(cat.id, entry.id, idx); }}
                             />
                           </button>

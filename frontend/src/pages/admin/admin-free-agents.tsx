@@ -432,7 +432,7 @@ export function AdminFreeAgents() {
 function FreeAgentRow({ p, onPickup }: { p: FreeAgent; onPickup: () => void }) {
   const bst = p.stats.hp + p.stats.atk + p.stats.def + p.stats.spa + p.stats.spd + p.stats.spe;
   return (
-    <div className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-overlay/40 transition-colors group">
+    <div className="flex items-center gap-2 px-2 py-1 rounded hover:bg-surface-overlay/40 transition-colors">
       <PokemonSprite name={p.name} size="xs" className="shrink-0" />
       <span className="text-xs font-medium text-text-primary w-28 truncate">{p.name}</span>
       <div className="flex items-center gap-1 shrink-0">
@@ -449,7 +449,7 @@ function FreeAgentRow({ p, onPickup }: { p: FreeAgent; onPickup: () => void }) {
       <span className="text-[10px] text-text-muted/50 font-mono tabular-nums">{bst} bst</span>
       <button
         onClick={onPickup}
-        className="opacity-0 group-hover:opacity-100 text-[10px] text-neon hover:text-neon/80 font-semibold transition-all ml-auto"
+        className="opacity-60 hover:opacity-100 focus-visible:opacity-100 text-[10px] text-neon hover:text-neon/80 font-semibold transition-all ml-auto"
       >
         Pickup
       </button>
