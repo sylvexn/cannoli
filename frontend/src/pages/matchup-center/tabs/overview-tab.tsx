@@ -25,11 +25,11 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
   }, [teamA, teamB]);
 
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-4 items-start">
       <RosterTable team={teamA} side="a" />
 
       {/* Speed Tier Comparison */}
-      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden shrink-0 w-fit min-w-[18rem]">
+      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden shrink-0 w-fit min-w-[18rem] max-w-sm mx-auto">
         <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-text-muted text-center border-b border-border-subtle bg-surface-overlay/30">
           Speed Tiers
         </div>
@@ -42,10 +42,10 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
                 pokemon.side === 'a' ? 'bg-[#3b82f6]/10' : 'bg-[#ef4444]/10',
               )}
             >
-              <div>
+              <div className="min-w-0">
                 {pokemon.side === 'a' && (
-                  <div className="flex items-center gap-1 justify-end whitespace-nowrap">
-                    <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
+                  <div className="flex items-center gap-1 justify-end min-w-0">
+                    <Link to={pokemonRoute(pokemon.name)} className="truncate text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
                     <PokemonSprite name={pokemon.name} size="xs" shiny={pokemon.isShiny} className="shrink-0" />
                   </div>
                 )}
@@ -56,11 +56,11 @@ export function OverviewTab({ teamA, teamB }: OverviewTabProps) {
               )}>
                 {pokemon.stats.spe}
               </span>
-              <div>
+              <div className="min-w-0">
                 {pokemon.side === 'b' && (
-                  <div className="flex items-center gap-1 whitespace-nowrap">
+                  <div className="flex items-center gap-1 min-w-0">
                     <PokemonSprite name={pokemon.name} size="xs" shiny={pokemon.isShiny} className="shrink-0" />
-                    <Link to={pokemonRoute(pokemon.name)} className="text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
+                    <Link to={pokemonRoute(pokemon.name)} className="truncate text-[11px] font-mono text-text-primary hover:text-neon hover:underline transition-colors">{pokemon.name}</Link>
                   </div>
                 )}
               </div>

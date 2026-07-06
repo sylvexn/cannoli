@@ -35,7 +35,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
   const allPokemon = useMemo(() => [...teamA, ...teamB].sort((a, b) => b.stats.spe - a.stats.spe), [teamA, teamB]);
 
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-4 items-start">
       {/* Speed Calculators — Left */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -64,7 +64,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
       </div>
 
       {/* Base Speed Column — Center */}
-      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden w-[260px]">
+      <div className="rounded-lg border border-border-default bg-surface-raised/50 overflow-hidden w-full max-w-[260px] mx-auto">
         <div className="px-3 py-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-text-muted border-b border-border-subtle bg-surface-overlay/30 text-center">
           Base Speed
         </div>
@@ -76,16 +76,16 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
               <div
                 key={`${entry.name}-${entry.side}-${i}`}
                 className={cn(
-                  'flex items-center gap-2 px-2.5 py-[3px]',
+                  'flex items-center gap-2 px-2.5 py-[3px] min-w-0',
                   entry.side === 'a' ? 'bg-[#3b82f6]/10 border-l-2 border-l-[#3b82f6]/50' : 'bg-[#ef4444]/10 border-l-2 border-l-[#ef4444]/50',
                 )}
               >
-                <button onClick={() => openSideCard(entry.name)} title={entry.nickname ? `${entry.name} — "${entry.nickname}"` : 'View details'}>
+                <button onClick={() => openSideCard(entry.name)} title={entry.nickname ? `${entry.name} — "${entry.nickname}"` : 'View details'} className="shrink-0">
                   <PokemonSprite name={entry.name} size="xs" shiny={entry.isShiny} />
                 </button>
                 <Link
                   to={pokemonRoute(entry.name)}
-                  className="text-xs font-mono text-text-primary hover:text-neon hover:underline transition-colors whitespace-nowrap"
+                  className="truncate min-w-0 text-xs font-mono text-text-primary hover:text-neon hover:underline transition-colors"
                 >
                   {entry.name}
                 </Link>
@@ -233,7 +233,7 @@ function LabeledInput({ label, value, onChange, min, max, step }: {
         onChange={onChange}
         min={min} max={max}
         step={step}
-        className="h-5 text-[11px] [&_input]:px-1 [&_input]:h-5 [&_input]:text-[11px]"
+        className="text-[11px] [&_input]:px-1 [&_input]:text-[11px]"
       />
     </div>
   );

@@ -118,7 +118,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
       </div>
 
       {/* Grids */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div>
           <div className="text-xs font-heading font-semibold text-[#3b82f6] mb-1.5 uppercase tracking-wider">My Team</div>
           <TypeGrid chart={chartA} mode={mode} />
