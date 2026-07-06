@@ -12,7 +12,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { TypeChip } from '@/components/type-chip';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import type { PokemonType } from '@/lib/pokemon';
 
@@ -464,8 +464,8 @@ export function SpeedTiersPage() {
  * Inline cluster of league-colored gem chips — one per (league, team) the
  * mon is rostered on. Each chip uses `league.color` as its background so a
  * mon claimed by Sapphire reads sapphire-blue regardless of the team logo.
- * Hovering surfaces the team identity (logo + abbrev + coach) without
- * needing to leave the row.
+ * Hovering (mouse) or tapping (touch) surfaces the team identity (logo +
+ * abbrev + coach) without needing to leave the row.
  *
  * Empty array (free agent in every active league) renders a quiet em-dash so
  * the column doesn't visually collapse.
@@ -478,8 +478,12 @@ function OwnershipChips({ ownerships }: { ownerships: ApiSpeedTierOwnership[] })
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {ownerships.map(o => (
-        <Tooltip key={`${o.leagueId}:${o.teamId}`}>
-          <TooltipTrigger
+        <Popover key={`${o.leagueId}:${o.teamId}`}>
+          <PopoverTrigger
+            nativeButton={false}
+            openOnHover
+            delay={200}
+            closeDelay={120}
             render={
               <Link
                 to={`/league/${o.leagueId}/teams/${o.teamId}`}
@@ -491,7 +495,6 @@ function OwnershipChips({ ownerships }: { ownerships: ApiSpeedTierOwnership[] })
                   backgroundColor: `${o.leagueColor}20`,
                   color: o.leagueColor,
                 }}
-                title={undefined}
               />
             }
           >
@@ -499,12 +502,13 @@ function OwnershipChips({ ownerships }: { ownerships: ApiSpeedTierOwnership[] })
             {o.isTeraCaptain && (
               <Sparkles size={8} className="-mt-0.5 text-yellow-300" aria-label="Tera captain" />
             )}
-          </TooltipTrigger>
-          <TooltipContent
+          </PopoverTrigger>
+          <PopoverContent
             side="top"
-            className="bg-surface-overlay border border-border-default text-text-primary"
+            align="center"
+            className="w-auto p-0 overflow-hidden bg-surface-overlay border-border-default text-text-primary"
           >
-            <div className="flex items-center gap-2 py-0.5">
+            <div className="flex items-center gap-2 py-1.5 px-2.5">
               <TeamLogo
                 abbrev={o.teamAbbrev}
                 color={o.teamColor}
@@ -527,8 +531,8 @@ function OwnershipChips({ ownerships }: { ownerships: ApiSpeedTierOwnership[] })
                 )}
               </div>
             </div>
-          </TooltipContent>
-        </Tooltip>
+          </PopoverContent>
+        </Popover>
       ))}
     </div>
   );
