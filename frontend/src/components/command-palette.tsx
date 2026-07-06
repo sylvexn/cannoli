@@ -357,10 +357,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                     className="flex items-center gap-2.5"
                   >
                     <TeamLogo abbrev={t.teamAbbrev} color={t.teamColor} size="sm" logoPath={t.logoPath} />
-                    <span className="font-medium text-text-primary">{t.teamName}</span>
-                    <span className="text-xs text-text-muted">{t.playerName}</span>
+                    <span className="min-w-0 truncate font-medium text-text-primary">{t.teamName}</span>
+                    <span className="min-w-0 truncate text-xs text-text-muted">{t.playerName}</span>
                     <span
-                      className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded"
+                      className="ml-auto shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded"
                       style={{ color: t.leagueColor, backgroundColor: `${t.leagueColor}15` }}
                     >
                       {t.leagueName}
@@ -386,10 +386,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                       className="flex items-center gap-2.5"
                     >
                       <Icon size={14} className="text-text-muted shrink-0" />
-                      <span className="font-medium text-text-primary">{page.label}</span>
+                      <span className="min-w-0 truncate font-medium text-text-primary">{page.label}</span>
                       {page.leagueName && (
                         <span
-                          className="ml-auto text-[10px] font-mono px-1.5 py-0.5 rounded"
+                          className="ml-auto shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded"
                           style={{ color: page.leagueColor, backgroundColor: `${page.leagueColor}15` }}
                         >
                           {page.leagueName}
