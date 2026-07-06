@@ -17,7 +17,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarRange } from 'lucide-react';
+import { CalendarRange, Check, CircleHelp, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { getWeekDays, formatWeekDay, weekHasDates } from '@/lib/schedule-utils';
@@ -45,10 +45,10 @@ interface MyTeam {
   weekDates: Record<string, string> | null | undefined;
 }
 
-const STATUS_STYLES: Record<AvailStatus, { bg: string; text: string; label: string }> = {
-  available: { bg: 'bg-win/15 border-win/30', text: 'text-win', label: 'Available' },
-  maybe: { bg: 'bg-draw/15 border-draw/30', text: 'text-draw', label: 'Maybe' },
-  unavailable: { bg: 'bg-loss/15 border-loss/30', text: 'text-loss', label: 'Busy' },
+const STATUS_STYLES: Record<AvailStatus, { bg: string; text: string; label: string; icon: typeof Check }> = {
+  available: { bg: 'bg-win/15 border-win/30', text: 'text-win', label: 'Available', icon: Check },
+  maybe: { bg: 'bg-draw/15 border-draw/30', text: 'text-draw', label: 'Maybe', icon: CircleHelp },
+  unavailable: { bg: 'bg-loss/15 border-loss/30', text: 'text-loss', label: 'Busy', icon: X },
 };
 
 const CYCLE: AvailStatus[] = ['available', 'maybe', 'unavailable'];
@@ -268,14 +268,22 @@ export function AvailabilityTab() {
                   <div key={day.key} className="px-1 py-2 flex items-center justify-center">
                     <button
                       onClick={() => cycleStatus(day.key)}
+                      aria-label={style ? style.label : 'Not set — click to cycle availability'}
                       className={cn(
-                        'w-full h-9 rounded text-[11px] font-semibold border transition-all',
+                        'w-full h-9 rounded text-[11px] font-semibold border transition-all flex items-center justify-center gap-1',
                         style
                           ? `${style.bg} ${style.text}`
                           : 'border-border-subtle text-text-muted/60 hover:border-border-default hover:text-text-muted',
                       )}
                     >
-                      {style?.label ?? '—'}
+                      {style ? (
+                        <>
+                          <style.icon size={13} className="sm:hidden" aria-hidden="true" />
+                          <span className="hidden sm:inline">{style.label}</span>
+                        </>
+                      ) : (
+                        '—'
+                      )}
                     </button>
                   </div>
                 );
