@@ -167,7 +167,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
             to={`/matchup?leagueId=${league.id}&teamA=${homePlayer.id}&teamB=${awayPlayer.id}`}
             onClick={e => e.stopPropagation()}
             title="Scout this matchup"
-            className="text-text-muted hover:text-neon transition-colors p-1"
+            className="text-text-muted hover:text-neon transition-colors p-2"
           >
             <Swords className="w-3.5 h-3.5" />
           </Link>
@@ -182,7 +182,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
                 leagueName: league.name,
                 leagueColor: league.color,
               }}
-              className="text-text-muted hover:text-neon transition-colors p-1"
+              className="text-text-muted hover:text-neon transition-colors p-2"
             >
               <Play className="w-3.5 h-3.5" />
             </ReplayLink>
@@ -221,7 +221,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               className="w-full !block"
             >
               {/* Team column headers */}
-              <div className="grid grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2">
                 <div
                   className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5"
                   style={{ backgroundColor: `${homePlayer.teamColor}15`, color: homePlayer.teamColor }}
@@ -241,7 +241,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               </div>
 
               {/* Pokemon rows side by side */}
-              <div className="grid grid-cols-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2">
                 <PokemonKDColumn
                   entries={detail.home}
                   teamColor={homePlayer.teamColor}
@@ -266,7 +266,7 @@ export function MatchCard({ match, homePlayer, awayPlayer }: MatchCardProps) {
               </div>
 
               {/* Summary footer */}
-              <div className="grid grid-cols-2 border-t border-border-subtle">
+              <div className="grid grid-cols-1 sm:grid-cols-2 border-t border-border-subtle">
                 <TeamKDSummary entries={detail.home} teamColor={homePlayer.teamColor} />
                 <TeamKDSummary entries={detail.away} teamColor={awayPlayer.teamColor} alignRight />
               </div>
