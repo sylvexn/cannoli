@@ -15,7 +15,7 @@ import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { api } from '@/lib/api';
 import { TeamLogo } from '@/components/team-logo';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { getWeekDays, formatWeekDay, weekHasDates } from '@/lib/schedule-utils';
 
@@ -101,13 +101,13 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
           No availability submitted for this week yet.
         </div>
       ) : (
-        <div className="rounded-lg border border-border-default overflow-hidden">
+        <div className="rounded-lg border border-border-default bg-surface-raised overflow-x-auto">
           {/* Header: day labels + total-available counts */}
           <div
-            className="grid bg-surface-overlay/50 border-b border-border-subtle"
+            className="grid bg-surface-overlay/50 border-b border-border-subtle min-w-max"
             style={{ gridTemplateColumns: `120px repeat(${weekDays.length}, 1fr)` }}
           >
-            <div className="px-2 py-1.5 text-[10px] text-text-muted font-medium">Team</div>
+            <div className="sticky left-0 z-10 bg-surface-overlay px-2 py-1.5 text-[10px] text-text-muted font-medium">Team</div>
             {overlapCounts.map(({ day, available }) => {
               const { short, date } = formatWeekDay(day);
               return (
@@ -128,10 +128,10 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
           {players.map(player => (
             <div
               key={player.id}
-              className="grid border-b border-border-subtle last:border-0"
+              className="grid border-b border-border-subtle last:border-0 min-w-max"
               style={{ gridTemplateColumns: `120px repeat(${weekDays.length}, 1fr)` }}
             >
-              <div className="px-2 py-1.5 flex items-center gap-1.5">
+              <div className="sticky left-0 z-10 bg-surface-raised px-2 py-1.5 flex items-center gap-1.5">
                 <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} size="sm" logoPath={player.logoPath} />
                 <span className="text-[11px] text-text-secondary font-medium truncate">{player.teamAbbrev}</span>
               </div>
@@ -142,11 +142,17 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
                 return (
                   <div key={day.key} className="px-1 py-1.5 flex items-center justify-center">
                     {style ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className={cn('w-full h-3 rounded-sm cursor-default', style.bar)} aria-label={style.label} />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="px-2 py-1">
+                      <Popover>
+                        <PopoverTrigger
+                          nativeButton={false}
+                          openOnHover
+                          delay={150}
+                          closeDelay={120}
+                          render={<button type="button" className="w-full" aria-label={style.label} />}
+                        >
+                          <span className={cn('block w-full h-3 rounded-sm', style.bar)} />
+                        </PopoverTrigger>
+                        <PopoverContent side="top" align="center" sideOffset={6} className="w-auto p-2">
                           <div className="flex items-center gap-1.5 text-xs">
                             <span className={cn('w-1.5 h-1.5 rounded-full', style.dot)} />
                             <span>{style.label}</span>
@@ -156,8 +162,8 @@ export function AvailabilityAggregate({ selectedWeek }: AvailabilityAggregatePro
                               {entry.note}
                             </div>
                           )}
-                        </TooltipContent>
-                      </Tooltip>
+                        </PopoverContent>
+                      </Popover>
                     ) : (
                       <span className="w-1 h-1 rounded-full bg-text-muted/15" aria-label="No availability set" />
                     )}
