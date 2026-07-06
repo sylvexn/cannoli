@@ -288,7 +288,8 @@
   position: absolute;
   top: calc(100% + 6px);
   z-index: 60;
-  width: min(400px, 92vw);
+  width: min(400px, 92cqi);
+  max-width: calc(100cqi - 24px);
   background: var(--mu-raised);
   border: 1px solid var(--mu-line);
   border-radius: 10px;
