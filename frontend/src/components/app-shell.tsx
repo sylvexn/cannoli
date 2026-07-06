@@ -213,23 +213,27 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-dvh overflow-hidden">
       {/* Site-wide simulator banner — only renders on mock.cannoli.live */}
       <SimBanner />
       {/* Announcement banners — fetched from /api/banners */}
       <AnnouncementBanners />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* Mobile hamburger — only when the sidebar is an off-canvas drawer */}
-      {!isDesktop && !drawerOpen && (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open navigation"
-          className="fixed top-3 left-3 z-30 flex items-center justify-center h-9 w-9 rounded-md bg-surface-raised border border-border-default text-text-secondary hover:text-text-primary shadow-lg"
-        >
-          <Menu size={18} />
-        </button>
+      {/* Mobile header — in-flow row (never overlaps the banners above it,
+          unlike the old fixed-position hamburger). Only rendered when the
+          sidebar is an off-canvas drawer. */}
+      {!isDesktop && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-border-default bg-surface-raised">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation"
+            className="shrink-0 flex items-center justify-center h-9 w-9 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"
+          >
+            <Menu size={18} />
+          </button>
+          <NeonLogo className="h-6 w-auto" />
+        </div>
       )}
-
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Backdrop behind the open drawer */}
       {!isDesktop && drawerOpen && (
         <div
@@ -263,7 +267,7 @@ export function AppShell() {
                   <button
                     onClick={() => setDrawerOpen(false)}
                     aria-label="Close navigation"
-                    className="shrink-0 text-text-muted hover:text-text-primary p-1 -mr-1"
+                    className="shrink-0 flex items-center justify-center h-9 w-9 -mr-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"
                   >
                     <X size={18} />
                   </button>
