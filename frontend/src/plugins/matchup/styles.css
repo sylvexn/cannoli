@@ -140,6 +140,7 @@
 .matchup-picker-b .matchup-picker-role { color: var(--mu-opp); }
 
 .matchup-picker-value {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -218,6 +219,7 @@
 .matchup-menu-item:disabled:hover { background: none; }
 
 .matchup-menu-item-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -613,6 +615,7 @@
 .matchup-col-b .matchup-col-h { color: var(--mu-opp); }
 
 .matchup-col-h a {
+  min-width: 0;
   color: inherit;
   text-decoration: none;
   overflow: hidden;
