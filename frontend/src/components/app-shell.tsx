@@ -10,6 +10,11 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
@@ -213,23 +218,27 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-dvh overflow-hidden">
       {/* Site-wide simulator banner — only renders on mock.cannoli.live */}
       <SimBanner />
       {/* Announcement banners — fetched from /api/banners */}
       <AnnouncementBanners />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* Mobile hamburger — only when the sidebar is an off-canvas drawer */}
-      {!isDesktop && !drawerOpen && (
-        <button
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open navigation"
-          className="fixed top-3 left-3 z-30 flex items-center justify-center h-9 w-9 rounded-md bg-surface-raised border border-border-default text-text-secondary hover:text-text-primary shadow-lg"
-        >
-          <Menu size={18} />
-        </button>
+      {/* Mobile header — in-flow row (never overlaps the banners above it,
+          unlike the old fixed-position hamburger). Only rendered when the
+          sidebar is an off-canvas drawer. */}
+      {!isDesktop && (
+        <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-border-default bg-surface-raised">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation"
+            className="shrink-0 flex items-center justify-center h-9 w-9 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-overlay transition-colors"
+          >
+            <Menu size={18} />
+          </button>
+          <NeonLogo className="h-6 w-auto" />
+        </div>
       )}
-
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Backdrop behind the open drawer */}
       {!isDesktop && drawerOpen && (
         <div
@@ -263,7 +272,7 @@ export function AppShell() {
                   <button
                     onClick={() => setDrawerOpen(false)}
                     aria-label="Close navigation"
-                    className="shrink-0 text-text-muted hover:text-text-primary p-1 -mr-1"
+                    className="shrink-0 flex items-center justify-center h-9 w-9 -mr-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors"
                   >
                     <X size={18} />
                   </button>
@@ -318,44 +327,52 @@ export function AppShell() {
             </div>
           ) : (
           <div className="px-3 pt-2 pb-1">
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => {
-                    if (liveMatches.length === 1) {
-                      navigate(`/league/${liveMatches[0].leagueId}/schedule`);
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
-                >
+            {liveMatches.length === 1 ? (
+              <button
+                onClick={() => navigate(`/league/${liveMatches[0].leagueId}/schedule`)}
+                className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-loss" />
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-loss">
+                  Live
+                </span>
+              </button>
+            ) : (
+              /* Multiple live matches — click/tap opens the list instead of a
+                 hover-only tooltip, so it's reachable on touch. */
+              <Popover>
+                <PopoverTrigger className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer outline-none">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-loss" />
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-loss">
-                    Live{liveMatches.length > 1 ? ` (${liveMatches.length})` : ''}
+                    Live ({liveMatches.length})
                   </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="bg-surface-overlay border-border-default">
-                <div className="space-y-1">
-                  {liveMatches.map(m => {
-                    const league = leagues.find(l => l.id === m.leagueId);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => navigate(`/league/${m.leagueId}/schedule`)}
-                        className="flex items-center gap-2 text-xs hover:text-neon transition-colors w-full"
-                      >
-                        <span className="font-bold" style={{ color: league?.color }}>{league?.name.replace(' League', '')}</span>
-                        <span className="text-text-muted">W{m.week}</span>
-                        <span className="text-text-primary">{m.homePlayer} vs {m.awayPlayer}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" className="w-64 bg-surface-overlay border-border-default">
+                  <div className="space-y-1">
+                    {liveMatches.map(m => {
+                      const league = leagues.find(l => l.id === m.leagueId);
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => navigate(`/league/${m.leagueId}/schedule`)}
+                          className="flex items-center gap-2 text-xs hover:text-neon transition-colors w-full"
+                        >
+                          <span className="font-bold" style={{ color: league?.color }}>{league?.name.replace(' League', '')}</span>
+                          <span className="text-text-muted">W{m.week}</span>
+                          <span className="text-text-primary">{m.homePlayer} vs {m.awayPlayer}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
           )
         )}
@@ -427,7 +444,6 @@ export function AppShell() {
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div className={cn(
           isWide ? 'p-4 h-full overflow-hidden flex flex-col' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6',
-          !isDesktop && 'pt-14',
         )}>
           {/* Show a return-to-league pill on global routes if we know which
               league the user was last in. Skip on Home where it would just

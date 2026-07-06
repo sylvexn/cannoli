@@ -104,7 +104,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-dvh bg-surface flex items-center justify-center p-4 relative overflow-hidden">
       {/* Animated shader backdrop (GPU-gated; static gradient fallback otherwise) */}
       <Suspense fallback={<div className="absolute inset-0 z-0" style={{ background: buildGradientCss(BRAND_PALETTE) }} />}>
         <ShaderField colors={BRAND_PALETTE} speed={0.55} distortion={1.0} className="absolute inset-0 z-0" />

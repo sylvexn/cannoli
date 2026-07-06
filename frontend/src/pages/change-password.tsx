@@ -44,7 +44,7 @@ export function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+    <div className="min-h-dvh bg-surface flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex justify-center">
           <NeonLogo className="w-64 h-auto" />
