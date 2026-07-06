@@ -517,11 +517,11 @@ function TeamRow({ team, manager, onUpload, onEdit, onDelete }: {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border-subtle hover:border-border-default transition-colors">
       {/* Logo with hover-to-upload overlay */}
-      <div className="relative shrink-0 group">
+      <div className="relative shrink-0">
         <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="md" logoPath={team.logoPath} />
         <button
           onClick={() => fileRef.current?.click()}
-          className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-60 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           title="Upload logo"
         >
           <Upload size={14} className="text-white" />
