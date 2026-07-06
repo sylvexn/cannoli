@@ -430,14 +430,14 @@ function FeedbackRow({
       {/* Screenshot lightbox */}
       {item.screenshotUrl && (
         <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-          <DialogContent className="sm:max-w-2xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle className="text-sm font-medium">Screenshot — {item.title}</DialogTitle>
             </DialogHeader>
             <img
               src={item.screenshotUrl}
               alt="Feedback screenshot"
-              className="w-full rounded-md border border-border-default"
+              className="max-h-[70dvh] w-auto max-w-full object-contain mx-auto rounded-md border border-border-default"
             />
           </DialogContent>
         </Dialog>
