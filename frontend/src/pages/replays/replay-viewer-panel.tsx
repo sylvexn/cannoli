@@ -84,9 +84,8 @@ export function ReplayViewerPanel({
         <div
           className={cn(
             'w-full flex flex-col items-center justify-center gap-3 bg-[#0e0e10] px-6 text-center',
-            theater ? 'flex-1' : '',
+            theater ? 'flex-1' : 'h-[min(600px,65dvh)]',
           )}
-          style={!theater ? { height: '600px' } : undefined}
         >
           <FlaskConical size={32} className="text-draw" />
           <div className="space-y-1">
@@ -102,8 +101,7 @@ export function ReplayViewerPanel({
         </div>
       ) : (
         <div
-          className={cn('flex bg-[#0e0e10] p-2', theater ? 'flex-1 min-h-0' : '')}
-          style={!theater ? { height: '600px' } : undefined}
+          className={cn('flex bg-[#0e0e10] p-2', theater ? 'flex-1 min-h-0' : 'h-[min(600px,65dvh)]')}
         >
           <ReplayPlayer matchId={match.id} className="flex-1 min-h-0" />
         </div>
