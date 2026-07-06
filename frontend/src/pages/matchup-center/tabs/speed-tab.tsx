@@ -233,7 +233,7 @@ function LabeledInput({ label, value, onChange, min, max, step }: {
         onChange={onChange}
         min={min} max={max}
         step={step}
-        className="text-[11px] [&_input]:px-1 [&_input]:text-[11px]"
+        className="text-[11px] [&_input]:px-1 [&_input]:h-6 [&_input]:text-[11px]"
       />
     </div>
   );
