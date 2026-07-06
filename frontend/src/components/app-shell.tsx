@@ -444,7 +444,6 @@ export function AppShell() {
       <main className={cn('flex-1 bg-surface', isWide ? 'overflow-hidden' : 'overflow-y-auto')}>
         <div className={cn(
           isWide ? 'p-4 h-full overflow-hidden flex flex-col' : 'max-w-[clamp(1280px,80vw,1600px)] mx-auto p-6',
-          !isDesktop && 'pt-14',
         )}>
           {/* Show a return-to-league pill on global routes if we know which
               league the user was last in. Skip on Home where it would just
