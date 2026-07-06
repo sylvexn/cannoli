@@ -141,7 +141,7 @@ export function AdminBot() {
       </Card>
 
       {/* Stat grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <StatCard label="Connection" value={status.connected ? 'Open' : 'Closed'} tone={status.connected ? 'win' : 'loss'} />
         <StatCard label="Reconnect attempts" value={String(status.reconnectAttempts)} tone={status.reconnectAttempts > 0 ? 'draw' : 'muted'} />
         <StatCard label="Battles monitored" value={String(status.monitoredBattles.length)} tone="muted" />

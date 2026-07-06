@@ -164,13 +164,12 @@ export function AdminUsers() {
 
       {/* Column headers */}
       <div className="flex items-center gap-3 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-text-muted/50">
-        <SortHeader label="User" col="username" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[160px]" />
-        <SortHeader label="Role" col="role" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[60px]" />
-        <SortHeader label="Active" col="status" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[56px] justify-center" />
-        <span className="w-[60px]" />
-        <span className="flex-1" />
-        <SortHeader label="Created" col="created" active={sortBy} dir={sortDir} onSort={toggleSort} className="w-[80px] justify-end" />
-        <span className="w-[24px]" />
+        <SortHeader label="User" col="username" active={sortBy} dir={sortDir} onSort={toggleSort} className="flex-1 min-w-0" />
+        <SortHeader label="Role" col="role" active={sortBy} dir={sortDir} onSort={toggleSort} className="hidden md:flex w-[60px]" />
+        <SortHeader label="Active" col="status" active={sortBy} dir={sortDir} onSort={toggleSort} className="hidden md:flex w-[56px] justify-center" />
+        <span className="hidden md:inline w-[60px]" />
+        <SortHeader label="Created" col="created" active={sortBy} dir={sortDir} onSort={toggleSort} className="hidden md:flex w-[80px] justify-end" />
+        <span className="w-[24px] shrink-0" />
       </div>
 
       {/* Compact user list */}
@@ -184,7 +183,7 @@ export function AdminUsers() {
             )}
           >
             {/* Username — links to public profile + opens hover card */}
-            <span className="w-[180px] truncate text-[13px] font-medium">
+            <span className="flex-1 min-w-0 truncate text-[13px] font-medium">
               <CoachLink
                 coach={{
                   username: user.username,
@@ -205,7 +204,7 @@ export function AdminUsers() {
             <Badge
               variant="outline"
               className={cn(
-                'text-[10px] px-1.5 py-0 h-4 w-[60px] justify-center',
+                'hidden md:flex text-[10px] px-1.5 py-0 h-4 w-[60px] justify-center',
                 user.role === 'bot'
                   ? 'bg-violet-400/10 text-violet-400 border-violet-400/30'
                   : (user.role === 'admin' || user.role === 'dev')
@@ -217,7 +216,7 @@ export function AdminUsers() {
             </Badge>
 
             {/* Status dot */}
-            <div className="w-[56px] flex justify-center">
+            <div className="hidden md:flex w-[56px] justify-center">
               <div
                 className={cn('w-1.5 h-1.5 rounded-full', user.active ? 'bg-win' : 'bg-loss')}
                 aria-label={user.active ? 'Active' : 'Inactive'}
@@ -225,20 +224,18 @@ export function AdminUsers() {
             </div>
 
             {/* Must change pw */}
-            <span className="w-[60px] text-[9px] text-draw font-mono">
+            <span className="hidden md:inline w-[60px] text-[9px] text-draw font-mono">
               {user.mustChangePassword ? 'pw reset' : ''}
             </span>
 
-            <span className="flex-1" />
-
             {/* Created date */}
-            <span className="text-[10px] text-text-muted/60 font-mono tabular-nums w-[80px] text-right">
+            <span className="hidden md:inline text-[10px] text-text-muted/60 font-mono tabular-nums w-[80px] text-right">
               {user.createdAt ? new Date(user.createdAt).toLocaleDateString([], { month: 'numeric', day: 'numeric', year: '2-digit', timeZone: tz }) : '—'}
             </span>
 
             {/* Actions */}
             <DropdownMenu>
-              <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none w-[24px] flex justify-end">
+              <DropdownMenuTrigger className="p-0.5 rounded hover:bg-surface-overlay transition-colors outline-none w-[24px] shrink-0 flex justify-end">
                 <MoreHorizontal size={13} className="text-text-muted" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[170px] w-auto">

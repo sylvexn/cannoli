@@ -125,30 +125,76 @@ export function AdminPage() {
     : NAV_GROUPS
   ).map(g => ({ ...g, items: g.items.filter(i => isDev || !i.devOnly) }));
 
-  return (
-    <div className="flex gap-0">
-      {/* Sidebar nav — sticky */}
-      <nav className="w-[180px] shrink-0 border-r border-border-default pr-1 pt-1 space-y-4 sticky top-4 self-start">
-        <div className="pb-1">
-          <h1 className="px-3 text-lg font-mono font-bold tracking-tight uppercase flex items-center gap-2">
-            <span className="text-loss">Admin</span>
-            {mode && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[9px] font-mono uppercase tracking-wider px-1.5 py-0 h-4',
-                  mode === 'live'
-                    ? 'border-win/40 text-win bg-win/10'
-                    : 'border-draw/40 text-draw bg-draw/10',
-                )}
-                title={mode === 'live' ? 'Pointing at live DB' : 'Pointing at mock DB (mock.cannoli.live)'}
-              >
-                {mode}
-              </Badge>
+  const header = (
+    <div className="pb-1">
+      <h1 className="px-3 text-lg font-mono font-bold tracking-tight uppercase flex items-center gap-2">
+        <span className="text-loss">Admin</span>
+        {mode && (
+          <Badge
+            variant="outline"
+            className={cn(
+              'text-[9px] font-mono uppercase tracking-wider px-1.5 py-0 h-4',
+              mode === 'live'
+                ? 'border-win/40 text-win bg-win/10'
+                : 'border-draw/40 text-draw bg-draw/10',
             )}
-          </h1>
-          <p className="px-3 text-[10px] text-text-muted">Site management</p>
-        </div>
+            title={mode === 'live' ? 'Pointing at live DB' : 'Pointing at mock DB (mock.cannoli.live)'}
+          >
+            {mode}
+          </Badge>
+        )}
+      </h1>
+      <p className="px-3 text-[10px] text-text-muted">Site management</p>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-0">
+      {/* Below lg: header + a horizontal, scrollable tab strip replaces the
+          vertical sidebar so it doesn't eat most of a phone viewport. Group
+          boundaries become thin separators to preserve NAV_GROUPS structure. */}
+      <div className="lg:hidden pb-2 mb-2 border-b border-border-default">
+        {header}
+        <nav className="flex items-center gap-1 overflow-x-auto pt-2 px-3">
+          {navGroups.map((group, gi) => (
+            <div key={group.label} className="flex items-center gap-1 shrink-0">
+              {gi > 0 && <span className="w-px h-4 bg-border-default mx-1.5 shrink-0" />}
+              {group.items.map(item => {
+                const Icon = item.icon;
+                return (
+                  <NavLink
+                    key={item.slug}
+                    to={item.slug}
+                    end={item.matchEnd}
+                    className={({ isActive }) => cn(
+                      'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] whitespace-nowrap shrink-0 transition-colors',
+                      isActive
+                        ? 'bg-surface-overlay text-text-primary font-medium'
+                        : 'text-text-muted hover:text-text-secondary hover:bg-surface-overlay/40',
+                    )}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <Icon size={12} className={isActive ? 'text-neon' : ''} />
+                        {item.label}
+                        {item.slug === 'observability' && unreadErrors > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded-full bg-loss/20 text-loss text-[9px] font-mono font-bold tabular-nums">
+                            {unreadErrors > 99 ? '99+' : unreadErrors}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+      </div>
+
+      {/* Sidebar nav — sticky, ≥lg only */}
+      <nav className="hidden lg:block w-[180px] shrink-0 border-r border-border-default pr-1 pt-1 space-y-4 sticky top-4 self-start">
+        {header}
         {navGroups.map(group => (
           <div key={group.label}>
             <div className="px-3 mb-1 text-[9px] font-mono font-bold uppercase tracking-[0.15em] text-text-muted/50">
@@ -189,7 +235,7 @@ export function AdminPage() {
       </nav>
 
       {/* Active tab — single content pane */}
-      <div className="flex-1 min-w-0 pl-6 pt-1 pb-12">
+      <div className="flex-1 min-w-0 pt-1 pb-12 lg:pl-6">
         <Outlet />
       </div>
     </div>
