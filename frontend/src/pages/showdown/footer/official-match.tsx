@@ -304,17 +304,17 @@ function SelectedMatch({
 function TeamDisplay({ team, isReady, leagueId }: { team: ArenaMatch['homeTeam']; isReady: boolean; leagueId: string }) {
   if (!team) return <div className="text-text-muted text-sm">TBD</div>;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0 flex-1">
       <div
-        className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold"
+        className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold shrink-0"
         style={{ backgroundColor: team.color + '20', color: team.color }}
       >
         {team.abbrev.toUpperCase()}
       </div>
-      <div>
+      <div className="min-w-0">
         <Link
           to={`/league/${leagueId}/teams/${team.id}`}
-          className="text-sm font-medium text-text-primary hover:text-neon hover:underline transition-colors"
+          className="block truncate text-sm font-medium text-text-primary hover:text-neon hover:underline transition-colors"
         >
           {team.name}
         </Link>

@@ -27,18 +27,18 @@ export function LiveMatchesSection({ matches, onSpectate }: Props) {
           {matches.map(m => (
             <div
               key={m.matchId}
-              className="flex items-center justify-between px-3 py-2 rounded-md bg-surface-overlay text-sm"
+              className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-surface-overlay text-sm"
             >
-              <div className="flex items-center gap-2">
-                <Zap size={12} className="text-green-400" />
-                <span className="text-text-primary">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Zap size={12} className="text-green-400 shrink-0" />
+                <span className="text-text-primary truncate min-w-0 flex-1">
                   Week {m.week}: {m.homeTeam?.name ?? '?'} vs {m.awayTeam?.name ?? '?'}
                 </span>
-                <span className="text-xs text-text-muted capitalize">{m.leagueId}</span>
+                <span className="text-xs text-text-muted capitalize shrink-0">{m.leagueId}</span>
               </div>
               <button
                 onClick={() => onSpectate(m)}
-                className="px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors"
+                className="px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors shrink-0"
               >
                 Spectate
               </button>
