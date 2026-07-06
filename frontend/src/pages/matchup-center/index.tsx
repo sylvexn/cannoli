@@ -201,7 +201,7 @@ export function MatchupCenterPage() {
       </div>
 
       {/* Roster Strip — always visible */}
-      <div className="flex gap-1.5 items-stretch">
+      <div className="flex gap-1.5 items-stretch overflow-x-auto">
         {state.teamA.length === 0 && noManagedTeam ? (
           <NoManagedTeamPanel />
         ) : (
