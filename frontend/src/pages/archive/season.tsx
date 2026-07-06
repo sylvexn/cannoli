@@ -468,7 +468,9 @@ function ArchiveTeamRow({
 }: {
   seasonId: number; leagueId: string; team: ArchiveTeam; rank: number; compact?: boolean;
 }) {
-  const [showRoster, setShowRoster] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const showRoster = hovered || pinned;
   const { openSideCard } = usePokemonSideCard();
 
   return (
@@ -477,8 +479,8 @@ function ArchiveTeamRow({
         'relative rounded-md transition-colors group',
         compact ? 'px-2 py-1' : rank <= 3 ? 'bg-surface-overlay/30 px-3 py-2' : 'px-3 py-2',
       )}
-      onMouseEnter={() => setShowRoster(true)}
-      onMouseLeave={() => setShowRoster(false)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <Link to={`/archive/${seasonId}/${leagueId}/${team.id}`} className="flex items-center gap-2.5">
         <span className={cn(
@@ -506,7 +508,7 @@ function ArchiveTeamRow({
         {team.roster.length > 0 && (
           <button
             type="button"
-            onClick={e => { e.preventDefault(); e.stopPropagation(); setShowRoster(v => !v); }}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setPinned(v => !v); }}
             aria-label={showRoster ? 'Hide roster' : 'Show roster'}
             className="shrink-0 p-1 text-text-muted hover:text-neon transition-colors"
           >
@@ -516,7 +518,7 @@ function ArchiveTeamRow({
       </Link>
 
       {showRoster && team.roster.length > 0 && (
-        <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-lg border border-border-default bg-surface-raised shadow-card-lg p-2.5 space-y-1 max-h-[50vh] overflow-y-auto">
+        <div className="absolute z-20 left-0 right-0 top-full mt-1 rounded-lg border border-border-default bg-surface-raised shadow-card-lg p-2.5 space-y-1 max-h-[50dvh] overflow-y-auto">
           <div className="text-[9px] text-text-muted uppercase tracking-wider mb-1">
             Roster · {team.roster.reduce((s, r) => s + r.tier, 0)}pts
           </div>
