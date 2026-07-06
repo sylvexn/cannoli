@@ -2,6 +2,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import type { Player, RosterPokemon } from '@/lib/types';
 import { getTierList, type CostFormat } from '@/data/tier-list';
+import { POKEMON_DATA } from '@/data/pokemon-data';
 import { TYPE_CHART } from '@/lib/type-effectiveness';
 
 // ─── Interfaces ──────────────────────────────────────────────────
@@ -74,13 +75,17 @@ export function computePool(allPlayers: Player[], format?: CostFormat): PoolEntr
 }
 
 export function freeAgentToRoster(fa: { name: string; tier: number }): RosterPokemon {
+  // Pull types/stats/abilities from the generated pokedex so theorycrafted
+  // additions feed the defensive/weakness chart and show type chips, exactly
+  // like drafted mons. Falls back to empties for any name missing from the map.
+  const data = POKEMON_DATA.get(fa.name);
   return {
     name: fa.name,
     tier: fa.tier,
-    types: [], // Would come from a Pokemon data API
+    types: data?.types ?? [],
     isTeraCaptain: false,
-    stats: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
-    abilities: [],
+    stats: data?.stats ?? { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 },
+    abilities: data?.abilities ?? [],
     seasonStats: { kills: 0, deaths: 0, gp: 0 },
   };
 }
