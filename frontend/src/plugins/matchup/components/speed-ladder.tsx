@@ -32,24 +32,27 @@ export function SpeedLadder({
         <div className="matchup-mid-hint">&mdash;</div>
       ) : (
         ladder.map(({ p, side }, i) => (
-          <div key={`${side}-${p.name}-${i}`} className="matchup-mrow" title={`${p.name} — ${p.stats.spe}`}>
-            {side === 'a' ? (
-              <span className="matchup-mside matchup-mside-a">
-                <span className="matchup-mname">{p.name}</span>
-                <span className="matchup-mbar matchup-mbar-a" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
-              </span>
-            ) : (
-              <span />
-            )}
-            <span className="matchup-tick">{p.stats.spe}</span>
-            {side === 'b' ? (
-              <span className="matchup-mside matchup-mside-b">
-                <span className="matchup-mbar matchup-mbar-b" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
-                <span className="matchup-mname">{p.name}</span>
-              </span>
-            ) : (
-              <span />
-            )}
+          <div key={`${side}-${p.name}-${i}`} className={`matchup-mrow matchup-mrow-${side}`} title={`${p.name} — ${p.stats.spe}`}>
+            {/* Name gets its own full-width line so it uses the whole center
+                column instead of fighting the speed bar for room. */}
+            <span className="matchup-mname">{p.name}</span>
+            <span className="matchup-mbarline">
+              {side === 'a' ? (
+                <span className="matchup-mside matchup-mside-a">
+                  <span className="matchup-mbar matchup-mbar-a" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
+                </span>
+              ) : (
+                <span />
+              )}
+              <span className="matchup-tick">{p.stats.spe}</span>
+              {side === 'b' ? (
+                <span className="matchup-mside matchup-mside-b">
+                  <span className="matchup-mbar matchup-mbar-b" style={{ width: barWidth(p.stats.spe, maxSpe) }} />
+                </span>
+              ) : (
+                <span />
+              )}
+            </span>
           </div>
         ))
       )}

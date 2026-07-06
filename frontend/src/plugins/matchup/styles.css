@@ -579,7 +579,7 @@
 
 .matchup-cmp {
   display: grid;
-  grid-template-columns: 1fr 150px 1fr;
+  grid-template-columns: 1fr 164px 1fr;
   flex: 1;
   align-items: stretch;
 }
@@ -900,10 +900,18 @@
 }
 
 .matchup-mrow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+
+/* the bar + speed tick, laid out around the center axis */
+.matchup-mbarline {
   display: grid;
   grid-template-columns: 1fr 34px 1fr;
   align-items: center;
-  height: 24px;
+  height: 13px;
 }
 
 .matchup-tick {
@@ -925,15 +933,21 @@
 .matchup-mside-a { justify-content: flex-end; }
 .matchup-mside-b { justify-content: flex-start; }
 
+/* Name owns a full-width line above its bar, so it uses the whole center
+   column and no longer truncates against the speed bar. */
 .matchup-mname {
   font-family: var(--mu-mono);
   font-size: 10px;
   color: var(--mu-muted);
-  min-width: 0;
+  padding: 0 8px;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.matchup-mrow-a .matchup-mname { text-align: left; }
+.matchup-mrow-b .matchup-mname { text-align: right; }
 
 .matchup-mbar {
   display: block;
