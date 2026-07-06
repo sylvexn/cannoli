@@ -394,7 +394,7 @@
   background: none;
   border: none;
   color: var(--mu-muted);
-  width: 16px;
+  width: 24px;
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
@@ -620,6 +620,10 @@
 
 .matchup-mv {
   padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .matchup-mv-loading {
@@ -634,11 +638,14 @@
 }
 
 /* own scroll box (both axes): the sprite header sticks on vertical scroll,
-   the label column sticks on horizontal scroll, the room never grows
-   unbounded */
+   the label column sticks on horizontal scroll. flex:1/min-height:0 (rather
+   than a vh cap, the wrong frame inside a docked room panel) bounds this to
+   whatever's actually left under the header/tabs/footer chrome, so the room
+   itself never grows unbounded */
 .matchup-mv-scroll {
   overflow: auto;
-  max-height: 70vh;
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--mu-line);
   border-radius: 10px;
   background: var(--mu-panel);
