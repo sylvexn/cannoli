@@ -10,6 +10,11 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@/components/ui/tooltip';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
@@ -322,44 +327,52 @@ export function AppShell() {
             </div>
           ) : (
           <div className="px-3 pt-2 pb-1">
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => {
-                    if (liveMatches.length === 1) {
-                      navigate(`/league/${liveMatches[0].leagueId}/schedule`);
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
-                >
+            {liveMatches.length === 1 ? (
+              <button
+                onClick={() => navigate(`/league/${liveMatches[0].leagueId}/schedule`)}
+                className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-loss" />
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-loss">
+                  Live
+                </span>
+              </button>
+            ) : (
+              /* Multiple live matches — click/tap opens the list instead of a
+                 hover-only tooltip, so it's reachable on touch. */
+              <Popover>
+                <PopoverTrigger className="w-full flex items-center justify-center gap-1.5 py-1 px-3 rounded-full bg-loss/10 border border-loss/20 hover:bg-loss/15 transition-colors cursor-pointer outline-none">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-loss opacity-75" />
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-loss" />
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-loss">
-                    Live{liveMatches.length > 1 ? ` (${liveMatches.length})` : ''}
+                    Live ({liveMatches.length})
                   </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="bg-surface-overlay border-border-default">
-                <div className="space-y-1">
-                  {liveMatches.map(m => {
-                    const league = leagues.find(l => l.id === m.leagueId);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => navigate(`/league/${m.leagueId}/schedule`)}
-                        className="flex items-center gap-2 text-xs hover:text-neon transition-colors w-full"
-                      >
-                        <span className="font-bold" style={{ color: league?.color }}>{league?.name.replace(' League', '')}</span>
-                        <span className="text-text-muted">W{m.week}</span>
-                        <span className="text-text-primary">{m.homePlayer} vs {m.awayPlayer}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" className="w-64 bg-surface-overlay border-border-default">
+                  <div className="space-y-1">
+                    {liveMatches.map(m => {
+                      const league = leagues.find(l => l.id === m.leagueId);
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => navigate(`/league/${m.leagueId}/schedule`)}
+                          className="flex items-center gap-2 text-xs hover:text-neon transition-colors w-full"
+                        >
+                          <span className="font-bold" style={{ color: league?.color }}>{league?.name.replace(' League', '')}</span>
+                          <span className="text-text-muted">W{m.week}</span>
+                          <span className="text-text-primary">{m.homePlayer} vs {m.awayPlayer}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
           )
         )}
