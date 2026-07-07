@@ -197,8 +197,8 @@ export function RosterOverrideModal({
 
   return (
     <Dialog open onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85dvh] flex flex-col gap-3">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[88dvh] flex flex-col gap-3">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="font-mono uppercase tracking-wide flex items-center gap-2">
             <ShieldAlert className="size-4 text-amber-400 shrink-0" />
             Override {player.teamAbbrev || player.teamName}
@@ -223,7 +223,7 @@ export function RosterOverrideModal({
 
         {/* Soft-warnings panel */}
         {warnings.length > 0 ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2">
+          <div className="shrink-0 max-h-[22dvh] overflow-y-auto rounded-lg border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
               <AlertTriangle className="size-3.5 shrink-0" />
               {warnings.length} warning{warnings.length === 1 ? '' : 's'} — commit still allowed
@@ -238,17 +238,31 @@ export function RosterOverrideModal({
             </ul>
           </div>
         ) : (
-          <div className="rounded-lg border border-border-subtle bg-surface-overlay/20 px-3 py-1.5 flex items-center gap-1.5 text-[11px] text-text-muted">
+          <div className="shrink-0 rounded-lg border border-border-subtle bg-surface-overlay/20 px-3 py-1.5 flex items-center gap-1.5 text-[11px] text-text-muted">
             <Check className="size-3.5 text-win shrink-0" />
             No client-side rule issues detected.
           </div>
         )}
-        <p className="-mt-1 text-[10px] text-text-muted">
+        <p className="shrink-0 -mt-1 text-[10px] text-text-muted">
           Duplicate National-Dex numbers are validated on the server (not shown here).
         </p>
 
-        {/* Scrollable body: current roster + additions + add picker */}
-        <div className="flex-1 overflow-y-auto -mx-1 px-1 flex flex-col gap-1.5">
+        {/* Body: roster/additions scroller on top; when the picker is open it
+            fills the space below with its own internal scroll — no nested
+            double-scroll, footer stays pinned. */}
+        <div className="flex-1 min-h-0 flex flex-col gap-1.5">
+          {/* Current roster + additions — own scroll region. Takes the whole
+              body when the picker is closed; caps + scrolls to yield room to
+              the picker when it's open. */}
+          <div
+            className={cn(
+              '-mx-1 px-1 flex flex-col gap-1.5 overflow-y-auto min-h-0',
+              // When the picker is open, cap the roster so the picker (flex-1)
+              // keeps a usable height — tighter on phones where vertical budget
+              // is scarce, roomier on desktop.
+              addingMode ? 'shrink-0 max-h-[22dvh] sm:max-h-[30dvh]' : 'flex-1',
+            )}
+          >
           {/* Current roster — remove toggles */}
           <div className="text-[9px] font-semibold uppercase tracking-widest text-text-muted px-0.5">
             Current roster
@@ -340,12 +354,14 @@ export function RosterOverrideModal({
             </div>
           ))}
 
+          </div>
+
           {/* Add toggle */}
           <button
             type="button"
             onClick={() => setAddingMode(v => !v)}
             className={cn(
-              'mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-[11px] font-semibold uppercase tracking-wider transition-all',
+              'shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-dashed py-2 text-[11px] font-semibold uppercase tracking-wider transition-all',
               addingMode
                 ? 'border-neon/50 bg-neon/5 text-neon'
                 : 'border-border-subtle text-text-muted hover:border-neon/40 hover:text-neon',
@@ -356,15 +372,18 @@ export function RosterOverrideModal({
           </button>
 
           {/* Reused AddPicker — free reign (over-cap stays pickable). Drafted mons
-              are reachable via its "Show taken" toggle with a "drafted by" hint. */}
+              are reachable via its "Show taken" toggle with a "drafted by" hint.
+              `fill` lets it flex to the remaining body height with one internal
+              scroll instead of a fixed 320px block nested inside another scroll. */}
           {addingMode && (
-            <div className="rounded-lg border border-border-subtle overflow-hidden">
+            <div className="flex-1 min-h-0 flex flex-col rounded-lg border border-border-subtle overflow-hidden">
               <AddPicker
                 activeRoster={projected}
                 pool={pool}
                 pointsUsed={pointsUsed}
                 config={config}
                 allowOverCap
+                fill
                 onAdd={handleAdd}
                 onClose={() => setAddingMode(false)}
               />
@@ -372,7 +391,7 @@ export function RosterOverrideModal({
           )}
         </div>
 
-        <DialogFooter className="items-center sm:justify-between">
+        <DialogFooter className="shrink-0 items-center sm:justify-between">
           <div className="flex items-center gap-2 text-xs font-mono tabular-nums">
             <span className="text-text-muted">
               +{additions.length} / -{removedIds.size}
