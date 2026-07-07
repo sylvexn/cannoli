@@ -116,6 +116,8 @@ function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) 
                   >
                     {pokemon.name}
                   </a>
+                  {' '}
+                  <span className="matchup-tier">T{pokemon.tier}</span>
                   {pokemon.nickname && (
                     <span className="matchup-stats-nick">"{pokemon.nickname}"</span>
                   )}

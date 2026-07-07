@@ -59,14 +59,6 @@
   flex-wrap: wrap;
 }
 
-.matchup-tc-modelabel {
-  font-family: var(--mu-mono);
-  font-size: 10px;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: var(--mu-faint);
-}
-
 .matchup-tc-toggle {
   display: inline-flex;
   border: 1px solid var(--mu-line);
@@ -94,11 +86,6 @@
   background: #0d3320;
   color: #4ade80;
   font-weight: 600;
-}
-
-.matchup-tc-modehint {
-  font-size: 11px;
-  color: var(--mu-faint);
 }
 
 .matchup-tc-sec-title {
@@ -137,7 +124,7 @@
   padding: 3px 8px;
   border-right: 1px solid var(--mu-line-soft);
   min-width: 130px;
-  max-width: 160px;
+  max-width: 168px;
 }
 
 .matchup-tc-monhead,
@@ -168,11 +155,13 @@
 }
 
 .matchup-tc-monname {
+  flex: 1;
+  min-width: 0;
   font-family: var(--mu-mono);
   font-size: 10.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .matchup-tc-monlink:hover .matchup-tc-monname {
@@ -544,7 +533,8 @@
 
 .matchup-stats-mon {
   padding: 3px 8px;
-  max-width: 140px;
+  min-width: 116px;
+  max-width: 150px;
 }
 
 .matchup-stats-monlink {
@@ -553,10 +543,8 @@
   font-size: 11px;
   font-weight: 600;
   text-decoration: none;
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .matchup-stats-monlink:hover {

@@ -66,7 +66,6 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   return (
     <div className="matchup-tc">
       <div className="matchup-tc-modebar">
-        <span className="matchup-tc-modelabel">View:</span>
         <div className="matchup-tc-toggle" role="group" aria-label="Chart mode">
           <button
             type="button"
@@ -83,11 +82,6 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
             Offensive
           </button>
         </div>
-        <span className="matchup-tc-modehint">
-          {mode === 'defensive'
-            ? '— green = resists, red = weak'
-            : '— green = super-effective, red = resisted'}
-        </span>
       </div>
 
       <TypeGrid title="Your team" side="a" chart={chartA} mode={mode} />
@@ -98,6 +92,7 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
 
 interface ChartRow {
   name: string
+  tier: number
   nickname?: string | null
   isShiny?: boolean
   matchups: { type: PokemonType; multiplier: number }[]
@@ -106,6 +101,7 @@ interface ChartRow {
 function toChart(team: RosterPokemon[]): ChartRow[] {
   return team.map(p => ({
     name: p.name,
+    tier: p.tier,
     nickname: p.nickname,
     isShiny: p.isShiny,
     matchups: getDefensiveMatchups(p.types as PokemonType[], p.abilities?.[0]),
@@ -185,7 +181,11 @@ function TypeGrid({
                       title={p.nickname ? `${p.name} — "${p.nickname}"` : p.name}
                     >
                       <PokeSprite name={p.name} shiny={p.isShiny} />
-                      <span className="matchup-tc-monname">{p.name}</span>
+                      <span className="matchup-tc-monname">
+                        {p.name}
+                        {' '}
+                        <span className="matchup-tier">T{p.tier}</span>
+                      </span>
                     </a>
                   </td>
                   {p.matchups.map(({ type, multiplier }) => (
