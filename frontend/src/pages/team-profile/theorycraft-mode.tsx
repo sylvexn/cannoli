@@ -7,7 +7,7 @@ import { TierBadge } from '@/components/tier-badge';
 import { ArrowRightLeft, Plus, Search, X } from 'lucide-react';
 import { freeAgentToRoster } from './utils';
 import type { PoolEntry } from './utils';
-import { tierToHslColor } from '@/lib/utils';
+import { cn, tierToHslColor } from '@/lib/utils';
 
 interface SwapPickerProps {
   swappingIndex: number;
@@ -195,6 +195,10 @@ interface AddPickerProps {
   /** When true, over–point-cap mons stay pickable (the cap is shown as a soft
    *  cue, not a block). Used by the staff roster-override tool for free reign. */
   allowOverCap?: boolean;
+  /** When true the picker fills its parent (flex-1 min-h-0) instead of the
+   *  fixed 320px body — used inside height-capped modals so it scales with the
+   *  available space rather than forcing a nested double-scroll. */
+  fill?: boolean;
 }
 
 export function AddPicker({
@@ -205,6 +209,7 @@ export function AddPicker({
   onAdd,
   onClose,
   allowOverCap = false,
+  fill = false,
 }: AddPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTaken, setShowTaken] = useState(false);
@@ -228,9 +233,9 @@ export function AddPicker({
   const hovered = hoveredAgent ? filteredAgents.find(a => a.name === hoveredAgent) : null;
 
   return (
-    <div className="border-t border-border-subtle bg-surface-overlay/15">
+    <div className={cn('border-t border-border-subtle bg-surface-overlay/15', fill && 'flex flex-col h-full min-h-0')}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle text-[10px]">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border-subtle text-[10px] shrink-0">
         <Plus size={10} className="text-neon shrink-0" />
         <span className="text-text-muted">Add Pokemon</span>
         <span className="font-mono text-text-muted">({activeRoster.length}/12)</span>
@@ -262,7 +267,7 @@ export function AddPicker({
         <button onClick={onClose} className="text-text-muted hover:text-text-primary ml-1"><X size={12} /></button>
       </div>
 
-      <div className="flex" style={{ height: 320 }}>
+      <div className={cn('flex', fill && 'flex-1 min-h-0')} style={fill ? undefined : { height: 320 }}>
         {/* Grid */}
         <div className="flex-1 overflow-y-auto p-2">
           <div className="flex flex-wrap gap-[3px] content-start">

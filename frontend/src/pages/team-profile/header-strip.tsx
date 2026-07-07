@@ -144,7 +144,7 @@ export function HeaderStrip({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/50"
             >
               <ShieldAlert size={11} />
-              Override
+              Admin
             </button>
           )}
           {canManage && (
