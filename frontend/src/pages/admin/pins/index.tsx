@@ -96,45 +96,56 @@ export function PinsTab() {
     );
   }, [defs, search]);
 
+  // The tab tracks the season NUMBER (it drives the dropdown and the mint
+  // endpoint, which both key off seasonNumber), but pins.season_id stores the
+  // real season *id*. Resolve that id for anything that touches pin rows — the
+  // award payload and every per-season filter/count — otherwise awards land on
+  // a nonexistent season (FK violation → 500) and correctly-stored pins never
+  // match the filter (id 3 !== number 11), so the season view looks empty.
+  const activeSeason = useMemo(
+    () => seasons.find(s => s.seasonNumber === seasonId) ?? null,
+    [seasons, seasonId],
+  );
+  const activeSeasonId = activeSeason?.id ?? null;
+  // Mint button visibility: only when all leagues for the active season have
+  // wrapped (phase = offseason). The /api/seasons aggregate uses the
+  // "least-advanced" phase across leagues, so offseason implies all leagues.
+  const seasonOffseasonOrPast = activeSeason?.phase === 'offseason';
+  const seasonNumberById = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const s of seasons) m.set(s.id, s.seasonNumber);
+    return m;
+  }, [seasons]);
+
   // Award counts for the active season, keyed by pin def id. Computed from
   // the recent-awards fetch (200 most recent — enough for any normal
   // season). When the season is undefined we fall back to all-time counts.
   const seasonAwardCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const r of recent) {
-      if (seasonId != null && r.seasonId !== seasonId) continue;
+      if (seasonId != null && r.seasonId !== activeSeasonId) continue;
       counts[r.pinDefId] = (counts[r.pinDefId] ?? 0) + 1;
     }
     return counts;
-  }, [recent, seasonId]);
+  }, [recent, seasonId, activeSeasonId]);
 
   const seasonRecent = useMemo(() => {
     if (seasonId == null) return recent;
-    return recent.filter(r => r.seasonId === seasonId);
-  }, [recent, seasonId]);
-
-  // Mint button visibility: only when all leagues for the active season have
-  // wrapped (phase = offseason). The /api/seasons aggregate uses the
-  // "least-advanced" phase across leagues, so summaryPhase === 'offseason'
-  // implies every league is offseason.
-  const activeSeason = useMemo(
-    () => seasons.find(s => s.seasonNumber === seasonId) ?? null,
-    [seasons, seasonId],
-  );
-  const seasonOffseasonOrPast = activeSeason?.phase === 'offseason';
+    return recent.filter(r => r.seasonId === activeSeasonId);
+  }, [recent, seasonId, activeSeasonId]);
 
   // Bucket existing pins per def for the active season so cards know whether
   // to show Award (manual + unawarded) or Edit (auto + already awarded).
   const existingByDef = useMemo(() => {
     const map = new Map<string, ApiPinRecent[]>();
     for (const r of recent) {
-      if (seasonId != null && r.seasonId !== seasonId) continue;
+      if (seasonId != null && r.seasonId !== activeSeasonId) continue;
       const list = map.get(r.pinDefId) ?? [];
       list.push(r);
       map.set(r.pinDefId, list);
     }
     return map;
-  }, [recent, seasonId]);
+  }, [recent, seasonId, activeSeasonId]);
 
   async function handleRunAuto() {
     if (seasonId == null) return;
@@ -296,7 +307,7 @@ export function PinsTab() {
                       )}
                       <div className="text-[10px] text-text-muted">
                         {r.awardedBy ? 'manual' : 'auto'}
-                        {r.seasonId != null && ` · Earned S${r.seasonId}`}
+                        {r.seasonId != null && ` · Earned S${seasonNumberById.get(r.seasonId) ?? r.seasonId}`}
                       </div>
                     </div>
                     <Button
@@ -320,7 +331,7 @@ export function PinsTab() {
       {awardDef && (
         <AwardDialog
           def={awardDef}
-          defaultSeasonId={seasonId}
+          defaultSeasonId={activeSeasonId}
           users={users}
           leagues={leagues}
           onClose={() => setAwardDef(null)}

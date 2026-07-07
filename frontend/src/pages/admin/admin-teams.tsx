@@ -299,7 +299,6 @@ export function AdminTeams() {
                   onChange={e => setForm(f => ({ ...f, teamAbbrev: e.target.value.toUpperCase() }))}
                   placeholder="SAS"
                   maxLength={5}
-                  disabled={formMode === 'edit'}
                 />
               </FormField>
             </div>
