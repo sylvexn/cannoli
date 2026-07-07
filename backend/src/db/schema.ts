@@ -279,7 +279,7 @@ export const rosters = sqliteTable('rosters', {
   teraType2: text('tera_type2'),
   teraType3: text('tera_type3'),
   isShiny: integer('is_shiny', { mode: 'boolean' }).notNull().default(false),
-  acquiredVia: text('acquired_via', { enum: ['draft', 'trade', 'fa'] }).notNull().default('draft'),
+  acquiredVia: text('acquired_via', { enum: ['draft', 'trade', 'fa', 'admin'] }).notNull().default('draft'),
   acquiredWeek: integer('acquired_week'),
   nickname: text('nickname'),
 }, (t) => ({
