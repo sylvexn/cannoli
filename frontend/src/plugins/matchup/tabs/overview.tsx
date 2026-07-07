@@ -1,11 +1,8 @@
-import { useMemo } from 'react'
 import type { RosterPokemon } from '@/lib/types'
-import type { PokemonType } from '@/lib/pokemon'
 import type { TeamSource } from '@/pages/matchup-center/use-matchup-state'
 import { RosterRow } from '../components/roster-row'
 import { SpeedLadder } from '../components/speed-ladder'
-import { sitePokemonUrl, siteTeamUrl } from '../lib/links'
-import { computeSummary, type MatchupSummary } from '../lib/summary'
+import { siteTeamUrl } from '../lib/links'
 
 interface OverviewTabProps {
   /** Full rosters — the selection UI needs every row visible. */
@@ -35,8 +32,6 @@ export function OverviewTab({
   subTeamA, subTeamB, onToggleSub, onResetSubs,
   sourceA, sourceB,
 }: OverviewTabProps) {
-  const summary = useMemo(() => computeSummary(activeTeamA, activeTeamB), [activeTeamA, activeTeamB])
-
   return (
     <div className="matchup-overview">
       <div className="matchup-cmp">
@@ -62,8 +57,6 @@ export function OverviewTab({
           onReset={onResetSubs}
         />
       </div>
-
-      {summary && <SummaryFoot summary={summary} />}
     </div>
   )
 }
@@ -89,9 +82,6 @@ function RosterColumn({
         subCount={subTeam.size}
         onReset={onReset}
       />
-      {hasSub && (
-        <div className="matchup-col-subnote">analyzing {subTeam.size}/{team.length}</div>
-      )}
       {team.length === 0 ? (
         <EmptySide side={side} source={source} />
       ) : (
@@ -155,64 +145,6 @@ function EmptySide({ side, source }: { side: 'a' | 'b'; source: TeamSource | nul
           ? 'Open a team in the teambuilder to sync your build.'
           : `Pick a league team from the ${side === 'a' ? 'You' : 'Opponent'} menu above.`}
       </div>
-    </div>
-  )
-}
-
-function PokeLink({ name, className }: { name: string; className?: string }) {
-  return (
-    <a href={sitePokemonUrl(name)} target="_blank" rel="noopener" className={className}>
-      {name}
-    </a>
-  )
-}
-
-function capType(t: PokemonType): string {
-  return t.charAt(0).toUpperCase() + t.slice(1)
-}
-
-function SummaryFoot({ summary }: { summary: MatchupSummary }) {
-  const { speed, sharedWeaknesses, threats } = summary
-  return (
-    <div className="matchup-foot">
-      <span>
-        <span className="matchup-foot-k">Speed:</span> <PokeLink name={speed.fastest.name} />{' '}
-        {speed.notOutsped.length === 0 ? (
-          'outspeeds everything'
-        ) : speed.notOutsped.length <= 2 ? (
-          <>
-            outspeeds all but{' '}
-            {speed.notOutsped.map((p, i) => (
-              <span key={p.name}>
-                {i > 0 && ', '}
-                <PokeLink name={p.name} />
-              </span>
-            ))}
-          </>
-        ) : (
-          `outspeeds all but ${speed.notOutsped.length} opponents`
-        )}
-      </span>
-
-      <span>
-        <span className="matchup-foot-k">Shared weaknesses:</span>{' '}
-        {sharedWeaknesses.length === 0
-          ? 'none shared'
-          : sharedWeaknesses.map(w => `${capType(w.type)} ×${w.count}`).join(' · ')}
-      </span>
-
-      {threats && (
-        <span>
-          <span className="matchup-foot-k">Threats:</span>{' '}
-          {threats.names.map((name, i) => (
-            <span key={name}>
-              {i > 0 && ', '}
-              <PokeLink name={name} className="matchup-foot-threat" />
-            </span>
-          ))}{' '}
-          pressure {threats.count}/{threats.total}
-        </span>
-      )}
     </div>
   )
 }
