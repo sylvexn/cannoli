@@ -252,7 +252,7 @@ export function AwardDialog({
             <Input
               value={seasonIdText}
               onChange={e => setSeasonIdText(e.target.value)}
-              placeholder="e.g. 11"
+              placeholder="auto-filled from selected season"
               className="h-8 text-xs font-mono"
             />
           </div>
