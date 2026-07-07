@@ -88,6 +88,11 @@
   font-weight: 600;
 }
 
+.matchup-tc-modehint {
+  font-size: 11px;
+  color: var(--mu-faint);
+}
+
 .matchup-tc-sec-title {
   font-family: var(--mu-mono);
   font-size: 10px;

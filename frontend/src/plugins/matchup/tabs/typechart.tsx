@@ -82,6 +82,11 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
             Offensive
           </button>
         </div>
+        <span className="matchup-tc-modehint">
+          {mode === 'defensive'
+            ? '— green = resists, red = weak'
+            : '— green = super-effective, red = resisted'}
+        </span>
       </div>
 
       <TypeGrid title="Your team" side="a" chart={chartA} mode={mode} />
