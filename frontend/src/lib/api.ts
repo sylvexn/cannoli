@@ -1491,6 +1491,13 @@ export const api = {
     captainNote?: string | null;
   }) => putJson<{ success: boolean }>(`/api/teams/${teamId}`, data),
 
+  // Staff-only roster override — free-reign add/remove of Pokemon on a team's
+  // roster. Backend validates authoritatively and returns non-blocking warnings
+  // (over cap, mega cap, duplicate species/natdex, roster band, banned) that the
+  // caller surfaces; nothing here blocks the commit.
+  adminOverrideRoster: (teamId: string, data: { add?: { name: string; isTeraCaptain?: boolean; teraTypes?: string[]; isShiny?: boolean; nickname?: string | null }[]; removeRosterIds?: number[] }) =>
+    postJson<{ success: boolean; added: string[]; removed: string[]; warnings: string[] }>(`/api/teams/${encodeURIComponent(teamId)}/roster-override`, data),
+
   deleteTeam: (teamId: string, opts?: { force?: boolean }) =>
     deleteJson<{ success: boolean }>(`/api/teams/${teamId}${opts?.force ? '?force=1' : ''}`),
 

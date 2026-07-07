@@ -4,7 +4,7 @@ import { TeamLogo } from '@/components/team-logo';
 import { TeamCoach } from '@/components/team-coach';
 import { RecordDisplay } from '@/components/record-display';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { FlaskConical, ArrowLeft, SlidersHorizontal } from 'lucide-react';
+import { FlaskConical, ArrowLeft, SlidersHorizontal, ShieldAlert } from 'lucide-react';
 import { RankBadge } from './rank-badge';
 
 interface HeaderStripProps {
@@ -17,6 +17,9 @@ interface HeaderStripProps {
   /** Viewer can take manager actions (owner OR staff) — gates the Manage button. */
   canManage: boolean;
   onManage: () => void;
+  /** Viewer is staff (admin/dev) — gates the free-reign roster Override button. */
+  canOverride: boolean;
+  onOverride: () => void;
 }
 
 /**
@@ -39,6 +42,8 @@ export function HeaderStrip({
   teamDeaths,
   canManage,
   onManage,
+  canOverride,
+  onOverride,
 }: HeaderStripProps) {
   return (
     <div
@@ -132,6 +137,16 @@ export function HeaderStrip({
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
+          {canOverride && (
+            <button
+              onClick={onOverride}
+              title="Staff roster override — free-reign add/remove"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-semibold tracking-wider uppercase transition-all bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 hover:border-amber-500/50"
+            >
+              <ShieldAlert size={11} />
+              Override
+            </button>
+          )}
           {canManage && (
             <button
               onClick={onManage}

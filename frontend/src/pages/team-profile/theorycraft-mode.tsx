@@ -192,6 +192,9 @@ interface AddPickerProps {
   config: LeagueConfig;
   onAdd: (mon: RosterPokemon) => void;
   onClose: () => void;
+  /** When true, over–point-cap mons stay pickable (the cap is shown as a soft
+   *  cue, not a block). Used by the staff roster-override tool for free reign. */
+  allowOverCap?: boolean;
 }
 
 export function AddPicker({
@@ -201,6 +204,7 @@ export function AddPicker({
   config,
   onAdd,
   onClose,
+  allowOverCap = false,
 }: AddPickerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTaken, setShowTaken] = useState(false);
@@ -263,7 +267,7 @@ export function AddPicker({
         <div className="flex-1 overflow-y-auto p-2">
           <div className="flex flex-wrap gap-[3px] content-start">
             {visibleAgents.map(fa => {
-              const wouldExceed = fa.tier > remaining;
+              const wouldExceed = !allowOverCap && fa.tier > remaining;
               const isHov = hoveredAgent === fa.name;
               return (
                 <button

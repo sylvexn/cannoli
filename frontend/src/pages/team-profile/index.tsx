@@ -17,7 +17,7 @@ import { ArrowLeft, Play, Shield, Calendar, Zap, Sword } from 'lucide-react';
 import { ReplayLink } from '@/components/replay-link';
 
 import { useAuth } from '@/lib/auth-context';
-import { canManageTeam } from '@/lib/permissions';
+import { canManageTeam, isStaff } from '@/lib/permissions';
 import { computePool, getTeamDefensiveProfile } from './utils';
 import type { SwapEntry, TeraEdit } from './utils';
 import { RosterTable } from './roster-table';
@@ -25,6 +25,7 @@ import { TypeCoverageGridInner } from './type-coverage-grid';
 import { HeaderStrip } from './header-strip';
 import { SpriteShowcase } from './sprite-showcase';
 import { ManageRosterModal } from './manage-roster-modal';
+import { RosterOverrideModal } from './roster-override-modal';
 import { NextMatchBanner } from './next-match-banner';
 import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
@@ -72,6 +73,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   // edit affordance on this page — tera captains, nickname editing, theorycraft
   // commits, etc. See lib/permissions.
   const canManage = canManageTeam(user, player);
+  // Staff-only free-reign roster override (add/remove any Pokemon). Distinct
+  // from `canManage` (which also includes team owners).
+  const isAdmin = isStaff(user);
   const season = league.season;
   const config = DEFAULT_LEAGUE_CONFIG;
 
@@ -86,6 +90,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     searchParams.get('theorycraft') === '1',
   );
   const [manageOpen, setManageOpen] = useState(false);
+  const [overrideOpen, setOverrideOpen] = useState(false);
   // Strip the param after consumption so refresh doesn't re-enter mode unintentionally
   useEffect(() => {
     if (searchParams.get('theorycraft') === '1') {
@@ -361,6 +366,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         teamDeaths={teamDeaths}
         canManage={canManage}
         onManage={() => setManageOpen(true)}
+        canOverride={isAdmin}
+        onOverride={() => setOverrideOpen(true)}
       />
 
       {/* ═══ MANAGE ROSTER MODAL (nicknames + shiny + tera, owner/staff) ═══ */}
@@ -373,6 +380,20 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
           costFormat={costFormat}
           season={season}
           onSaved={refresh}
+        />
+      )}
+
+      {/* ═══ ROSTER OVERRIDE MODAL (staff free-reign add/remove) ═══ */}
+      {isAdmin && overrideOpen && (
+        <RosterOverrideModal
+          player={player}
+          leagueId={league.id}
+          players={players}
+          costFormat={costFormat}
+          config={config}
+          season={season}
+          onClose={() => setOverrideOpen(false)}
+          onCommitted={() => { void refresh(); setOverrideOpen(false); }}
         />
       )}
 
