@@ -959,3 +959,54 @@ export const announcementDismissals = sqliteTable('announcement_dismissals', {
   announcementId: integer('announcement_id').notNull().references(() => announcements.id, { onDelete: 'cascade' }),
   dismissedAt: text('dismissed_at').default(sql`(datetime('now'))`),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.announcementId] }) }));
+
+// ─── Usage Events (first-party web analytics — raw beacon rows) ─────────────
+// One row per pageview / named feature event posted to the public beacon
+// endpoint (/api/analytics/events). Cookieless: anonymous visitors get a
+// daily-rotating anon_id (sha256 of salt+ip+ua) instead of any client-side
+// identifier. Raw rows retain ~90 days (opportunistic prune in lib/usage.ts);
+// history beyond that survives via the usage_daily rollup tables below.
+
+export const usageEvents = sqliteTable('usage_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ts: text('ts').default(sql`(datetime('now'))`),
+  /** 'pageview' or a named feature event (e.g. 'matchup-compare-run'). */
+  event: text('event').notNull().default('pageview'),
+  /** Normalized route pattern (ids collapsed to ':id') — bounded cardinality. */
+  route: text('route').notNull(),
+  /** Raw path as the client saw it (capped at 512 chars). */
+  path: text('path').notNull(),
+  /** Resolved from the session cookie; null for anonymous visitors. */
+  userId: integer('user_id'),
+  /** Daily-rotating visitor hash — set only when user_id is null. */
+  anonId: text('anon_id'),
+  device: text('device').notNull(),
+  /** External referrer origin only (same-host referrers are dropped). */
+  referrer: text('referrer'),
+}, (t) => ({
+  tsIdx: index('usage_events_ts_idx').on(t.ts),
+  eventTsIdx: index('usage_events_event_ts_idx').on(t.event, t.ts),
+  userTsIdx: index('usage_events_user_ts_idx').on(t.userId, t.ts),
+}));
+
+// ─── Usage Daily Rollups (per-day aggregates — survive the raw 90d window) ──
+// Written by the usage-rollup job (lib/usage.ts) once per completed UTC day.
+// usage_daily is per (event, route); usage_daily_totals is the day-level line
+// (distinct-visitor counts can't be summed across routes, so totals get their
+// own table). Idempotent: a day present in usage_daily_totals is skipped.
+
+export const usageDaily = sqliteTable('usage_daily', {
+  date: text('date').notNull(),
+  event: text('event').notNull(),
+  route: text('route').notNull(),
+  views: integer('views').notNull().default(0),
+  uniqueUsers: integer('unique_users').notNull().default(0),
+  uniqueAnons: integer('unique_anons').notNull().default(0),
+}, (t) => ({ pk: primaryKey({ columns: [t.date, t.event, t.route] }) }));
+
+export const usageDailyTotals = sqliteTable('usage_daily_totals', {
+  date: text('date').primaryKey(),
+  views: integer('views').notNull().default(0),
+  uniqueUsers: integer('unique_users').notNull().default(0),
+  uniqueAnons: integer('unique_anons').notNull().default(0),
+});
