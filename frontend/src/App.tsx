@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { lazyWithReload } from '@/lib/lazy-with-reload';
+import { usePageviewBeacon } from '@/lib/analytics';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/lib/auth-context';
 import { AppDataProvider } from '@/lib/app-data-context';
@@ -30,7 +31,7 @@ import {
   AdminTemplatesRoute,
   AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
   AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
-  AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute,
+  AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute, AdminUsageRoute,
   AdminAnnouncementsRoute,
   AdminRulesRoute,
 } from '@/pages/admin/admin-routes';
@@ -61,9 +62,16 @@ function MarketRedirect({ tab }: { tab: 'trades' | 'free-agents' }) {
   return <Navigate to={`/league/${leagueId}/market/${tab}`} replace />;
 }
 
+/** SPA pageview beacon — renders nothing; must sit inside BrowserRouter. */
+function AnalyticsBeacon() {
+  usePageviewBeacon();
+  return null;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
+      <AnalyticsBeacon />
       <AuthProvider>
         <AppDataProvider>
         <TooltipProvider>
@@ -154,6 +162,7 @@ export default function App() {
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
                     <Route path="observability" element={<AdminObservabilityRoute />} />
+                    <Route path="usage" element={<AdminUsageRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
                     <Route path="feedback" element={<AdminFeedbackRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
