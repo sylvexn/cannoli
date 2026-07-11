@@ -10,6 +10,7 @@ import { runAutoForfeit } from './jobs/auto-forfeit';
 import { runAdvanceWeek } from './jobs/advance-week';
 import { runExpireTrades } from './jobs/expire-trades';
 import { runStaleInProgressSweep } from './jobs/stale-in-progress';
+import { runUsageRollup } from './usage';
 
 interface JobDef {
   name: string;
@@ -23,6 +24,7 @@ const JOBS: JobDef[] = [
   { name: 'stale-in-progress', intervalMs: 10 * 60 * 1000, fn: runStaleInProgressSweep },
   { name: 'advance-week', intervalMs: 60 * 60 * 1000, fn: runAdvanceWeek },
   { name: 'expire-trades', intervalMs: 60 * 60 * 1000, fn: runExpireTrades },
+  { name: 'usage-rollup', intervalMs: 60 * 60 * 1000, fn: runUsageRollup },
 ];
 
 const handles: NodeJS.Timeout[] = [];

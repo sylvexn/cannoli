@@ -125,6 +125,9 @@ export function shouldLogPath(method: string, path: string): boolean {
   if (method === 'OPTIONS') return false;
   if (path === '/health' || path === '/api/health') return false;
   if (path === '/') return false;
+  // Usage-analytics beacon: one hit per pageview — high-volume, zero
+  // diagnostic value, and it would flush the 5k-row buffer in hours.
+  if (path === '/api/analytics/events') return false;
   // Only the API surface (plus the action.php SSO proxy, which lives there).
   return path.startsWith('/api/');
 }

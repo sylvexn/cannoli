@@ -18,6 +18,7 @@ import { feedbackRoutes } from './routes/feedback';
 import { changelogRoutes } from './routes/changelog';
 import { notificationRoutes } from './routes/notifications';
 import { clientErrorRoutes } from './routes/client-errors';
+import { analyticsRoutes } from './routes/analytics';
 import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
 import { psInternalRoutes } from './routes/ps-internal';
@@ -26,6 +27,7 @@ import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
 import { startSchedulers, stopSchedulers } from './lib/scheduler';
+import { runUsageRollup } from './lib/usage';
 import { markRequestStart, captureRequestError, logRequest, logServerFault, getRequestId } from './lib/request-log';
 import { startHeartbeat, stopHeartbeat } from './lib/heartbeat';
 import { GIT_SHA } from './lib/version';
@@ -172,7 +174,12 @@ const app = new Elysia()
     // Exempt login itself (no session yet). Exempt the PS action.php proxy
     // path because Showdown's testclient does not participate in our CSRF
     // scheme; that endpoint has its own auth (sid cookie + signed assertion).
-    const csrfExempt = path === '/api/auth/login' || path === '/api/ps/action.php';
+    // Exempt the analytics beacon: navigator.sendBeacon cannot attach the
+    // X-CSRF-Token header, so logged-in users' pageview beacons would 403.
+    const csrfExempt =
+      path === '/api/auth/login' ||
+      path === '/api/ps/action.php' ||
+      path === '/api/analytics/events';
     if (!csrfExempt && sessionToken) {
       const cookieHeader = request.headers.get('cookie') ?? undefined;
       const cookieToken = parseCsrfCookie(cookieHeader);
@@ -243,6 +250,7 @@ const app = new Elysia()
   .use(changelogRoutes)
   .use(notificationRoutes)
   .use(clientErrorRoutes)
+  .use(analyticsRoutes)
   .use(arenaRoutes)
   .use(psLoginRoutes)
   .use(psInternalRoutes)
@@ -281,6 +289,11 @@ if (process.env.PS_SERVER_WS_URL) {
 
 // Start cron-style schedulers (auto-forfeit, week-advance)
 startSchedulers();
+
+// Catch up the usage-analytics daily rollup once at boot (idempotent), so UTC
+// days that completed while the process was down still land in usage_daily
+// before their raw rows age out. The hourly job handles steady state.
+runUsageRollup();
 
 // In-process self-monitor: probes DB / PS bot on an interval, records into
 // health_checks, and Discord-alerts on ok→down flips. Catches silent deaths
