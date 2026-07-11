@@ -58,7 +58,7 @@ export function TimelinePanel({ timeline, days, onDaysChange, loading, onRefresh
         <div className="flex-1 min-w-0">
           {timeline.length > 0 ? (
             <>
-              <div className="flex items-end gap-px h-24" role="img" aria-label="Daily views and visitors">
+              <div className="flex items-end gap-px h-32" role="img" aria-label="Daily views and visitors">
                 {timeline.map(d => {
                   const viewsPct = maxViews > 0 ? Math.max(2, Math.round((d.views / maxViews) * 100)) : 2;
                   const visitorsPct = d.views > 0 ? Math.round((d.visitors / d.views) * viewsPct) : 0;
@@ -88,7 +88,7 @@ export function TimelinePanel({ timeline, days, onDaysChange, loading, onRefresh
               </div>
             </>
           ) : (
-            <div className="h-24 flex items-center justify-center text-xs text-text-muted">
+            <div className="h-32 flex items-center justify-center text-xs text-text-muted">
               {loading ? 'Loading…' : 'No traffic recorded in this window yet.'}
             </div>
           )}
