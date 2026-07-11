@@ -8,9 +8,10 @@
  *
  * Always 204, no body, best-effort: parsing/derivation/insert all live in
  * recordUsageEvent (lib/usage.ts) which never throws — a broken beacon must
- * never surface an error to the app. No Elysia body schema either: a
- * validation failure would 422 instead of 204, and sendBeacon string payloads
- * arrive as text/plain.
+ * never surface an error to the app. The `parse` hook hands the raw text
+ * straight through (no Elysia body schema / JSON parser): a malformed body
+ * would otherwise 400/422 in the framework before the handler ever ran, and
+ * sendBeacon string payloads arrive as text/plain anyway.
  */
 import { Elysia } from 'elysia';
 import { recordUsageEvent } from '../lib/usage';
@@ -21,4 +22,6 @@ export const analyticsRoutes = new Elysia()
     const user = (ctx as { user?: AuthUser | null }).user ?? null;
     recordUsageEvent(body, request, user ? { id: user.id } : null);
     return new Response(null, { status: 204 });
+  }, {
+    parse: ({ request }) => request.text().catch(() => ''),
   });

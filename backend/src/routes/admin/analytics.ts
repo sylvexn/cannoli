@@ -18,8 +18,8 @@ const VISITOR_KEY = `COALESCE('u:' || user_id, 'a:' || anon_id)`;
 
 /** Clamp the ?days window to [1, 90] (raw retention). */
 function clampDays(raw: string | undefined, def: number): number {
-  const n = parseInt(raw ?? '') || def;
-  return Math.min(Math.max(n, 1), 90);
+  const n = parseInt(raw ?? '');
+  return Math.min(Math.max(Number.isNaN(n) ? def : n, 1), 90);
 }
 
 /** SQLite datetime modifier for "start of the window, N days back incl. today". */
