@@ -9,6 +9,7 @@ import { templateAdminRoutes } from './templates';
 import { miscRoutes } from './misc';
 import { psReplaysRoutes } from './ps-replays';
 import { observabilityRoutes } from './observability';
+import { analyticsAdminRoutes } from './analytics';
 import { announcementsRoutes } from './announcements';
 import { adminNotificationsRoutes } from './notifications';
 // Simulator control API. `simRoutesGated` is the real sim route group when
@@ -28,6 +29,7 @@ export const adminRoutes = new Elysia()
   .use(miscRoutes)
   .use(psReplaysRoutes)
   .use(observabilityRoutes)
+  .use(analyticsAdminRoutes)
   .use(announcementsRoutes)
   .use(adminNotificationsRoutes)
   .use(simRoutesGated);

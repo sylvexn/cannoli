@@ -29,6 +29,7 @@ import { AdminActivityLog } from './admin-activity-log';
 import { AdminApiLogs } from './admin-api-logs';
 import { AdminFeedback } from './admin-feedback';
 import { Observability } from './observability';
+import { AdminAnalytics } from './analytics';
 import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
@@ -39,7 +40,7 @@ import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
   CalendarCog, List, Settings, Shield, MessageSquare,
   Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
-  UsersRound, Megaphone, BookOpen,
+  UsersRound, Megaphone, BookOpen, BarChart3,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -122,6 +123,11 @@ export const AdminObservabilityRoute = () => {
     </DevOnly>
   );
 };
+export const AdminUsageRoute = () => (
+  <DevOnly>
+    <AdminSection icon={BarChart3} title="Usage"><AdminAnalytics /></AdminSection>
+  </DevOnly>
+);
 export const AdminBotRoute = () => (
   <DevOnly>
     <AdminSection icon={Bot} title="PS Bot"><AdminBot /></AdminSection>

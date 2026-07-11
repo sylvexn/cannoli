@@ -597,6 +597,39 @@ export interface ApiObservabilityHealth {
   version: string;
 }
 
+// ─── Usage analytics (dev-only dashboard) ─────────────────────────────────────
+
+export interface ApiAnalyticsSummary {
+  tiles: {
+    liveNow: number;
+    viewsToday: number;
+    visitorsToday: number;
+    wau: number;
+    mau: number;
+  };
+  /** Zero-filled daily buckets over the window, oldest→newest, incl. today. */
+  timeline: { date: string; views: number; visitors: number }[];
+  topRoutes: { route: string; views: number; visitors: number }[];
+  events: { event: string; count: number; users: number }[];
+  devices: { device: string; views: number }[];
+  referrers: { referrer: string; views: number }[];
+}
+
+export interface ApiAnalyticsCoach {
+  userId: string | number;
+  username: string;
+  views: number;
+  lastSeenAt: string;
+  topRoute: string;
+}
+
+export interface ApiAnalyticsLiveEntry {
+  username: string | null;
+  route: string;
+  event: string | null;
+  ts: string;
+}
+
 export interface ApiSiteSettings {
   defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
@@ -1035,6 +1068,14 @@ export const api = {
     postJson<{ success: boolean; groups: number; occurrences: number }>('/api/admin/observability/seed-demo'),
   clearDemoErrors: () =>
     postJson<{ success: boolean; cleared: number }>('/api/admin/observability/seed-demo/clear'),
+
+  // ── Usage analytics (dev-only "Usage" tab) ──
+  getAnalyticsSummary: (days = 30) =>
+    fetchJson<ApiAnalyticsSummary>(`/api/admin/analytics/summary?days=${days}`),
+  getAnalyticsCoaches: (days = 7) =>
+    fetchJson<{ coaches: ApiAnalyticsCoach[] }>(`/api/admin/analytics/coaches?days=${days}`),
+  getAnalyticsLive: () =>
+    fetchJson<{ entries: ApiAnalyticsLiveEntry[] }>('/api/admin/analytics/live'),
 
   // Report a browser-side fault (error boundary / global handlers). Returns a
   // short ref the user can quote in feedback. Caller swallows failures.
