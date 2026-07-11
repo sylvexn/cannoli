@@ -15,6 +15,7 @@ import { MovesTab } from './tabs/moves-tab';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api, type ApiTeam } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 import { rosterFromApi } from '@/lib/roster-from-api';
 import type { League } from '@/lib/types';
 import {
@@ -154,6 +155,7 @@ export function MatchupCenterPage() {
         label: `${team.teamName} (${opponentContext.league.name.replace(' League', '')})`,
       },
     });
+    trackEvent('matchup.compare');
   }
 
   // Preload sprites for both teams
@@ -194,7 +196,10 @@ export function MatchupCenterPage() {
           <span className="text-xs font-heading font-bold text-text-muted uppercase tracking-widest">vs</span>
           <TeamPicker
             source={state.teamBSource}
-            onSelect={(roster, source) => dispatch({ type: 'SET_TEAM_B', roster, source })}
+            onSelect={(roster, source) => {
+              dispatch({ type: 'SET_TEAM_B', roster, source });
+              trackEvent('matchup.compare');
+            }}
             side="b"
           />
         </div>
