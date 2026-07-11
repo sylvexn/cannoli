@@ -82,9 +82,9 @@ export function TimelinePanel({ timeline, days, onDaysChange, loading, onRefresh
                 })}
               </div>
               <div className="flex items-center justify-between mt-1 font-mono text-[10px] text-text-muted tabular-nums">
-                <span>{formatDate(timeline[0]!.date, { year: 'hide' })}</span>
+                <span>{formatDate(timeline[0]!.date, { year: 'hide', tz: 'UTC' })}</span>
                 <span className="text-text-muted/70">grey=views, neon=visitors</span>
-                <span>{formatDate(timeline[timeline.length - 1]!.date, { year: 'hide' })}</span>
+                <span>{formatDate(timeline[timeline.length - 1]!.date, { year: 'hide', tz: 'UTC' })}</span>
               </div>
             </>
           ) : (
@@ -101,7 +101,7 @@ export function TimelinePanel({ timeline, days, onDaysChange, loading, onRefresh
           <SummaryStat
             label="Peak day"
             value={peak.views > 0 ? `${peak.views.toLocaleString()}` : '—'}
-            sub={peak.views > 0 ? formatDate(peak.date, { year: 'hide' }) : undefined}
+            sub={peak.views > 0 ? formatDate(peak.date, { year: 'hide', tz: 'UTC' }) : undefined}
           />
         </div>
       </div>
