@@ -377,7 +377,15 @@ export const tradeRoutes = new Elysia()
     const { trade, league, season } = ctx;
     const archived = checkLeagueArchived(trade.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
-    if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
+    // Approval requires the recipient to have accepted first (status
+    // 'awaiting_admin'). A still-'pending' trade must not be approved — that
+    // would let an admin who proposed it skip the recipient's acceptance
+    // (self-approval of the admin step itself stays allowed).
+    if (trade.status === 'pending') {
+      set.status = 400;
+      return { error: 'Trade must be accepted by the recipient before it can be approved', code: 'TRADE_NOT_ACCEPTED' };
+    }
+    if (trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
     }
 

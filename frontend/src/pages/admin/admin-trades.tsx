@@ -237,10 +237,15 @@ function TradeApprovalCard({
                   <X size={12} />
                   Reject
                 </Button>
-                <Button size="xs" onClick={onApprove} className="bg-win text-surface-base hover:bg-win/90">
-                  <Check size={12} />
-                  Approve
-                </Button>
+                {/* Approve only once the recipient has accepted (awaiting_admin).
+                    A still-'pending' trade can't be approved — the backend
+                    rejects it — so we don't offer the button there. */}
+                {trade.status === 'awaiting_admin' && (
+                  <Button size="xs" onClick={onApprove} className="bg-win text-surface-base hover:bg-win/90">
+                    <Check size={12} />
+                    Approve
+                  </Button>
+                )}
               </>
             ) : (
               <Badge variant="outline" className={
