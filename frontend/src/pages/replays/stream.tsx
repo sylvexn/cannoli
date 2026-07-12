@@ -88,6 +88,11 @@ export function StreamPage() {
         ]);
         const matches = schedule.matches;
         const teamMap = new Map(teams.map(t => [t.id, t]));
+        // `getTeams` returns teams already ordered by live standings, so a team's
+        // 1-indexed position in that array IS its current standings rank. Use that
+        // for the pre-roll badge instead of `team.rank` (a static draft/seed column
+        // that never moves with results) — feedback #72.
+        const standingsRankById = new Map(teams.map((t, i) => [t.id, i + 1]));
         return matches
           .filter((m: ApiMatch) => m.week === week)
           .filter((m: ApiMatch) => (m.replayUrl && m.replayUrl !== '#') || m.hasReplay)
@@ -102,8 +107,8 @@ export function StreamPage() {
               league,
               homeTeam: home,
               awayTeam: away,
-              homeRank: home?.rank,
-              awayRank: away?.rank,
+              homeRank: home ? standingsRankById.get(home.id) : undefined,
+              awayRank: away ? standingsRankById.get(away.id) : undefined,
             };
           });
       }),
