@@ -193,12 +193,19 @@ export function AdminFreeAgents() {
   async function handlePickup() {
     if (!pickupPokemon || !pickupTeam) return;
     try {
-      await api.freeAgentPickup(selectedLeague, {
+      const result = await api.freeAgentPickup(selectedLeague, {
         teamId: pickupTeam,
         pickupNames: [pickupPokemon],
         dropNames: dropPokemon ? [dropPokemon] : [],
       });
-      toast.success(`${pickupPokemon} picked up successfully`);
+      // Pickups are queued for admin approval (feedback #73): nothing is applied
+      // on submit — surface the pending request and let an admin approve it in
+      // the queue below (self-approval allowed).
+      toast.success(
+        result.pending
+          ? `${pickupPokemon} submitted for approval`
+          : `${pickupPokemon} picked up successfully`,
+      );
       setPickupPokemon(null);
       setPickupTeam('');
       setDropPokemon('');
@@ -206,6 +213,7 @@ export function AdminFreeAgents() {
       const faRes = await api.getFreeAgents(selectedLeague);
       const fa = Array.isArray(faRes) ? faRes : (faRes as { freeAgents: FreeAgent[] }).freeAgents;
       setFreeAgents(fa as FreeAgent[]);
+      fetchFaReqs(selectedLeague);
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, 'Pickup failed'));
     }
