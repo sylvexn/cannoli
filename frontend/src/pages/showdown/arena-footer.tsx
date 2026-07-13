@@ -1,15 +1,19 @@
 /**
  * ArenaFooter — collapsible footer for the Showdown page.
  *
- * Collapsed (default, ~40px): thin bar with [Match] [Scrims (n)] [Live (n)]
+ * Collapsed (default, ~32px): thin bar with [Match] [Scrims (n)] [Live (n)]
  * mini-buttons. Click any pill to expand to ~280px showing that section.
  * Click the active pill to collapse.
  *
- * BattleHud takeover: when `viewingBattle` is set, the footer expands to
- * ~50% of the page's own available height (not the viewport — see
- * BATTLE_HEIGHT below) and renders <BattleHud> instead of the picked
- * section. Closing the battle returns the footer to its prior state
- * (last-selected pill + height).
+ * The footer is intentionally NEVER a second Pokemon Showdown client. The
+ * page's main PS iframe (index.tsx) is the one and only PS client — a coach
+ * plays their live match, and spectates others, in THAT client (or a new tab
+ * for someone else's room). We used to balloon the footer into an in-page
+ * "Battle HUD" that mounted a SECOND PS iframe; two PS clients share the same
+ * origin's sid/localStorage and corrupt each other, so that HUD is gone.
+ *
+ * When the coach's own official match goes live we collapse the footer to the
+ * pill bar (they're now playing in the main client — nothing to expand for).
  *
  * Always-mounted + CSS height transition (per project conventions —
  * we avoid base-ui Sheet-style animations for panels like this).
@@ -25,26 +29,16 @@ import { Swords, Users, Tv2, ChevronDown } from 'lucide-react';
 import { OfficialMatchCard } from './footer/official-match';
 import { ScrimsSection } from './footer/scrims';
 import { LiveMatchesSection } from './footer/live-matches';
-import { BattleHud } from './battle-hud';
 
 type Pill = 'match' | 'scrims' | 'live';
 
 const COLLAPSED_PX = 32;
 const EXPANDED_PX = 280;
-// Height when watching a battle: a % of the wide-route column's own height,
-// not `vh` — `vh` ignores banners/pills above the page and squeezes the PS
-// iframe on shorter viewports. The wide-route shell (app-shell.tsx -> this
-// page's root) is a definite-height flex chain all the way to h-screen, so a
-// percentage here resolves against real remaining space. Clamped so the HUD
-// stays usable on short viewports without ballooning on tall ones.
-const BATTLE_HEIGHT = 'clamp(240px, 50%, 480px)';
 
-interface ViewingBattle {
-  matchId: string;
-  psRoomId: string | null;
-  isOfficial: boolean;
-  label: string;
-}
+// The one and only PS client lives in the page's main iframe; spectating
+// someone else's room opens it here in a new tab rather than a second in-page
+// client. Same base URL as the main iframe (see index.tsx).
+const PS_URL = import.meta.env.VITE_SHOWDOWN_URL || 'https://sim.cannoli.live';
 
 export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boolean }) {
   const { user } = useAuth();
@@ -63,37 +57,26 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
 
   const liveMine = myMatches.find(m => m.status === 'in_progress' && m.psRoomId);
 
-  const [viewingBattle, setViewingBattle] = useState<ViewingBattle | null>(null);
-
-  // Auto-enter HUD when any of our matches goes in_progress (whichever week).
-  useEffect(() => {
-    if (liveMine?.psRoomId && !viewingBattle) {
-      const home = liveMine.homeTeam?.name ?? 'Home';
-      const away = liveMine.awayTeam?.name ?? 'Away';
-      setViewingBattle({
-        matchId: liveMine.matchId,
-        psRoomId: liveMine.psRoomId,
-        isOfficial: true,
-        label: `Week ${liveMine.week}: ${home} vs ${away}`,
-      });
-    }
-  }, [liveMine?.matchId, liveMine?.psRoomId]);
-
   // Persisted pill + open state
   const [activePill, setActivePill] = useLocalStorageState<Pill>('arena-footer-pill', 'match');
   const [isOpen, setIsOpen] = useLocalStorageState<boolean>('arena-footer-open', false);
 
   // A coach has something to play this week (their current-week fixture that
-  // hasn't started/finished). Drives the auto-open on a fresh visit.
+  // hasn't STARTED yet). Drives the auto-open on a fresh visit so they can ready
+  // up. Deliberately excludes `in_progress` — once the match is live the coach
+  // is playing in the main PS client, and the collapse-on-live effect below
+  // pulls the footer down to the pill bar instead of popping a panel open.
   const hasActionableCurrentMatch = myMatches.some(
-    m => m.isCurrentWeek &&
-      (m.status === 'scheduled' || m.status === 'ready' || m.status === 'in_progress'),
+    m => m.isCurrentWeek && (m.status === 'scheduled' || m.status === 'ready'),
   );
 
   // Track an explicit manual collapse so we never re-open the footer the coach
   // just closed. We also only auto-open ONCE per mount.
   const userCollapsedRef = useRef(false);
   const autoOpenedRef = useRef(false);
+  // Remember the last live match we collapsed for, so we collapse once per
+  // match-start rather than fighting the coach every render.
+  const collapsedForLiveRef = useRef<string | null>(null);
 
   function togglePill(pill: Pill) {
     if (isOpen && pill === activePill) {
@@ -136,6 +119,21 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forceOpenArena, hasActionableCurrentMatch]);
 
+  // When the coach's own official match goes live, collapse the footer to the
+  // pill bar — they're now playing in the main PS client and there's nothing to
+  // expand for. Fires once per match-start (keyed on matchId) so a coach who
+  // deliberately re-opens a pill mid-battle isn't yanked closed every render.
+  useEffect(() => {
+    if (!liveMine) return;
+    if (collapsedForLiveRef.current === liveMine.matchId) return;
+    collapsedForLiveRef.current = liveMine.matchId;
+    userCollapsedRef.current = true; // keep auto-open from re-popping it
+    setIsOpen(false);
+  // Key on the match id (fire once per match-start), not the liveMine object —
+  // it's a fresh find() every render. The ref guard keeps this idempotent.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveMine?.matchId, setIsOpen]);
+
   // Count of matches the coach can still act on (not finished). Surfaced on the
   // collapsed Match pill so the 32px bar signals "you have N matches".
   const playableCount = playable.length;
@@ -145,80 +143,62 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
   // — the pill bar is therefore always visible and the PS client is forced to
   // lay out within a deterministic window (no full-height iframe pushing the
   // canvas below the fold).
-  // - Battle HUD takeover: ~50% of the column's own height (see BATTLE_HEIGHT).
   // - Expanded panel: 280px.
   // - Collapsed pill bar: 32px.
-  const collapsed = !viewingBattle && !isOpen;
-  const containerStyle: React.CSSProperties = collapsed
-    ? { height: COLLAPSED_PX }
-    : viewingBattle
-      ? { height: BATTLE_HEIGHT }
-      : { height: `${EXPANDED_PX}px` };
+  const containerStyle: React.CSSProperties = isOpen
+    ? { height: `${EXPANDED_PX}px` }
+    : { height: COLLAPSED_PX };
 
   return (
     <div
       className="flex-shrink-0 transition-[height] duration-200 ease-out border-t border-border-default bg-surface-base flex flex-col overflow-hidden"
       style={containerStyle}
     >
-      {/* Pill bar — always visible, even during battle (acts as the "back" affordance is the battle's own bottom bar) */}
-      {!viewingBattle && (
-        <div className="flex items-center gap-1 px-2 h-8 flex-shrink-0">
-          <PillButton
-            active={isOpen && activePill === 'match'}
-            onClick={() => togglePill('match')}
-            icon={<Swords size={12} />}
-            label="Match"
-            accent="orange"
-            badge={liveMine ? 'LIVE' : playableCount > 0 ? String(playableCount) : null}
-          />
-          <PillButton
-            active={isOpen && activePill === 'scrims'}
-            onClick={() => togglePill('scrims')}
-            icon={<Users size={12} />}
-            label="Scrims"
-            accent="blue"
-            badge={scrimLobbies.length > 0 ? String(scrimLobbies.length) : null}
-          />
-          <PillButton
-            active={isOpen && activePill === 'live'}
-            onClick={() => togglePill('live')}
-            icon={<Tv2 size={12} />}
-            label="Live"
-            accent="green"
-            badge={liveMatches.length > 0 ? String(liveMatches.length) : null}
-          />
+      {/* Pill bar — always visible. */}
+      <div className="flex items-center gap-1 px-2 h-8 flex-shrink-0">
+        <PillButton
+          active={isOpen && activePill === 'match'}
+          onClick={() => togglePill('match')}
+          icon={<Swords size={12} />}
+          label="Match"
+          accent="orange"
+          badge={liveMine ? 'LIVE' : playableCount > 0 ? String(playableCount) : null}
+        />
+        <PillButton
+          active={isOpen && activePill === 'scrims'}
+          onClick={() => togglePill('scrims')}
+          icon={<Users size={12} />}
+          label="Scrims"
+          accent="blue"
+          badge={scrimLobbies.length > 0 ? String(scrimLobbies.length) : null}
+        />
+        <PillButton
+          active={isOpen && activePill === 'live'}
+          onClick={() => togglePill('live')}
+          icon={<Tv2 size={12} />}
+          label="Live"
+          accent="green"
+          badge={liveMatches.length > 0 ? String(liveMatches.length) : null}
+        />
 
-          <div className="ml-auto flex items-center gap-2 text-[11px] text-text-muted">
-            <span className={`w-1.5 h-1.5 rounded-full ${arena.connected ? 'bg-green-400' : 'bg-red-400'}`} />
-            <span>{arena.connected ? 'Connected' : 'Reconnecting...'}</span>
-            {isOpen && (
-              <button
-                onClick={collapse}
-                className="ml-2 text-text-muted hover:text-text-primary transition-colors"
-                title="Collapse"
-                aria-label="Collapse footer"
-              >
-                <ChevronDown size={14} />
-              </button>
-            )}
-          </div>
+        <div className="ml-auto flex items-center gap-2 text-[11px] text-text-muted">
+          <span className={`w-1.5 h-1.5 rounded-full ${arena.connected ? 'bg-green-400' : 'bg-red-400'}`} />
+          <span>{arena.connected ? 'Connected' : 'Reconnecting...'}</span>
+          {isOpen && (
+            <button
+              onClick={collapse}
+              className="ml-2 text-text-muted hover:text-text-primary transition-colors"
+              title="Collapse"
+              aria-label="Collapse footer"
+            >
+              <ChevronDown size={14} />
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Body — battle HUD OR section content */}
-      {viewingBattle ? (
-        <div className="flex-1 min-h-0">
-          <BattleHud
-            matchId={viewingBattle.matchId}
-            psRoomId={viewingBattle.psRoomId}
-            isOfficial={viewingBattle.isOfficial}
-            label={viewingBattle.label}
-            liveStats={arena.liveStats}
-            spectatorCount={arena.spectatorCounts[viewingBattle.matchId]}
-            onBackToLobby={() => setViewingBattle(null)}
-          />
-        </div>
-      ) : isOpen ? (
+      {/* Body — selected section content (never a second PS client). */}
+      {isOpen ? (
         <div className="flex-1 min-h-0 overflow-y-auto p-3">
           {activePill === 'match' && (
             <OfficialMatchCard
@@ -246,16 +226,11 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
           {activePill === 'live' && (
             <LiveMatchesSection
               matches={liveMatches}
-              onSpectate={(m) => {
-                const home = m.homeTeam?.name ?? 'Home';
-                const away = m.awayTeam?.name ?? 'Away';
-                setViewingBattle({
-                  matchId: m.matchId,
-                  psRoomId: m.psRoomId,
-                  isOfficial: true,
-                  label: `Week ${m.week}: ${home} vs ${away}`,
-                });
-                arena.subscribeMatch(m.matchId);
+              onWatch={(m) => {
+                // Watch in the PS client (a new tab), never a second in-page
+                // client. Without a psRoomId there's no room to open yet.
+                if (!m.psRoomId) return;
+                window.open(`${PS_URL}/${m.psRoomId}`, '_blank', 'noopener,noreferrer');
               }}
             />
           )}

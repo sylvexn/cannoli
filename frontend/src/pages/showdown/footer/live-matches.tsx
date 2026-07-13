@@ -1,16 +1,17 @@
 /**
- * LiveMatchesSection — list of in-progress official matches with spectate.
+ * LiveMatchesSection — list of in-progress official matches. "Watch" opens the
+ * battle in the Showdown client (a new tab), never a second in-page PS client.
  * Extracted from arena-tab.tsx for the Showdown footer.
  */
-import { Zap } from 'lucide-react';
+import { Zap, ExternalLink } from 'lucide-react';
 import type { LiveMatch } from '../use-arena-websocket';
 
 interface Props {
   matches: LiveMatch[];
-  onSpectate: (match: LiveMatch) => void;
+  onWatch: (match: LiveMatch) => void;
 }
 
-export function LiveMatchesSection({ matches, onSpectate }: Props) {
+export function LiveMatchesSection({ matches, onWatch }: Props) {
   return (
     <section className="rounded-lg border border-border-default bg-surface-raised p-5">
       <div className="flex items-center gap-2 mb-3">
@@ -37,10 +38,12 @@ export function LiveMatchesSection({ matches, onSpectate }: Props) {
                 <span className="text-xs text-text-muted capitalize shrink-0">{m.leagueId}</span>
               </div>
               <button
-                onClick={() => onSpectate(m)}
-                className="px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors shrink-0"
+                onClick={() => onWatch(m)}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-green-400/10 text-green-400 hover:bg-green-400/20 transition-colors shrink-0"
+                title="Watch in the Showdown client (opens a new tab)"
               >
-                Spectate
+                Watch
+                <ExternalLink size={11} />
               </button>
             </div>
           ))}

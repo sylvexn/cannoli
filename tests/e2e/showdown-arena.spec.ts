@@ -3,18 +3,12 @@ import { test, expect, type Page } from '@playwright/test';
 /**
  * Showdown / Arena surface.
  *
- * The full Battle HUD (live K/D stats + scouting panels) only mounts when the
- * arena WS reports an active battle the user is viewing — that path needs the
- * PS fork running and a real |win|/|tie| stream, which is the Showdown
- * integration suite's job, not this one. What we CAN cover deterministically:
- *
- *   - /showdown is a top-level route OUTSIDE the AppShell's page-error-boundary
- *     wrapper... actually it's inside the AppShell <Outlet>, so a render crash
- *     here is caught — we assert it mounts cleanly with the PS iframe + the
- *     collapsible Arena footer, and that no Base UI/React error fires.
- *
- * See the fixme below for the BattleHud render bug this suite would otherwise
- * catch (LAUNCH-BUG: hud-glyph).
+ * The Showdown page is a single PS client (the main iframe) plus a collapsible
+ * Arena footer. There is deliberately NO second in-page PS client: a coach
+ * plays their live match — and watches others — in that one client (the "Live"
+ * pill's Watch button opens someone else's room in a new tab). We assert the
+ * page mounts cleanly with the PS iframe + the footer's connection pill, and
+ * that no Base UI/React error fires.
  */
 test.describe('Showdown / Arena', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -45,34 +39,19 @@ test.describe('Showdown / Arena', () => {
   });
 
   /**
-   * hud-glyph (FIXED) — battle-hud.tsx used to render literal "☠"/"●" glyphs
-   * as JSX text children (violating the no-emoji / use-lucide rule). They are
-   * now lucide-react Skull / Circle icons.
-   *
-   * Reaching the live Battle HUD in e2e requires a real PS battle stream
-   * (PS fork + |win| capture) that this suite intentionally does NOT stand up,
-   * and there's no component-render harness in the e2e project. So rather than
-   * deleting the coverage, we assert at the source level that the HUD imports
-   * and renders the lucide icons (and no longer contains the raw glyphs) — a
-   * regression guard for the no-emoji convention. Promote to a live-HUD
-   * assertion if/when the arena fixture can inject viewingBattle + liveStats.
+   * No second in-page PS client. The page must render exactly ONE Showdown
+   * iframe — the main client. The old Battle HUD mounted a second PS iframe
+   * (titled "Pokemon Showdown Battle"); two clients on one origin corrupt each
+   * other's session, so it was removed. Guard against it creeping back.
    */
-  test('battle HUD uses lucide Skull/Circle icons, not literal glyphs', async () => {
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const src = fs.readFileSync(
-      path.resolve(__dirname, '../../frontend/src/pages/showdown/battle-hud.tsx'),
-      'utf8',
-    );
-    // No raw skull/dot glyphs left in the source.
-    expect(src.includes('☠'), 'no literal skull glyph in battle-hud').toBe(false);
-    expect(src.includes('●'), 'no literal status-dot glyph in battle-hud').toBe(false);
-    // lucide icons imported and rendered for the fainted/alive indicator.
-    expect(/import\s+\{[^}]*\bSkull\b[^}]*\bCircle\b[^}]*\}\s+from\s+['"]lucide-react['"]/.test(src)
-      || (/\bSkull\b/.test(src) && /\bCircle\b/.test(src) && src.includes("from 'lucide-react'")))
-      .toBe(true);
-    expect(/<Skull\b/.test(src), 'renders <Skull> for fainted').toBe(true);
-    expect(/<Circle\b/.test(src), 'renders <Circle> for alive').toBe(true);
+  test('renders a single PS client, never a second in-page battle iframe', async ({ page }) => {
+    await loginAs(page, 'syl', 'admin');
+    await page.goto('/showdown');
+
+    await expect(page.locator('iframe[title="Pokemon Showdown"]')).toBeVisible({ timeout: 15_000 });
+    // The removed HUD's iframe was titled "Pokemon Showdown Battle".
+    await expect(page.locator('iframe[title="Pokemon Showdown Battle"]')).toHaveCount(0);
+    await expect(page.locator('iframe')).toHaveCount(1);
   });
 });
 
