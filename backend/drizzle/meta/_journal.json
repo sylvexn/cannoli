@@ -470,6 +470,13 @@
       "when": 1783800000000,
       "tag": "0066_effective_week",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "6",
+      "when": 1783900000000,
+      "tag": "0067_fix_empoleon_ability",
+      "breakpoints": true
     }
   ]
 }
