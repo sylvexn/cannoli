@@ -49,6 +49,7 @@ export function AwardDialog({
 
   const [userId, setUserId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState('');
+  const [listOpen, setListOpen] = useState(false);
   const [pokemonName, setPokemonName] = useState('');
   const [pokemonSearch, setPokemonSearch] = useState('');
   const [pokemonResults, setPokemonResults] = useState<{ name: string; tier: number }[]>([]);
@@ -152,11 +153,11 @@ export function AwardDialog({
             <div className="text-[11px] text-text-muted">Coach</div>
             <Input
               value={userSearch}
-              onChange={e => { setUserSearch(e.target.value); setUserId(null); }}
+              onChange={e => { setUserSearch(e.target.value); setUserId(null); setListOpen(true); }}
               placeholder="Search by username"
               className="h-8 text-xs"
             />
-            {userSearch && (
+            {listOpen && userSearch && (
               <div className="max-h-40 overflow-y-auto rounded-md border border-border-default bg-surface-base">
                 {filteredUsers.length === 0 ? (
                   <div className="text-[11px] text-text-muted px-2 py-1">No matches</div>
@@ -164,7 +165,7 @@ export function AwardDialog({
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => { setUserId(parseInt(u.id)); setUserSearch(u.username); }}
+                    onClick={() => { setUserId(parseInt(u.id)); setUserSearch(u.username); setListOpen(false); }}
                     className={cn(
                       'w-full text-left px-2 py-1 text-xs hover:bg-surface-overlay/40 transition-colors flex items-center justify-between',
                       userId === parseInt(u.id) && 'bg-surface-overlay/60',
