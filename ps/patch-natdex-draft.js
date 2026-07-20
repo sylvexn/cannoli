@@ -1,14 +1,28 @@
 #!/usr/bin/env node
 /**
- * Patch upstream Pokemon Showdown's `config/formats.ts` for Cannoli. Two
+ * Patch upstream Pokemon Showdown's `config/formats.ts` for Cannoli. Three
  * independent, idempotent patches:
  *   1. Add the Cannoli league banlist to the `[Gen 9] NatDex Draft` format.
  *      The upstream entry ships without a banlist; the league rules
  *      (`plan/rules`) require a fixed set of ability/item/move bans plus
  *      per-Pokemon clauses.
- *   2. Guard the Tera Captains team-preview line so a side with no Tera
- *      Captains doesn't emit a blank `this.add('')` (which renders as a stray
- *      empty line in the battle/replay chat).
+ *   2. Guard the empty Tera Captains team-preview line in upstream's OWN
+ *      "[Gen 9] Draft Factory" format (a random-teams ladder format, unrelated
+ *      to Cannoli's real league play — despite the name, this is NOT the
+ *      Cannoli Tera Captain feature). Historical patch, kept for hygiene.
+ *   3. Strip 'Tera Type Preview' back OUT of NatDex Draft's ruleset. It was
+ *      added here for feedback #44 (Ready Up battles ran with no team preview
+ *      at all), but its icon line reads `pokemon.teraType` off whatever team
+ *      the player happens to have saved client-side — which Cannoli doesn't
+ *      control and which essentially never has a teraType set — so it always
+ *      rendered as empty separators ("caleb's Tera Types: /////", feedback
+ *      #49). Team Preview itself (pick order + reveal) is unaffected — it
+ *      comes from 'Standard Draft' independently of this rule. CannoliBot now
+ *      posts its OWN correct preview (sourced from rosters.teraType1/2/3) via
+ *      the `/cannoli-tera-preview` plugin command once both players join (see
+ *      ps/cannoli.ts + backend/src/lib/ps-bot.ts sendTeraPreview) — this patch
+ *      just gets the broken vanilla line out of the way so it isn't shown
+ *      twice.
  *
  * Invoked at provisioning time by both:
  *   - `scripts/setup-showdown.sh` (local dev clone)
@@ -46,21 +60,24 @@ let changed = false;
 	if (res.changed) { src = res.src; changed = true; }
 }
 
-// ── Patch 3: enforce Tera Preview in NatDex Draft ───────────────────────────
-// Cannoli battles are created server-side via /cannoli-battle, which never
-// touches the client's challenge UI — so `teraPreviewDefault` (a client-only
-// pre-check flag) does nothing and Ready Up games ran with Tera Preview off.
-// Put the rule IN the ruleset so it's always enforced and can't be turned off
-// (feedback #44). 'Tera Type Preview' is the exact rule the client's box
-// appends; Standard Draft already includes the required Team Preview.
+// ── Patch 3: strip 'Tera Type Preview' back out of NatDex Draft ────────────
+// See module doc above — the vanilla rule can't show correct data for
+// bot-created battles (the player's own team never has teraType set), so
+// Cannoli replaces it with its own roster-sourced preview instead. This is
+// CONVERGENT (actively removes the entry if present), not skip-if-touched, so
+// a formats.ts left over from a build before this patch changed still ends up
+// correct on the next provision.
 {
-	const res = patchTeraPreview(src);
+	const res = stripTeraPreview(src);
 	if (res.changed) { src = res.src; changed = true; }
 }
 
-// ── Patch 2: guard the empty Tera Captains team-preview line ─────────────────
+// ── Patch 2: guard the empty Tera Captains line in upstream's Draft Factory ──
 // onTeamPreview() builds `buf` only for sides that have Tera Captains, then
 // unconditionally `this.add(`${buf}`)`. A side with none adds an empty line.
+// NOTE: this is the "[Gen 9] Draft Factory" format's OWN onTeamPreview (a
+// random-teams ladder format upstream ships with a same-named "Tera Captains"
+// mechanic) — not Cannoli's NatDex Draft. See module doc above.
 const TERA_BUGGY = 'this.add(`${buf}`);';
 const TERA_FIXED = 'if (buf) this.add(`${buf}`);';
 if (src.includes(TERA_FIXED)) {
@@ -76,7 +93,7 @@ if (src.includes(TERA_FIXED)) {
 if (changed) fs.writeFileSync(absTarget, src);
 process.exit(0);
 
-function patchTeraPreview(src) {
+function stripTeraPreview(src) {
 	// Match the NatDex Draft block's own ruleset array (non-greedy from its name
 	// to the first ruleset: after it).
 	const re = /(name:\s*"\[Gen 9\] NatDex Draft",[\s\S]*?ruleset:\s*\[)([^\]]*)(\])/m;
@@ -85,15 +102,16 @@ function patchTeraPreview(src) {
 		console.warn(`[patch] NatDex Draft ruleset not found for Tera Preview — skipping`);
 		return { src, changed: false };
 	}
-	if (/['"]Tera Type Preview['"]/.test(m[2])) {
-		console.log(`[patch] Tera Type Preview already in ruleset — skipping`);
+	if (!/['"]Tera Type Preview['"]/.test(m[2])) {
+		console.log(`[patch] Tera Type Preview not in ruleset — nothing to strip`);
 		return { src, changed: false };
 	}
-	// Insert right after 'Standard Draft' (fall back to prepending).
-	let newInner = m[2].replace(/(['"]Standard Draft['"])/, `$1, 'Tera Type Preview'`);
-	if (newInner === m[2]) newInner = `'Tera Type Preview', ${m[2]}`;
+	// Remove the entry along with a leading ", " (or trailing ", " if it's first).
+	let newInner = m[2]
+		.replace(/,\s*['"]Tera Type Preview['"]/, '')
+		.replace(/['"]Tera Type Preview['"],\s*/, '');
 	const updated = src.slice(0, m.index) + m[1] + newInner + m[3] + src.slice(m.index + m[0].length);
-	console.log(`[patch] formats.ts: added Tera Type Preview to NatDex Draft ruleset`);
+	console.log(`[patch] formats.ts: stripped Tera Type Preview from NatDex Draft ruleset`);
 	return { src: updated, changed: true };
 }
 

@@ -1288,6 +1288,55 @@ function handleBattleLine(room: string, line: string) {
   }
 }
 
+// ─── Tera Preview ───────────────────────────────────────────────────────────
+
+/**
+ * A team's league Tera Captains (rosters.isTeraCaptain), each with the
+ * roster-assigned ALLOWED tera types (teraType1/2/3 — up to 3, freely
+ * switchable per league rules; not a single fixed type). Entries with no
+ * type assigned yet are dropped — nothing useful to preview for them.
+ */
+function getTeraCaptains(teamId: string): { pokemon: string; types: string[] }[] {
+  const roster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, teamId)).all();
+  return roster
+    .filter(r => r.isTeraCaptain)
+    .map(r => ({
+      pokemon: r.pokemonName,
+      types: [r.teraType1, r.teraType2, r.teraType3].filter((t): t is string => !!t),
+    }))
+    .filter(c => c.types.length > 0);
+}
+
+/**
+ * Post a Cannoli-authored tera-captain preview into the battle room once both
+ * players have joined. Cannoli battles are created via the native invite flow
+ * (see ps/cannoli.ts) — each player brings their OWN saved Showdown team,
+ * which essentially never has a `teraType` set on any set, so PS's built-in
+ * "X's Tera Types:" team-preview line renders as empty separators
+ * ("caleb's Tera Types: /////" — feedback #49). We own the real intended
+ * data (rosters.teraType1/2/3, the up-to-3 allowed types per league Tera
+ * Captain), so post our own corrected line via the `/cannoli-tera-preview`
+ * plugin command instead of trying to inject into the player's PS team (which
+ * doesn't exist yet at battle-creation time — it's chosen later, client-side,
+ * when the player accepts the invite).
+ *
+ * Called once from transitionMatchToInProgress, right as the match flips to
+ * in_progress (both players just joined — team preview is imminent/underway
+ * server-side). No-op if either userid doesn't map to a known team, or if
+ * neither team has a tera captain with a type assigned yet.
+ */
+function sendTeraPreview(battle: MonitoredBattle) {
+  const p1Team = useridToTeam.get(battle.p1);
+  const p2Team = useridToTeam.get(battle.p2);
+  if (!p1Team || !p2Team) return;
+
+  const p1Captains = getTeraCaptains(p1Team.teamId);
+  const p2Captains = getTeraCaptains(p2Team.teamId);
+  if (!p1Captains.length && !p2Captains.length) return;
+
+  sendToPs(`${battle.roomId}|/cannoli-tera-preview ${JSON.stringify(p1Captains)}|${JSON.stringify(p2Captains)}`);
+}
+
 // ─── Match Detection ────────────────────────────────────────────────────────
 
 function checkForOfficialMatch(battle: MonitoredBattle) {
@@ -1409,6 +1458,10 @@ function transitionMatchToInProgress(battle: MonitoredBattle) {
       inArray(schema.matches.status, ['scheduled', 'ready']),
     ))
     .run();
+
+  // Post Cannoli's own tera-captain preview now that team preview is
+  // imminent/underway server-side — see sendTeraPreview doc (feedback #49).
+  sendTeraPreview(battle);
 
   // Log to activity
   db.insert(schema.activityLog).values({

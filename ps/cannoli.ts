@@ -25,6 +25,27 @@
 const BOT_USERID = toID('cannolibot');
 
 /**
+ * Cannoli stores Megas/Primals with a "Mega <species>"/"Primal <species>"
+ * PREFIX (see backend/src/lib/pokedex.ts `toCannoliSpeciesName`), but
+ * Showdown's own Dex keys them with a "<species>-Mega[-X|Y]"/"<species>-Primal"
+ * SUFFIX, and only has hand-curated prefix aliases for a handful of popular
+ * megas (data/aliases.ts) — most (e.g. "Mega Altaria") won't resolve as typed.
+ * Reorder to Showdown's native suffix form before handing off to
+ * Dex.species.get so every Mega/Primal, not just the aliased ones, resolves
+ * to the right icon. No-op for every other name (regionals, cosmetics, etc.
+ * already match between the two conventions).
+ */
+function toPsSpeciesQuery(name: string): string {
+	const xy = /^Mega\s+(.+)\s+([XY])$/i.exec(name);
+	if (xy) return `${xy[1]}-Mega-${xy[2].toUpperCase()}`;
+	const mega = /^Mega\s+(.+)$/i.exec(name);
+	if (mega) return `${mega[1]}-Mega`;
+	const primal = /^Primal\s+(.+)$/i.exec(name);
+	if (primal) return `${primal[1]}-Primal`;
+	return name;
+}
+
+/**
  * Send a synthetic PM line directly to the bot's connection.
  * Format: |pm|SENDER|RECEIVER|MESSAGE — what the bot would normally see when
  * a real user PM'd it. We use this as an in-band signal channel so the bot
@@ -249,5 +270,93 @@ export const commands: Chat.ChatCommands = {
 			return this.errorReply('Access denied.');
 		}
 		this.sendReply('CannoliBot is connected and operational.');
+	},
+
+	/**
+	 * (room) /cannoli-tera-preview p1CaptainsJson|p2CaptainsJson
+	 *
+	 * Posts a Cannoli-authored "X's Tera Captains:" preview line into a battle
+	 * room, sourced from the league's roster tera-captain assignments
+	 * (rosters.teraType1/2/3) instead of the players' own Showdown team.
+	 *
+	 * WHY: Cannoli battles are created via the native invite flow — each
+	 * player brings their OWN saved Showdown team, which essentially never has
+	 * a `teraType` set on any set. Showdown's built-in "Tera Type Preview" rule
+	 * (data/rulesets.ts) reads `pokemon.teraType` straight off that team, so it
+	 * renders as empty separators: "caleb's Tera Types: /////" (feedback #49).
+	 * We can't fix that at the source — Cannoli never sees/controls the team a
+	 * player picks — so instead we post our OWN corrected line using data we
+	 * actually own. Sent by CannoliBot (which has direct DB access to
+	 * `rosters`) once both players have joined the battle.
+	 *
+	 * Must be sent WITH a room prefix (`roomid|/cannoli-tera-preview ...`) —
+	 * the bot joins the room right after the battle is created, well before
+	 * either player finishes picking a team, so it's always present by the
+	 * time this fires.
+	 *
+	 * Payload: two JSON arrays of `{ pokemon: string; types: string[] }`
+	 * (p1's tera captains, then p2's), pipe-separated. `types` is up to 3
+	 * entries — a league Tera Captain has that many ALLOWED types, freely
+	 * switchable, so every allowed type is shown as its own icon (there's no
+	 * single "the" tera type the way a vanilla Showdown team has one). A side
+	 * with zero tera captains (or none with any type set) is skipped — no
+	 * blank line, mirroring the guard already applied to the unrelated
+	 * upstream "Draft Factory" format's own Tera Captains line.
+	 *
+	 * Silently no-ops (not an errorReply) on a bad/incomplete payload — this
+	 * is a purely cosmetic supplement to the battle, not something that should
+	 * ever be able to disrupt it.
+	 */
+	'cannoli-tera-preview'(target, room, user) {
+		if (user.id !== BOT_USERID) {
+			return this.errorReply('Access denied. Only CannoliBot can use this command.');
+		}
+		if (!room || !room.battle) return; // must be sent room-scoped to a battle
+
+		const pipeIdx = target.indexOf('|');
+		if (pipeIdx < 0) return;
+		const p1Raw = target.slice(0, pipeIdx).trim();
+		const p2Raw = target.slice(pipeIdx + 1).trim();
+
+		type CaptainPayload = { pokemon: string; types: string[] };
+		function parseCaptains(raw: string): CaptainPayload[] {
+			if (!raw) return [];
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(raw);
+			} catch {
+				return [];
+			}
+			if (!Array.isArray(parsed)) return [];
+			return parsed.filter((c): c is CaptainPayload =>
+				!!c && typeof c === 'object' && typeof c.pokemon === 'string' && Array.isArray(c.types));
+		}
+
+		const p1Captains = parseCaptains(p1Raw);
+		const p2Captains = parseCaptains(p2Raw);
+		if (!p1Captains.length && !p2Captains.length) return;
+
+		const battle = room.battle;
+		const sides: [string, CaptainPayload[]][] = [
+			[battle.p1?.name || 'Player 1', p1Captains],
+			[battle.p2?.name || 'Player 2', p2Captains],
+		];
+
+		for (const [sideName, captains] of sides) {
+			let buf = '';
+			for (const captain of captains) {
+				const species = Dex.species.get(toPsSpeciesQuery(captain.pokemon));
+				if (!species.exists) continue;
+				const typeIcons = captain.types
+					.map(t => Dex.types.get(t))
+					.filter(t => t.exists)
+					.map(t => `<psicon type="${t.name}" />`)
+					.join('');
+				if (!typeIcons) continue;
+				buf += buf ? ' / ' : `raw|${sideName}'s Tera Captains:<br />`;
+				buf += `<psicon pokemon="${species.id}" />${typeIcons}`;
+			}
+			if (buf) room.add(`|${buf}`).update();
+		}
 	},
 };
