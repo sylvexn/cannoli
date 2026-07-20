@@ -449,6 +449,11 @@ export const trades = sqliteTable('trades', {
   resolvedAt: text('resolved_at'),
   resolvedBy: text('resolved_by'),
   rejectReason: text('reject_reason'),
+  /** League week an approved trade counts for. Set at approve time (default
+   *  league.currentWeek); null until then. The swap still applies immediately
+   *  — this only labels which week the ledger (transactions/rosters) records
+   *  it under. */
+  effectiveWeek: integer('effective_week'),
 });
 
 // ─── Free-Agency Requests (admin approval queue) ────────────────────────────
@@ -474,6 +479,10 @@ export const faRequests = sqliteTable('fa_requests', {
   resolvedBy: text('resolved_by'),
   resolvedAt: text('resolved_at'),
   rejectReason: text('reject_reason'),
+  /** League week an approved request counts for. Set at approve time (default
+   *  league.currentWeek); null until then. Applies immediately — this only
+   *  labels which week the ledger (transactions/rosters) records it under. */
+  effectiveWeek: integer('effective_week'),
 }, (t) => ({
   faRequestsLeagueWeekIdx: index('fa_requests_league_week_idx').on(t.leagueId, t.week),
   faRequestsStatusIdx: index('fa_requests_status_idx').on(t.status),

@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { NumberInput } from '@/components/ui/number-input';
 import { LoadingSprite } from '@/components/loading-sprite';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 import { Check, X, ArrowLeftRight, Clock } from 'lucide-react';
 import { formatTimestamp } from '@/lib/format';
 import { getErrorMessage } from '@/lib/errors';
+import type { League } from '@/lib/types';
 
 interface AdminTrade {
   id: string;
@@ -28,6 +30,11 @@ interface AdminTrade {
   proposedAt: string;
   status: 'pending' | 'awaiting_admin' | 'accepted' | 'rejected' | 'expired';
   rejectReason?: string | null;
+  effectiveWeek?: number | null;
+}
+
+function currentWeekFor(leagues: League[], leagueId: string): number {
+  return leagues.find(l => l.id === leagueId)?.season?.currentWeek ?? 1;
 }
 
 export function AdminTrades() {
@@ -54,6 +61,7 @@ export function AdminTrades() {
           proposedAt: t.proposedAt || '',
           status: t.status,
           rejectReason: t.rejectReason,
+          effectiveWeek: t.effectiveWeek,
         })))
       )
     ).then(results => {
@@ -65,11 +73,11 @@ export function AdminTrades() {
   const pending = tradeList.filter(t => t.status === 'pending' || t.status === 'awaiting_admin');
   const resolved = tradeList.filter(t => t.status !== 'pending' && t.status !== 'awaiting_admin');
 
-  async function handleApprove(id: string) {
+  async function handleApprove(id: string, effectiveWeek: number) {
     try {
-      await api.approveTrade(id);
+      await api.approveTrade(id, effectiveWeek);
       setTradeList(prev => prev.map(t =>
-        t.id === id ? { ...t, status: 'accepted' as const } : t
+        t.id === id ? { ...t, status: 'accepted' as const, effectiveWeek } : t
       ));
       toast.success('Trade approved');
     } catch (err: unknown) { toast.error(getErrorMessage(err)); }
@@ -119,7 +127,8 @@ export function AdminTrades() {
               <TradeApprovalCard
                 key={trade.id}
                 trade={trade}
-                onApprove={() => handleApprove(trade.id)}
+                defaultWeek={currentWeekFor(leagues, trade.leagueId)}
+                onApprove={effectiveWeek => handleApprove(trade.id, effectiveWeek)}
                 onReject={() => { setRejectTarget(trade); setRejectReason(''); }}
               />
             ))}
@@ -167,14 +176,18 @@ export function AdminTrades() {
 
 function TradeApprovalCard({
   trade,
+  defaultWeek,
   onApprove,
   onReject,
 }: {
   trade: AdminTrade;
-  onApprove?: () => void;
+  defaultWeek?: number;
+  onApprove?: (effectiveWeek: number) => void;
   onReject?: () => void;
 }) {
   const isActive = trade.status === 'pending' || trade.status === 'awaiting_admin';
+  const [effectiveWeek, setEffectiveWeek] = useState(defaultWeek ?? trade.week);
+  useEffect(() => { if (defaultWeek != null) setEffectiveWeek(defaultWeek); }, [defaultWeek]);
 
   return (
     <Card className={!isActive ? 'opacity-60' : undefined}>
@@ -193,7 +206,11 @@ function TradeApprovalCard({
             >
               {trade.leagueName}
             </Badge>
-            <span className="text-[10px] text-text-muted">W{trade.week}</span>
+            <span className="text-[10px] text-text-muted">
+              {trade.status === 'accepted' && trade.effectiveWeek != null
+                ? `Applied W${trade.effectiveWeek}`
+                : `W${trade.week}`}
+            </span>
           </div>
 
           {/* Trade details */}
@@ -241,10 +258,22 @@ function TradeApprovalCard({
                     A still-'pending' trade can't be approved — the backend
                     rejects it — so we don't offer the button there. */}
                 {trade.status === 'awaiting_admin' && (
-                  <Button size="xs" onClick={onApprove} className="bg-win text-surface-base hover:bg-win/90">
-                    <Check size={12} />
-                    Approve
-                  </Button>
+                  <>
+                    <div className="flex items-center gap-1" title="League week this trade counts for">
+                      <span className="text-[9px] font-mono uppercase tracking-wider text-text-muted">Wk</span>
+                      <NumberInput
+                        value={effectiveWeek}
+                        onChange={setEffectiveWeek}
+                        min={1}
+                        max={30}
+                        className="w-16"
+                      />
+                    </div>
+                    <Button size="xs" onClick={() => onApprove?.(effectiveWeek)} className="bg-win text-surface-base hover:bg-win/90">
+                      <Check size={12} />
+                      Approve
+                    </Button>
+                  </>
                 )}
               </>
             ) : (

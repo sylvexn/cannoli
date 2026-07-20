@@ -12,7 +12,7 @@
  *     parseReporterUsername MUST stay in sync with that format.
  */
 import { db, schema, sqlite } from '../../db';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { Octokit } from 'octokit';
 
 // ─── notifyUser ──────────────────────────────────────────────────────────────
@@ -76,6 +76,30 @@ export function notifyUser(userId: number, opts: NotifyOpts): NotifyResult {
       console.error('[notify] notifyUser failed:', e2);
       return 'skipped';
     }
+  }
+}
+
+// ─── notifyStaff ─────────────────────────────────────────────────────────────
+
+/**
+ * Notify every dev/admin user with the same directed notification. Used for
+ * events that need admin attention (trade/FA/tera approval queue). `bot`
+ * (service accounts) is intentionally excluded — this targets human staff.
+ *
+ * Loops notifyUser() per recipient, so dedupeKey idempotency and per-row
+ * error isolation (never throws) both apply. Best-effort: never throws.
+ */
+export function notifyStaff(opts: NotifyOpts): void {
+  try {
+    const staff = db.select({ id: schema.users.id })
+      .from(schema.users)
+      .where(inArray(schema.users.role, ['dev', 'admin']))
+      .all();
+    for (const s of staff) {
+      notifyUser(s.id, opts);
+    }
+  } catch (e) {
+    console.error('[notify] notifyStaff failed:', e);
   }
 }
 

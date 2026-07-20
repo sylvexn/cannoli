@@ -665,6 +665,10 @@ export interface ApiTrade {
   resolvedAt: string | null;
   resolvedBy: string | null;
   rejectReason: string | null;
+  /** League week the trade was applied against (set on admin approval; null
+   *  until then). Chosen by the approving admin, defaulting to the league's
+   *  current week — the swap itself always applies immediately. */
+  effectiveWeek: number | null;
 }
 
 export interface ApiTradeBlockListing {
@@ -691,6 +695,11 @@ export interface ApiFaRequest {
   resolvedBy: string | null;
   resolvedAt: string | null;
   rejectReason: string | null;
+  /** League week the request was applied against (set on admin approval;
+   *  null until then). Chosen by the approving admin, defaulting to the
+   *  league's current week — the pickup/change itself always applies
+   *  immediately. */
+  effectiveWeek: number | null;
 }
 
 export interface ApiTierListEntry {
@@ -1253,8 +1262,8 @@ export const api = {
   generateSchedule: (leagueId: string, opts?: { force?: boolean; confirmName?: string }) =>
     postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`, opts ?? {}),
 
-  approveTrade: (tradeId: string) =>
-    postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`),
+  approveTrade: (tradeId: string, effectiveWeek?: number) =>
+    postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`, { effectiveWeek }),
 
   rejectTrade: (tradeId: string, reason?: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/reject`, { reason }),
@@ -1748,8 +1757,8 @@ export const api = {
   // ── FA approval queue (feedback #42) ──
   getFaRequests: (leagueId: string) =>
     fetchJson<ApiFaRequest[]>(`/api/leagues/${leagueId}/fa-requests`),
-  approveFaRequest: (id: number) =>
-    postJson<{ success: boolean }>(`/api/fa-requests/${id}/approve`, {}),
+  approveFaRequest: (id: number, effectiveWeek?: number) =>
+    postJson<{ success: boolean }>(`/api/fa-requests/${id}/approve`, { effectiveWeek }),
   rejectFaRequest: (id: number, reason?: string) =>
     postJson<{ success: boolean }>(`/api/fa-requests/${id}/reject`, { reason }),
 

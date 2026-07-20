@@ -30,6 +30,7 @@ interface FaRequestRow {
   resolvedBy: string | null;
   resolvedAt: string | null;
   rejectReason: string | null;
+  effectiveWeek: number | null;
 }
 
 const parseList = (json: string): string[] => {
@@ -56,6 +57,7 @@ const shape = (r: FaRequestRow) => ({
   resolvedBy: r.resolvedBy,
   resolvedAt: r.resolvedAt,
   rejectReason: r.rejectReason,
+  effectiveWeek: r.effectiveWeek,
 });
 
 /** Notify the requesting team's owner that their FA was approved/rejected. */
@@ -87,7 +89,7 @@ export const faRequestRoutes = new Elysia()
   })
 
   // ─── Approve a pending request → apply it ────────────────────────────────
-  .post('/api/fa-requests/:id/approve', ({ params, user, set }) => {
+  .post('/api/fa-requests/:id/approve', ({ params, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     if (!isStaff(user)) { set.status = 403; return { error: 'Staff only' }; }
 
@@ -96,13 +98,22 @@ export const faRequestRoutes = new Elysia()
     if (!req) { set.status = 404; return { error: 'FA request not found' }; }
     if (req.status !== 'pending') { set.status = 409; return { error: `Request already ${req.status}`, code: 'fa_request_resolved' }; }
 
+    // Admin may choose which league week this request counts for (default =
+    // current week). It still applies immediately — this only labels which
+    // week the ledger (transactions/rosters) records it under.
+    const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, req.leagueId)).get();
+    const { effectiveWeek: bodyEffectiveWeek } = (body || {}) as { effectiveWeek?: number };
+    const effectiveWeek = (typeof bodyEffectiveWeek === 'number' && Number.isFinite(bodyEffectiveWeek))
+      ? bodyEffectiveWeek
+      : (league?.currentWeek ?? req.week);
+
     // ── Tera-change request (feedback #51) ──
     // Re-validate + apply via the shared tera applier. A request that became
     // illegal since submission (tier-list edit, cap change) fails cleanly and is
     // left pending so the admin can reject/retry.
     if (req.requestType === 'tera_change') {
       const captains = parseTera(req.teraChanges);
-      const teraResult = applyTeraCaptains(req.teamId, captains, req.requestedBy ?? user.username);
+      const teraResult = applyTeraCaptains(req.teamId, captains, req.requestedBy ?? user.username, effectiveWeek);
       if (!teraResult.ok) {
         set.status = teraResult.status;
         return { error: teraResult.error, code: teraResult.code };
@@ -112,6 +123,7 @@ export const faRequestRoutes = new Elysia()
         status: 'approved',
         resolvedBy: user.username,
         resolvedAt: new Date().toISOString(),
+        effectiveWeek,
       }).where(eq(schema.faRequests.id, id)).run();
 
       try { refreshUserMap(); } catch { /* best-effort */ }
@@ -132,6 +144,7 @@ export const faRequestRoutes = new Elysia()
       dropNames: parseList(req.drops),
       actorUsername: req.requestedBy ?? user.username,
       dryRun: false,
+      effectiveWeek,
     });
     if (!result.ok) {
       // Leave the request pending so the admin can see why and reject/retry.
@@ -143,6 +156,7 @@ export const faRequestRoutes = new Elysia()
       status: 'approved',
       resolvedBy: user.username,
       resolvedAt: new Date().toISOString(),
+      effectiveWeek,
     }).where(eq(schema.faRequests.id, id)).run();
 
     try { refreshUserMap(); } catch { /* best-effort */ }

@@ -10,6 +10,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { NumberInput } from '@/components/ui/number-input';
 import { Search, ArrowDown, UserPlus, X } from 'lucide-react';
 import type { PokemonType } from '@/lib/pokemon';
 import { useDebounced } from '@/lib/use-debounced';
@@ -64,6 +65,13 @@ export function AdminFreeAgents() {
   const pendingReqs = useMemo(() => faReqs.filter(r => r.status === 'pending'), [faReqs]);
   const teamName = (id: string) => teams.find(t => t.id === id)?.teamAbbrev ?? id;
 
+  // Effective-week picker per pending request (defaults to the selected
+  // league's current week). Lazily keyed so untouched rows always reflect
+  // the current default rather than a stale snapshot.
+  const leagueCurrentWeek = leagues.find(l => l.id === selectedLeague)?.season?.currentWeek ?? 1;
+  const [effWeekOverrides, setEffWeekOverrides] = useState<Record<number, number>>({});
+  const effWeekFor = (id: number) => effWeekOverrides[id] ?? leagueCurrentWeek;
+
   async function refreshAfterResolve() {
     fetchFaReqs(selectedLeague);
     const faRes = await api.getFreeAgents(selectedLeague);
@@ -73,9 +81,9 @@ export function AdminFreeAgents() {
     setTeams(t.map(tm => ({ id: tm.id, teamName: tm.teamName, teamAbbrev: tm.teamAbbrev, teamColor: tm.teamColor, roster: tm.roster.map(r => ({ name: r.name, tier: r.tier })) })));
   }
 
-  async function approveReq(id: number) {
+  async function approveReq(id: number, effectiveWeek: number) {
     try {
-      await api.approveFaRequest(id);
+      await api.approveFaRequest(id, effectiveWeek);
       toast.success('FA request approved');
       await refreshAfterResolve();
     } catch (e: unknown) {
@@ -278,7 +286,17 @@ export function AdminFreeAgents() {
                     {r.requestedBy && <span className="text-text-muted ml-2">· {r.requestedBy}</span>}
                   </span>
                 )}
-                <Button size="sm" className="h-6 px-2 text-[11px] bg-win/15 text-win hover:bg-win/25 border border-win/30" onClick={() => approveReq(r.id)}>
+                <div className="flex items-center gap-1 shrink-0" title="League week this request counts for">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-text-muted">Wk</span>
+                  <NumberInput
+                    value={effWeekFor(r.id)}
+                    onChange={v => setEffWeekOverrides(prev => ({ ...prev, [r.id]: v }))}
+                    min={1}
+                    max={30}
+                    className="w-14"
+                  />
+                </div>
+                <Button size="sm" className="h-6 px-2 text-[11px] bg-win/15 text-win hover:bg-win/25 border border-win/30" onClick={() => approveReq(r.id, effWeekFor(r.id))}>
                   Approve
                 </Button>
                 <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-loss hover:bg-loss/10" onClick={() => rejectReq(r.id)}>

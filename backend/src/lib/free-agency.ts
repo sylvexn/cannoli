@@ -26,6 +26,11 @@ export interface FaPickupInput {
   actorUsername: string;
   /** Run all validation + the mutation tx, then roll it back. */
   dryRun?: boolean;
+  /** League week to stamp on transactions.week / rosters.acquiredWeek
+   *  (admin-chosen "effective week" at approve time). Defaults to the
+   *  league's currentWeek when omitted — the pickup still applies
+   *  immediately; this only labels which week the ledger records it under. */
+  effectiveWeek?: number;
 }
 
 export interface FaPickupOk {
@@ -80,6 +85,11 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
   const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
   const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
   const week = league?.currentWeek ?? 0;
+  // Ledger stamp week: admin-chosen effective week if given, else the actual
+  // current week. Deadline/phase gating below always uses `week` (the real
+  // current week) — only the ledger writes (rosters.acquiredWeek,
+  // transactions.week) use `stampWeek`.
+  const stampWeek = input.effectiveWeek ?? week;
   const settings = db.select().from(schema.siteSettings).get();
 
   // ── Phase / deadline gate ──
@@ -157,7 +167,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
       // ── Apply pickups ──
       for (const { name: pokemonName, tier } of pickupCosts) {
         db.insert(schema.rosters).values({
-          teamId, pokemonName, tier, costAtDraft: tier, acquiredVia: 'fa', acquiredWeek: week,
+          teamId, pokemonName, tier, costAtDraft: tier, acquiredVia: 'fa', acquiredWeek: stampWeek,
         }).run();
       }
 
@@ -211,7 +221,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
         const pickup = pickupCosts[i];
         const drop = dropNames[i];
         db.insert(schema.transactions).values({
-          leagueId, week, type: 'fa', teamId,
+          leagueId, week: stampWeek, type: 'fa', teamId,
           pokemonOut: drop ?? null,
           pointsOut: drop ? dropCostOf(drop) : null,
           pokemonIn: pickup?.name ?? null,
@@ -330,6 +340,9 @@ export function applyTeraCaptains(
   teamId: string,
   captains: TeraCaptainInput[],
   actorUsername: string,
+  /** League week to stamp on the tera_change transactions (admin-chosen
+   *  "effective week" at approve time). Defaults to the league's currentWeek. */
+  effectiveWeek?: number,
 ): TeraApplyResult {
   const check = validateTeraCaptains(teamId, captains);
   if (!check.ok) return check;
@@ -361,7 +374,7 @@ export function applyTeraCaptains(
     }
 
     if (league) {
-      const week = league.currentWeek ?? 0;
+      const week = effectiveWeek ?? (league.currentWeek ?? 0);
       for (const c of captains) {
         db.insert(schema.transactions).values({
           leagueId: team.leagueId,

@@ -9,6 +9,7 @@ import { effectiveCost } from '../lib/tera-cost';
 import { getLeagueCostMap } from '../lib/league-costs';
 import { validateRosterLegality } from '../lib/roster-legality';
 import { refreshUserMap } from '../lib/ps-bot';
+import { notifyStaff } from '../lib/notifications/notify';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -264,6 +265,7 @@ export const tradeRoutes = new Elysia()
         resolvedAt: t.resolvedAt,
         resolvedBy: t.resolvedBy,
         rejectReason: t.rejectReason,
+        effectiveWeek: t.effectiveWeek,
       }));
   })
 
@@ -286,7 +288,7 @@ export const tradeRoutes = new Elysia()
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
-    const { trade, league, recipientTeam, season } = ctx;
+    const { trade, league, proposerTeam, recipientTeam, season } = ctx;
     const archived = checkLeagueArchived(trade.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
@@ -346,6 +348,14 @@ export const tradeRoutes = new Elysia()
           description: `${user.username} accepted trade — awaiting admin approval`,
           metadata: JSON.stringify({ tradeId, proposerId: trade.proposerId, recipientId: trade.recipientId }),
         }).run();
+
+        notifyStaff({
+          type: 'system',
+          title: 'Trade needs approval',
+          body: `${proposerTeam.teamName} ↔ ${recipientTeam.teamName}`,
+          link: '/admin/trades',
+          dedupeKey: `trade:awaiting:${tradeId}`,
+        });
       } else {
         db.update(schema.trades).set({
           status: 'rejected',
@@ -369,7 +379,7 @@ export const tradeRoutes = new Elysia()
 
   // ─── Trade Approve/Reject (admin) ──────────────────────────────
 
-  .post('/api/trades/:id/approve', ({ params, query, user, set }) => {
+  .post('/api/trades/:id/approve', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const tradeId = parseInt(params.id);
     const ctx = loadTradeContext(tradeId);
@@ -377,6 +387,15 @@ export const tradeRoutes = new Elysia()
     const { trade, league, season } = ctx;
     const archived = checkLeagueArchived(trade.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
+
+    // Admin may choose which league week this trade counts for (default =
+    // current week). The swap still applies immediately — this only labels
+    // which week the ledger (transactions/rosters) records it under.
+    const { effectiveWeek: bodyEffectiveWeek } = (body || {}) as { effectiveWeek?: number };
+    const effectiveWeek = (typeof bodyEffectiveWeek === 'number' && Number.isFinite(bodyEffectiveWeek))
+      ? bodyEffectiveWeek
+      : (league?.currentWeek ?? trade.week);
+
     // Approval requires the recipient to have accepted first (status
     // 'awaiting_admin'). A still-'pending' trade must not be approved — that
     // would let an admin who proposed it skip the recipient's acceptance
@@ -422,7 +441,7 @@ export const tradeRoutes = new Elysia()
           recipientId: trade.recipientId,
           offering,
           requesting,
-          week: league?.currentWeek ?? trade.week,
+          week: effectiveWeek,
           leagueId: trade.leagueId,
         });
 
@@ -430,6 +449,7 @@ export const tradeRoutes = new Elysia()
           status: 'accepted',
           resolvedAt: new Date().toISOString(),
           resolvedBy: user.username,
+          effectiveWeek,
         }).where(eq(schema.trades.id, tradeId)).run();
 
         db.insert(schema.activityLog).values({

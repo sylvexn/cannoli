@@ -9,6 +9,7 @@ import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
 import { applyFaPickup, validateTeraCaptains } from '../../lib/free-agency';
 import { refreshUserMap } from '../../lib/ps-bot';
+import { notifyStaff } from '../../lib/notifications/notify';
 
 export const teamRoutes = new Elysia()
 
@@ -271,6 +272,14 @@ export const teamRoutes = new Elysia()
       metadata: JSON.stringify({ teamId: params.teamId, captains, requestId: row.id }),
     }).run();
 
+    notifyStaff({
+      type: 'system',
+      title: 'Tera change needs approval',
+      body: `${team.teamName} requested ${captains.map(c => c.pokemonName).join(', ')}`,
+      link: '/admin/free-agents',
+      dedupeKey: `tera:pending:${row.id}`,
+    });
+
     return { success: true, pending: true, requestId: row.id };
   })
 
@@ -463,6 +472,14 @@ export const teamRoutes = new Elysia()
       description: `FA request: ${team.teamName} requested ${pickupNames.join(', ')}${dropNames.length ? `, dropping ${dropNames.join(', ')}` : ''}`,
       metadata: JSON.stringify({ teamId, pickupNames, dropNames, requestId: row.id }),
     }).run();
+
+    notifyStaff({
+      type: 'system',
+      title: 'Free agent pickup needs approval',
+      body: `${team.teamName} requested ${pickupNames.join(', ')}${dropNames.length ? `, dropping ${dropNames.join(', ')}` : ''}`,
+      link: '/admin/free-agents',
+      dedupeKey: `fa:pending:${row.id}`,
+    });
 
     return {
       success: true, pending: true, requestId: row.id,
