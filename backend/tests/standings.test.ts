@@ -25,7 +25,7 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     for (const row of out) expect(row.tiebreaker).toBeNull();
   });
 
-  test('two-way tie resolved by H2H', () => {
+  test('two-way tie resolved by H2H (diff also tied)', () => {
     // a, b both 4-3 with same diff and PF; H2H gives a 1-0 → a above b
     const out = orderRecords(
       [
@@ -39,6 +39,37 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     expect(out[0].tiebreaker).toEqual({ rule: 'h2h', value: 1 });
     expect(out[1].tiebreaker).toEqual({ rule: 'h2h', value: 0 });
     expect(out[2].tiebreaker).toBeNull();
+  });
+
+  test('two-way tie: differential outranks H2H (feedback #77)', () => {
+    // a and b both 4-3. b lost the head-to-head (0 in-set wins vs a's 1) but
+    // has the better overall point differential. Differential is checked
+    // before H2H, so b ranks above a despite losing their direct match.
+    const out = orderRecords(
+      [
+        record('a', 4, 3, 28, 25), // diff +3, h2h 1
+        record('b', 4, 3, 34, 25), // diff +9, h2h 0
+      ],
+      staticH2h({ a: 1, b: 0 }),
+    );
+    expect(out.map(r => r.id)).toEqual(['b', 'a']);
+    expect(out[0].tiebreaker).toEqual({ rule: 'diff', value: 9 });
+    expect(out[1].tiebreaker).toEqual({ rule: 'diff', value: 3 });
+  });
+
+  test('two-way tie: H2H decides once differential is tied (feedback #77)', () => {
+    // a and b both 4-3 with identical differential (+5). a won their direct
+    // match (h2h 1-0), so once diff fails to separate them H2H promotes a.
+    const out = orderRecords(
+      [
+        record('a', 4, 3, 30, 25), // diff +5, h2h 1
+        record('b', 4, 3, 29, 24), // diff +5, h2h 0
+      ],
+      staticH2h({ a: 1, b: 0 }),
+    );
+    expect(out.map(r => r.id)).toEqual(['a', 'b']);
+    expect(out[0].tiebreaker).toEqual({ rule: 'h2h', value: 1 });
+    expect(out[1].tiebreaker).toEqual({ rule: 'h2h', value: 0 });
   });
 
   test('3-way tie at wins=4 resolved by differential (H2H ignored for 3+ way ties)', () => {

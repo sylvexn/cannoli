@@ -3,13 +3,14 @@
  *
  * Tiebreaker hierarchy (applied in order):
  *   1. Wins (desc)
- *   2. Head-to-head record — ONLY applied for an exact two-team tie. With 3+
- *      teams tied on wins, most members haven't played every other member of
- *      the set, so an in-set H2H record is statistical noise (a team that got
- *      lucky with one head-to-head win could rank above a team with a far
- *      better overall record). For those larger ties this step is skipped
- *      entirely and we fall straight through to differential.
- *   3. Point differential (kills - deaths) — desc
+ *   2. Point differential (kills - deaths) — desc
+ *   3. Head-to-head record — ONLY applied for an exact two-team tie that's
+ *      still tied after differential. With 3+ teams tied on wins, most
+ *      members haven't played every other member of the set, so an in-set
+ *      H2H record is statistical noise (a team that got lucky with one
+ *      head-to-head win could rank above a team with a far better overall
+ *      record). For those larger ties this step is skipped entirely and we
+ *      fall straight through to kills.
  *   4. Total kills (points-for) — desc
  *   5. Team ID (asc) — last-resort stable tiebreaker
  *
@@ -99,20 +100,20 @@ function resolveBucketPure(
   }));
 
   enriched.sort((a, b) => {
-    if (useH2h && b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
     if (b.differential !== a.differential) return b.differential - a.differential;
+    if (useH2h && b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
     return a.id.localeCompare(b.id);
   });
 
-  const allSameH2h = enriched.every(r => r.h2hWins === enriched[0].h2hWins);
   const allSameDiff = enriched.every(r => r.differential === enriched[0].differential);
+  const allSameH2h = enriched.every(r => r.h2hWins === enriched[0].h2hWins);
   const allSameKills = enriched.every(r => r.pointsFor === enriched[0].pointsFor);
 
   return enriched.map(r => {
     let tb: TeamStandingRow['tiebreaker'];
-    if (useH2h && !allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
-    else if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
+    if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
+    else if (useH2h && !allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
     else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
     else tb = { rule: 'id', value: r.id };
     return {
@@ -208,8 +209,9 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all'; maxWeek
  * in matches whose both participants are in `tiedIds`. Losses can be derived as
  * (gamesPlayedInSet - wins) but we only need wins for ordering.
  *
- * For a multi-way tie this naturally produces a sub-cycle ordering; if every
- * team in the set has the same H2H record, the next tiebreaker (diff) applies.
+ * Only consulted once differential fails to separate a clean two-team tie; if
+ * both teams also have the same in-set H2H record, the next tiebreaker
+ * (kills) applies.
  */
 function headToHeadWins(leagueId: string, tiedIds: string[], maxWeek?: number | null): Map<string, number> {
   const result = new Map<string, number>(tiedIds.map(id => [id, 0]));
