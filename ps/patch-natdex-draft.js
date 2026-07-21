@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Patch upstream Pokemon Showdown's `config/formats.ts` for Cannoli. Three
+ * Patch upstream Pokemon Showdown's `config/formats.ts` for Cannoli. Four
  * independent, idempotent patches:
  *   1. Add the Cannoli league banlist to the `[Gen 9] NatDex Draft` format.
  *      The upstream entry ships without a banlist; the league rules
@@ -23,6 +23,13 @@
  *      ps/cannoli.ts + backend/src/lib/ps-bot.ts sendTeraPreview) — this patch
  *      just gets the broken vanilla line out of the way so it isn't shown
  *      twice.
+ *   4. Turn OFF `teraPreviewDefault` for NatDex Draft (companion to #3). With
+ *      the rule stripped from the ruleset, the client challenge dialog's
+ *      pre-checked Tera-Preview box (driven by this flag) would re-append
+ *      'Tera Type Preview' as a custom rule — a no-op that PS rejects with
+ *      "none of your custom rules change anything" on direct challenges
+ *      (feedback #74), and which would re-introduce the empty vanilla line.
+ *      Cannoli's own /cannoli-tera-preview is the single source now.
  *
  * Invoked at provisioning time by both:
  *   - `scripts/setup-showdown.sh` (local dev clone)
@@ -72,6 +79,14 @@ let changed = false;
 	if (res.changed) { src = res.src; changed = true; }
 }
 
+// ── Patch 4: disable teraPreviewDefault for NatDex Draft (convergent) ───────
+// Companion to Patch 3 — see module doc item 4. Only touches the NatDex Draft
+// block (bounded so it can't flip another format's flag).
+{
+	const res = disableTeraPreviewDefault(src);
+	if (res.changed) { src = res.src; changed = true; }
+}
+
 // ── Patch 2: guard the empty Tera Captains line in upstream's Draft Factory ──
 // onTeamPreview() builds `buf` only for sides that have Tera Captains, then
 // unconditionally `this.add(`${buf}`)`. A side with none adds an empty line.
@@ -112,6 +127,21 @@ function stripTeraPreview(src) {
 		.replace(/['"]Tera Type Preview['"],\s*/, '');
 	const updated = src.slice(0, m.index) + m[1] + newInner + m[3] + src.slice(m.index + m[0].length);
 	console.log(`[patch] formats.ts: stripped Tera Type Preview from NatDex Draft ruleset`);
+	return { src: updated, changed: true };
+}
+
+function disableTeraPreviewDefault(src) {
+	// Match the NatDex Draft block's OWN teraPreviewDefault, bounded so the
+	// non-greedy body can't cross into another format's block (no intervening
+	// `name:` key). Convergent: only fires while the flag is still `true`.
+	const re = /(name:\s*"\[Gen 9\] NatDex Draft",(?:(?!name:)[\s\S])*?teraPreviewDefault:\s*)true/m;
+	const m = re.exec(src);
+	if (!m) {
+		console.log(`[patch] NatDex Draft teraPreviewDefault:true not found — nothing to disable`);
+		return { src, changed: false };
+	}
+	const updated = src.slice(0, m.index) + m[1] + 'false' + src.slice(m.index + m[0].length);
+	console.log(`[patch] formats.ts: set NatDex Draft teraPreviewDefault:false`);
 	return { src: updated, changed: true };
 }
 
