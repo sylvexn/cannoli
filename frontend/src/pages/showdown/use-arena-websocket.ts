@@ -162,8 +162,12 @@ export function useArenaWebSocket() {
           case 'match_state':
             setState(s => ({
               ...s,
-              // A fresh state for this match supersedes any stale error.
-              lastMatchError: null,
+              // A fresh state supersedes a stale error ONLY when the match moves
+              // forward (ready / in_progress). The invite-failure path emits a
+              // match_error and then reverts the match to 'scheduled' with a
+              // trailing match_state — clearing here would wipe the "couldn't
+              // start — try again (reason)" line before the coach ever sees it.
+              lastMatchError: msg.status === 'scheduled' ? s.lastMatchError : null,
               myMatches: s.myMatches.map(m =>
                 m.matchId === msg.matchId
                   ? {
