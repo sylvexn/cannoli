@@ -154,6 +154,48 @@ function clearReadyTimer(matchId: string) {
   }
 }
 
+/**
+ * Revert a 'ready' official match back to 'scheduled': clear ready flags +
+ * startedAt + psRoomId, tear down any orphaned PS invite room, and log the
+ * event. Shared by the team-selection timeout and the battle-create-failure
+ * path (both mean the same thing — "the invite never turned into a running
+ * battle") so the two can't drift apart.
+ */
+function revertReadyMatch(
+  m: { id: string; leagueId: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null },
+  opts: { logEvent: 'timeout' | null; activityType: string; activityDescription: string },
+) {
+  // A readied match always has both teams resolved (not a NULL bracket slot).
+  if (m.homeTeamId == null || m.awayTeamId == null) return;
+
+  db.update(schema.matches)
+    .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null, psRoomId: null })
+    .where(eq(schema.matches.id, m.id))
+    .run();
+
+  // Tear down the orphaned PS invite room (created at /cannoli-battle but never
+  // started). Without this the empty invite room lingers until the bot's idle
+  // sweep evicts it 30 min later.
+  if (m.psRoomId) {
+    try { cancelBattle(m.psRoomId); }
+    catch (err) { console.error(`[arena] cancelBattle failed for ${m.psRoomId}:`, err); }
+  }
+
+  if (opts.logEvent) {
+    db.insert(schema.matchReadyLog).values({ matchId: m.id, teamId: m.homeTeamId, event: opts.logEvent }).run();
+    db.insert(schema.matchReadyLog).values({ matchId: m.id, teamId: m.awayTeamId, event: opts.logEvent }).run();
+  }
+
+  db.insert(schema.activityLog).values({
+    type: opts.activityType,
+    category: 'match',
+    actor: 'system',
+    leagueId: m.leagueId,
+    description: opts.activityDescription,
+    metadata: JSON.stringify({ matchId: m.id }),
+  }).run();
+}
+
 function scheduleReadyTimeout(matchId: string) {
   clearReadyTimer(matchId);
   const handle = setTimeout(() => {
@@ -162,40 +204,12 @@ function scheduleReadyTimeout(matchId: string) {
     // Only revert if still ready (the battle never started — i.e. at least one
     // player never picked a team / accepted the invite).
     if (!m || m.status !== 'ready') return;
-    // A readied match always has both teams resolved (not a NULL bracket slot).
-    if (m.homeTeamId == null || m.awayTeamId == null) return;
 
-    db.update(schema.matches)
-      .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null })
-      .where(eq(schema.matches.id, matchId))
-      .run();
-
-    // Tear down the orphaned PS invite room (created at /cannoli-battle but never
-    // started). Without this the empty invite room lingers until the bot's idle
-    // sweep evicts it 30 min later.
-    if (m.psRoomId) {
-      try { cancelBattle(m.psRoomId); }
-      catch (err) { console.error(`[arena] cancelBattle failed for ${m.psRoomId}:`, err); }
-    }
-
-    db.insert(schema.matchReadyLog).values({
-      matchId,
-      teamId: m.homeTeamId,
-      event: 'timeout',
-    }).run();
-    db.insert(schema.matchReadyLog).values({
-      matchId,
-      teamId: m.awayTeamId,
-      event: 'timeout',
-    }).run();
-    db.insert(schema.activityLog).values({
-      type: 'match_ready_timeout',
-      category: 'match',
-      actor: 'system',
-      leagueId: m.leagueId,
-      description: `Team selection timed out for ${matchId} — a player did not pick a team within ${INVITE_TIMEOUT_MS / 1000}s`,
-      metadata: JSON.stringify({ matchId }),
-    }).run();
+    revertReadyMatch(m, {
+      logEvent: 'timeout',
+      activityType: 'match_ready_timeout',
+      activityDescription: `Team selection timed out for ${matchId} — a player did not pick a team within ${INVITE_TIMEOUT_MS / 1000}s`,
+    });
 
     publishWs(`arena:match:${matchId}`, JSON.stringify({
       type: 'match_timeout',
@@ -223,6 +237,44 @@ export function clearReadyTimerForMatch(matchId: string) {
 export function getArenaBroadcaster(): { publish: (topic: string, data: string) => void } | null {
   if (!hasBroadcastServer()) return null;
   return { publish: (topic, data) => { publishWs(topic, data); } };
+}
+
+/**
+ * Effective PS userid the owner of `teamId` is logged into Showdown as (their
+ * custom psUsername if set, else their canonical username) — same resolution
+ * as psUseridFor, starting from a team instead of a username. Returns '' for
+ * an unowned/placeholder team.
+ */
+function teamPsUserid(teamId: string | null): string {
+  if (!teamId) return '';
+  const row = db.select({ username: schema.users.username, psUsername: schema.users.psUsername })
+    .from(schema.teams)
+    .innerJoin(schema.users, eq(schema.teams.userId, schema.users.id))
+    .where(eq(schema.teams.id, teamId))
+    .get();
+  return row ? effectivePsUserid(row) : '';
+}
+
+/**
+ * Find a 'ready' official match with no psRoomId yet whose home/away team
+ * owners resolve to the given PS userid pair, in either order. The
+ * cannoli-battle-failed PM only carries PS userids, not our matchId, so this
+ * is how we locate which match a failed invite belonged to. Matches that
+ * already have a psRoomId are excluded — that failure PM belongs to some
+ * other (already-succeeded) attempt, not this one.
+ */
+function findReadyMatchForFailedPair(p1: string, p2: string) {
+  const candidates = db.select().from(schema.matches)
+    .where(eq(schema.matches.status, 'ready'))
+    .all();
+  for (const m of candidates) {
+    if (m.psRoomId) continue;
+    const homeUid = teamPsUserid(m.homeTeamId);
+    const awayUid = teamPsUserid(m.awayTeamId);
+    if (!homeUid || !awayUid) continue;
+    if ((homeUid === p1 && awayUid === p2) || (homeUid === p2 && awayUid === p1)) return m;
+  }
+  return null;
 }
 
 /**
@@ -270,8 +322,35 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
     }));
     return;
   }
-  // No matching lobby found — already cleaned up or was a match battle.
-  console.log(`[arena] cannoli-battle-failed for ${p1} vs ${p2} (${reason}) — no matching scrim lobby`);
+
+  // Not a scrim — check for an OFFICIAL match waiting on this pair's invite.
+  // createBattleForReadyMatch fires when both ready flags flip to 'ready'; if
+  // the PS plugin then fails to create the room, the match would otherwise sit
+  // 'ready' with no psRoomId until the 5-minute INVITE_TIMEOUT_MS revert. Revert
+  // it immediately and surface the failure instead of leaving the coach staring
+  // at the "sending team-select invite..." spinner for the full window.
+  const officialMatch = findReadyMatchForFailedPair(p1, p2);
+  if (officialMatch) {
+    clearReadyTimer(officialMatch.id);
+    revertReadyMatch(officialMatch, {
+      logEvent: null,
+      activityType: 'match_battle_create_failed',
+      activityDescription: `Battle creation failed for ${officialMatch.id} (${reason}) — reverted to scheduled`,
+    });
+
+    console.log(`[arena] official match ${officialMatch.id} battle creation failed (${reason}) — reverted to scheduled`);
+
+    publishWs(`arena:match:${officialMatch.id}`, JSON.stringify({
+      type: 'match_error',
+      matchId: officialMatch.id,
+      message: `Couldn't start battle — try again (${reason})`,
+    }));
+    broadcastMatchState(officialMatch.id);
+    return;
+  }
+
+  // No matching lobby or official match found — already cleaned up.
+  console.log(`[arena] cannoli-battle-failed for ${p1} vs ${p2} (${reason}) — no matching scrim lobby or official match`);
 }
 
 /**
@@ -341,7 +420,13 @@ function getMatchWithTeams(matchId: string) {
   return { match, homeTeam, awayTeam };
 }
 
-function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) => void }) {
+/**
+ * Broadcast a match's current status/ready-flags/psRoomId to its subscribers
+ * (and to `arena:global` for the lobby list). Exported so ps-bot can push a
+ * fresh snapshot the moment it links an invite room's psRoomId to a match —
+ * see handleBotPm — without waiting for the next in-band arena.ts mutation.
+ */
+export function broadcastMatchState(matchId: string, senderWs?: { send: (data: string) => void }) {
   const data = getMatchWithTeams(matchId);
   if (!data) return;
 
@@ -571,25 +656,35 @@ export const arenaRoutes = new Elysia()
                 // and instruct the bot to create the PS battle. All of this is
                 // gated on connectivity so we never strand the match in 'ready'
                 // with no battle behind it.
-                db.update(schema.matches)
+                //
+                // Atomic flip: only transition rows still 'scheduled'. `.changes`
+                // tells us whether THIS request won the flip — without this guard,
+                // a re-sent match_ready on an already-'ready' match (double-click,
+                // the "Retry start" button, a WS reconnect resending ready state)
+                // would fall through and fire a SECOND /cannoli-battle, opening a
+                // duplicate invite room. Mirrors the same guard in
+                // resumeReadyMatchesOnBotReconnect below.
+                const res = db.update(schema.matches)
                   .set({ status: 'ready', startedAt: new Date().toISOString() })
                   .where(and(
                     eq(schema.matches.id, match.id),
                     sql`status = 'scheduled'`,
                   )).run();
 
-                scheduleReadyTimeout(match.id);
+                if (res.changes > 0) {
+                  scheduleReadyTimeout(match.id);
 
-                db.insert(schema.activityLog).values({
-                  type: 'match_ready',
-                  category: 'match',
-                  actor: 'system',
-                  leagueId: client.leagueId,
-                  description: `Both teams ready for ${match.id}`,
-                  metadata: JSON.stringify({ matchId: match.id }),
-                }).run();
+                  db.insert(schema.activityLog).values({
+                    type: 'match_ready',
+                    category: 'match',
+                    actor: 'system',
+                    leagueId: client.leagueId,
+                    description: `Both teams ready for ${match.id}`,
+                    metadata: JSON.stringify({ matchId: match.id }),
+                  }).run();
 
-                createBattleForReadyMatch(match);
+                  createBattleForReadyMatch(match);
+                }
               } else {
                 // Bot offline — KEEP status 'scheduled' and KEEP the ready
                 // flags so the reconnect auto-resume path can pick this up.

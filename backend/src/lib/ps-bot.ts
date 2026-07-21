@@ -18,7 +18,7 @@ import { toUserid, signAssertion } from './ps-login';
 import { getLeagueCostFormat } from './league-costs';
 import { db, schema } from '../db';
 import { eq, and, sql, inArray } from 'drizzle-orm';
-import { getArenaBroadcaster, clearReadyTimerForMatch, handleScrimBattleFailed } from '../routes/arena';
+import { getArenaBroadcaster, clearReadyTimerForMatch, handleScrimBattleFailed, broadcastMatchState } from '../routes/arena';
 import { runAutoAwards } from './pins/auto-award';
 import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
@@ -584,7 +584,7 @@ function handleBotPm(sender: string, message: string) {
             : p2TeamId === matchRow.homeTeamId ? 'p2'
               : null;
         // Record the room id only — leave status as-is ('scheduled'/'ready').
-        db.update(schema.matches)
+        const linkRes = db.update(schema.matches)
           .set({ psRoomId: roomId })
           .where(and(
             eq(schema.matches.id, matchRow.id),
@@ -592,6 +592,20 @@ function handleBotPm(sender: string, message: string) {
           ))
           .run();
         console.log(`[PS Bot] Deterministic match link (invite pending): ${matchRow.id} → ${roomId}`);
+
+        // Tell the Arena the psRoomId landed. Without this, myMatches[].psRoomId
+        // stays null for the whole team-pick window — the only OTHER broadcast
+        // carrying psRoomId is match_live, which fires later once both players
+        // have joined — so the frontend's "pick your team in Showdown" state
+        // (gated on psRoomId, see official-match.tsx) can never render and the
+        // coach is stuck on the "sending team-select invite..." spinner until
+        // match_live or the 5-minute ready-timeout. match_state already carries
+        // psRoomId and the frontend already applies it — reuse that broadcast
+        // as-is rather than inventing a new event shape.
+        if (linkRes.changes > 0) {
+          try { broadcastMatchState(matchRow.id); }
+          catch (err) { console.error('[PS Bot] broadcastMatchState failed:', err); }
+        }
       } else if (!matchRow) {
         console.warn(`[PS Bot] PM matchId ${pmMatchId} not found — falling back to inference`);
       }

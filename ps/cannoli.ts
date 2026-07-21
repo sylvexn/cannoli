@@ -117,6 +117,7 @@ export const commands: Chat.ChatCommands = {
 		// Validate format exists
 		const validFormat = Dex.formats.get(format);
 		if (!validFormat || !validFormat.exists) {
+			pmBot(`cannoli-battle-failed|Unknown format: ${format}|${toID(p1Name)}|${toID(p2Name)}`);
 			return this.errorReply(`Unknown format: ${format}`);
 		}
 
