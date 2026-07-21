@@ -578,6 +578,16 @@ export const userRoutes = new Elysia()
     const row = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
     if (!row || !row.active) { set.status = 404; return { error: 'User not found' }; }
 
+    // Secondary lookup for the profiled coach's timezone pref. Not every
+    // user has a userPreferences row (lazy-upserted on first PUT), so this
+    // can legitimately come back undefined — treat that the same as an
+    // explicit null (user never set a zone; unknowable server-side).
+    const prefsRow = db.select({ timezone: schema.userPreferences.timezone })
+      .from(schema.userPreferences)
+      .where(eq(schema.userPreferences.userId, row.id))
+      .get();
+    const timezone = prefsRow?.timezone ?? null;
+
     // Pull every team this user has ever owned, joined with the season the
     // team belonged to. Active-season tenures populate `currentTeams`;
     // archived-season tenures populate `pastTeams` with finish data so the
@@ -712,6 +722,9 @@ export const userRoutes = new Elysia()
       // Surface role so the identity strip can show an ADMIN chip without
       // a second auth round-trip. Only dev/admin → chip on the frontend.
       role: row.role,
+      // IANA zone string, or null if the coach never set one in Settings —
+      // the frontend must not guess a zone on their behalf.
+      timezone,
       currentTeams,
       pastTeams,
       careerSummary: {

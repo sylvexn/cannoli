@@ -14,6 +14,7 @@ import { ProfileSettingsPanel } from './settings-panel';
 import { useCoachExtras, type CoachResult } from './use-coach-extras';
 import { WinRateSparkline } from './win-rate-sparkline';
 import { RecentHighlights } from './recent-highlights';
+import { CoachTimezoneWidget } from './timezone-widget';
 
 const FALLBACK_PRIMARY = '#7dd3fc';
 const FALLBACK_SECONDARY = '#a78bfa';
@@ -178,6 +179,7 @@ export function CoachProfilePage() {
         </div>
 
         <div className="shrink-0 flex flex-col items-end gap-2">
+          <CoachTimezoneWidget timezone={profile.timezone} />
           {canEdit && (
             <button
               type="button"

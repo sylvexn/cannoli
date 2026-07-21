@@ -414,6 +414,9 @@ export interface ApiPublicProfile {
    *  applicable. Only set on backends that include it (older deploys may
    *  omit it; treat undefined as `'user'`). */
   role?: 'dev' | 'admin' | 'user' | 'bot' | null;
+  /** IANA zone string (e.g. 'America/New_York'), or null when the coach
+   *  never set one in Settings — never guess a zone on their behalf. */
+  timezone?: string | null;
   currentTeams: Array<{
     teamId: string;
     leagueId: string;
