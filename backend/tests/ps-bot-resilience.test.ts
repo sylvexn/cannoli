@@ -109,18 +109,29 @@ describe('bot message framing against a REAL PS server log', () => {
   test('forfeit with full teams forces the loser to 0 (feedback #81)', () => {
     // Both players had 2 mons alive when TestBob forfeited. The OLD parser
     // scored this as a raw "brought - deaths" 2-2, which let a forfeiter keep
-    // points on the board. Fixed: the loser is forced to 0 and their 2
-    // survivors are credited as owed kills to the winner's active mon
-    // (TestAlice's Garchomp, the only p1 mon ever switched in).
+    // points on the board. Fixed (#81): the MATCH score forces the loser to 0.
+    // Owed KO credit (R1) only accrues for loser survivors that actually took
+    // the field — here TestBob's Garchomp switched in but his Volcarona never
+    // did, so exactly one owed kill lands on TestAlice's active Garchomp.
     const r = ReplayParser.parse(REAL_LOG.join('\n'));
     expect(r.winnerScore).toBe(2);
     expect(r.loserScore).toBe(0);
 
     const aliceGarchomp = r.pokemon.find(p => p.player === 'p1' && p.species === 'Garchomp');
-    expect(aliceGarchomp?.kills).toBe(2);
+    expect(aliceGarchomp?.kills).toBe(1);
 
-    const bobMons = r.pokemon.filter(p => p.player === 'p2');
-    expect(bobMons.every(p => p.deaths === 1)).toBe(true);
+    // Bob's Garchomp appeared → its owed death persists; his Volcarona never
+    // switched in → no phantom death (the writer wouldn't persist it anyway).
+    const bobGarchomp = r.pokemon.find(p => p.player === 'p2' && p.species === 'Garchomp');
+    const bobVolcarona = r.pokemon.find(p => p.player === 'p2' && p.species === 'Volcarona');
+    expect(bobGarchomp?.deaths).toBe(1);
+    expect(bobVolcarona?.deaths).toBe(0);
+    expect(bobVolcarona?.appeared).toBe(false);
+
+    // Persisted (appeared) subset stays balanced: winner-kills == loser-deaths.
+    const appeared = r.pokemon.filter(p => p.appeared);
+    expect(appeared.reduce((s, p) => s + p.kills, 0))
+      .toBe(appeared.reduce((s, p) => s + p.deaths, 0));
   });
 
   test('|win| arrives AFTER a |-message| forfeit line (ordering the bot must tolerate)', () => {

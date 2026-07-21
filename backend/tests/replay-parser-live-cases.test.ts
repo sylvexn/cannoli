@@ -142,14 +142,24 @@ describe('Mid-battle forfeit / disconnect', () => {
     // Bob forced to 0 instead of his raw 1 survivor.
     expect(r.loserScore).toBe(0);
 
+    // Dragapult never switched in, so it takes no owed death — the writer keeps
+    // only `appeared` mons, and crediting a bench mon would strand a kill on the
+    // winner with no matching persisted death (R1). The 2-0 match score already
+    // reflects the sweep.
     const dragapult = r.pokemon.find(x => x.species === 'Dragapult');
-    expect(dragapult?.deaths).toBe(1); // the surviving mon becomes a death
-    // Chomp (p1a, still active at |win|) gets its real KO on Gambit PLUS the
-    // 1 owed kill from Dragapult's forced death.
+    expect(dragapult?.deaths).toBe(0);
+    expect(dragapult?.appeared).toBe(false);
+    // Chomp (p1a) keeps only its real KO on Gambit — no owed kill, since Bob's
+    // survivor never took the field.
     const chomp = r.pokemon.find(x => x.species === 'Garchomp');
-    expect(chomp?.kills).toBe(2);
+    expect(chomp?.kills).toBe(1);
     const volc = r.pokemon.find(x => x.species === 'Volcarona');
-    expect(volc?.kills ?? 0).toBe(0); // owed kill goes to the ACTIVE mon only
+    expect(volc?.kills ?? 0).toBe(0);
+
+    // Persisted (appeared) subset stays balanced: winner-kills == loser-deaths.
+    const appeared = r.pokemon.filter(x => x.appeared);
+    expect(appeared.reduce((s, x) => s + x.kills, 0))
+      .toBe(appeared.reduce((s, x) => s + x.deaths, 0));
   });
 
   test('immediate forfeit with no faints forces the loser to 0', () => {

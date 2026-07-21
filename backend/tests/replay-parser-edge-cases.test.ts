@@ -579,12 +579,13 @@ describe('ReplayParser — tie outcome', () => {
 });
 
 describe('ReplayParser — forfeit / timeout with surviving mons', () => {
-  test('forfeit at full health forces loser to zero and credits owed kills to the active mon', () => {
-    // Winner declared while Bob still has all mons alive (a forfeit/DC, since
-    // PS never lets a battle end via |win| with living mons through ordinary
-    // play). Feedback #81: this must score as a completed sweep — 3-0, not
-    // 3-3 — with Bob's 3 unfainted mons credited as kills to Alice's active
-    // Garchomp (p1a).
+  test('forfeit forces loser to zero; owed kills accrue only for mons that took the field', () => {
+    // Winner declared while Bob still has mons alive (a forfeit/DC, since PS
+    // never lets a battle end via |win| with living mons through ordinary
+    // play). Feedback #81: the MATCH score is a completed sweep — 3-0, not 3-3
+    // (loser's survivors zeroed). Owed KO credit, though, only accrues for the
+    // loser mon that actually took the field (Kingambit) — never-appeared bench
+    // mons aren't persisted, so crediting them would fabricate phantom KOs (R1).
     const parser = new ReplayParser();
     feed(parser, [
       '|player|p1|Alice|',
@@ -611,16 +612,24 @@ describe('ReplayParser — forfeit / timeout with surviving mons', () => {
     // Bob forced to 0, not his raw 3 survivors.
     expect(result.loserScore).toBe(0);
 
-    // All 3 of Bob's mons are marked as deaths (owed kills), even the two
-    // that never appeared — the forfeit completes the sweep.
-    const bobMons = result.pokemon.filter(p => p.player === 'p2');
-    expect(bobMons.every(p => p.deaths === 1)).toBe(true);
+    // Only Kingambit actually took the field before Bob bailed, so it's the
+    // sole owed death. The two mons Bob never sent out stay at deaths 0 — the
+    // match_pokemon writer keeps only `appeared` mons, so marking them here
+    // would drop the death on save while the winner kept the kill (R1).
+    const kingambit = result.pokemon.find(p => p.species === 'Kingambit');
+    expect(kingambit?.deaths).toBe(1);
+    const benched = result.pokemon.filter(p => p.player === 'p2' && p.species !== 'Kingambit');
+    expect(benched.every(p => p.deaths === 0 && !p.appeared)).toBe(true);
 
-    // The 3 owed kills land on Alice's active mon at the moment of |win|.
+    // Exactly the 1 owed kill (Kingambit) lands on Alice's active Garchomp — not 3.
     const chomp = result.pokemon.find(p => p.species === 'Garchomp');
-    expect(chomp?.kills).toBe(3);
-    const otherAliceMons = result.pokemon.filter(p => p.player === 'p1' && p.species !== 'Garchomp');
-    expect(otherAliceMons.every(p => p.kills === 0)).toBe(true);
+    expect(chomp?.kills).toBe(1);
+
+    // Persisted balance: over the mons the writer actually keeps (`appeared`),
+    // winner-kills == loser-deaths. This is the invariant R1 restores.
+    const appeared = result.pokemon.filter(p => p.appeared);
+    expect(appeared.reduce((s, p) => s + p.kills, 0))
+      .toBe(appeared.reduce((s, p) => s + p.deaths, 0));
   });
 
   test('RCD vs CIC: forfeit with 2 survivors scores 4-0, not 4-2', () => {
@@ -671,29 +680,39 @@ describe('ReplayParser — forfeit / timeout with surviving mons', () => {
     const result = parser.getResult();
     expect(result.winner).toBe('RCD');
     expect(result.loser).toBe('CIC');
-    // RCD brought 6, lost Garchomp + Volcarona → 4 real survivors.
+    // RCD brought 6, lost Garchomp + Volcarona → 4 real survivors. #81 headline:
+    // CIC's 2 surviving-on-the-bench mons are zeroed so the match reads 4-0.
     expect(result.winnerScore).toBe(4);
     expect(result.loserScore).toBe(0);
 
+    // Snorlax + Toxapex never switched in, so they take NO phantom death — the
+    // writer wouldn't persist them, and doing so would strand kills on the
+    // winner (R1). The 4-0 match score already reflects the sweep.
     const snorlax = result.pokemon.find(p => p.species === 'Snorlax');
     const toxapex = result.pokemon.find(p => p.species === 'Toxapex');
-    expect(snorlax?.deaths).toBe(1);
-    expect(toxapex?.deaths).toBe(1);
+    expect(snorlax?.deaths).toBe(0);
+    expect(toxapex?.deaths).toBe(0);
+    expect(snorlax?.appeared).toBe(false);
+    expect(toxapex?.appeared).toBe(false);
 
-    // Tyranitar was RCD's active mon when |win| fired: its real KO on Pult
-    // plus the 2 owed kills from CIC's survivors.
+    // Tyranitar was RCD's active mon when |win| fired: it keeps only its real
+    // KO on Pult — no owed kills, since CIC's survivors never took the field.
     const tyranitar = result.pokemon.find(p => p.species === 'Tyranitar');
-    expect(tyranitar?.kills).toBe(3);
+    expect(tyranitar?.kills).toBe(1);
 
-    const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
-    const totalDeaths = result.pokemon.reduce((s, p) => s + p.deaths, 0);
-    expect(totalKills).toBe(totalDeaths);
+    // R1 regression guard: over the persisted (appeared) subset the writer
+    // keeps, winner-kills == loser-deaths. Asserting over the FULL in-memory
+    // list would have masked the phantom-kill bug (it stayed balanced there).
+    const appeared = result.pokemon.filter(p => p.appeared);
+    const appearedKills = appeared.reduce((s, p) => s + p.kills, 0);
+    const appearedDeaths = appeared.reduce((s, p) => s + p.deaths, 0);
+    expect(appearedKills).toBe(appearedDeaths);
   });
 
   test('forfeit at team preview (no active mon yet) zeroes the loser without crashing', () => {
-    // Winner declared before any |switch| — activeSlot is empty, so the owed
-    // kills have no resolvable recipient. Must degrade gracefully: still zero
-    // the loser and mark their mons dead, just skip the kill credit.
+    // Winner declared before any |switch| — activeSlot is empty and nobody ever
+    // took the field. Must degrade gracefully: zero the loser's match score,
+    // credit no kills, and mark no phantom deaths (no mon appeared).
     const parser = new ReplayParser();
     expect(() => {
       feed(parser, [
@@ -711,8 +730,11 @@ describe('ReplayParser — forfeit / timeout with surviving mons', () => {
     expect(result.winnerScore).toBe(2); // p1 brought 2, none appeared/fainted
     expect(result.loserScore).toBe(0); // forced from 1 (Bob's brought Kingambit)
 
+    // Kingambit never switched in, so it takes no owed death (nothing to
+    // persist, nothing to balance) — only the match score is zeroed.
     const gambit = result.pokemon.find(p => p.species === 'Kingambit');
-    expect(gambit?.deaths).toBe(1);
+    expect(gambit?.deaths).toBe(0);
+    expect(gambit?.appeared).toBe(false);
     // No active mon existed for either side — no kill credit fabricated.
     const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
     expect(totalKills).toBe(0);
@@ -1075,9 +1097,10 @@ describe('ReplayParser — hidden-forme team-preview placeholders (feedback #52)
     expect(benched?.brought).toBe(true);
     expect(benched?.appeared).toBe(false);
     // The match ended via a plain |win| with Greninja still on the bench — a
-    // non-standard termination (feedback #81), so it forces Bob to 0 and
-    // marks the bench survivor as a death rather than leaving it alive.
-    expect(benched?.deaths).toBe(1);
+    // non-standard termination (feedback #81). The MATCH score forces Bob to 0,
+    // but the benched mon never took the field, so it takes no owed death (R1):
+    // persisting one would strand a phantom kill on the winner.
+    expect(benched?.deaths).toBe(0);
     expect(result.winnerScore).toBe(1);
     expect(result.loserScore).toBe(0);
   });

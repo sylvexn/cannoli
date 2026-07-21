@@ -260,7 +260,13 @@ export class ReplayParser {
       if (loserScore > 0) {
         let owedKills = 0;
         for (const st of allStats) {
-          if (st.player === loserSide && st.brought && st.deaths === 0) {
+          // Only credit an owed death (and matching winner kill) for a loser
+          // mon that actually took the field. The match_pokemon writer persists
+          // rows only for `appeared` mons (ps-bot.ts), so marking a never-sent
+          // bench mon here would drop its death on save while the winner keeps
+          // the kill — fabricating a phantom KO that inflates leaderboards/MVP.
+          // Gating on `appeared` keeps persisted winner-kills == loser-deaths.
+          if (st.player === loserSide && st.brought && st.appeared && st.deaths === 0) {
             st.deaths = 1;
             owedKills++;
           }
@@ -557,7 +563,7 @@ export class ReplayParser {
     if (moveName) {
       const side = this.parseSide(attacker);
       const species = this.nickToSpecies.get(attacker) ?? '';
-      const key = `${side} ${species} ${moveName}`;
+      const key = `${side}\0${species}\0${moveName}`;
       if (!this.movesUsed.has(key)) {
         this.movesUsed.set(key, { side, species, move: moveName });
       }
