@@ -391,10 +391,15 @@ export const tradeRoutes = new Elysia()
     // Admin may choose which league week this trade counts for (default =
     // current week). The swap still applies immediately — this only labels
     // which week the ledger (transactions/rosters) records it under.
+    // Clamp to a real integer league week in [1, totalWeeks] — the UI enforces
+    // this, but a direct API caller could otherwise stamp the ledger with a
+    // negative / fractional / out-of-range week.
     const { effectiveWeek: bodyEffectiveWeek } = (body || {}) as { effectiveWeek?: number };
+    const defaultWeek = league?.currentWeek ?? trade.week;
+    const maxWeek = season?.totalWeeks ?? 30;
     const effectiveWeek = (typeof bodyEffectiveWeek === 'number' && Number.isFinite(bodyEffectiveWeek))
-      ? bodyEffectiveWeek
-      : (league?.currentWeek ?? trade.week);
+      ? Math.min(Math.max(1, Math.trunc(bodyEffectiveWeek)), maxWeek)
+      : defaultWeek;
 
     // Approval requires the recipient to have accepted first (status
     // 'awaiting_admin'). A still-'pending' trade must not be approved — that

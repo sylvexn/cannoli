@@ -102,10 +102,16 @@ export const faRequestRoutes = new Elysia()
     // current week). It still applies immediately — this only labels which
     // week the ledger (transactions/rosters) records it under.
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, req.leagueId)).get();
+    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+    // Clamp to a real integer league week in [1, totalWeeks] — the UI enforces
+    // this, but a direct API caller could otherwise stamp the ledger with a
+    // negative / fractional / out-of-range week.
     const { effectiveWeek: bodyEffectiveWeek } = (body || {}) as { effectiveWeek?: number };
+    const defaultWeek = league?.currentWeek ?? req.week;
+    const maxWeek = season?.totalWeeks ?? 30;
     const effectiveWeek = (typeof bodyEffectiveWeek === 'number' && Number.isFinite(bodyEffectiveWeek))
-      ? bodyEffectiveWeek
-      : (league?.currentWeek ?? req.week);
+      ? Math.min(Math.max(1, Math.trunc(bodyEffectiveWeek)), maxWeek)
+      : defaultWeek;
 
     // ── Tera-change request (feedback #51) ──
     // Re-validate + apply via the shared tera applier. A request that became
