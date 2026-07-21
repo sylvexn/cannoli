@@ -671,11 +671,19 @@ function findReplayFileRecursive(dir: string, fileNames: string[], maxDepth: num
   for (const e of entries) {
     if (e.isFile() && fileNames.includes(e.name)) return join(dir, e.name);
   }
-  for (const e of entries) {
-    if (e.isDirectory()) {
-      const hit = findReplayFileRecursive(join(dir, e.name), fileNames, maxDepth - 1);
-      if (hit) return hit;
-    }
+  // Descend newest-first. Date dirs (YYYY-MM / YYYY-MM-DD) sort lexicographically,
+  // so a reverse sort walks the most recent first — matching the deterministic
+  // scan's intent. Without an explicit sort we'd inherit raw readdir order, which
+  // is filesystem-dependent (fine locally, wrong on other filesystems) and could
+  // return an OLDER replay when the same room id exists under several dates.
+  const subdirs = entries
+    .filter(e => e.isDirectory())
+    .map(e => e.name)
+    .sort()
+    .reverse();
+  for (const name of subdirs) {
+    const hit = findReplayFileRecursive(join(dir, name), fileNames, maxDepth - 1);
+    if (hit) return hit;
   }
   return null;
 }
