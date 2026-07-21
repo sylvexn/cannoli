@@ -1,5 +1,4 @@
 import { useParams, Link, useSearchParams } from 'react-router-dom';
-import { useLeagueUrl } from '@/lib/use-league-url';
 import { EmptyState } from '@/components/empty-state';
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useLeagueData } from '@/lib/league-data-context';
@@ -9,12 +8,10 @@ import type { Player, RosterPokemon } from '@/lib/types';
 import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
 import type { PokemonType } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
-import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ArrowLeft, Play, Shield, Calendar, Zap, Sword } from 'lucide-react';
-import { ReplayLink } from '@/components/replay-link';
+import { ArrowLeft, Shield, Calendar, Zap, Sword } from 'lucide-react';
 
 import { useAuth } from '@/lib/auth-context';
 import { canManageTeam, isStaff } from '@/lib/permissions';
@@ -31,6 +28,8 @@ import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
 import { Personality } from './personality';
 import { RecentEvents } from './recent-events';
+import { ScheduleTab } from './schedule-tab';
+import type { ScheduleRow } from './schedule-tab';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // ─── Main Page ───────────────────────────────────────────────────
@@ -65,7 +64,6 @@ export function TeamProfilePage() {
 }
 
 function TeamProfileContent({ player, rank }: { player: Player; rank: number }) {
-  const leagueUrl = useLeagueUrl();
   const { players, getTeamMatches, getTeamByes, refresh } = useLeagueData();
   const league = useLeague();
   const { user } = useAuth();
@@ -117,7 +115,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const byeWeeks = useMemo(() => new Set(getTeamByes(player.id).map(b => b.week)), [player.id]);
   /** Match rows + BYE rows interleaved by week, sorted ascending. */
   const scheduleRows = useMemo(() => {
-    const rows: Array<{ kind: 'match'; week: number; match: typeof matches[number] } | { kind: 'bye'; week: number }> = [
+    const rows: ScheduleRow[] = [
       ...matches.map(m => ({ kind: 'match' as const, week: m.week, match: m })),
       ...[...byeWeeks].map(week => ({ kind: 'bye' as const, week })),
     ];
@@ -498,73 +496,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
             </TabsContent>
 
             <TabsContent value="schedule" className="p-0 flex-1 overflow-y-auto flex flex-col">
-              <div className="p-3 flex-1 flex flex-col gap-0.5">
-                {scheduleRows.map(row => {
-                  if (row.kind === 'bye') {
-                    const isCurrent = row.week === (season?.currentWeek ?? 0) + 1;
-                    return (
-                      <div
-                        key={`bye-${row.week}`}
-                        className={`flex items-center gap-2 px-2 rounded flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : ''}`}
-                      >
-                        <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{row.week}</span>
-                        <span className="w-4 text-center text-[10px] text-text-muted">—</span>
-                        <span className="text-[10px] tracking-widest font-mono uppercase text-text-muted flex-1">Bye</span>
-                      </div>
-                    );
-                  }
-                  const match = row.match;
-                  const isHome = match.homePlayer === player.id;
-                  const opponentId = isHome ? match.awayPlayer : match.homePlayer;
-                  const opponent = players.find(p => p.id === opponentId);
-                  if (!opponent) return null;
-
-                  const hasResult = match.homeScore != null && match.awayScore != null;
-                  const myScore = isHome ? match.homeScore : match.awayScore;
-                  const theirScore = isHome ? match.awayScore : match.homeScore;
-                  const won = hasResult && (myScore ?? 0) > (theirScore ?? 0);
-                  const lost = hasResult && (myScore ?? 0) < (theirScore ?? 0);
-                  const isCurrent = match.week === (season?.currentWeek ?? 0) + 1;
-
-                  return (
-                    <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/50'}`}>
-                      <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{match.week}</span>
-                      {hasResult ? (
-                        <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
-                          {won ? 'W' : lost ? 'L' : 'D'}
-                        </span>
-                      ) : (
-                        <span className="w-4 text-center text-[10px] text-text-muted">—</span>
-                      )}
-                      <Link to={leagueUrl(`/teams/${opponentId}`)} viewTransition className="flex items-center gap-1.5 flex-1 min-w-0">
-                        <TeamLogo abbrev={opponent.teamAbbrev} color={opponent.teamColor} size="sm" logoPath={opponent.logoPath} />
-                        <span className="text-xs text-text-secondary hover:text-neon transition-colors truncate font-medium">{opponent.teamAbbrev}</span>
-                      </Link>
-                      {hasResult && (
-                        <span className="font-mono text-[11px] tabular-nums text-text-muted">
-                          {myScore}<span className="mx-px">-</span>{theirScore}
-                        </span>
-                      )}
-                      {match.replayUrl && (
-                        <ReplayLink
-                          matchId={match.id}
-                          context={{
-                            homeLabel: player.teamAbbrev,
-                            awayLabel: opponent.teamAbbrev,
-                            week: match.week,
-                            playoffRound: match.playoffRound,
-                            leagueName: league.name,
-                            leagueColor: league.color,
-                          }}
-                          className="text-text-muted/40 hover:text-neon transition-colors"
-                        >
-                          <Play size={10} />
-                        </ReplayLink>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <ScheduleTab player={player} scheduleRows={scheduleRows} />
             </TabsContent>
 
             <TabsContent value="speed" className="p-0 flex-1 overflow-y-auto flex flex-col">

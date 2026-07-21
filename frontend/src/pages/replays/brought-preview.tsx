@@ -73,7 +73,7 @@ function SpriteRow({
   );
 }
 
-function spriteTitle(mon: ApiMatchPokemon): string {
+export function spriteTitle(mon: ApiMatchPokemon): string {
   const parts = [mon.nickname ? `${mon.name} "${mon.nickname}"` : mon.name];
   parts.push(`${mon.kills}K / ${mon.deaths}D`);
   if (mon.teraUsed) parts.push(mon.teraType ? `tera ${mon.teraType}` : 'tera');
