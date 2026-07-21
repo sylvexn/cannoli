@@ -72,10 +72,10 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     expect(out[1].tiebreaker).toEqual({ rule: 'h2h', value: 0 });
   });
 
-  test('3-way tie at wins=4 resolved by differential (H2H ignored for 3+ way ties)', () => {
-    // 3 teams 4-3 with distinct diffs: b=+9, a=+5, c=+1.
-    // H2H within the set favors a (a=2, b=1, c=0) but for a 3-way tie H2H is
-    // skipped entirely, so differential decides: b > a > c.
+  test('3-way tie at wins=4 with distinct differentials resolved by differential', () => {
+    // 3 teams 4-3 with distinct diffs: b=+9, a=+5, c=+1. Differential is checked
+    // before H2H and already fully separates them, so H2H never comes into play
+    // (each diff is unique) even though the in-set H2H favors a (a=2, b=1, c=0).
     const out = orderRecords(
       [
         record('a', 4, 3, 30, 25), // diff +5
@@ -91,8 +91,9 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
   test('multi-way tie: differential outranks h2h (feedback #62)', () => {
     // Early-season 1-1 tie among 3+ teams: x has a strong +4 differential but
     // 0 in-set H2H wins (hasn't played the others yet); y has a losing -1
-    // differential but 1 in-set H2H win. Before the fix, H2H ran first even
-    // in this 3-way tie and ranked y above x — exactly the reported bug.
+    // differential but 1 in-set H2H win. Differential is checked FIRST and the
+    // three diffs are distinct, so H2H never fires — x ranks top on +4, not y on
+    // its lone H2H win. (Before the #62 fix H2H ran first and wrongly promoted y.)
     const out = orderRecords(
       [
         record('x', 1, 1, 14, 10), // diff +4, h2h 0
@@ -174,6 +175,52 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
     expect(() => computeStandings('__nonexistent_league__', { phase: 'all' })).not.toThrow();
     expect(() => computeStandings('__nonexistent_league__', { phase: 'regular' })).not.toThrow();
     expect(() => computeStandings('__nonexistent_league__')).not.toThrow();
+  });
+
+  test('within a 3-way wins tie, H2H breaks a differential sub-tie (not just 2-way)', () => {
+    // Three teams 4-3. c is separated by its superior +9 differential. a and b
+    // are a genuine wins+differential tie (both +5); a won their head-to-head so
+    // H2H — over only {a, b} — promotes a above b, even though b has more kills
+    // (PF 32 > 30). The old 2-way-only rule skipped H2H here and let b's kills win.
+    const out = orderRecords(
+      [
+        record('a', 4, 3, 30, 25), // diff +5, PF 30
+        record('b', 4, 3, 32, 27), // diff +5, PF 32 (more kills, but lost H2H)
+        record('c', 4, 3, 34, 25), // diff +9
+      ],
+      staticH2h({ a: 1, b: 0, c: 0 }),
+    );
+    expect(out.map(r => r.id)).toEqual(['c', 'a', 'b']);
+    expect(out[0].tiebreaker).toEqual({ rule: 'diff', value: 9 });
+    expect(out[1].tiebreaker).toEqual({ rule: 'h2h', value: 1 });
+    expect(out[2].tiebreaker).toEqual({ rule: 'h2h', value: 0 });
+  });
+
+  test('H2H is scoped to the differential-run, never the whole wins-bucket', () => {
+    // 4 teams at 3-2. p (+8) and s (-3) are separated by differential; q and r
+    // are the only real tie (+2 each). H2H must be consulted ONLY for {q, r} —
+    // a bucket-wide lookup could let a win over p/s leak into the q-vs-r order.
+    const calls: string[][] = [];
+    const lookup = (tiedIds: string[]) => {
+      calls.push([...tiedIds].sort());
+      const m = new Map<string, number>();
+      for (const id of tiedIds) m.set(id, id === 'q' ? 1 : 0); // q beat r head-to-head
+      return m;
+    };
+    const out = orderRecords(
+      [
+        record('p', 3, 2, 28, 20), // +8 (unique)
+        record('q', 3, 2, 24, 22), // +2 (lower PF, but won H2H)
+        record('r', 3, 2, 26, 24), // +2 (higher PF)
+        record('s', 3, 2, 17, 20), // -3 (unique)
+      ],
+      lookup,
+    );
+    expect(out.map(r => r.id)).toEqual(['p', 'q', 'r', 's']);
+    // Consulted exactly once, for exactly the {q, r} run — never for p or s.
+    expect(calls).toEqual([['q', 'r']]);
+    expect(out[1].tiebreaker).toEqual({ rule: 'h2h', value: 1 });
+    expect(out[2].tiebreaker).toEqual({ rule: 'h2h', value: 0 });
   });
 
   test('different wins-buckets each evaluate tiebreakers independently', () => {

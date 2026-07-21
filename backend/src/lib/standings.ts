@@ -4,13 +4,13 @@
  * Tiebreaker hierarchy (applied in order):
  *   1. Wins (desc)
  *   2. Point differential (kills - deaths) — desc
- *   3. Head-to-head record — ONLY applied for an exact two-team tie that's
- *      still tied after differential. With 3+ teams tied on wins, most
- *      members haven't played every other member of the set, so an in-set
- *      H2H record is statistical noise (a team that got lucky with one
- *      head-to-head win could rank above a team with a far better overall
- *      record). For those larger ties this step is skipped entirely and we
- *      fall straight through to kills.
+ *   3. Head-to-head record — among the teams STILL tied after differential
+ *      (i.e. same wins AND same differential). Computed within that tied run
+ *      ONLY, so a team's win over a differently-ranked opponent never leaks into
+ *      a tie it isn't part of; that keeps it meaningful for a tie of any size,
+ *      not just a two-team tie. Differential is deliberately checked FIRST
+ *      (feedback #77 / #62) so a lucky head-to-head can't override a clearly
+ *      better season.
  *   4. Total kills (points-for) — desc
  *   5. Team ID (asc) — last-resort stable tiebreaker
  *
@@ -85,37 +85,55 @@ function resolveBucketPure(
     }];
   }
 
-  const tiedIds = bucket.map(r => r.id);
-  const h2h = h2hLookup(tiedIds);
-
-  // H2H is only sound for a clean two-way tie — in larger ties most teams
-  // haven't played each other, so an in-set H2H record is noise rather than
-  // a meaningful signal.
-  const useH2h = bucket.length === 2;
-
   const enriched = bucket.map(r => ({
     ...r,
     differential: r.pointsFor - r.pointsAgainst,
-    h2hWins: h2h.get(r.id) ?? 0,
+    h2hWins: 0,
   }));
 
-  enriched.sort((a, b) => {
-    if (b.differential !== a.differential) return b.differential - a.differential;
-    if (useH2h && b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
-    if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
-    return a.id.localeCompare(b.id);
-  });
+  // Point differential is the primary in-bucket tiebreaker.
+  enriched.sort((a, b) => b.differential - a.differential);
 
-  const allSameDiff = enriched.every(r => r.differential === enriched[0].differential);
-  const allSameH2h = enriched.every(r => r.h2hWins === enriched[0].h2hWins);
-  const allSameKills = enriched.every(r => r.pointsFor === enriched[0].pointsFor);
+  // Within each run of teams STILL tied on differential, head-to-head record
+  // breaks the tie — computed among ONLY the teams in that run, so a win over a
+  // differently-ranked opponent can't leak into a tie it isn't part of. Then
+  // kills, then id. This fires for any run size (feedback #77): a genuine
+  // wins+differential tie is exactly where an in-set H2H record is meaningful.
+  for (let i = 0; i < enriched.length; ) {
+    let j = i + 1;
+    while (j < enriched.length && enriched[j].differential === enriched[i].differential) j++;
+    if (j - i > 1) {
+      const run = enriched.slice(i, j);
+      const h2h = h2hLookup(run.map(r => r.id));
+      for (const r of run) r.h2hWins = h2h.get(r.id) ?? 0;
+      run.sort((a, b) => {
+        if (b.h2hWins !== a.h2hWins) return b.h2hWins - a.h2hWins;
+        if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor;
+        return a.id.localeCompare(b.id);
+      });
+      for (let k = 0; k < run.length; k++) enriched[i + k] = run[k];
+    }
+    i = j;
+  }
+
+  // Per-row tiebreaker label: a row whose differential is unique in the bucket
+  // was placed by differential; otherwise it sits in a differential-run and the
+  // finest rule separating that run (h2h → kills → id) applies to it.
+  const diffCounts = new Map<number, number>();
+  for (const r of enriched) diffCounts.set(r.differential, (diffCounts.get(r.differential) ?? 0) + 1);
 
   return enriched.map(r => {
     let tb: TeamStandingRow['tiebreaker'];
-    if (!allSameDiff) tb = { rule: 'diff', value: r.differential };
-    else if (useH2h && !allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
-    else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
-    else tb = { rule: 'id', value: r.id };
+    if ((diffCounts.get(r.differential) ?? 0) === 1) {
+      tb = { rule: 'diff', value: r.differential };
+    } else {
+      const run = enriched.filter(x => x.differential === r.differential);
+      const allSameH2h = run.every(x => x.h2hWins === run[0].h2hWins);
+      const allSameKills = run.every(x => x.pointsFor === run[0].pointsFor);
+      if (!allSameH2h) tb = { rule: 'h2h', value: r.h2hWins };
+      else if (!allSameKills) tb = { rule: 'kills', value: r.pointsFor };
+      else tb = { rule: 'id', value: r.id };
+    }
     return {
       id: r.id,
       wins: r.wins,
