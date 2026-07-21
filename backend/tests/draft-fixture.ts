@@ -15,6 +15,7 @@
  */
 import { db, schema, sqlite } from '../src/db';
 import { eq } from 'drizzle-orm';
+import { ensurePokemonReference } from './pokemon-reference-seed';
 
 // The dev DB is a single on-disk SQLite file shared by every test process (and,
 // during launch-prep, by sibling agent worktrees running seeds). Without a busy
@@ -129,10 +130,18 @@ export function buildDraftFixture(opts?: {
 /** A real seeded, unbanned, base-form Pokemon name of the given tier. */
 const usedByTier = new Map<number, string[]>();
 export function pickByTier(tier: number, skip: string[] = []): string {
-  const rows = db.select().from(schema.pokemon)
+  const query = () => db.select().from(schema.pokemon)
     .where(eq(schema.pokemon.tier, tier))
     .all()
     .filter(p => !p.banned && p.formCategory === 'base' && !skip.includes(p.name));
+  let rows = query();
+  if (rows.length === 0) {
+    // The shared reference table was emptied by another suite's reset earlier in
+    // this `bun test tests/` run (see pokemon-reference-seed.ts). Re-seed and
+    // retry so draft fixtures don't depend on test file order.
+    ensurePokemonReference();
+    rows = query();
+  }
   if (rows.length === 0) throw new Error(`no seeded tier-${tier} pokemon available`);
   return rows[0].name;
 }
