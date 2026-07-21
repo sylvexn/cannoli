@@ -111,11 +111,12 @@ describe('Mega / form change (|detailschange|)', () => {
 });
 
 describe('Mid-battle forfeit / disconnect', () => {
-  // PS represents a forfeit/disconnect/timeout as a plain |win|WINNER. The
-  // loser may still have undefeated mons on the field — the score is computed
-  // from `brought - deaths`, so a forfeit at full health is a 6-6 style score,
-  // NOT 6-0. This pins that behaviour so the bot doesn't fabricate a sweep.
-  test('forfeit win counts surviving mons on both sides', () => {
+  // PS represents a forfeit/disconnect/timeout as a plain |win|WINNER while
+  // the loser may still have undefeated mons on the field. Feedback #81: this
+  // must score as a completed sweep (loser forced to 0), with the loser's
+  // survivors credited as owed kills to the winner's active mon — NOT a
+  // brought-minus-deaths score that leaves the loser with points on the board.
+  test('forfeit win forces the loser to 0 and credits owed kills to the winner active mon', () => {
     const p = new ReplayParser();
     feed(p, [
       ...preamble('Alice', 'Bob'),
@@ -127,7 +128,7 @@ describe('Mid-battle forfeit / disconnect', () => {
       '|switch|p1a: Chomp|Garchomp, M|100/100',
       '|switch|p2a: Gambit|Kingambit, M|100/100',
       '|turn|1',
-      // Alice KOs one of Bob's mons, then Bob forfeits.
+      // Alice KOs one of Bob's mons, then Bob forfeits with 1 left.
       '|move|p1a: Chomp|Earthquake|p2a: Gambit',
       '|-damage|p2a: Gambit|0 fnt',
       '|faint|p2a: Gambit',
@@ -136,12 +137,22 @@ describe('Mid-battle forfeit / disconnect', () => {
     const r = p.getResult();
     expect(r.winner).toBe('Alice');
     expect(r.loser).toBe('Bob');
-    // Alice (p1) brought 2, lost 0 → 2. Bob (p2) brought 2, lost 1 → 1.
+    // Alice (p1) brought 2, lost 0 → 2, unaffected.
     expect(r.winnerScore).toBe(2);
-    expect(r.loserScore).toBe(1);
+    // Bob forced to 0 instead of his raw 1 survivor.
+    expect(r.loserScore).toBe(0);
+
+    const dragapult = r.pokemon.find(x => x.species === 'Dragapult');
+    expect(dragapult?.deaths).toBe(1); // the surviving mon becomes a death
+    // Chomp (p1a, still active at |win|) gets its real KO on Gambit PLUS the
+    // 1 owed kill from Dragapult's forced death.
+    const chomp = r.pokemon.find(x => x.species === 'Garchomp');
+    expect(chomp?.kills).toBe(2);
+    const volc = r.pokemon.find(x => x.species === 'Volcarona');
+    expect(volc?.kills ?? 0).toBe(0); // owed kill goes to the ACTIVE mon only
   });
 
-  test('immediate forfeit with no faints scores by brought count', () => {
+  test('immediate forfeit with no faints forces the loser to 0', () => {
     const p = new ReplayParser();
     feed(p, [
       ...preamble('Alice', 'Bob'),
@@ -154,7 +165,7 @@ describe('Mid-battle forfeit / disconnect', () => {
     const r = p.getResult();
     expect(r.winner).toBe('Alice');
     expect(r.winnerScore).toBe(2); // p1 brought 2
-    expect(r.loserScore).toBe(1);  // p2 brought 1
+    expect(r.loserScore).toBe(0);  // forced from 1 (Bob's brought Kingambit)
   });
 });
 

@@ -229,16 +229,54 @@ export class ReplayParser {
     let loserScore = 0;
 
     if (this.winner) {
+      let winnerSide: 'p1' | 'p2';
+      let loserSide: 'p1' | 'p2';
       if (this.winner === this.players.p1) {
         winner = this.players.p1;
         loser = this.players.p2;
+        winnerSide = 'p1';
+        loserSide = 'p2';
         winnerScore = p1Remaining;
         loserScore = p2Remaining;
       } else {
         winner = this.players.p2;
         loser = this.players.p1;
+        winnerSide = 'p2';
+        loserSide = 'p1';
         winnerScore = p2Remaining;
         loserScore = p1Remaining;
+      }
+
+      // Forfeit / timeout / disconnect normalization (feedback #81). PS never
+      // lets a battle end with a `|win|` while the loser still has living
+      // Pokemon through ordinary play — a fainted active mon forces a switch
+      // prompt first — so `loserScore > 0` here only happens on a non-standard
+      // termination (FF/timeout/DC). Treat it as a completed sweep: zero the
+      // loser's score, mark their survivors as deaths (keeps winner-kills ==
+      // loser-deaths so the standings differential reflects a real sweep and
+      // downstream match_pokemon writes stay consistent), and credit the
+      // "owed" kills to the winner's active Pokemon. winnerScore is left
+      // untouched — it already reflects the winner's real survivors.
+      if (loserScore > 0) {
+        let owedKills = 0;
+        for (const st of allStats) {
+          if (st.player === loserSide && st.brought && st.deaths === 0) {
+            st.deaths = 1;
+            owedKills++;
+          }
+        }
+        loserScore = 0;
+
+        if (owedKills > 0) {
+          // Winner's active Pokemon at the moment the match ended. May be
+          // unresolvable (e.g. a forfeit at team preview, before any
+          // |switch| ever fired) — degrade gracefully rather than guess.
+          const activeNick = this.activeSlot.get(`${winnerSide}a`);
+          const activeSpecies = activeNick ? this.nickToSpecies.get(activeNick) : undefined;
+          if (activeSpecies) {
+            this.getOrCreateStats(winnerSide, activeSpecies).kills += owedKills;
+          }
+        }
       }
     }
 

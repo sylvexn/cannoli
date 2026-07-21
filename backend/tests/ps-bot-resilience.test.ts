@@ -106,14 +106,21 @@ describe('bot message framing against a REAL PS server log', () => {
     expect(r.winner).toBe('TestAlice');
   });
 
-  test('forfeit with full teams yields a non-sweep score (LAUNCH NOTE)', () => {
-    // Both players had 2 mons alive at forfeit, so the score is 2-2. This is
-    // the parser's "brought - deaths" model; a forfeit/disconnect does NOT
-    // count as a 6-0. The bot writes this verbatim. Flagged as a launch
-    // semantics concern (see findings: forfeit scoring).
+  test('forfeit with full teams forces the loser to 0 (feedback #81)', () => {
+    // Both players had 2 mons alive when TestBob forfeited. The OLD parser
+    // scored this as a raw "brought - deaths" 2-2, which let a forfeiter keep
+    // points on the board. Fixed: the loser is forced to 0 and their 2
+    // survivors are credited as owed kills to the winner's active mon
+    // (TestAlice's Garchomp, the only p1 mon ever switched in).
     const r = ReplayParser.parse(REAL_LOG.join('\n'));
     expect(r.winnerScore).toBe(2);
-    expect(r.loserScore).toBe(2);
+    expect(r.loserScore).toBe(0);
+
+    const aliceGarchomp = r.pokemon.find(p => p.player === 'p1' && p.species === 'Garchomp');
+    expect(aliceGarchomp?.kills).toBe(2);
+
+    const bobMons = r.pokemon.filter(p => p.player === 'p2');
+    expect(bobMons.every(p => p.deaths === 1)).toBe(true);
   });
 
   test('|win| arrives AFTER a |-message| forfeit line (ordering the bot must tolerate)', () => {

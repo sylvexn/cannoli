@@ -441,6 +441,11 @@ describe('ReplayParser — Illusion (|replace|)', () => {
       '|turn|2',
       // Illusion breaks before Eevee attacks
       '|replace|p1a: Lax|Zoroark, M|',
+      // Zoroark finishes the sweep for real, so this stays a clean win rather
+      // than tripping the forfeit-normalization path (loserScore already 0).
+      '|move|p1a: Lax|Night Slash|p2a: Eve',
+      '|-damage|p2a: Eve|0 fnt',
+      '|faint|p2a: Eve',
       '|win|Alice',
     ]);
 
@@ -449,8 +454,9 @@ describe('ReplayParser — Illusion (|replace|)', () => {
     // No entry should remain under 'Snorlax' (re-keyed on replace)
     const fakeSnorlax = result.pokemon.find(p => p.species === 'Snorlax' && p.player === 'p1');
     expect(fakeSnorlax).toBeUndefined();
-    // Kill earned while disguised must be on Zoroark
-    expect(zoroark?.kills).toBe(1);
+    // Both kills earned while disguised (or post-reveal, same nick) land on Zoroark
+    expect(zoroark?.kills).toBe(2);
+    expect(result.loserScore).toBe(0);
   });
 });
 
@@ -573,9 +579,12 @@ describe('ReplayParser — tie outcome', () => {
 });
 
 describe('ReplayParser — forfeit / timeout with surviving mons', () => {
-  test('forfeit at full health produces non-negative scores for both sides', () => {
-    // Winner declared while both players have all mons alive.
-    // brought=6 each, deaths=0 each → scores should be 6/6, not negative.
+  test('forfeit at full health forces loser to zero and credits owed kills to the active mon', () => {
+    // Winner declared while Bob still has all mons alive (a forfeit/DC, since
+    // PS never lets a battle end via |win| with living mons through ordinary
+    // play). Feedback #81: this must score as a completed sweep — 3-0, not
+    // 3-3 — with Bob's 3 unfainted mons credited as kills to Alice's active
+    // Garchomp (p1a).
     const parser = new ReplayParser();
     feed(parser, [
       '|player|p1|Alice|',
@@ -597,12 +606,141 @@ describe('ReplayParser — forfeit / timeout with surviving mons', () => {
     const result = parser.getResult();
     expect(result.winner).toBe('Alice');
     expect(result.loser).toBe('Bob');
-    expect(result.winnerScore).toBeGreaterThanOrEqual(0);
-    expect(result.loserScore).toBeGreaterThanOrEqual(0);
-    // Alice (p1) brought 3, deaths 0 → 3 remaining
+    // Alice (p1) brought 3, deaths 0 → 3 remaining, unchanged by the fix.
     expect(result.winnerScore).toBe(3);
-    // Bob (p2) brought 3, deaths 0 → 3 remaining
-    expect(result.loserScore).toBe(3);
+    // Bob forced to 0, not his raw 3 survivors.
+    expect(result.loserScore).toBe(0);
+
+    // All 3 of Bob's mons are marked as deaths (owed kills), even the two
+    // that never appeared — the forfeit completes the sweep.
+    const bobMons = result.pokemon.filter(p => p.player === 'p2');
+    expect(bobMons.every(p => p.deaths === 1)).toBe(true);
+
+    // The 3 owed kills land on Alice's active mon at the moment of |win|.
+    const chomp = result.pokemon.find(p => p.species === 'Garchomp');
+    expect(chomp?.kills).toBe(3);
+    const otherAliceMons = result.pokemon.filter(p => p.player === 'p1' && p.species !== 'Garchomp');
+    expect(otherAliceMons.every(p => p.kills === 0)).toBe(true);
+  });
+
+  test('RCD vs CIC: forfeit with 2 survivors scores 4-0, not 4-2', () => {
+    // Reproduces the reported bug exactly: RCD ends with 4 real survivors,
+    // CIC forfeits with 2 mons still alive (Snorlax, Toxapex). Expected 4-0,
+    // with the 2 owed kills credited to RCD's active mon at the time of |win|.
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|RCD|',
+      '|player|p2|CIC|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p1|Volcarona, M|',
+      '|poke|p1|Tyranitar, M|',
+      '|poke|p1|Corviknight, M|',
+      '|poke|p1|Rotom-Wash, M|',
+      '|poke|p1|Ferrothorn, M|',
+      '|poke|p2|Kingambit, M|',
+      '|poke|p2|Dragapult, M|',
+      '|poke|p2|Snorlax, M|',
+      '|poke|p2|Toxapex, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      '|move|p1a: Chomp|Earthquake|p2a: Gambit',
+      '|-damage|p2a: Gambit|0 fnt',
+      '|faint|p2a: Gambit',
+      '|switch|p2a: Pult|Dragapult, M|100/100',
+      '|turn|2',
+      // Pult claims 2 of RCD's mons before going down itself.
+      '|move|p2a: Pult|Draco Meteor|p1a: Chomp',
+      '|-damage|p1a: Chomp|0 fnt',
+      '|faint|p1a: Chomp',
+      '|switch|p1a: Volc|Volcarona, M|100/100',
+      '|turn|3',
+      '|move|p2a: Pult|Draco Meteor|p1a: Volc',
+      '|-damage|p1a: Volc|0 fnt',
+      '|faint|p1a: Volc',
+      '|switch|p1a: Tar|Tyranitar, M|100/100',
+      '|turn|4',
+      '|move|p1a: Tar|Rock Slide|p2a: Pult',
+      '|-damage|p2a: Pult|0 fnt',
+      '|faint|p2a: Pult',
+      // CIC forfeits with Snorlax + Toxapex still alive on the bench.
+      '|win|RCD',
+    ]);
+
+    const result = parser.getResult();
+    expect(result.winner).toBe('RCD');
+    expect(result.loser).toBe('CIC');
+    // RCD brought 6, lost Garchomp + Volcarona → 4 real survivors.
+    expect(result.winnerScore).toBe(4);
+    expect(result.loserScore).toBe(0);
+
+    const snorlax = result.pokemon.find(p => p.species === 'Snorlax');
+    const toxapex = result.pokemon.find(p => p.species === 'Toxapex');
+    expect(snorlax?.deaths).toBe(1);
+    expect(toxapex?.deaths).toBe(1);
+
+    // Tyranitar was RCD's active mon when |win| fired: its real KO on Pult
+    // plus the 2 owed kills from CIC's survivors.
+    const tyranitar = result.pokemon.find(p => p.species === 'Tyranitar');
+    expect(tyranitar?.kills).toBe(3);
+
+    const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
+    const totalDeaths = result.pokemon.reduce((s, p) => s + p.deaths, 0);
+    expect(totalKills).toBe(totalDeaths);
+  });
+
+  test('forfeit at team preview (no active mon yet) zeroes the loser without crashing', () => {
+    // Winner declared before any |switch| — activeSlot is empty, so the owed
+    // kills have no resolvable recipient. Must degrade gracefully: still zero
+    // the loser and mark their mons dead, just skip the kill credit.
+    const parser = new ReplayParser();
+    expect(() => {
+      feed(parser, [
+        '|player|p1|Alice|',
+        '|player|p2|Bob|',
+        '|poke|p1|Garchomp, M|',
+        '|poke|p1|Volcarona, M|',
+        '|poke|p2|Kingambit, M|',
+        '|start',
+        '|win|Alice', // Bob DCs at team preview, before either side switched in
+      ]);
+    }).not.toThrow();
+
+    const result = parser.getResult();
+    expect(result.winnerScore).toBe(2); // p1 brought 2, none appeared/fainted
+    expect(result.loserScore).toBe(0); // forced from 1 (Bob's brought Kingambit)
+
+    const gambit = result.pokemon.find(p => p.species === 'Kingambit');
+    expect(gambit?.deaths).toBe(1);
+    // No active mon existed for either side — no kill credit fabricated.
+    const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
+    expect(totalKills).toBe(0);
+  });
+
+  test('a normal clean win (loser already at 0) is unaffected by forfeit normalization', () => {
+    const parser = new ReplayParser();
+    feed(parser, [
+      '|player|p1|Alice|',
+      '|player|p2|Bob|',
+      '|poke|p1|Garchomp, M|',
+      '|poke|p2|Kingambit, M|',
+      '|start',
+      '|switch|p1a: Chomp|Garchomp, M|100/100',
+      '|switch|p2a: Gambit|Kingambit, M|100/100',
+      '|turn|1',
+      '|move|p1a: Chomp|Earthquake|p2a: Gambit',
+      '|-damage|p2a: Gambit|0 fnt',
+      '|faint|p2a: Gambit',
+      '|win|Alice',
+    ]);
+
+    const result = parser.getResult();
+    expect(result.winnerScore).toBe(1);
+    expect(result.loserScore).toBe(0);
+    const chomp = result.pokemon.find(p => p.species === 'Garchomp');
+    // Real kill from the actual KO, not an owed/forfeit credit.
+    expect(chomp?.kills).toBe(1);
   });
 
   test('score never goes negative when deaths exceed brought (missed team-preview reconnect)', () => {
@@ -930,15 +1068,17 @@ describe('ReplayParser — hidden-forme team-preview placeholders (feedback #52)
 
     const result = parser.getResult();
     const p2 = result.pokemon.filter(p => p.player === 'p2');
-    // Two brought mons; the benched placeholder is renamed but still counts as alive.
+    // Two brought mons; the benched placeholder is renamed correctly either way.
     expect(p2.filter(p => p.brought).length).toBe(2);
     expect(result.pokemon.some(p => p.species.endsWith('-*'))).toBe(false);
     const benched = p2.find(p => p.species === 'Greninja');
     expect(benched?.brought).toBe(true);
     expect(benched?.appeared).toBe(false);
-    expect(benched?.deaths).toBe(0);
-    // Bob brought 2, lost 1 -> 1 survivor. Alice 1-1.
+    // The match ended via a plain |win| with Greninja still on the bench — a
+    // non-standard termination (feedback #81), so it forces Bob to 0 and
+    // marks the bench survivor as a death rather than leaving it alive.
+    expect(benched?.deaths).toBe(1);
     expect(result.winnerScore).toBe(1);
-    expect(result.loserScore).toBe(1);
+    expect(result.loserScore).toBe(0);
   });
 });
