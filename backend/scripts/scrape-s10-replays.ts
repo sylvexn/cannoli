@@ -305,5 +305,5 @@ for (const league of LEAGUES) {
   totals.errors += r.errors;
 }
 
-console.log(`\n✓ Done. Saved ${totals.saved}, skipped ${totals.skipped}, errors ${totals.errors}`);
+console.log(`\nDone. Saved ${totals.saved}, skipped ${totals.skipped}, errors ${totals.errors}`);
 console.log(`  Cache: ${OUT_DIR}`);

@@ -22,7 +22,7 @@ const DRAFT_WS = `ws://localhost:3001/ws/draft/${DRAFT.leagueId}`;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let FAILS = 0;
-function check(cond: boolean, msg: string) { console.log(`${cond ? '  ✓' : '  ✗ FAIL'} ${msg}`); if (!cond) FAILS++; }
+function check(cond: boolean, msg: string) { console.log(`${cond ? '  PASS' : '  FAIL'} ${msg}`); if (!cond) FAILS++; }
 
 // captain eligibility lookup (tier ≤ 9, not tera-banned)
 const monMeta = new Map((fixture as any[]).map((p) => [p.name, { tier: p.tier, teraBanned: !!p.tera_banned, banned: !!p.banned }]));

@@ -166,7 +166,7 @@ for (const name of names) {
 
 console.log(`\n  Matched: ${matched.length}/${names.length}`);
 if (unmatched.length > 0) {
-  console.log(`\n  ⚠ UNMATCHED (${unmatched.length}) — add ID_OVERRIDES entries:`);
+  console.log(`\n  UNMATCHED (${unmatched.length}) — add ID_OVERRIDES entries:`);
   for (const u of unmatched) {
     console.log(`    "${u.name}" → tried ID "${u.id}"`);
   }
@@ -213,6 +213,6 @@ writeFileSync(outPath, lines.join('\n'), 'utf8');
 console.log(`\nWrote ${outPath} (${matched.length} entries)`);
 
 if (unmatched.length > 0) {
-  console.error(`\n✖ ${unmatched.length} Pokemon had no pokedex match — see list above.`);
+  console.error(`\n${unmatched.length} Pokemon had no pokedex match — see list above.`);
   process.exit(1);
 }

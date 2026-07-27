@@ -269,7 +269,7 @@ for (const name of names) {
 const matchedCount = byFormat.gen9natdex.length;
 console.log(`\n  Matched: ${matchedCount}/${names.length}`);
 if (unmatched.length > 0) {
-  console.log(`\n  ⚠ UNMATCHED (${unmatched.length}) — add ID_OVERRIDES entries:`);
+  console.log(`\n  UNMATCHED (${unmatched.length}) — add ID_OVERRIDES entries:`);
   for (const u of unmatched) {
     console.log(`    "${u.name}" → tried ID "${u.id}"`);
   }
@@ -380,6 +380,6 @@ for (const format of FORMATS) {
 }
 
 if (unmatched.length > 0) {
-  console.error(`\n✖ ${unmatched.length} Pokemon had no learnset match — see list above.`);
+  console.error(`\n${unmatched.length} Pokemon had no learnset match — see list above.`);
   process.exit(1);
 }

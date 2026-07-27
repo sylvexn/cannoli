@@ -64,9 +64,9 @@ async function main() {
     process.stdout.write(`  ${Math.min(i + 20, ALL_NAMES.length)}/${ALL_NAMES.length}\r`);
   }
   const fails = results.filter(r => !r.ok);
-  console.log(`\n\n✓ ${results.length - fails.length} OK`);
+  console.log(`\n\n${results.length - fails.length} OK`);
   if (fails.length) {
-    console.log(`✗ ${fails.length} MISSING:\n`);
+    console.log(`${fails.length} MISSING:\n`);
     for (const f of fails) console.log(`  ${f.name.padEnd(28)} → ${f.id}`);
   } else {
     console.log('All sprites valid!');

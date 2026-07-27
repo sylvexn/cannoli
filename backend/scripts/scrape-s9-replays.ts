@@ -344,6 +344,6 @@ for (const league of LEAGUES) {
 }
 
 console.log(
-  `\n✓ Done. Saved ${totals.saved}, skipped ${totals.skipped}, errors ${totals.errors}, missing-embed ${totals.missingEmbed}`,
+  `\nDone. Saved ${totals.saved}, skipped ${totals.skipped}, errors ${totals.errors}, missing-embed ${totals.missingEmbed}`,
 );
 console.log(`  Cache: ${OUT_DIR}`);

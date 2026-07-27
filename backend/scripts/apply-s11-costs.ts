@@ -56,7 +56,7 @@ const known = new Set<string>(
 );
 const missing = [...byName.keys(), ...banned].filter((n) => !known.has(n));
 if (missing.length) {
-  console.warn(`\n⚠  ${missing.length} sheet name(s) absent from the pokemon table (skipped):`);
+  console.warn(`\nwarning: ${missing.length} sheet name(s) absent from the pokemon table (skipped):`);
   console.warn(`   ${missing.join(', ')}`);
 }
 
@@ -110,7 +110,7 @@ const dbTeraBanned = (db.prepare('SELECT COUNT(*) c FROM pokemon WHERE tera_bann
 console.log(`\nReference table now: ${dbBanned} banned, ${dbTeraBanned} tera-banned`);
 if (dbBanned !== banned.length) {
   console.warn(
-    `⚠  DB banned count (${dbBanned}) ≠ sheet (${banned.length}). Likely stale bans on species ` +
+    `warning: DB banned count (${dbBanned}) ≠ sheet (${banned.length}). Likely stale bans on species ` +
       `not present in Costs.xlsx — inspect: SELECT name FROM pokemon WHERE banned=1.`,
   );
 }

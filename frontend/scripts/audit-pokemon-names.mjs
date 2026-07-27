@@ -76,7 +76,7 @@ const dbByKey = new Map();
 for (const name of dbNames) {
   const key = normalizePokemonKey(name);
   if (dbByKey.has(key)) {
-    console.error(`✖ DB normalized-key collision: "${dbByKey.get(key)}" vs "${name}"`);
+    console.error(`DB normalized-key collision: "${dbByKey.get(key)}" vs "${name}"`);
     process.exit(1);
   }
   dbByKey.set(key, name);
@@ -142,7 +142,7 @@ if (absent.length > 0) {
   for (const s of absent) console.log(`  ${s.name}`);
 }
 if (gaps.length > 0) {
-  console.log(`\n✖ RESOLVER GAPS (${gaps.length}) — base species IS in the pool:`);
+  console.log(`\nRESOLVER GAPS (${gaps.length}) — base species IS in the pool:`);
   for (const s of gaps) {
     console.log(`  ${s.name} (base: ${s.baseSpecies}) — candidates: ${showdownNameCandidates(s.name).join(' | ')}`);
   }
@@ -150,10 +150,10 @@ if (gaps.length > 0) {
 
 const unreachable = dbNames.filter(n => !reachable.has(n));
 if (unreachable.length > 0) {
-  console.log(`\n✖ UNREACHABLE DB ROWS (${unreachable.length}) — no Showdown species lands here:`);
+  console.log(`\nUNREACHABLE DB ROWS (${unreachable.length}) — no Showdown species lands here:`);
   for (const n of unreachable) console.log(`  ${n}`);
 } else {
-  console.log(`\nUnreachable DB rows: 0/${dbNames.length} ✓`);
+  console.log(`\nUnreachable DB rows: 0/${dbNames.length}`);
 }
 
 if (gaps.length > 0 || unreachable.length > 0) process.exit(1);

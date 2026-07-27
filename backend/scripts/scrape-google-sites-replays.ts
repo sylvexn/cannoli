@@ -375,7 +375,7 @@ async function main() {
     }
   });
 
-  console.log(`\n✓ Done. Saved ${saved}, skipped ${skipped}, errors ${errors}`);
+  console.log(`\nDone. Saved ${saved}, skipped ${skipped}, errors ${errors}`);
   console.log(`  Cache: ${OUT_ROOT}`);
   if (failed.length > 0) {
     console.error(`\n${failed.length} URL(s) failed; re-run after fixing the source pages or rerun with --force:`);

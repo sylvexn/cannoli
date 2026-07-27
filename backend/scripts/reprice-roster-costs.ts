@@ -82,7 +82,7 @@ const run = db.transaction(() => {
   for (const lg of leagues) {
     const costs = fmtCostMap(lg.costFormat);
     if (costs.size === 0) {
-      console.warn(`  ⚠  ${lg.id}: format_costs[${lg.costFormat}] is empty — run apply-cost-formats.ts first. Skipping.`);
+      console.warn(`  warning: ${lg.id}: format_costs[${lg.costFormat}] is empty — run apply-cost-formats.ts first. Skipping.`);
       continue;
     }
 
@@ -141,14 +141,14 @@ if (sampleChanges.length) {
   for (const s of sampleChanges) console.log(`    ${s}`);
 }
 if (bannedFlags.length) {
-  console.log(`\n  ⚠  ${bannedFlags.length} flagged (banned/unknown in format — NOT changed):`);
+  console.log(`\n  warning: ${bannedFlags.length} flagged (banned/unknown in format — NOT changed):`);
   for (const f of bannedFlags) console.log(`    ${f}`);
 }
 if (overCapFlags.length) {
-  console.log(`\n  ⚠  ${overCapFlags.length} team(s) over cap at the new prices:`);
+  console.log(`\n  warning: ${overCapFlags.length} team(s) over cap at the new prices:`);
   for (const f of overCapFlags) console.log(`    ${f}`);
 } else {
-  console.log(`\n  ✓ all teams within cap at the new prices`);
+  console.log(`\n  ok: all teams within cap at the new prices`);
 }
 
 console.log(`\n=== ${DRY ? 'Would reprice' : 'Repriced'}: ${totalRosterChanged} roster rows, ${totalPickChanged} draft picks across ${leagues.length} league(s) ===`);

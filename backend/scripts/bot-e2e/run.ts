@@ -36,7 +36,7 @@ const { PSClient } = await import('./ps-client');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let FAILS = 0;
 function check(cond: boolean, msg: string) {
-  console.log(`${cond ? '  ✓' : '  ✗ FAIL'} ${msg}`);
+  console.log(`${cond ? '  PASS' : '  FAIL'} ${msg}`);
   if (!cond) FAILS++;
 }
 async function until<T>(fn: () => T | null | undefined, ms: number, every = 500): Promise<T | null> {
