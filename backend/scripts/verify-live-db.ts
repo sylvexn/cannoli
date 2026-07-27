@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 /**
  * verify-live-db.ts — assert a built live DB artifact matches the launch
- * runbook's "verify the artifact" step (deploy/README.md, "Live data
- * migration", step 2).
+ * runbook's "verify the artifact" step (live data migration, step 2).
  *
  * USAGE
  *   bun run scripts/verify-live-db.ts [DB_PATH]

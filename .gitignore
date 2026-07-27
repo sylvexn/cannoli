@@ -1,6 +1,6 @@
-# Project docs (local only)
+# Project docs (local only) — only the top-level README is tracked
 *.md
-!README.md
+!/README.md
 plan/
 
 # Dependencies

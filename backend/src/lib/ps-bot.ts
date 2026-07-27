@@ -46,7 +46,7 @@ const PS_PUBLIC_HOST =
  * against the backend cwd at boot). Used for the disk-replay fallback when a
  * match completes while the bot is offline. Default points at the in-repo
  * Showdown checkout for dev convenience; production should set PS_LOGS_DIR
- * to wherever the PS server volume is mounted (see deploy/README.md).
+ * to wherever the PS server volume is mounted.
  */
 const PS_LOGS_DIR = resolve(
   process.env.PS_LOGS_DIR || './showdown/server/logs',

@@ -4,8 +4,8 @@
  * Unlike `seed.ts` (which builds a whole DB and whose S11 path intentionally
  * omits S10), this script imports ONLY S11 *on top of* a DB that already holds
  * the S9 + S10 archives — i.e. the live database. It is the "launch day" step
- * referenced in deploy/README.md ("S11 is NOT created — it launches separately
- * on launch day").
+ * of the deploy runbook: S11 is NOT created by the seed, it launches
+ * separately on launch day.
  *
  * What it does:
  *   1. Import S11 from backend/imports/Cannoli {Sapphire,Ruby,Emerald} Season 11.xlsx

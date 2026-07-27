@@ -5,9 +5,9 @@ import * as schema from './schema';
 import { mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 
-// Honor CANNOLI_DB_PATH (documented in deploy/README.md + read by the boot
-// guard in src/index.ts) so per-worktree/test DBs can be pointed at a
-// different file; fall back to the canonical data/cannoli.db otherwise.
+// Honor CANNOLI_DB_PATH (also read by the boot guard in src/index.ts) so
+// per-worktree/test DBs can be pointed at a different file; fall back to the
+// canonical data/cannoli.db otherwise.
 const DB_PATH = process.env.CANNOLI_DB_PATH
   ? resolve(process.env.CANNOLI_DB_PATH)
   : resolve(import.meta.dir, '../../data/cannoli.db');
