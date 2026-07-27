@@ -39,8 +39,8 @@ jobs:
       # The backend suite shares ONE on-disk SQLite file across bun test's
       # per-file workers, so a few suites flake on CI timing — ps-bot-seed vs
       # live-DB tests, disk-replay date ordering, draft fixtures — each passing
-      # in isolation and locally. Real fix is per-suite tmp DBs (plan/todo.md);
-      # until then, retry so a known flake doesn't gate the deploy. A genuine
+      # in isolation and locally. Real fix is per-suite tmp DBs; until then,
+      # retry so a known flake doesn't gate the deploy. A genuine
       # regression is deterministic and fails all three attempts.
       - name: Backend unit tests
         run: |

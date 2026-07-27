@@ -7,7 +7,7 @@
 #   bash backend/scripts/bot-e2e/run.sh
 #
 # Prereq: scripts/setup-showdown.sh has been run once (clones + builds PS,
-# generates showdown/ps_private.pem, writes .env). See plan/launch-checklist.md §2.
+# generates showdown/ps_private.pem, writes .env).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"

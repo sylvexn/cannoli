@@ -1,7 +1,7 @@
 /* Matchup plugin styles — injected at runtime as a <style> tag by main.tsx.
    Everything is scoped under cannoli-matchup-* / matchup-* class prefixes so
    nothing leaks into (or is clobbered by) the PS client's global styles.
-   Palette + layout mirror plan/reference/matchup-plugin-mockups.html. */
+   Palette + layout mirror the Cannoli app's matchup center. */
 
 .cannoli-matchup-room {
   background: #0b0f16;
