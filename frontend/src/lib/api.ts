@@ -85,7 +85,7 @@ async function patchJson<T>(path: string, body?: unknown): Promise<T> {
   return mutateJson('PATCH', path, body);
 }
 
-// ─── Types (matching backend response shapes) ────────────────────────────────
+// Types (matching backend response shapes)
 
 export interface ApiLeague {
   id: string;
@@ -337,9 +337,9 @@ export interface ApiDraftState {
   teraCaptainSlots?: number;
 }
 
-// ─── API functions ───────────────────────────────────────────────────────────
+// API functions
 
-// ─── Auth response types ────────────────────────────────────────────────────
+// Auth response types
 
 export interface ApiAuthUser {
   id: string;
@@ -470,7 +470,7 @@ export interface ApiBotStatus {
   health: 'green' | 'yellow' | 'red';
 }
 
-// ─── PS recorded battles (autosaved replays) ────────────────────────────────
+// PS recorded battles (autosaved replays)
 
 export type PsReplayLinkStatus = 'attached' | 'recoverable' | 'unlinked';
 
@@ -493,7 +493,7 @@ export interface PsReplayDetail extends PsReplayRow {
   pokemon: { species: string; player: 'p1' | 'p2'; kills: number; deaths: number; teraUsed: boolean; teraType: string | null }[];
 }
 
-// ─── Admin types ────────────────────────────────────────────────────────────
+// Admin types
 
 export interface ApiActivityEvent {
   id: string;
@@ -540,7 +540,7 @@ export interface ApiRequestLogResponse {
   };
 }
 
-// ─── Observability dashboard (dev-only) ───────────────────────────────────────
+// Observability dashboard (dev-only)
 
 export type ErrorGroupStatus = 'open' | 'resolved' | 'muted';
 
@@ -600,7 +600,7 @@ export interface ApiObservabilityHealth {
   version: string;
 }
 
-// ─── Usage analytics (dev-only dashboard) ─────────────────────────────────────
+// Usage analytics (dev-only dashboard)
 
 export interface ApiAnalyticsSummary {
   tiles: {
@@ -668,10 +668,12 @@ export interface ApiTrade {
   resolvedAt: string | null;
   resolvedBy: string | null;
   rejectReason: string | null;
-  /** League week the trade was applied against (set on admin approval; null
-   *  until then). Chosen by the approving admin, defaulting to the league's
-   *  current week — the swap itself always applies immediately. */
+  /** League week the trade takes effect in (set on admin approval; null until
+   *  then). Defaults to the week AFTER the league's current week. */
   effectiveWeek: number | null;
+  /** When the roster swap actually ran. Null on an `accepted` trade means it is
+   *  SCHEDULED — approved, but rosters are untouched until effectiveWeek. */
+  appliedAt: string | null;
 }
 
 export interface ApiTradeBlockListing {
@@ -698,11 +700,12 @@ export interface ApiFaRequest {
   resolvedBy: string | null;
   resolvedAt: string | null;
   rejectReason: string | null;
-  /** League week the request was applied against (set on admin approval;
-   *  null until then). Chosen by the approving admin, defaulting to the
-   *  league's current week — the pickup/change itself always applies
-   *  immediately. */
+  /** League week the request takes effect in (set on admin approval; null until
+   *  then). Defaults to the week AFTER the league's current week. */
   effectiveWeek: number | null;
+  /** When the pickup/change actually ran. Null on an `approved` request means it
+   *  is SCHEDULED — rosters are untouched until effectiveWeek. */
+  appliedAt: string | null;
 }
 
 export interface ApiTierListEntry {
@@ -735,7 +738,7 @@ export interface ApiDraftTemplate {
   createdBy: number | null;
 }
 
-// ─── Speed Tiers ─────────────────────────────────────────────────────────
+// Speed Tiers
 
 /**
  * One ownership entry per (league, team) the Pokemon is rostered on. Rendered
@@ -834,7 +837,7 @@ export interface ApiPokemonRecentBattle {
   teraType: string | null;
 }
 
-// ─── Pins ────────────────────────────────────────────────────────────────
+// Pins
 
 export type PinCategory = 'career' | 'season' | 'week' | 'draft' | 'community' | 'custom';
 
@@ -884,7 +887,7 @@ export interface ApiChangelogEntry {
   body?: string;
 }
 
-// ─── Feedback (DB-backed, all 4 categories) ──────────────────────────────────
+// Feedback (DB-backed, all 4 categories)
 export type FeedbackCategory = 'bug' | 'feature' | 'league' | 'general';
 
 /** A feedback row as returned by the admin triage endpoint (joined to users). */
@@ -907,7 +910,7 @@ export interface ApiFeedbackItem {
   createdAt: string;
 }
 
-// ─── Notifications (unified pane: changelog + feedback + announcement + match) ─
+// Notifications (unified pane: changelog + feedback + announcement + match)
 export type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
 
 export interface NotificationItem {
@@ -1053,7 +1056,7 @@ export const api = {
   },
   clearRequestLogs: () => postJson<{ cleared: number }>('/api/admin/request-logs/clear'),
 
-  // ── Observability dashboard (dev-only) ──
+  // Observability dashboard (dev-only)
   getErrorGroups: (params?: { status?: string; kind?: string; search?: string; limit?: number; offset?: number }) => {
     const q = new URLSearchParams();
     if (params?.status && params.status !== 'all') q.set('status', params.status);
@@ -1081,7 +1084,7 @@ export const api = {
   clearDemoErrors: () =>
     postJson<{ success: boolean; cleared: number }>('/api/admin/observability/seed-demo/clear'),
 
-  // ── Usage analytics (dev-only "Usage" tab) ──
+  // Usage analytics (dev-only "Usage" tab)
   getAnalyticsSummary: (days = 30) =>
     fetchJson<ApiAnalyticsSummary>(`/api/admin/analytics/summary?days=${days}`),
   getAnalyticsCoaches: (days = 7) =>
@@ -1107,7 +1110,7 @@ export const api = {
 
   getCostFormats: () => fetchJson<ApiCostFormat[]>('/api/cost-formats'),
 
-  // ─── Draft Templates ─────────────────────────────────────────────
+  // Draft Templates
   // A template snapshots format + tier list + bans + captain config so a new
   // season can spin up a known-good preset. The wizard "Start from template"
   // step seeds initial state from one of these.
@@ -1265,8 +1268,10 @@ export const api = {
   generateSchedule: (leagueId: string, opts?: { force?: boolean; confirmName?: string }) =>
     postJson<{ success: boolean; matchCount: number }>(`/api/leagues/${leagueId}/schedule/generate`, opts ?? {}),
 
+  /** `scheduled: true` = approved for a future week; rosters are untouched
+   *  until the league reaches `effectiveWeek`. */
   approveTrade: (tradeId: string, effectiveWeek?: number) =>
-    postJson<{ success: boolean }>(`/api/trades/${tradeId}/approve`, { effectiveWeek }),
+    postJson<{ success: boolean; effectiveWeek: number; scheduled: boolean }>(`/api/trades/${tradeId}/approve`, { effectiveWeek }),
 
   rejectTrade: (tradeId: string, reason?: string) =>
     postJson<{ success: boolean }>(`/api/trades/${tradeId}/reject`, { reason }),
@@ -1631,7 +1636,7 @@ export const api = {
   markChangelogSeen: () =>
     postJson<{ success: boolean; seenAt: string }>('/api/changelog/seen'),
 
-  // ─── Unified notifications pane ──────────────────────────────────────────
+  // Unified notifications pane
   getNotifications: () => fetchJson<NotificationsResponse>('/api/notifications'),
 
   /** Mark everything seen on pane open (changelog + announcements + all directed rows). */
@@ -1641,7 +1646,7 @@ export const api = {
   markNotificationsRead: (ids: string[]) =>
     postJson<{ success: boolean }>('/api/notifications/read', { ids }),
 
-  // ─── Admin announcement composer ─────────────────────────────────────────
+  // Admin announcement composer
   listAnnouncements: () => fetchJson<ApiAnnouncement[]>('/api/admin/announcements'),
 
   createAnnouncement: (a: {
@@ -1757,11 +1762,13 @@ export const api = {
       data,
     ),
 
-  // ── FA approval queue (feedback #42) ──
+  // FA approval queue (feedback #42)
   getFaRequests: (leagueId: string) =>
     fetchJson<ApiFaRequest[]>(`/api/leagues/${leagueId}/fa-requests`),
+  /** `scheduled: true` = approved for a future week; the roster is untouched
+   *  until the league reaches `effectiveWeek`. */
   approveFaRequest: (id: number, effectiveWeek?: number) =>
-    postJson<{ success: boolean }>(`/api/fa-requests/${id}/approve`, { effectiveWeek }),
+    postJson<{ success: boolean; effectiveWeek: number; scheduled: boolean }>(`/api/fa-requests/${id}/approve`, { effectiveWeek }),
   rejectFaRequest: (id: number, reason?: string) =>
     postJson<{ success: boolean }>(`/api/fa-requests/${id}/reject`, { reason }),
 
@@ -1807,7 +1814,7 @@ export const api = {
     );
   },
 
-  // ─── Pins / achievements ──────────────────────────────────────────────
+  // Pins / achievements
   getUserPins: (username: string) =>
     fetchJson<ApiPin[]>(`/api/users/${encodeURIComponent(username)}/pins`),
 
@@ -1869,7 +1876,7 @@ export const api = {
   updatePinRecipient: (id: number, data: { userId?: number; metadata?: Record<string, unknown> }) =>
     mutateJson<{ success: boolean }>('PATCH', `/api/admin/pins/${id}`, data),
 
-  // ─── Season Simulator (mock-mode only) ──────────────────────────────────
+  // Season Simulator (mock-mode only)
   // Drives the mock.cannoli.live interactive season simulator. Every endpoint
   // is mock-gated server-side — calls 403 on a live backend.
   getSimState: () => fetchJson<ApiSimState>('/api/admin/sim/state'),
@@ -1921,7 +1928,7 @@ export const api = {
   simResetMatch: (matchId: string) =>
     postJson<{ ok: boolean; matchId: string }>(`/api/admin/sim/reset-match/${matchId}`),
 
-  // ─── Rules content (per-league) ──────────────────────────────────────
+  // Rules content (per-league)
   getLeagueRules: (leagueId: string) =>
     fetchJson<LeagueRulesResponse>(`/api/leagues/${leagueId}/rules`),
   saveLeagueRules: (leagueId: string, content: RulesContent) =>
@@ -1930,7 +1937,7 @@ export const api = {
     deleteJson<{ success: boolean }>(`/api/leagues/${leagueId}/rules`),
 };
 
-// ─── Simulator types ─────────────────────────────────────────────────────────
+// Simulator types
 
 export interface ApiSimSeason {
   id: number;

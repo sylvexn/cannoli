@@ -10,11 +10,12 @@ import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
 import { scheduleDeadline } from '../../lib/deadline';
+import { applyDueTransactions } from '../../lib/scheduled-transactions';
 
 export const leagueAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── Leagues CRUD ───────────────────────────────────────────────────
+  // Leagues CRUD
 
   .post('/api/leagues', ({ body, user, set }) => {
     const { name, color } = body as { name: string; color: string };
@@ -258,7 +259,7 @@ export const leagueAdminRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Season Management ──────────────────────────────────────────────
+  // Season Management
 
   .post('/api/leagues/:leagueId/phase', ({ params, query, body, user, set }) => {
     const { phase, override, confirm } = body as { phase: string; override?: boolean; confirm?: string };
@@ -276,7 +277,7 @@ export const leagueAdminRoutes = new Elysia()
     // the others in the same season along with it.
     const previousPhase = league.phase;
 
-    // ─── Monotonic guard ─────────────────────────────────────────────────
+    // Monotonic guard
     // Forward transitions (predraft → draft → regular → playoffs → offseason)
     // are one-click. Backward transitions are destructive (e.g. playoffs → regular
     // re-opens trade/FA gates, demotes brackets to draft state, etc.) so they
@@ -298,7 +299,7 @@ export const leagueAdminRoutes = new Elysia()
       }
     }
 
-    // ─── Phase transition preconditions ────────────────────────────────
+    // Phase transition preconditions
     const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all();
     const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
 
@@ -416,10 +417,12 @@ export const leagueAdminRoutes = new Elysia()
         metadata: JSON.stringify({ from: league.currentWeek, to: newWeek }),
       }).run();
     });
-    return { success: true, week: newWeek };
+    // Apply anything that was scheduled for the week we just entered.
+    const applied = applyDueTransactions(params.leagueId);
+    return { success: true, week: newWeek, scheduledApplied: applied };
   })
 
-  // ─── Results Reveal Gate ────────────────────────────────────────────
+  // Results Reveal Gate
   //
   // Admin-controlled per-league gate that hides completed results (and freezes
   // standings/records) for weeks beyond `revealedThrough` for EVERYONE.

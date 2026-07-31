@@ -155,6 +155,8 @@ function HistoryRow({
 }) {
   const fa = isFreeAgentTrade(trade);
   const accepted = trade.status === 'accepted';
+  // Approved for a future week: agreed, but rosters don't change until then.
+  const scheduled = accepted && !trade.appliedAt && trade.effectiveWeek != null;
   const proposer = playerMap.get(trade.proposer) ?? null;
   const recipient = fa ? null : playerMap.get(trade.recipient) ?? null;
 
@@ -163,7 +165,11 @@ function HistoryRow({
       {/* Status glyph */}
       <span
         className="shrink-0 inline-flex"
-        title={accepted ? (fa ? 'Free agent pickup' : 'Trade accepted') : 'Rejected'}
+        title={
+          scheduled ? `Takes effect Week ${trade.effectiveWeek} — rosters unchanged until then`
+            : accepted ? (fa ? 'Free agent pickup' : 'Trade accepted')
+            : 'Rejected'
+        }
       >
         {accepted ? (
           fa ? (
@@ -217,10 +223,12 @@ function HistoryRow({
         variant="outline"
         className={cn(
           'text-[11px] px-1.5 py-0 shrink-0',
-          accepted ? 'text-win border-win/30 bg-win/10' : 'text-loss border-loss/30 bg-loss/10',
+          scheduled ? 'text-draw border-draw/30 bg-draw/10'
+            : accepted ? 'text-win border-win/30 bg-win/10'
+            : 'text-loss border-loss/30 bg-loss/10',
         )}
       >
-        {accepted ? (fa ? 'FA' : 'Trade') : 'Rej'}
+        {scheduled ? `W${trade.effectiveWeek}` : accepted ? (fa ? 'FA' : 'Trade') : 'Rej'}
       </Badge>
     </div>
   );

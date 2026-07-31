@@ -11,6 +11,7 @@ import { runAdvanceWeek } from './jobs/advance-week';
 import { runExpireTrades } from './jobs/expire-trades';
 import { runStaleInProgressSweep } from './jobs/stale-in-progress';
 import { runUsageRollup } from './usage';
+import { applyDueTransactions } from './scheduled-transactions';
 
 interface JobDef {
   name: string;
@@ -23,6 +24,9 @@ const JOBS: JobDef[] = [
   { name: 'auto-forfeit', intervalMs: 10 * 60 * 1000, fn: runAutoForfeit },
   { name: 'stale-in-progress', intervalMs: 10 * 60 * 1000, fn: runStaleInProgressSweep },
   { name: 'advance-week', intervalMs: 60 * 60 * 1000, fn: runAdvanceWeek },
+  // Runs after advance-week so a week that just opened picks up its scheduled
+  // trades/FA moves in the same tick. Idempotent — no-ops when nothing is due.
+  { name: 'apply-scheduled', intervalMs: 60 * 60 * 1000, fn: () => { applyDueTransactions(); } },
   { name: 'expire-trades', intervalMs: 60 * 60 * 1000, fn: runExpireTrades },
   { name: 'usage-rollup', intervalMs: 60 * 60 * 1000, fn: runUsageRollup },
 ];

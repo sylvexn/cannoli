@@ -12,6 +12,7 @@ import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
 import { scheduleDeadline } from '../deadline';
+import { applyDueTransactions } from '../scheduled-transactions';
 
 export function runAdvanceWeek() {
   const leagues = db.select().from(schema.leagues)
@@ -63,6 +64,9 @@ export function runAdvanceWeek() {
         metadata: JSON.stringify({ leagueId: league.id, from: league.currentWeek, to: nextWeek }),
       }).run();
     });
+
+    // The new week is now current — run any trades/FA moves scheduled for it.
+    applyDueTransactions(league.id);
 
     console.log(`[advance-week] league ${league.id}: ${league.currentWeek} → ${nextWeek}`);
   }

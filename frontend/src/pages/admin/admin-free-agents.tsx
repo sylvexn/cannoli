@@ -65,12 +65,13 @@ export function AdminFreeAgents() {
   const pendingReqs = useMemo(() => faReqs.filter(r => r.status === 'pending'), [faReqs]);
   const teamName = (id: string) => teams.find(t => t.id === id)?.teamAbbrev ?? id;
 
-  // Effective-week picker per pending request (defaults to the selected
-  // league's current week). Lazily keyed so untouched rows always reflect
-  // the current default rather than a stale snapshot.
-  const leagueCurrentWeek = leagues.find(l => l.id === selectedLeague)?.season?.currentWeek ?? 1;
+  // Effective-week picker per pending request. Defaults to the week AFTER the
+  // selected league's current week, so approving mid-week never changes the
+  // roster a team is already playing with. Lazily keyed so untouched rows always
+  // reflect the current default rather than a stale snapshot.
+  const leagueCurrentWeek = leagues.find(l => l.id === selectedLeague)?.season?.currentWeek ?? 0;
   const [effWeekOverrides, setEffWeekOverrides] = useState<Record<number, number>>({});
-  const effWeekFor = (id: number) => effWeekOverrides[id] ?? leagueCurrentWeek;
+  const effWeekFor = (id: number) => effWeekOverrides[id] ?? leagueCurrentWeek + 1;
 
   async function refreshAfterResolve() {
     fetchFaReqs(selectedLeague);
@@ -83,8 +84,10 @@ export function AdminFreeAgents() {
 
   async function approveReq(id: number, effectiveWeek: number) {
     try {
-      await api.approveFaRequest(id, effectiveWeek);
-      toast.success('FA request approved');
+      const res = await api.approveFaRequest(id, effectiveWeek);
+      toast.success(res.scheduled
+        ? `FA request approved — takes effect Week ${effectiveWeek}`
+        : 'FA request approved');
       await refreshAfterResolve();
     } catch (e: unknown) {
       toast.error(getErrorMessage(e, 'Approve failed'));

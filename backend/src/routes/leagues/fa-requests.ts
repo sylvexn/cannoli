@@ -14,6 +14,7 @@ import { isStaff } from '../../lib/auth';
 import { applyFaPickup, applyTeraCaptains, type TeraCaptainInput } from '../../lib/free-agency';
 import { refreshUserMap } from '../../lib/ps-bot';
 import { notifyUser } from '../../lib/notifications/notify';
+import { resolveEffectiveWeek } from '../../lib/scheduled-transactions';
 
 interface FaRequestRow {
   id: number;
@@ -31,6 +32,7 @@ interface FaRequestRow {
   resolvedAt: string | null;
   rejectReason: string | null;
   effectiveWeek: number | null;
+  appliedAt: string | null;
 }
 
 const parseList = (json: string): string[] => {
@@ -58,6 +60,7 @@ const shape = (r: FaRequestRow) => ({
   resolvedAt: r.resolvedAt,
   rejectReason: r.rejectReason,
   effectiveWeek: r.effectiveWeek,
+  appliedAt: r.appliedAt,
 });
 
 /** Notify the requesting team's owner that their FA was approved/rejected. */
@@ -76,7 +79,7 @@ function notifyRequester(teamId: string, leagueId: string, msg: { title: string;
 
 export const faRequestRoutes = new Elysia()
 
-  // ─── List FA requests for a league ───────────────────────────────────────
+  // List FA requests for a league
   // Auth'd league members can read the queue (transparency); the admin UI
   // filters to pending, the user's FA page to their own team.
   .get('/api/leagues/:leagueId/fa-requests', ({ params, user, set }) => {
@@ -88,7 +91,7 @@ export const faRequestRoutes = new Elysia()
     return rows.map(shape);
   })
 
-  // ─── Approve a pending request → apply it ────────────────────────────────
+  // Approve a pending request → apply it
   .post('/api/fa-requests/:id/approve', ({ params, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     if (!isStaff(user)) { set.status = 403; return { error: 'Staff only' }; }
@@ -98,26 +101,39 @@ export const faRequestRoutes = new Elysia()
     if (!req) { set.status = 404; return { error: 'FA request not found' }; }
     if (req.status !== 'pending') { set.status = 409; return { error: `Request already ${req.status}`, code: 'fa_request_resolved' }; }
 
-    // Admin may choose which league week this request counts for (default =
-    // current week). It still applies immediately — this only labels which
-    // week the ledger (transactions/rosters) records it under.
+    // Which league week this request takes effect in. Default = NEXT week, so
+    // approving mid-week never changes the roster a team is already playing
+    // with. Clamped to [currentWeek, totalWeeks] — the UI enforces this, but a
+    // direct API caller could otherwise stamp a negative / fractional / past week.
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, req.leagueId)).get();
     const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
-    // Clamp to a real integer league week in [1, totalWeeks] — the UI enforces
-    // this, but a direct API caller could otherwise stamp the ledger with a
-    // negative / fractional / out-of-range week.
     const { effectiveWeek: bodyEffectiveWeek } = (body || {}) as { effectiveWeek?: number };
-    const defaultWeek = league?.currentWeek ?? req.week;
-    const maxWeek = season?.totalWeeks ?? 30;
-    const effectiveWeek = (typeof bodyEffectiveWeek === 'number' && Number.isFinite(bodyEffectiveWeek))
-      ? Math.min(Math.max(1, Math.trunc(bodyEffectiveWeek)), maxWeek)
-      : defaultWeek;
+    const effectiveWeek = resolveEffectiveWeek({
+      requested: bodyEffectiveWeek, league, fallbackWeek: req.week,
+    });
+    // A future effective week means this is SCHEDULED — approved now, applied by
+    // applyDueTransactions() once the league reaches that week. Pickups are
+    // still dry-run validated up front so the admin gets an immediate answer;
+    // tera changes are validated when they actually apply.
+    const deferred = (league?.currentWeek ?? 0) < effectiveWeek;
+    const stamp = new Date().toISOString();
 
-    // ── Tera-change request (feedback #51) ──
+    // Tera-change request (feedback #51)
     // Re-validate + apply via the shared tera applier. A request that became
     // illegal since submission (tier-list edit, cap change) fails cleanly and is
     // left pending so the admin can reject/retry.
     if (req.requestType === 'tera_change') {
+      if (deferred) {
+        db.update(schema.faRequests).set({
+          status: 'approved', resolvedBy: user.username, resolvedAt: stamp, effectiveWeek, appliedAt: null,
+        }).where(eq(schema.faRequests.id, id)).run();
+        notifyRequester(req.teamId, req.leagueId, {
+          title: 'Tera change approved — scheduled',
+          body: `Your tera captain change was approved and takes effect at the start of Week ${effectiveWeek}.`,
+        });
+        return { success: true, effectiveWeek, scheduled: true };
+      }
+
       const captains = parseTera(req.teraChanges);
       const teraResult = applyTeraCaptains(req.teamId, captains, req.requestedBy ?? user.username, effectiveWeek);
       if (!teraResult.ok) {
@@ -128,8 +144,9 @@ export const faRequestRoutes = new Elysia()
       db.update(schema.faRequests).set({
         status: 'approved',
         resolvedBy: user.username,
-        resolvedAt: new Date().toISOString(),
+        resolvedAt: stamp,
         effectiveWeek,
+        appliedAt: stamp,
       }).where(eq(schema.faRequests.id, id)).run();
 
       try { refreshUserMap(); } catch { /* best-effort */ }
@@ -143,13 +160,16 @@ export const faRequestRoutes = new Elysia()
       return { success: true };
     }
 
+    // Deferred approvals dry-run so the admin still learns immediately if the
+    // pickup is illegal; the real mutation happens in the sweep. It is
+    // re-validated then too, since rosters can shift before the week arrives.
     const result = applyFaPickup({
       leagueId: req.leagueId,
       teamId: req.teamId,
       pickupNames: parseList(req.pickups),
       dropNames: parseList(req.drops),
       actorUsername: req.requestedBy ?? user.username,
-      dryRun: false,
+      dryRun: deferred,
       effectiveWeek,
     });
     if (!result.ok) {
@@ -161,22 +181,26 @@ export const faRequestRoutes = new Elysia()
     db.update(schema.faRequests).set({
       status: 'approved',
       resolvedBy: user.username,
-      resolvedAt: new Date().toISOString(),
+      resolvedAt: stamp,
       effectiveWeek,
+      appliedAt: deferred ? null : stamp,
     }).where(eq(schema.faRequests.id, id)).run();
 
     try { refreshUserMap(); } catch { /* best-effort */ }
 
     const picks = parseList(req.pickups).join(', ');
-    notifyRequester(req.teamId, req.leagueId, {
+    notifyRequester(req.teamId, req.leagueId, deferred ? {
+      title: 'Free agent pickup approved — scheduled',
+      body: `Your pickup of ${picks} was approved and takes effect at the start of Week ${effectiveWeek}. Your roster is unchanged until then.`,
+    } : {
       title: 'Free agent pickup approved',
       body: `Your pickup of ${picks} was approved.`,
     });
 
-    return { success: true, ...result };
+    return { success: true, effectiveWeek, scheduled: deferred, ...result };
   })
 
-  // ─── Reject a pending request ────────────────────────────────────────────
+  // Reject a pending request
   .post('/api/fa-requests/:id/reject', ({ params, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     if (!isStaff(user)) { set.status = 403; return { error: 'Staff only' }; }

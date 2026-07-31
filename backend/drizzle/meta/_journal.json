@@ -477,6 +477,13 @@
       "when": 1783900000000,
       "tag": "0067_fix_empoleon_ability",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "6",
+      "when": 1784000000000,
+      "tag": "0068_scheduled_transactions",
+      "breakpoints": true
     }
   ]
 }

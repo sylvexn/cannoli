@@ -31,10 +31,13 @@ interface AdminTrade {
   status: 'pending' | 'awaiting_admin' | 'accepted' | 'rejected' | 'expired';
   rejectReason?: string | null;
   effectiveWeek?: number | null;
+  appliedAt?: string | null;
 }
 
-function currentWeekFor(leagues: League[], leagueId: string): number {
-  return leagues.find(l => l.id === leagueId)?.season?.currentWeek ?? 1;
+/** Default effective week for an approval: the week AFTER the current one, so
+ *  approving mid-week never changes the roster a team is already playing with. */
+function defaultEffectiveWeek(leagues: League[], leagueId: string): number {
+  return (leagues.find(l => l.id === leagueId)?.season?.currentWeek ?? 0) + 1;
 }
 
 export function AdminTrades() {
@@ -62,6 +65,7 @@ export function AdminTrades() {
           status: t.status,
           rejectReason: t.rejectReason,
           effectiveWeek: t.effectiveWeek,
+          appliedAt: t.appliedAt,
         })))
       )
     ).then(results => {
@@ -75,11 +79,13 @@ export function AdminTrades() {
 
   async function handleApprove(id: string, effectiveWeek: number) {
     try {
-      await api.approveTrade(id, effectiveWeek);
+      const res = await api.approveTrade(id, effectiveWeek);
       setTradeList(prev => prev.map(t =>
-        t.id === id ? { ...t, status: 'accepted' as const, effectiveWeek } : t
+        t.id === id ? { ...t, status: 'accepted' as const, effectiveWeek, appliedAt: res.scheduled ? null : new Date().toISOString() } : t
       ));
-      toast.success('Trade approved');
+      toast.success(res.scheduled
+        ? `Trade approved — takes effect Week ${effectiveWeek}`
+        : 'Trade approved');
     } catch (err: unknown) { toast.error(getErrorMessage(err)); }
   }
 
@@ -127,7 +133,7 @@ export function AdminTrades() {
               <TradeApprovalCard
                 key={trade.id}
                 trade={trade}
-                defaultWeek={currentWeekFor(leagues, trade.leagueId)}
+                defaultWeek={defaultEffectiveWeek(leagues, trade.leagueId)}
                 onApprove={effectiveWeek => handleApprove(trade.id, effectiveWeek)}
                 onReject={() => { setRejectTarget(trade); setRejectReason(''); }}
               />
@@ -208,7 +214,7 @@ function TradeApprovalCard({
             </Badge>
             <span className="text-[10px] text-text-muted">
               {trade.status === 'accepted' && trade.effectiveWeek != null
-                ? `Applied W${trade.effectiveWeek}`
+                ? `${trade.appliedAt ? 'Applied' : 'Scheduled'} W${trade.effectiveWeek}`
                 : `W${trade.week}`}
             </span>
           </div>
@@ -259,7 +265,7 @@ function TradeApprovalCard({
                     rejects it — so we don't offer the button there. */}
                 {trade.status === 'awaiting_admin' && (
                   <>
-                    <div className="flex items-center gap-1" title="League week this trade counts for">
+                    <div className="flex items-center gap-1" title="League week this trade takes effect in — a future week is scheduled, not applied now">
                       <span className="text-[9px] font-mono uppercase tracking-wider text-text-muted">Wk</span>
                       <NumberInput
                         value={effectiveWeek}

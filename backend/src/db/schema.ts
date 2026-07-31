@@ -1,7 +1,7 @@
 import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
-// ─── Users ──────────────────────────────────────────────────────────────────
+// Users
 
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -43,7 +43,7 @@ export const users = sqliteTable('users', {
   psUsername: text('ps_username'),
 });
 
-// ─── Sessions ───────────────────────────────────────────────────────────────
+// Sessions
 
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(), // UUID token
@@ -52,7 +52,7 @@ export const sessions = sqliteTable('sessions', {
   expiresAt: text('expires_at').notNull(),
 });
 
-// ─── Seasons ─────────────────────────────────────────────────────────────────
+// Seasons
 
 export const seasons = sqliteTable('seasons', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -68,7 +68,7 @@ export const seasons = sqliteTable('seasons', {
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
 });
 
-// ─── Leagues ─────────────────────────────────────────────────────────────────
+// Leagues
 
 export const leagues = sqliteTable('leagues', {
   id: text('id').primaryKey(), // 'sapphire', 'ruby', 'emerald'
@@ -139,7 +139,7 @@ export const leagues = sqliteTable('leagues', {
   resultsRevealedThrough: integer('results_revealed_through'),
 });
 
-// ─── Format Costs (per-cost-format Pokemon prices / bans) ───────────────────
+// Format Costs (per-cost-format Pokemon prices / bans)
 //
 // The per-league cost authority. A row overrides the global `pokemon` reference
 // table's tier/banned/teraBanned FOR A GIVEN COST FORMAT. Resolution at read
@@ -160,7 +160,7 @@ export const formatCosts = sqliteTable('format_costs', {
   pk: primaryKey({ columns: [t.costFormat, t.pokemonName] }),
 }));
 
-// ─── Draft Templates (saved {format, captain count, banlist, tier snapshot}) ─
+// Draft Templates (saved {format, captain count, banlist, tier snapshot})
 
 export const draftTemplates = sqliteTable('draft_templates', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -183,7 +183,7 @@ export const draftTemplates = sqliteTable('draft_templates', {
   createdBy: integer('created_by').references(() => users.id),
 });
 
-// ─── Teams ───────────────────────────────────────────────────────────────────
+// Teams
 
 export const teams = sqliteTable('teams', {
   id: text('id').primaryKey(), // abbreviation: 'sas', 'pow', etc.
@@ -233,7 +233,7 @@ export const teams = sqliteTable('teams', {
   leagueIdx: index('teams_league_idx').on(t.leagueId),
 }));
 
-// ─── Pokemon (reference table — full national dex) ──────────────────────────
+// Pokemon (reference table — full national dex)
 
 export const pokemon = sqliteTable('pokemon', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -258,7 +258,7 @@ export const pokemon = sqliteTable('pokemon', {
   formCategory: text('form_category', { enum: ['base', 'mega', 'regional', 'other'] }).notNull().default('base'),
 });
 
-// ─── Rosters (team ↔ pokemon for a season) ──────────────────────────────────
+// Rosters (team ↔ pokemon for a season)
 
 export const rosters = sqliteTable('rosters', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -287,7 +287,7 @@ export const rosters = sqliteTable('rosters', {
   teamPokemonUnique: uniqueIndex('rosters_team_pokemon_unique').on(t.teamId, t.pokemonName),
 }));
 
-// ─── Draft Picks ─────────────────────────────────────────────────────────────
+// Draft Picks
 
 export const draftPicks = sqliteTable('draft_picks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -302,7 +302,7 @@ export const draftPicks = sqliteTable('draft_picks', {
   leaguePicknumUnique: uniqueIndex('draft_picks_league_picknum_unique').on(t.leagueId, t.pickNumber),
 }));
 
-// ─── Matches ─────────────────────────────────────────────────────────────────
+// Matches
 
 export const matches = sqliteTable('matches', {
   id: text('id').primaryKey(), // 'sapphire-w1m1'
@@ -366,7 +366,7 @@ export const matches = sqliteTable('matches', {
   statusIdx: index('matches_status_idx').on(t.status),
 }));
 
-// ─── Bye Weeks (one row per team-week sit-out for odd-team leagues) ─────────
+// Bye Weeks (one row per team-week sit-out for odd-team leagues)
 
 export const byeWeeks = sqliteTable('bye_weeks', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -378,7 +378,7 @@ export const byeWeeks = sqliteTable('bye_weeks', {
   teamIdx: index('bye_weeks_team_idx').on(t.teamId),
 }));
 
-// ─── Match Pokemon (per-match K/D for each Pokemon) ─────────────────────────
+// Match Pokemon (per-match K/D for each Pokemon)
 
 export const matchPokemon = sqliteTable('match_pokemon', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -393,7 +393,7 @@ export const matchPokemon = sqliteTable('match_pokemon', {
   matchIdx: index('match_pokemon_match_idx').on(t.matchId),
 }));
 
-// ─── Move Categories (admin-configurable, for matchup analysis) ─────────────
+// Move Categories (admin-configurable, for matchup analysis)
 
 export const moveCategories = sqliteTable('move_categories', {
   id: text('id').primaryKey(), // 'hazards', 'healing', etc.
@@ -410,7 +410,7 @@ export const moveCategoryEntries = sqliteTable('move_category_entries', {
   isAbility: integer('is_ability', { mode: 'boolean' }).notNull().default(false),
 });
 
-// ─── Transactions (trades + FA pickups + tera changes) ──────────────────────
+// Transactions (trades + FA pickups + tera changes)
 
 export const transactions = sqliteTable('transactions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -432,7 +432,7 @@ export const transactions = sqliteTable('transactions', {
   leagueWeekIdx: index('transactions_league_week_idx').on(t.leagueId, t.week),
 }));
 
-// ─── Trades (proposal lifecycle — separate from completed transactions) ─────
+// Trades (proposal lifecycle — separate from completed transactions)
 
 export const trades = sqliteTable('trades', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -449,14 +449,17 @@ export const trades = sqliteTable('trades', {
   resolvedAt: text('resolved_at'),
   resolvedBy: text('resolved_by'),
   rejectReason: text('reject_reason'),
-  /** League week an approved trade counts for. Set at approve time (default
-   *  league.currentWeek); null until then. The swap still applies immediately
-   *  — this only labels which week the ledger (transactions/rosters) records
-   *  it under. */
+  /** League week an approved trade takes effect. Set at approve time (default
+   *  league.currentWeek + 1); null until then. If it is in the future the swap
+   *  is SCHEDULED, not applied — see `appliedAt`. */
   effectiveWeek: integer('effective_week'),
+  /** ISO timestamp the roster swap actually ran. `status='accepted'` with a
+   *  null appliedAt = approved but scheduled for a later week; the
+   *  apply-scheduled sweep runs it once league.currentWeek >= effectiveWeek. */
+  appliedAt: text('applied_at'),
 });
 
-// ─── Free-Agency Requests (admin approval queue) ────────────────────────────
+// Free-Agency Requests (admin approval queue)
 // Non-staff FA pickups land here as `pending` instead of mutating rosters
 // immediately; an admin approves (applies) or rejects them (feedback #42).
 export const faRequests = sqliteTable('fa_requests', {
@@ -479,16 +482,19 @@ export const faRequests = sqliteTable('fa_requests', {
   resolvedBy: text('resolved_by'),
   resolvedAt: text('resolved_at'),
   rejectReason: text('reject_reason'),
-  /** League week an approved request counts for. Set at approve time (default
-   *  league.currentWeek); null until then. Applies immediately — this only
-   *  labels which week the ledger (transactions/rosters) records it under. */
+  /** League week an approved request takes effect. Set at approve time (default
+   *  league.currentWeek + 1); null until then. If it is in the future the
+   *  pickup/tera change is SCHEDULED, not applied — see `appliedAt`. */
   effectiveWeek: integer('effective_week'),
+  /** ISO timestamp the request actually mutated rosters. `status='approved'`
+   *  with a null appliedAt = approved but scheduled for a later week. */
+  appliedAt: text('applied_at'),
 }, (t) => ({
   faRequestsLeagueWeekIdx: index('fa_requests_league_week_idx').on(t.leagueId, t.week),
   faRequestsStatusIdx: index('fa_requests_status_idx').on(t.status),
 }));
 
-// ─── Trade Block Listings ───────────────────────────────────────────────────
+// Trade Block Listings
 
 export const tradeBlockListings = sqliteTable('trade_block_listings', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -499,7 +505,7 @@ export const tradeBlockListings = sqliteTable('trade_block_listings', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
-// ─── Site Settings (singleton) ──────────────────────────────────────────────
+// Site Settings (singleton)
 
 export const siteSettings = sqliteTable('site_settings', {
   id: integer('id').primaryKey().default(1),
@@ -531,7 +537,7 @@ export const siteSettings = sqliteTable('site_settings', {
   rulesText: text('rules_text'),
 });
 
-// ─── Per-League Rules ───────────────────────────────────────────────────────
+// Per-League Rules
 
 /** Admin-authored, structured rules document for a single league. One row per
  *  league; absence means "use the cost-format default" (see lib/rules-defaults).
@@ -543,7 +549,7 @@ export const leagueRules = sqliteTable('league_rules', {
   updatedBy: text('updated_by'),
 });
 
-// ─── Draft State (tracks active/completed drafts per league) ────────────────
+// Draft State (tracks active/completed drafts per league)
 
 export const draftState = sqliteTable('draft_state', {
   leagueId: text('league_id').primaryKey().references(() => leagues.id),
@@ -560,7 +566,7 @@ export const draftState = sqliteTable('draft_state', {
   timerExpiredForTeam: text('timer_expired_for_team'),
 });
 
-// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+// Draft Queue (per-team auto-pick preference list)
 // A coach can pre-set an ordered list of Pokemon. When their pick timer expires
 // and an auto-pick fires, the engine walks this queue top-down and picks the
 // first still-eligible/affordable entry, falling back to highest-affordable
@@ -574,7 +580,7 @@ export const draftQueue = sqliteTable('draft_queue', {
   pokemonName: text('pokemon_name').notNull(),
 });
 
-// ─── Activity Log ───────────────────────────────────────────────────────────
+// Activity Log
 
 export const activityLog = sqliteTable('activity_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -590,7 +596,7 @@ export const activityLog = sqliteTable('activity_log', {
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
 });
 
-// ─── Match Ready Log (audit trail for ready-up events) ─────────────────
+// Match Ready Log (audit trail for ready-up events)
 
 export const matchReadyLog = sqliteTable('match_ready_log', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -600,7 +606,7 @@ export const matchReadyLog = sqliteTable('match_ready_log', {
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
 });
 
-// ─── Scrims (unofficial practice matches — tracked but not in standings) ───
+// Scrims (unofficial practice matches — tracked but not in standings)
 
 export const scrims = sqliteTable('scrims', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -615,7 +621,7 @@ export const scrims = sqliteTable('scrims', {
   playedAt: text('played_at').default(sql`(datetime('now'))`),
 });
 
-// ─── Feedback Submissions (tracks who submitted which GitHub issues) ───────
+// Feedback Submissions (tracks who submitted which GitHub issues)
 // DEPRECATED: superseded by the `feedback` table (full in-app storage) + the
 // `notifications` system. Still read by the legacy GitHub-close polling path
 // until that is retired; new submissions no longer write here. Do not drop yet.
@@ -631,7 +637,7 @@ export const feedbackSubmissions = sqliteTable('feedback_submissions', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
-// ─── User Preferences (one row per user, lazy-upserted) ───────────────────
+// User Preferences (one row per user, lazy-upserted)
 
 export const userPreferences = sqliteTable('user_preferences', {
   userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
@@ -669,7 +675,7 @@ export const userPreferences = sqliteTable('user_preferences', {
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 });
 
-// ─── Player Availability ───────────────────────────────────────────────────
+// Player Availability
 
 export const playerAvailability = sqliteTable('player_availability', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -682,7 +688,7 @@ export const playerAvailability = sqliteTable('player_availability', {
   note: text('note'),
 });
 
-// ─── Pin Definitions (catalog of awardable pins/achievements) ─────────────
+// Pin Definitions (catalog of awardable pins/achievements)
 //
 // Two creation paths:
 //   * `is_auto = true`  — seeded; awarded by the auto-award job at season-end
@@ -710,7 +716,7 @@ export const pinDefinitions = sqliteTable('pin_definitions', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
-// ─── Pins (awarded instances — many users × many definitions) ──────────────
+// Pins (awarded instances — many users × many definitions)
 //
 // Unique composite (user_id, pin_def_id, season_id) enforces "one Champion per
 // season per user", while still letting a user collect distinct seasons of the
@@ -741,7 +747,7 @@ export const pins = sqliteTable('pins', {
   metadata: text('metadata'),
 });
 
-// ─── Request Logs (API observability — every /api/* call + its outcome) ──
+// Request Logs (API observability — every /api/* call + its outcome)
 //
 // Lightweight per-request audit written by the logging middleware in
 // src/index.ts (onAfterResponse / onError). Powers the admin "API Logs" tab:
@@ -789,7 +795,7 @@ export const requestLogs = sqliteTable('request_logs', {
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
 });
 
-// ─── Error groups (observability) ─────────────────────────────────────────────
+// Error groups (observability)
 // One row per distinct fault, keyed by a normalized fingerprint. request_logs
 // rows (which prune at ~5000) link back via their `fingerprint` column; this
 // table never prunes, so counts/first-seen survive the raw occurrences. Powers
@@ -830,7 +836,7 @@ export const errorGroupUsers = sqliteTable('error_group_users', {
   userId: integer('user_id').notNull(),
 });
 
-// ─── Health checks (heartbeat self-monitor) ───────────────────────────────────
+// Health checks (heartbeat self-monitor)
 // Latest status per probe (DB / PS bot / WS / ...). One row per probe name,
 // upserted by the in-process heartbeat; flips ok→down fire a Discord alert.
 
@@ -843,7 +849,7 @@ export const healthChecks = sqliteTable('health_checks', {
   lastOkAt: text('last_ok_at'),
 });
 
-// ─── Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims) ──
+// Scrim Pokemon (per-scrim K/D — mirrors matchPokemon but for scrims)
 
 export const scrimPokemon = sqliteTable('scrim_pokemon', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -856,7 +862,7 @@ export const scrimPokemon = sqliteTable('scrim_pokemon', {
   teraType: text('tera_type'),
 });
 
-// ─── Feedback (every submission across all 4 categories) ───────────────────
+// Feedback (every submission across all 4 categories)
 // Replaces the GitHub-only feedback flow. EVERY submission lands here; bug and
 // feature additionally mirror to a GitHub issue (github_issue_* set). league
 // and general are in-app only. Admin triage reads from this table; the resolve
@@ -889,7 +895,7 @@ export const feedback = sqliteTable('feedback', {
   userIdx: index('feedback_user_idx').on(t.userId),
 }));
 
-// ─── Notifications (DIRECTED — one row per recipient) ──────────────────────
+// Notifications (DIRECTED — one row per recipient)
 // Persisted per-user events with independent read state. `type` is open-ended
 // so future directed events reuse this table. `dedupeKey` + UNIQUE(user_id,
 // dedupe_key) makes inserts idempotent: re-running the issue-close detector or
@@ -916,7 +922,7 @@ export const notifications = sqliteTable('notifications', {
   dedupeIdx: uniqueIndex('notifications_user_dedupe_idx').on(t.userId, t.dedupeKey),
 }));
 
-// ─── Changelog ("What's New" release feed) ─────────────────────────────────
+// Changelog ("What's New" release feed)
 // User-facing release feed. DB-backed (was a hand-edited JSON file shipped in
 // the image) so releases can be published through the admin API — and later CI —
 // without a redeploy. Seeded once at boot from src/content/changelog.json when
@@ -936,7 +942,7 @@ export const changelog = sqliteTable('changelog', {
   dateIdx: index('changelog_date_idx').on(t.date),
 }));
 
-// ─── Announcements (BROADCAST — one global row, seen via a per-user stamp) ──
+// Announcements (BROADCAST — one global row, seen via a per-user stamp)
 // Admin-authored site-wide broadcasts. NOT the same as site_settings.announcement
 // (that is the single persistent home-page banner). Unread per user = rows with
 // created_at > user_preferences.announcements_seen_at. Future signups see all
@@ -969,7 +975,7 @@ export const announcementDismissals = sqliteTable('announcement_dismissals', {
   dismissedAt: text('dismissed_at').default(sql`(datetime('now'))`),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.announcementId] }) }));
 
-// ─── Usage Events (first-party web analytics — raw beacon rows) ─────────────
+// Usage Events (first-party web analytics — raw beacon rows)
 // One row per pageview / named feature event posted to the public beacon
 // endpoint (/api/analytics/events). Cookieless: anonymous visitors get a
 // daily-rotating anon_id (sha256 of salt+ip+ua) instead of any client-side
@@ -998,7 +1004,7 @@ export const usageEvents = sqliteTable('usage_events', {
   userTsIdx: index('usage_events_user_ts_idx').on(t.userId, t.ts),
 }));
 
-// ─── Usage Daily Rollups (per-day aggregates — survive the raw 90d window) ──
+// Usage Daily Rollups (per-day aggregates — survive the raw 90d window)
 // Written by the usage-rollup job (lib/usage.ts) once per completed UTC day.
 // usage_daily is per (event, route); usage_daily_totals is the day-level line
 // (distinct-visitor counts can't be summed across routes, so totals get their

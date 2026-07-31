@@ -35,6 +35,7 @@ import { simulateSeason, simulatePlayoffs } from '../../lib/sim/simulate-season'
 import { simulateMatch } from '../../lib/sim/simulate-match';
 import { recordMatchResult } from '../../lib/match-service';
 import { buildSimWorld, DEFAULT_SIM_SEED } from '../../lib/sim/build-world';
+import { applyDueTransactions } from '../../lib/scheduled-transactions';
 
 const MIGRATIONS_DIR = resolve(import.meta.dir, '../../../drizzle');
 const SIM_ACTOR = 'simulator';
@@ -104,7 +105,7 @@ function voidMatch(matchId: string): void {
 
 export const simRoutes = new Elysia()
 
-  // ─── GET /state — drive the control panel UI ─────────────────────────
+  // GET /state — drive the control panel UI
   .get('/api/admin/sim/state', ({ user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -146,7 +147,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /advance-week — sim current week, then advance the pointer ──
+  // POST /advance-week — sim current week, then advance the pointer
   .post('/api/admin/sim/advance-week', ({ body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -190,6 +191,7 @@ export const simRoutes = new Elysia()
         }).run();
       });
       weekAfter = nextWeek;
+      applyDueTransactions(leagueId);
     }
 
     return {
@@ -201,7 +203,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /match/:matchId — simulate one specific scheduled match ────
+  // POST /match/:matchId — simulate one specific scheduled match
   .post('/api/admin/sim/match/:matchId', ({ params, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -242,7 +244,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /week/:week — simulate every scheduled match in a week ─────
+  // POST /week/:week — simulate every scheduled match in a week
   .post('/api/admin/sim/week/:week', ({ params, body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -275,7 +277,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /draft/auto-complete — run a synthetic snake draft ─────────
+  // POST /draft/auto-complete — run a synthetic snake draft
   .post('/api/admin/sim/draft/auto-complete', ({ body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -304,7 +306,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /playoffs/generate — build + play the playoff bracket ──────
+  // POST /playoffs/generate — build + play the playoff bracket
   .post('/api/admin/sim/playoffs/generate', ({ body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -326,7 +328,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /phase — pass-through to the real phase-change logic ───────
+  // POST /phase — pass-through to the real phase-change logic
   // Mirrors `POST /api/leagues/:leagueId/phase` precondition + monotonic
   // guards so phase gates still apply to sim-driven transitions.
   .post('/api/admin/sim/phase', ({ body, user, set }) => {
@@ -412,7 +414,7 @@ export const simRoutes = new Elysia()
     return { ok: true, leagueId, from: previousPhase, to: phase, teams: teams.length };
   })
 
-  // ─── POST /reset — destructive full rebuild of the sim world ─────────
+  // POST /reset — destructive full rebuild of the sim world
   .post('/api/admin/sim/reset', ({ body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -471,7 +473,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /reset-week/:week — void a week + rewind currentWeek ───────
+  // POST /reset-week/:week — void a week + rewind currentWeek
   .post('/api/admin/sim/reset-week/:week', ({ params, body, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;
@@ -526,7 +528,7 @@ export const simRoutes = new Elysia()
     };
   })
 
-  // ─── POST /reset-match/:matchId — void a single match ───────────────
+  // POST /reset-match/:matchId — void a single match
   .post('/api/admin/sim/reset-match/:matchId', ({ params, user, set }) => {
     const denied = gate(user, set);
     if (denied) return denied;

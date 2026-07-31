@@ -89,23 +89,28 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
   // current week. Deadline/phase gating below always uses `week` (the real
   // current week) — only the ledger writes (rosters.acquiredWeek,
   // transactions.week) use `stampWeek`.
+  // Week this pickup takes effect in (admin-chosen at approve time, default
+  // next week). Falls back to the real current week for direct staff pickups.
   const stampWeek = input.effectiveWeek ?? week;
   const settings = db.select().from(schema.siteSettings).get();
 
-  // ── Phase / deadline gate ──
+  // Phase / deadline gate
   if (league) {
     if (league.phase === 'playoffs') {
       return err(409, 'Free agent pickups are closed during playoffs', 'fa_playoffs_closed');
     }
     if (league.phase === 'regular') {
+      // The deadline binds the week the pickup LANDS in, not the week it is
+      // approved in — an admin can't push one past it by picking a later
+      // effective week.
       const faDeadline = settings?.faDeadlineWeek ?? 7;
-      if (week > faDeadline) {
-        return err(409, `Free agent deadline has passed (week ${faDeadline}, current week ${week})`, 'fa_deadline_passed');
+      if (stampWeek > faDeadline) {
+        return err(409, `Free agent deadline has passed (week ${faDeadline}, effective week ${stampWeek})`, 'fa_deadline_passed');
       }
     }
   }
 
-  // ── FA budget check ── (each picked-up mon costs 1 slot)
+  // FA budget check  (each picked-up mon costs 1 slot)
   const faPickupsPerSeason = settings?.faPickupsPerSeason ?? 6;
   const usedPickups = db.select().from(schema.transactions)
     .where(and(
@@ -127,7 +132,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
 
   try {
     const result = tx(() => {
-      // ── Already-rostered guard (atomic with the inserts) ──
+      // Already-rostered guard (atomic with the inserts)
       const teamsInLeague = db.select({ id: schema.teams.id })
         .from(schema.teams)
         .where(eq(schema.teams.leagueId, leagueId))
@@ -144,7 +149,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
         }
       }
 
-      // ── Apply drops first ──
+      // Apply drops first
       const droppedCosts = new Map<string, number>();
       for (const dropPokemonName of dropNames) {
         const droppedRow = db.select().from(schema.rosters)
@@ -164,14 +169,14 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
           .run();
       }
 
-      // ── Apply pickups ──
+      // Apply pickups
       for (const { name: pokemonName, tier } of pickupCosts) {
         db.insert(schema.rosters).values({
           teamId, pokemonName, tier, costAtDraft: tier, acquiredVia: 'fa', acquiredWeek: stampWeek,
         }).run();
       }
 
-      // ── Post-swap roster legality re-check ──
+      // Post-swap roster legality re-check
       const newRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, teamId)).all();
       if (league) {
         // Effective band: a per-league min/max range. NULL falls back to
@@ -214,7 +219,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
       // roster/ledger rows persist. The thrown payload carries the result.
       if (dryRun) throw Object.assign(new Error('dry-run-ok'), { [DRY_RUN_OK]: okResult });
 
-      // ── Transaction records (pair each drop with a pickup — feedback #41) ──
+      // Transaction records (pair each drop with a pickup — feedback #41)
       const dropCostOf = (name: string) => droppedCosts.get(name) ?? leagueCosts.get(name)?.tier ?? null;
       const rowCount = Math.max(pickupCosts.length, dropNames.length);
       for (let i = 0; i < rowCount; i++) {
@@ -249,7 +254,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
   }
 }
 
-// ─── Tera-captain change core (feedback #51) ────────────────────────────────
+// Tera-captain change core (feedback #51)
 // Coaches can change their tera captains (which mons, and each captain's up-to-3
 // tera types) freely BEFORE the captain-gate lock. Once locked, the change must
 // be requested and an admin approves it. Both the direct PUT (staff / pre-lock)

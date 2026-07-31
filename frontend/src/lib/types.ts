@@ -176,6 +176,11 @@ export interface Trade {
   requesting: string[];
   proposedAt: string;
   resolvedAt?: string;
+  /** League week an approved trade takes effect in. */
+  effectiveWeek?: number | null;
+  /** When the swap actually ran. Null on an accepted trade = SCHEDULED: agreed
+   *  and approved, but rosters don't change until effectiveWeek. */
+  appliedAt?: string | null;
 }
 
 export interface TradeBlockListing {
