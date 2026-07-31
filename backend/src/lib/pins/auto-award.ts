@@ -23,6 +23,11 @@
  * helper) rather than re-deriving from score comparison, so a forfeit at full
  * health (equal KO score, e.g. 2-2, but a real winner) is credited correctly.
  *
+ * Every stat pin awards exactly ONE winner per league — never a split. Each
+ * `pickXxx` narrows ties with its own criterion, then falls through to the
+ * shared `breakTieByRank` (lib/pins/tiebreak.ts) so the result is always
+ * deterministic and stable across re-runs.
+ *
  * The subjective Elite-4 / Mix / Player awards (Baxcalibur, Kingambit, Ash,
  * Best Draft, Dragapult, Charizard, Florges, Rotom, Pikachu, Red) are
  * minted by hand from the admin UI.
@@ -30,7 +35,18 @@
 import { db, schema } from '../../db';
 import { and, eq, lte, sql } from 'drizzle-orm';
 import { tx } from '../tx';
-import { matchWinner } from '../standings';
+import { matchWinner, computeStandings } from '../standings';
+import {
+  pickGarchompWinners, pickCannoliWinners, pickCynthiaWinners, computeStreak,
+  type GarchompRow, type GarchompWinner,
+  type CannoliRecord, type CynthiaStreak, type StreakMatch,
+} from './auto-award-pickers';
+
+export {
+  pickGarchompWinners, pickCannoliWinners, pickCynthiaWinners, computeStreak,
+  type GarchompRow, type GarchompWinner,
+  type CannoliRecord, type CynthiaStreak, type StreakMatch,
+};
 
 type Trigger = 'season-end' | 'match';
 
@@ -113,100 +129,6 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
   });
 
   return summary;
-}
-
-// Pure helpers (testable without DB)
-
-export interface GarchompRow { teamId: string; pokemon: string; kills: number }
-export interface GarchompWinner { teamId: string; pokemon: string; kills: number }
-
-/**
- * Pick Garchomp winners from pre-aggregated rows. Rows are expected to be
- * grouped by (teamId, LOWER(pokemonName)) — the SQL caller already does this,
- * but the pure helper additionally re-coalesces casing variants defensively
- * so unit tests can pass raw mixed-case inputs.
- */
-export function pickGarchompWinners(rows: GarchompRow[]): GarchompWinner[] {
-  if (rows.length === 0) return [];
-  const merged = new Map<string, GarchompWinner>();
-  for (const r of rows) {
-    const key = `${r.teamId}|${(r.pokemon ?? '').toLowerCase()}`;
-    const prev = merged.get(key);
-    if (prev) prev.kills += (r.kills ?? 0);
-    else merged.set(key, { teamId: r.teamId, pokemon: (r.pokemon ?? '').toLowerCase(), kills: r.kills ?? 0 });
-  }
-  const all = [...merged.values()];
-  const top = all.reduce((acc, r) => Math.max(acc, r.kills), 0);
-  if (top === 0) return [];
-  return all.filter(r => r.kills === top);
-}
-
-export interface CannoliRecord {
-  teamId: string;
-  userId: number | null;
-  wins: number;
-  losses: number;
-  diff: number;
-  played: number;
-}
-
-/**
- * Pick Cannoli winners (best regular-season record) from pre-computed records.
- * Most wins, tiebreak by diff. Excludes teams with no userId (orphans) from
- * the winner set but they still participate in the wins/diff comparison.
- */
-export function pickCannoliWinners(records: CannoliRecord[]): CannoliRecord[] {
-  const playing = records.filter(r => r.played > 0);
-  if (playing.length === 0) return [];
-  const topWins = playing.reduce((a, r) => Math.max(a, r.wins), 0);
-  const winners = playing.filter(r => r.wins === topWins);
-  const topDiff = winners.reduce((a, r) => Math.max(a, r.diff), Number.NEGATIVE_INFINITY);
-  return winners.filter(r => r.diff === topDiff);
-}
-
-export interface CynthiaStreak { teamId: string; userId: number | null; best: number }
-
-/**
- * Pick Cynthia winners from pre-computed streaks. Returns all teams tied at
- * the top, provided the top streak >= `min` (default 2).
- */
-export function pickCynthiaWinners(streaks: CynthiaStreak[], min = 2): CynthiaStreak[] {
-  if (streaks.length === 0) return [];
-  const top = streaks.reduce((a, s) => Math.max(a, s.best), 0);
-  if (top < min) return [];
-  return streaks.filter(s => s.best === top);
-}
-
-export interface StreakMatch {
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  homeScore: number | null;
-  awayScore: number | null;
-  /** Explicit winner flag — see matchWinner(). Null for legacy/sim rows. */
-  winnerTeamId: string | null;
-  forfeitedBy?: 'home' | 'away' | 'both' | null;
-}
-
-/**
- * Compute the longest consecutive-win streak for `teamId` over `matches`.
- * Matches are consumed in the order given (caller orders by week, id).
- * Rules:
- *   - `forfeitedBy === 'both'` matches are SKIPPED (neither extend nor break).
- *   - NULL scores reset the streak (treated as a non-win).
- *   - The win/loss/tie call is `matchWinner(m)` (winnerTeamId first, score
- *     comparison fallback) — a full-health forfeit (equal score, real winner)
- *     correctly extends the streak instead of breaking it.
- */
-export function computeStreak(matches: StreakMatch[], teamId: string): number {
-  let best = 0, current = 0;
-  for (const m of matches) {
-    if (m.forfeitedBy === 'both') continue;
-    if (m.homeScore == null || m.awayScore == null) { current = 0; continue; }
-    const winner = matchWinner(m);
-    if (winner === teamId) { current++; if (current > best) best = current; }
-    else { current = 0; }
-  }
-  return best;
 }
 
 // Helpers
@@ -293,6 +215,14 @@ function teamUserId(teamId: string): number | null {
   return team?.userId ?? null;
 }
 
+/** Team id → teams.rank for every team in the league, for the general
+ *  tiebreak fallback (see lib/pins/tiebreak.ts). */
+function teamRankMap(leagueId: string): Map<string, number | null> {
+  const rows = db.select({ id: schema.teams.id, rank: schema.teams.rank })
+    .from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
+  return new Map(rows.map(r => [r.id, r.rank]));
+}
+
 // Garchomp (most KOs across the regular season)
 // Sums match_pokemon.kills per team across regular-season completed matches;
 // the team owning the Pokemon (well, the team) with the highest single-Mon
@@ -317,6 +247,7 @@ function awardGarchomp(
     teamId: schema.matchPokemon.teamId,
     pokemon: sql<string>`LOWER(${schema.matchPokemon.pokemonName})`,
     kills: sql<number>`COALESCE(SUM(${schema.matchPokemon.kills}), 0)`,
+    deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
   })
     .from(schema.matchPokemon)
     .innerJoin(schema.matches, eq(schema.matches.id, schema.matchPokemon.matchId))
@@ -332,8 +263,10 @@ function awardGarchomp(
     return;
   }
 
+  const rankOf = teamRankMap(leagueId);
   const winners = pickGarchompWinners(rows.map(r => ({
-    teamId: r.teamId, pokemon: r.pokemon, kills: r.kills ?? 0,
+    teamId: r.teamId, pokemon: r.pokemon, kills: r.kills ?? 0, deaths: r.deaths ?? 0,
+    teamRank: rankOf.get(r.teamId) ?? null,
   })));
   for (const r of winners) {
     const uid = teamUserId(r.teamId);
@@ -370,6 +303,10 @@ function awardCannoli(
     return;
   }
 
+  // Canonical standings order (wins/diff/h2h/kills/id) — reused as-is for
+  // the final Cannoli tiebreak rather than reimplementing that chain here.
+  const standingsRankOf = new Map(computeStandings(leagueId).map((s, i) => [s.id, i + 1]));
+
   const records = teams.map(t => {
     const matches = db.select().from(schema.matches).where(and(
       eq(schema.matches.leagueId, leagueId),
@@ -391,7 +328,10 @@ function awardCannoli(
       if (winner === t.id) wins++;
       else if (winner != null) losses++;
     }
-    return { teamId: t.id, userId: t.userId, wins, losses, diff, played: matches.length };
+    return {
+      teamId: t.id, userId: t.userId, wins, losses, diff, played: matches.length,
+      standingsRank: standingsRankOf.get(t.id) ?? Number.MAX_SAFE_INTEGER,
+    };
   }).filter(r => r.played > 0);
 
   if (records.length === 0) {
@@ -434,6 +374,7 @@ function awardCynthia(
     return;
   }
 
+  const rankOf = teamRankMap(leagueId);
   const streaks = teams.map(t => {
     const matches = db.select().from(schema.matches).where(and(
       eq(schema.matches.leagueId, leagueId),
@@ -443,7 +384,7 @@ function awardCynthia(
     )).orderBy(schema.matches.week, schema.matches.id).all();
 
     const best = computeStreak(matches, t.id);
-    return { teamId: t.id, userId: t.userId, best };
+    return { teamId: t.id, userId: t.userId, best, teamRank: rankOf.get(t.id) ?? null };
   });
 
   const winners = pickCynthiaWinners(streaks, 2);

@@ -5,6 +5,7 @@
  * orchestrators live in archive-mint.ts. Unit-testable without a DB.
  */
 import { matchWinner } from '../standings';
+import { breakTieByRank } from './tiebreak';
 
 export interface ChampionFinalsRow {
   homeTeamId: string | null;
@@ -74,8 +75,12 @@ export interface HighScoreRow {
   pokemonName: string;
   matchId: string;
   kills: number;
+  deaths: number;
   week: number | null;
   phase: string | null;
+  /** The team's final standings rank (teams.rank), for the general tiebreak
+   *  fallback below. Null when not yet stamped. */
+  teamRank: number | null;
 }
 export interface HighScoreWinner {
   teamId: string;
@@ -87,21 +92,31 @@ export interface HighScoreWinner {
 }
 
 /**
- * Pick the highest single-match kill performance(s). Returns every row tied
- * at the top kill count. Returns [] when the top is 0 or input is empty.
+ * Pick the highest single-match kill performance. Ties on kills narrow by
+ * fewest deaths in that match, then earliest (lowest week, then lowest
+ * match id), then the general rank/id fallback (breakTieByRank). Returns []
+ * when the top is 0 or input is empty, else exactly one winner.
  */
 export function pickHighScore(rows: HighScoreRow[]): HighScoreWinner[] {
   if (rows.length === 0) return [];
   const top = rows.reduce((a, r) => Math.max(a, r.kills ?? 0), 0);
   if (top <= 0) return [];
-  return rows.filter(r => (r.kills ?? 0) === top).map(r => ({
-    teamId: r.teamId,
-    pokemonName: r.pokemonName,
-    matchId: r.matchId,
-    kills: r.kills,
-    week: r.week,
-    phase: r.phase,
-  }));
+  let tied = rows.filter(r => (r.kills ?? 0) === top);
+
+  const minDeaths = Math.min(...tied.map(r => r.deaths ?? 0));
+  tied = tied.filter(r => (r.deaths ?? 0) === minDeaths);
+
+  const minWeek = Math.min(...tied.map(r => r.week ?? Number.MAX_SAFE_INTEGER));
+  tied = tied.filter(r => (r.week ?? Number.MAX_SAFE_INTEGER) === minWeek);
+
+  const minMatchId = tied.map(r => r.matchId).sort()[0];
+  tied = tied.filter(r => r.matchId === minMatchId);
+
+  const winner = breakTieByRank(tied, r => r.teamRank, r => r.teamId);
+  return [{
+    teamId: winner.teamId, pokemonName: winner.pokemonName, matchId: winner.matchId,
+    kills: winner.kills, week: winner.week, phase: winner.phase,
+  }];
 }
 
 export interface StealRow {
@@ -110,6 +125,9 @@ export interface StealRow {
   kills: number;
   gp: number;
   cost: number | null;
+  /** The team's final standings rank (teams.rank), for the general tiebreak
+   *  fallback below. Null when not yet stamped. */
+  teamRank: number | null;
 }
 export interface StealWinner {
   teamId: string;
@@ -119,32 +137,39 @@ export interface StealWinner {
   ratio: number;
 }
 
+/** Minimum season kills a Pokemon must have to be eligible for Steal of the
+ *  Draft — otherwise a 2-kill $1 pick (ratio 2.0) beats a 19-kill workhorse.
+ *  One constant, one edit to retune. */
+export const STEAL_MIN_KILLS = 5;
+
 /**
- * Pick the best K-per-point ratio on a drafted Pokemon. Filters out rows
- * with no games played, no cost, or no kills (avoids div-by-0 and silly
- * "steals" from $0 picks). Ties on ratio mint to all.
+ * Pick the best K-per-point ratio on a drafted Pokemon with at least
+ * `STEAL_MIN_KILLS` season kills (also filters out rows with no games
+ * played or no cost, avoiding div-by-0). Ties on ratio narrow by higher raw
+ * kills, then the general rank/id fallback (breakTieByRank). Returns [] when
+ * nobody clears the floor, else exactly one winner.
  */
 export function pickStealOfTheDraft(rows: StealRow[]): StealWinner[] {
   const candidates = rows
-    .filter(r => r.gp >= 1 && (r.cost ?? 0) >= 1 && r.kills > 0)
+    .filter(r => r.gp >= 1 && (r.cost ?? 0) >= 1 && r.kills >= STEAL_MIN_KILLS)
     .map(r => ({
       teamId: r.teamId,
       pokemonName: r.pokemonName,
       kills: r.kills,
       cost: r.cost ?? 0,
       ratio: r.kills / Math.max(1, r.cost ?? 0),
+      teamRank: r.teamRank,
     }));
   if (candidates.length === 0) return [];
-  const top = candidates.reduce((a, r) => Math.max(a, r.ratio), 0);
-  return candidates
-    .filter(r => r.ratio === top)
-    .map(r => ({
-      teamId: r.teamId,
-      pokemonName: r.pokemonName,
-      kills: r.kills,
-      cost: r.cost,
-      ratio: Number(r.ratio.toFixed(3)),
-    }));
+  const topRatio = candidates.reduce((a, r) => Math.max(a, r.ratio), 0);
+  let tied = candidates.filter(r => r.ratio === topRatio);
+  const maxKills = Math.max(...tied.map(r => r.kills));
+  tied = tied.filter(r => r.kills === maxKills);
+  const winner = breakTieByRank(tied, r => r.teamRank, r => r.teamId);
+  return [{
+    teamId: winner.teamId, pokemonName: winner.pokemonName, kills: winner.kills,
+    cost: winner.cost, ratio: Number(winner.ratio.toFixed(3)),
+  }];
 }
 
 export interface SweeperMatchRow {
@@ -152,6 +177,9 @@ export interface SweeperMatchRow {
   winnerTeamId: string;
   winnerGp: number;
   winnerDeaths: number;
+  /** The winning team's final standings rank (teams.rank), for the general
+   *  tiebreak fallback below. Null when not yet stamped. */
+  teamRank: number | null;
 }
 export interface SweeperWinner {
   teamId: string;
@@ -159,22 +187,27 @@ export interface SweeperWinner {
 }
 
 /**
- * Pick the top sweeper(s) from per-match results. Each row represents one
+ * Pick the top sweeper from per-match results. Each row represents one
  * completed, decided match plus the winning team's death/game-played totals.
- * A sweep = winner had 0 deaths and at least 1 Pokemon recorded. Returns
- * all teams tied at the top sweep count, or [] when nobody swept.
+ * A sweep = winner had 0 deaths and at least 1 Pokemon recorded. Ties narrow
+ * via the general rank/id fallback (breakTieByRank). Returns [] when nobody
+ * swept, else exactly one winner.
  */
 export function pickSweeper(rows: SweeperMatchRow[]): SweeperWinner[] {
-  const sweeps = new Map<string, number>();
+  const sweeps = new Map<string, { count: number; teamRank: number | null }>();
   for (const m of rows) {
     if (m.winnerGp <= 0) continue;
     if (m.winnerDeaths > 0) continue;
-    sweeps.set(m.winnerTeamId, (sweeps.get(m.winnerTeamId) ?? 0) + 1);
+    const prev = sweeps.get(m.winnerTeamId);
+    if (prev) prev.count++;
+    else sweeps.set(m.winnerTeamId, { count: 1, teamRank: m.teamRank });
   }
   let topCount = 0;
-  for (const [, c] of sweeps) if (c > topCount) topCount = c;
+  for (const [, v] of sweeps) if (v.count > topCount) topCount = v.count;
   if (topCount === 0) return [];
-  return [...sweeps.entries()]
-    .filter(([, c]) => c === topCount)
-    .map(([teamId, c]) => ({ teamId, sweeps: c }));
+  const tied = [...sweeps.entries()]
+    .filter(([, v]) => v.count === topCount)
+    .map(([teamId, v]) => ({ teamId, sweeps: v.count, teamRank: v.teamRank }));
+  const winner = breakTieByRank(tied, t => t.teamRank, t => t.teamId);
+  return [{ teamId: winner.teamId, sweeps: winner.sweeps }];
 }

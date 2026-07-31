@@ -22,8 +22,12 @@
  * health (equal KO score, e.g. 2-2, but a real winner) resolves a champion /
  * sweeper correctly instead of being treated as an unfinished/tied series.
  *
- * Each minter tries to find a winner; on a tie we mint to all tied users
- * (rare; metadata records the value).
+ * Every stat pin awards exactly ONE winner per league — never a split. Each
+ * `pickXxx` narrows ties with its own criterion, then falls through to the
+ * shared `breakTieByRank` (lib/pins/tiebreak.ts) so the result is always
+ * deterministic and stable across re-runs. Champion is the one exception —
+ * it's inherently 1v1, so its own home/away resolution already produces at
+ * most one winner.
  *
  * Pure-vs-impure boundary mirrors lib/pins/auto-award.ts: each award has a
  * `pickXxx` pure function (input rows → output winners, in
@@ -37,7 +41,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
 import { matchWinner } from '../standings';
 import {
-  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper,
+  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper, STEAL_MIN_KILLS,
   type ChampionFinalsRow, type ChampionWinner,
   type HighScoreRow, type HighScoreWinner,
   type StealRow, type StealWinner,
@@ -45,7 +49,7 @@ import {
 } from './archive-mint-pickers';
 
 export {
-  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper,
+  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper, STEAL_MIN_KILLS,
   type ChampionFinalsRow, type ChampionWinner,
   type HighScoreRow, type HighScoreWinner,
   type StealRow, type StealWinner,
@@ -61,7 +65,8 @@ const PIN = {
 
 export interface UnresolvedEntry {
   pinDefId: string;
-  reason: 'team-has-no-user' | 'no-eligible-matches' | 'manual-pin-present' | 'tie-unresolved';
+  reason: 'team-has-no-user' | 'no-eligible-matches' | 'manual-pin-present' | 'tie-unresolved'
+    | 'no-pokemon-met-kill-floor';
   teamId?: string;
   leagueId?: string;
 }
@@ -151,6 +156,14 @@ function teamUserId(teamId: string): number | null {
   const team = db.select({ userId: schema.teams.userId })
     .from(schema.teams).where(eq(schema.teams.id, teamId)).get();
   return team?.userId ?? null;
+}
+
+/** Team id → teams.rank for every team in the league, for the general
+ *  tiebreak fallback (see lib/pins/tiebreak.ts). */
+function teamRankMap(leagueId: string): Map<string, number | null> {
+  const rows = db.select({ id: schema.teams.id, rank: schema.teams.rank })
+    .from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
+  return new Map(rows.map(r => [r.id, r.rank]));
 }
 
 function tryInsert(
@@ -280,6 +293,7 @@ function awardHighScore(
     teamId: schema.matchPokemon.teamId,
     matchId: schema.matchPokemon.matchId,
     kills: schema.matchPokemon.kills,
+    deaths: schema.matchPokemon.deaths,
     week: schema.matches.week,
     phase: schema.matches.phase,
   })
@@ -295,13 +309,16 @@ function awardHighScore(
     return;
   }
 
+  const rankOf = teamRankMap(leagueId);
   const winners = pickHighScore(rows.map(r => ({
     teamId: r.teamId,
     pokemonName: r.pokemonName,
     matchId: r.matchId,
     kills: r.kills ?? 0,
+    deaths: r.deaths ?? 0,
     week: r.week,
     phase: r.phase,
+    teamRank: rankOf.get(r.teamId) ?? null,
   })));
 
   for (const r of winners) {
@@ -359,13 +376,21 @@ function awardStealOfTheDraft(
     return;
   }
 
+  const rankOf = teamRankMap(leagueId);
   const winners = pickStealOfTheDraft(rows.map(r => ({
     teamId: r.teamId,
     pokemonName: r.pokemonName,
     kills: r.kills,
     gp: r.gp,
     cost: r.cost,
+    teamRank: rankOf.get(r.teamId) ?? null,
   })));
+  if (winners.length === 0) {
+    // Rows existed, but nobody cleared STEAL_MIN_KILLS — distinct from
+    // 'no-eligible-matches' (no data at all) so this is traceable, not silent.
+    summary.unresolved.push({ pinDefId: PIN.stealOfTheDraft, reason: 'no-pokemon-met-kill-floor', leagueId });
+    return;
+  }
 
   for (const w of winners) {
     const uid = teamUserId(w.teamId);
@@ -402,6 +427,7 @@ function awardSweeper(
     return;
   }
   const teamIds = new Set(teams.map(t => t.id));
+  const rankOf = new Map(teams.map(t => [t.id, t.rank]));
 
   const matches = db.select({
     id: schema.matches.id,
@@ -445,6 +471,7 @@ function awardSweeper(
       winnerTeamId: winnerId,
       winnerGp: row?.gp ?? 0,
       winnerDeaths: row?.deaths ?? 0,
+      teamRank: rankOf.get(winnerId) ?? null,
     });
   }
 

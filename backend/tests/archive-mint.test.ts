@@ -4,6 +4,7 @@ import {
   pickHighScore,
   pickStealOfTheDraft,
   pickSweeper,
+  STEAL_MIN_KILLS,
   type ChampionFinalsRow,
   type HighScoreRow,
   type StealRow,
@@ -15,7 +16,7 @@ import {
 describe('pickChampion', () => {
   test('single decisive final → home wins', () => {
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 5, awayScore: 1 },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 5, awayScore: 1, winnerTeamId: null },
     ];
     const out = pickChampion(rows);
     expect(out).not.toBeNull();
@@ -27,7 +28,7 @@ describe('pickChampion', () => {
 
   test('single decisive final → away wins', () => {
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 4 },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 4, winnerTeamId: null },
     ];
     const out = pickChampion(rows);
     expect(out!.winnerTeamId).toBe('b');
@@ -36,13 +37,13 @@ describe('pickChampion', () => {
     expect(out!.loserSum).toBe(1);
   });
 
-  test('best-of-3 series — sum scores to pick winner', () => {
+  test('best-of-3 series — game wins decide it', () => {
     // Game 1: a wins 4-2. Game 2: b wins 3-1. Game 3: a wins 5-2.
-    // Series totals: a=10, b=7. a should win.
+    // a wins 2 games to 1.
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2 },
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 3 },
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 5, awayScore: 2 },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2, winnerTeamId: null },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 3, winnerTeamId: null },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 5, awayScore: 2, winnerTeamId: null },
     ];
     const out = pickChampion(rows);
     expect(out!.winnerTeamId).toBe('a');
@@ -51,26 +52,35 @@ describe('pickChampion', () => {
     expect(out!.loserSum).toBe(7);
   });
 
-  test('tied series → null (unresolved)', () => {
+  test('a full-health forfeit (equal score, winner flag) still crowns a champion', () => {
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 3, awayScore: 3 },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 2, awayScore: 2, winnerTeamId: 'a' },
+    ];
+    const out = pickChampion(rows);
+    expect(out).not.toBeNull();
+    expect(out!.winnerTeamId).toBe('a');
+  });
+
+  test('tied series, no winner flag → null (unresolved)', () => {
+    const rows: ChampionFinalsRow[] = [
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 3, awayScore: 3, winnerTeamId: null },
     ];
     expect(pickChampion(rows)).toBeNull();
   });
 
   test('multi-game tied series → null', () => {
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2 },
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 3 },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2, winnerTeamId: null },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 1, awayScore: 3, winnerTeamId: null },
     ];
-    // a=5, b=5
+    // a=5, b=5, 1 game win each
     expect(pickChampion(rows)).toBeNull();
   });
 
   test('any unfinished match → null', () => {
     const rows: ChampionFinalsRow[] = [
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2 },
-      { homeTeamId: 'a', awayTeamId: 'b', homeScore: null, awayScore: null },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: 4, awayScore: 2, winnerTeamId: null },
+      { homeTeamId: 'a', awayTeamId: 'b', homeScore: null, awayScore: null, winnerTeamId: null },
     ];
     expect(pickChampion(rows)).toBeNull();
   });
@@ -82,8 +92,11 @@ describe('pickChampion', () => {
 
 // High Score
 
-function hs(teamId: string, pokemon: string, kills: number, matchId = 'm1', week: number | null = 1, phase = 'regular'): HighScoreRow {
-  return { teamId, pokemonName: pokemon, matchId, kills, week, phase };
+function hs(
+  teamId: string, pokemon: string, kills: number, matchId = 'm1', week: number | null = 1,
+  phase = 'regular', deaths = 0, teamRank: number | null = null,
+): HighScoreRow {
+  return { teamId, pokemonName: pokemon, matchId, kills, deaths, week, phase, teamRank };
 }
 
 describe('pickHighScore', () => {
@@ -100,15 +113,26 @@ describe('pickHighScore', () => {
     expect(out[0].kills).toBe(5);
   });
 
-  test('tie at the top → all tied returned', () => {
+  test('tie at the top kills, equal deaths/week → earliest (lowest) match id wins', () => {
     const rows: HighScoreRow[] = [
-      hs('a', 'dragapult', 6, 'm1'),
       hs('b', 'garchomp', 6, 'm2'),
+      hs('a', 'dragapult', 6, 'm1'),
       hs('c', 'gholdengo', 4, 'm3'),
     ];
     const out = pickHighScore(rows);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'b']));
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('a');
+    expect(out[0].matchId).toBe('m1');
+  });
+
+  test('tie on kills → fewer deaths in that match wins', () => {
+    const rows: HighScoreRow[] = [
+      hs('a', 'dragapult', 6, 'm1', 1, 'regular', 1),
+      hs('b', 'garchomp', 6, 'm2', 1, 'regular', 0),
+    ];
+    const out = pickHighScore(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
   });
 
   test('preserves match metadata (matchId, week, phase)', () => {
@@ -124,10 +148,7 @@ describe('pickHighScore', () => {
   });
 
   test('zero kills only → no winners', () => {
-    const rows: HighScoreRow[] = [
-      hs('a', 'dragapult', 0),
-      hs('b', 'garchomp', 0),
-    ];
+    const rows: HighScoreRow[] = [hs('a', 'dragapult', 0), hs('b', 'garchomp', 0)];
     expect(pickHighScore(rows)).toEqual([]);
   });
 
@@ -135,40 +156,41 @@ describe('pickHighScore', () => {
     expect(pickHighScore([])).toEqual([]);
   });
 
-  test('same Pokemon for one team in different matches → both kept if tied', () => {
-    // Same Pokemon, different matches both at top kill count.
+  test('same Pokemon for one team in different matches, tied → earliest match wins', () => {
     const rows: HighScoreRow[] = [
       hs('a', 'dragapult', 5, 'm1', 1),
       hs('a', 'dragapult', 5, 'm5', 5),
       hs('b', 'garchomp', 3, 'm2'),
     ];
     const out = pickHighScore(rows);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.matchId))).toEqual(new Set(['m1', 'm5']));
+    expect(out).toHaveLength(1);
+    expect(out[0].matchId).toBe('m1');
   });
 });
 
 // Steal of the Draft
 
-function sr(teamId: string, pokemon: string, kills: number, gp: number, cost: number | null): StealRow {
-  return { teamId, pokemonName: pokemon, kills, gp, cost };
+function sr(
+  teamId: string, pokemon: string, kills: number, gp: number, cost: number | null,
+  teamRank: number | null = null,
+): StealRow {
+  return { teamId, pokemonName: pokemon, kills, gp, cost, teamRank };
 }
 
 describe('pickStealOfTheDraft', () => {
-  test('best K-per-point ratio wins', () => {
+  test('best K-per-point ratio wins, ties broken by higher raw kills', () => {
     // a: 12k / 3cost = 4.0
     // b: 10k / 5cost = 2.0
-    // c: 8k / 2cost = 4.0
+    // c: 8k / 2cost = 4.0 — ties a on ratio, fewer kills
     const rows: StealRow[] = [
       sr('a', 'dragapult', 12, 8, 3),
       sr('b', 'koraidon', 10, 8, 5),
       sr('c', 'rotom-wash', 8, 8, 2),
     ];
     const out = pickStealOfTheDraft(rows);
-    // a and c tie at 4.0
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'c']));
-    expect(out.every(w => w.ratio === 4)).toBe(true);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('a');
+    expect(out[0].ratio).toBe(4);
   });
 
   test('one clear winner', () => {
@@ -182,6 +204,20 @@ describe('pickStealOfTheDraft', () => {
     expect(out[0].cost).toBe(3);
     expect(out[0].kills).toBe(12);
     expect(out[0].ratio).toBe(4);
+  });
+
+  test('below the minimum-kills floor is excluded even at a great ratio', () => {
+    // Regression: S10 Sapphire's Frogadier (2 kills, cost 1, ratio 2.0) beat
+    // a 19-kill workhorse under the old no-floor ranking. The floor now
+    // excludes it outright regardless of ratio.
+    expect(STEAL_MIN_KILLS).toBeGreaterThan(2);
+    const rows: StealRow[] = [
+      sr('frog', 'frogadier', 2, 5, 1),   // ratio 2.0, but only 2 kills
+      sr('mon', 'bigmon', 19, 10, 10),    // ratio 1.9, real workhorse
+    ];
+    const out = pickStealOfTheDraft(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('mon');
   });
 
   test('rows with zero cost are filtered out (no div-by-0)', () => {
@@ -204,7 +240,7 @@ describe('pickStealOfTheDraft', () => {
     expect(out[0].teamId).toBe('b');
   });
 
-  test('rows with zero kills are filtered out', () => {
+  test('rows below the kill floor are filtered out', () => {
     const rows: StealRow[] = [
       sr('a', 'no-kills', 0, 8, 1),
       sr('b', 'koraidon', 10, 8, 5),
@@ -246,8 +282,8 @@ describe('pickStealOfTheDraft', () => {
 
 // Sweeper
 
-function swm(matchId: string, winnerTeamId: string, winnerDeaths: number, winnerGp = 6): SweeperMatchRow {
-  return { matchId, winnerTeamId, winnerGp, winnerDeaths };
+function swm(matchId: string, winnerTeamId: string, winnerDeaths: number, winnerGp = 6, teamRank: number | null = null): SweeperMatchRow {
+  return { matchId, winnerTeamId, winnerGp, winnerDeaths, teamRank };
 }
 
 describe('pickSweeper', () => {
@@ -277,18 +313,30 @@ describe('pickSweeper', () => {
     expect(out[0].sweeps).toBe(1);
   });
 
-  test('tie at top → all tied teams returned', () => {
+  test('tie at top, no rank data → exactly one winner (lowest team id)', () => {
     const rows: SweeperMatchRow[] = [
-      swm('m1', 'a', 0),
-      swm('m2', 'a', 0),
-      swm('m3', 'b', 0),
-      swm('m4', 'b', 0),
+      swm('m1', 'b', 0),
+      swm('m2', 'b', 0),
+      swm('m3', 'a', 0),
+      swm('m4', 'a', 0),
       swm('m5', 'c', 0),
     ];
     const out = pickSweeper(rows);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'b']));
-    expect(out.every(w => w.sweeps === 2)).toBe(true);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('a');
+    expect(out[0].sweeps).toBe(2);
+  });
+
+  test('tie at top → better standings rank wins', () => {
+    const rows: SweeperMatchRow[] = [
+      swm('m1', 'a', 0, 6, 3),
+      swm('m2', 'a', 0, 6, 3),
+      swm('m3', 'b', 0, 6, 1), // better rank
+      swm('m4', 'b', 0, 6, 1),
+    ];
+    const out = pickSweeper(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
   });
 
   test('zero sweeps in input → no winners', () => {

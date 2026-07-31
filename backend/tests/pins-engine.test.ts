@@ -102,6 +102,12 @@ function cannoliPins(uid: number) {
   )).all();
 }
 
+function garchompPins(uid: number) {
+  return db.select().from(schema.pins).where(and(
+    eq(schema.pins.userId, uid), eq(schema.pins.pinDefId, 'garchomp'),
+  )).all();
+}
+
 beforeAll(() => {
   const season = db.insert(schema.seasons).values({
     seasonNumber: 8600 + (Date.now() % 100), pointCap: 110, teraCaptainSlots: 2, archived: false,
@@ -234,6 +240,56 @@ describe('mintArchivePins — unresolved instead of silent drop', () => {
       u => u.pinDefId === 'champion' && u.reason === 'team-has-no-user'
         && u.teamId === `${tag}-orphanWinner` && u.leagueId === leagueId,
     )).toBe(true);
+  });
+});
+
+describe('ties collapse to exactly one deterministic winner', () => {
+  test('a 3-way Garchomp tie mints exactly one pin, and re-running keeps the same winner', () => {
+    const leagueId = `${tag}-tie3`;
+    mkLeague(leagueId);
+    const uA = mkUser(`${tag}-t3ua`);
+    const uB = mkUser(`${tag}-t3ub`);
+    const uC = mkUser(`${tag}-t3uc`);
+    const uD = mkUser(`${tag}-t3ud`);
+    // Team ids share a prefix so the last-resort tiebreak (lowest team id,
+    // since none of these have a teams.rank stamped) is predictable: a < b < c.
+    const teamA = `${tag}-t3-a`, teamB = `${tag}-t3-b`, teamC = `${tag}-t3-c`, teamD = `${tag}-t3-d`;
+    mkTeam(teamA, leagueId, uA);
+    mkTeam(teamB, leagueId, uB);
+    mkTeam(teamC, leagueId, uC);
+    mkTeam(teamD, leagueId, uD);
+
+    // A, B, C each get exactly 5 kills on a distinct Pokemon (same deaths,
+    // no standings rank) — a genuine 3-way tie with nothing to naturally
+    // break it except the last-resort team-id fallback.
+    for (const [week, teamId, mon] of [[1, teamA, 'mon-a'], [2, teamB, 'mon-b'], [3, teamC, 'mon-c']] as const) {
+      const matchId = `${tag}-t3m${week}`;
+      db.insert(schema.matches).values({
+        id: matchId, leagueId, week, phase: 'regular', status: 'completed',
+        homeTeamId: teamId, awayTeamId: teamD, homeScore: 5, awayScore: 0,
+      }).run();
+      db.insert(schema.matchPokemon).values({
+        matchId, teamId, pokemonName: mon, kills: 5, deaths: 0,
+      }).run();
+    }
+
+    const first = runAutoAwards(leagueId, { trigger: 'season-end' });
+    const garchompAwards = first.awarded.filter(a => a.pinDefId === 'garchomp');
+    expect(garchompAwards.length).toBe(1);
+    expect(garchompAwards[0].userId).toBe(uA);
+    expect(garchompPins(uA).length).toBe(1);
+    expect(garchompPins(uB).length).toBe(0);
+    expect(garchompPins(uC).length).toBe(0);
+
+    // Re-run: same tied inputs must resolve to the SAME winner, not flip
+    // arbitrarily on row order.
+    const second = runAutoAwards(leagueId, { trigger: 'season-end' });
+    const secondGarchomp = second.awarded.filter(a => a.pinDefId === 'garchomp');
+    expect(secondGarchomp.length).toBe(1);
+    expect(secondGarchomp[0].userId).toBe(uA);
+    expect(garchompPins(uA).length).toBe(1);
+    expect(garchompPins(uB).length).toBe(0);
+    expect(garchompPins(uC).length).toBe(0);
   });
 });
 
