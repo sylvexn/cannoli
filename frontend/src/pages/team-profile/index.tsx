@@ -27,6 +27,7 @@ import { NextMatchBanner } from './next-match-banner';
 import { TheorycraftSummary } from './theorycraft-summary';
 import { CoverageTab } from './coverage-tab';
 import { Personality } from './personality';
+import { PinsTrophyCase } from './pins-trophy-case';
 import { RecentEvents } from './recent-events';
 import { ScheduleTab } from './schedule-tab';
 import type { ScheduleRow } from './schedule-tab';
@@ -409,6 +410,11 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
 
       {/* ═══ TEAM PERSONALITY (captain note, owner-editable) ═══ */}
       {!theorycraftMode && <Personality player={player} onSaved={refresh} />}
+
+      {/* ═══ TROPHY CASE (this season's team-earned pins) ═══ */}
+      {!theorycraftMode && season && (
+        <PinsTrophyCase player={player} leagueId={league.id} seasonId={season.id} />
+      )}
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
       <SpriteShowcase

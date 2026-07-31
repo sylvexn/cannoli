@@ -366,6 +366,7 @@ function CoachLinkPopover({ coach, linkPath, children }: CoachLinkPopoverProps) 
                 def={p.definition}
                 size="sm"
                 seasonId={p.seasonId}
+                leagueId={p.leagueId}
                 metadata={p.metadata}
               />
             ))}

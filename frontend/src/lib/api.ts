@@ -852,12 +852,18 @@ export interface ApiPinDefinition {
   createdAt?: string | null;
 }
 
+export type PinSource = 'auto' | 'manual';
+
 export interface ApiPin {
   id: number;
   pinDefId: string;
   seasonId: number | null;
+  /** League the pin is filed against — null for all-leagues coach awards
+   *  (Ash, Red). Drives the clickable team links in the pin tooltip. */
+  leagueId: string | null;
   awardedAt: string | null;
   awardedBy: number | null;
+  source: PinSource;
   metadata: Record<string, unknown> | null;
   definition: ApiPinDefinition;
 }
@@ -871,8 +877,10 @@ export interface ApiPinRecent {
   defIconName: string;
   defColor: string;
   seasonId: number | null;
+  leagueId: string | null;
   awardedAt: string | null;
   awardedBy: number | null;
+  source: PinSource;
   metadata: Record<string, unknown> | null;
 }
 
@@ -1818,6 +1826,11 @@ export const api = {
   getUserPins: (username: string) =>
     fetchJson<ApiPin[]>(`/api/users/${encodeURIComponent(username)}/pins`),
 
+  /** Public badge catalog — every pin definition, no auth required. Powers
+   *  the /badges page. Distinct from getPinDefinitions (staff-only, same
+   *  shape) so the catalog works for signed-out visitors. */
+  getPublicPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/pin-definitions'),
+
   getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
 
   createPinDefinition: (data: {
@@ -1843,8 +1856,13 @@ export const api = {
   revokePin: (id: number) =>
     deleteJson<{ success: boolean }>(`/api/admin/pins/${id}`),
 
-  getRecentPins: (limit = 50) =>
-    fetchJson<ApiPinRecent[]>(`/api/admin/pins/recent?limit=${limit}`),
+  /** `seasonId` filters server-side so an older season's pins aren't lost
+   *  once the table exceeds `limit` (the Edit affordance on auto pins keys
+   *  off this list, so silently dropping older rows hid a working button). */
+  getRecentPins: (limit = 50, seasonId?: number | null) =>
+    fetchJson<ApiPinRecent[]>(
+      `/api/admin/pins/recent?limit=${limit}${seasonId != null ? `&seasonId=${seasonId}` : ''}`,
+    ),
 
   // Bulk-mint wizard: preview then confirm.
   getManualAwards: (season: number) =>
@@ -1869,6 +1887,13 @@ export const api = {
       totalAwarded: number;
       totalSkipped: number;
       perLeague: { leagueId: string; awarded: number; skipped: number }[];
+      /** Awards the job couldn't resolve to a recipient — e.g. an orphaned
+       *  team ('team-has-no-user'), a manual pin already occupying the slot
+       *  ('manual-pin-present'), or no matches/kills clearing the floor
+       *  ('no-eligible-matches', 'no-pokemon-met-kill-floor'). Surfaced in
+       *  the admin UI instead of being dropped silently — this is how S9
+       *  Ruby's championship went missing with no trace. */
+      unresolved: { pinDefId: string; reason: string; teamId?: string | null; leagueId?: string | null }[];
     }>('/api/admin/pins/run-auto', { season }),
 
   /** Re-point an existing pin to a different user (used to override an

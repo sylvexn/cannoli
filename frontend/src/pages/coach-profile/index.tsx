@@ -364,6 +364,7 @@ function TrophyCase({ pins }: { pins: ApiPin[] }) {
               def={pin.definition}
               size="lg"
               seasonId={pin.seasonId}
+              leagueId={pin.leagueId}
               metadata={pin.metadata}
             />
           ))}
