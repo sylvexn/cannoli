@@ -100,11 +100,12 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
       return err(409, 'Free agent pickups are closed during playoffs', 'fa_playoffs_closed');
     }
     if (league.phase === 'regular') {
-      // The deadline binds the week the pickup LANDS in, not the week it is
-      // approved in — an admin can't push one past it by picking a later
-      // effective week.
+      // The deadline week is the LAST week you can pick up (same rule as trades
+      // — isTradeDeadlinePassed in lib/queries.ts). An approval lands the
+      // following week, so deadline + 1 is the furthest a pickup may land: that
+      // second clause only stops an admin stamping an arbitrary later week.
       const faDeadline = settings?.faDeadlineWeek ?? 7;
-      if (stampWeek > faDeadline) {
+      if (week > faDeadline || stampWeek > faDeadline + 1) {
         return err(409, `Free agent deadline has passed (week ${faDeadline}, effective week ${stampWeek})`, 'fa_deadline_passed');
       }
     }

@@ -223,11 +223,10 @@ export const tradeRoutes = new Elysia()
       set.status = 400;
       return { error: `Trade deadline has passed (Week ${league!.tradeDeadlineWeek})`, code: 'TRADE_DEADLINE_PASSED' };
     }
-    // The deadline binds the week a trade LANDS in, not just the week it is
-    // signed off in — an admin can't push an approval past it by picking a later
-    // effective week. The default (currentWeek + 1) always clears it: the gate
-    // above already requires currentWeek < tradeDeadlineWeek.
-    if (league && league.tradeDeadlineWeek > 0 && effectiveWeek > league.tradeDeadlineWeek) {
+    // An admin can't push an approval arbitrarily far past the deadline by
+    // picking a later effective week. Deadline week trades are legal and land
+    // the following week, so deadline + 1 is the furthest a trade may land.
+    if (league && league.tradeDeadlineWeek > 0 && effectiveWeek > league.tradeDeadlineWeek + 1) {
       set.status = 400;
       return {
         error: `Week ${effectiveWeek} is past the trade deadline (Week ${league.tradeDeadlineWeek})`,
