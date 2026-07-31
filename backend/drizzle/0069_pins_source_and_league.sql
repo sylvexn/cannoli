@@ -60,6 +60,28 @@ UPDATE `pins` SET `league_id` = (
 -- awards-data.ts lists. Those must survive an auto re-run untouched.
 UPDATE `pins` SET `source` = 'manual'
   WHERE `pin_def_id` IN (SELECT `id` FROM `pin_definitions` WHERE `is_auto` = 0);--> statement-breakpoint
+-- S9/S10 additionally have hand-curated winners for THREE is_auto=1 slugs.
+-- awards-data.ts is explicit that its rows are the source of truth for
+-- garchomp / cannoli / cynthia and deliberately override the auto minter — the
+-- Discord-announced winners were tallied by a human from data we no longer hold
+-- (those seasons were imported without per-Pokemon match rows, so the minter
+-- reports 'no-eligible-matches' and would re-derive nothing).
+--
+-- Marking them 'auto' would let a forced re-run DELETE verified history and
+-- replace it with nothing, or with a different winner. Verified against a live
+-- snapshot: it wiped all 3 S9 garchomp pins and re-pointed S9 Ruby's cannoli at
+-- a different coach.
+--
+-- Scoped by slug rather than by season-archived, because the four archive pins
+-- (champion/high-score/steal-of-the-draft/sweeper) and the two per-match pins
+-- ARE genuinely auto-derived even in these seasons, and must stay recomputable
+-- so the one-winner-per-league tiebreak can collapse S10's 14 High Score
+-- holders down to 3.
+UPDATE `pins` SET `source` = 'manual'
+  WHERE `season_id` IN (SELECT `id` FROM `seasons` WHERE `season_number` IN (9, 10))
+    AND `pin_def_id` NOT IN (
+      'champion', 'high-score', 'steal-of-the-draft', 'sweeper', 'kingslayer', 'flawless'
+    );--> statement-breakpoint
 DROP INDEX IF EXISTS `pins_user_def_season_idx`;--> statement-breakpoint
 DROP INDEX IF EXISTS `pins_user_def_lifetime_idx`;--> statement-breakpoint
 CREATE UNIQUE INDEX `pins_identity_idx` ON `pins` (
