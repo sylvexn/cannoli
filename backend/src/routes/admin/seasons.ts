@@ -9,7 +9,7 @@ import { mintArchivePins, type ArchiveMintSummary } from '../../lib/pins/archive
 export const seasonRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── Seasons CRUD ───────────────────────────────────────────────────
+  // Seasons CRUD
 
   .post('/api/seasons', async ({ body, user, set }) => {
     const {
@@ -203,7 +203,7 @@ export const seasonRoutes = new Elysia()
     }
   })
 
-  // ─── Season archive toggle ──────────────────────────────────────────
+  // Season archive toggle
 
   .put('/api/seasons/:seasonId/archived', ({ params, body, user, set }) => {
     const seasonId = parseInt(params.seasonId);
@@ -232,7 +232,7 @@ export const seasonRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Archive ceremony ───────────────────────────────────────────────
+  // Archive ceremony
   // The "Archive Season" admin button. Wraps three things into one
   // transactional action:
   //   1. Set seasons.archived = 1 (writes now require ?force=1).

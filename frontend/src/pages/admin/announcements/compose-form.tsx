@@ -23,7 +23,7 @@ import { ANNOUNCEMENT_CATEGORY_META, ANNOUNCEMENT_CATEGORIES } from '@/lib/const
 import { Megaphone } from 'lucide-react';
 import { ComposePreview } from './banner-preview';
 
-// ─── Defaults ─────────────────────────────────────────────────────────────────
+// Defaults
 
 const DEFAULT_CATEGORY: AnnouncementCategory = 'info';
 const DEFAULT_SURFACE: AnnouncementSurface   = 'bell';
@@ -46,7 +46,7 @@ export function ComposeForm({ editing, onSaved, onCancelEdit }: ComposeFormProps
   const [targetRole, setTargetRole] = useState<string>('all');   // 'all' → null, 'admin', 'user'
   const [busy,       setBusy]       = useState(false);
 
-  // ── Sync form when editing object changes ─────────────────────────────────
+  // Sync form when editing object changes
   useEffect(() => {
     if (editing) {
       setTitle(editing.title);

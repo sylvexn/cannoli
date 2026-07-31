@@ -28,7 +28,7 @@ import {
   Film, Gauge, ListTree, Gamepad2,
 } from 'lucide-react';
 
-// ─── Admin tab definitions (mirrored from admin/index.tsx) ───────
+// Admin tab definitions (mirrored from admin/index.tsx)
 // `id` is the URL slug under /admin/.
 const ADMIN_TABS = [
   { id: 'users', label: 'Users', group: 'People', icon: Users },
@@ -46,7 +46,7 @@ const ADMIN_TABS = [
   { id: 'feedback', label: 'Feedback', group: 'System', icon: MessageSquare },
 ];
 
-// ─── League page definitions ─────────────────────────────────────
+// League page definitions
 const LEAGUE_PAGES = [
   { path: '', label: 'Standings', icon: Trophy },
   { path: '/draft', label: 'Draft Board', icon: LayoutDashboard },
@@ -68,7 +68,7 @@ const GLOBAL_PAGES = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-// ─── Prefix filters ─────────────────────────────────────────────
+// Prefix filters
 type FilterMode = 'all' | 'pokemon' | 'teams' | 'pages' | 'admin';
 
 function getFilterMode(query: string): { mode: FilterMode; cleanQuery: string } {
@@ -79,7 +79,7 @@ function getFilterMode(query: string): { mode: FilterMode; cleanQuery: string } 
   return { mode: 'all', cleanQuery: query };
 }
 
-// ─── Pokemon search (limit results for performance) ─────────────
+// Pokemon search (limit results for performance)
 const MAX_POKEMON_RESULTS = 12;
 
 interface CommandPaletteProps {
@@ -146,13 +146,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
-  // ─── Navigate helper ───────────────────────────────────────────
+  // Navigate helper
   const go = useCallback((path: string) => {
     close();
     navigate(path);
   }, [close, navigate]);
 
-  // ─── Pokemon results ───────────────────────────────────────────
+  // Pokemon results
   const pokemonResults = useMemo(() => {
     if (mode !== 'all' && mode !== 'pokemon') return [];
     const q = cleanQuery.toLowerCase();
@@ -175,7 +175,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return results;
   }, [mode, cleanQuery]);
 
-  // ─── Team/player results ───────────────────────────────────────
+  // Team/player results
   const teamResults = useMemo(() => {
     if (mode !== 'all' && mode !== 'teams') return [];
     const q = cleanQuery.toLowerCase();
@@ -189,7 +189,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     });
   }, [mode, cleanQuery, teams]);
 
-  // ─── Page results ──────────────────────────────────────────────
+  // Page results
   const pageResults = useMemo(() => {
     if (mode !== 'all' && mode !== 'pages') return [];
     const q = cleanQuery.toLowerCase();
@@ -223,7 +223,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return results;
   }, [mode, cleanQuery, leagues]);
 
-  // ─── League results ────────────────────────────────────────────
+  // League results
   const leagueResults = useMemo(() => {
     if (mode !== 'all' && mode !== 'pages') return [];
     const q = cleanQuery.toLowerCase();
@@ -235,7 +235,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     );
   }, [mode, cleanQuery, leagues]);
 
-  // ─── Admin results ─────────────────────────────────────────────
+  // Admin results
   const adminResults = useMemo(() => {
     if (!isAdmin) return [];
     if (mode !== 'all' && mode !== 'admin') return [];

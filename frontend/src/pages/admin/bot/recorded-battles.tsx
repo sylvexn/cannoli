@@ -46,7 +46,7 @@ function LinkBadge({ row }: { row: PsReplayRow }) {
   );
 }
 
-// ─── Expanded detail ──────────────────────────────────────────────────────────
+// Expanded detail
 
 function ReplayDetail({ row }: { row: PsReplayRow }) {
   const [detail, setDetail] = useState<PsReplayDetail | null>(null);
@@ -165,7 +165,7 @@ function KdColumn({
   );
 }
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
+// Row
 
 function ReplayRow({ row }: { row: PsReplayRow }) {
   const [open, setOpen] = useState(false);
@@ -215,7 +215,7 @@ function ReplayRow({ row }: { row: PsReplayRow }) {
   );
 }
 
-// ─── Section ────────────────────────────────────────────────────────────────
+// Section
 
 export function RecordedBattles() {
   const [data, setData] = useState<PsReplayListResponse | null>(null);

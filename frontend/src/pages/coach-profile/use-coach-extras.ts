@@ -54,7 +54,7 @@ export function useCoachExtras(profile: ApiPublicProfile | null): CoachExtras {
     Promise.all(work).then(perLeague => {
       if (cancelled) return;
 
-      // ─── Results timeline ─────────────────────────────────────────────
+      // Results timeline
       // Flatten completed matches into per-coach W/L outcomes, ordered
       // by week ascending (oldest first) so the polyline reads left → right.
       const flat: CoachResult[] = [];

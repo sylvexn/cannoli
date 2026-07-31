@@ -64,7 +64,7 @@ const HOST_ROSTER = host
   ? (db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()?.rosterSize ?? 10)
   : 10;
 
-// ── Fixture lifecycle: every test uses the PFX teams/mons; tear them all down
+// Fixture lifecycle: every test uses the PFX teams/mons; tear them all down
 //    after each test so we never pollute the seeded DB.
 function cleanupFixtures() {
   // Delete any trades involving the fixture teams first (FK to teams).

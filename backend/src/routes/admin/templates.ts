@@ -49,7 +49,7 @@ function safeParse<T>(s: string | null, fallback: T): T {
 export const templateAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── List templates ─────────────────────────────────────────────────
+  // List templates
   .get('/api/draft-templates', ({ user, set }) => {
     const rows = db.select().from(schema.draftTemplates)
       .orderBy(desc(schema.draftTemplates.createdAt))
@@ -57,7 +57,7 @@ export const templateAdminRoutes = new Elysia()
     return rows.map(rowToJson);
   })
 
-  // ─── Get single ─────────────────────────────────────────────────────
+  // Get single
   .get('/api/draft-templates/:id', ({ params, user, set }) => {
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }
@@ -66,7 +66,7 @@ export const templateAdminRoutes = new Elysia()
     return rowToJson(row);
   })
 
-  // ─── Create ─────────────────────────────────────────────────────────
+  // Create
   .post('/api/draft-templates', ({ body, user, set }) => {
     const b = body as TemplateBody;
     const name = b.name?.trim();
@@ -101,7 +101,7 @@ export const templateAdminRoutes = new Elysia()
     return rowToJson(result);
   })
 
-  // ─── Update ─────────────────────────────────────────────────────────
+  // Update
   .put('/api/draft-templates/:id', ({ params, body, user, set }) => {
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }
@@ -138,7 +138,7 @@ export const templateAdminRoutes = new Elysia()
     return rowToJson(updated);
   })
 
-  // ─── Delete ─────────────────────────────────────────────────────────
+  // Delete
   .delete('/api/draft-templates/:id', ({ params, user, set }) => {
     const id = Number(params.id);
     if (!Number.isInteger(id)) { set.status = 400; return { error: 'Invalid id' }; }

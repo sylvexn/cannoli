@@ -98,7 +98,7 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
   return summary;
 }
 
-// ─── Pure helpers (testable without DB) ───────────────────────────────────
+// Pure helpers (testable without DB)
 
 export interface GarchompRow { teamId: string; pokemon: string; kills: number }
 export interface GarchompWinner { teamId: string; pokemon: string; kills: number }
@@ -191,7 +191,7 @@ export function computeStreak(matches: StreakMatch[], teamId: string): number {
   return best;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// Helpers
 
 function tryInsert(
   pinDefId: string,
@@ -254,7 +254,7 @@ function teamUserId(teamId: string): number | null {
   return team?.userId ?? null;
 }
 
-// ─── Garchomp (most KOs across the regular season) ────────────────────────
+// Garchomp (most KOs across the regular season)
 // Sums match_pokemon.kills per team across regular-season completed matches;
 // the team owning the Pokemon (well, the team) with the highest single-Mon
 // kill count gets it. We track per-Pokemon to surface the actual headline
@@ -297,7 +297,7 @@ function awardGarchomp(
   }
 }
 
-// ─── Cannoli (best regular-season record) ─────────────────────────────────
+// Cannoli (best regular-season record)
 // Most wins; tiebreak on point differential. Ties on both columns split the
 // pin (each tied user gets a copy).
 
@@ -340,7 +340,7 @@ function awardCannoli(
   }
 }
 
-// ─── Cynthia (longest consecutive-win streak in the regular season) ──────
+// Cynthia (longest consecutive-win streak in the regular season)
 // Streak is broken by losses *and* ties; we order matches by week then a
 // stable id fallback.
 
@@ -376,7 +376,7 @@ function awardCynthia(
   }
 }
 
-// ─── Kingslayer (post-match: bottom-half team beat a top-3 team) ─────────
+// Kingslayer (post-match: bottom-half team beat a top-3 team)
 // Snapshot the standings as of the match being recorded.
 
 function awardKingslayer(
@@ -449,7 +449,7 @@ function awardKingslayer(
   );
 }
 
-// ─── Flawless (won a match without losing a single Pokemon) ──────────────
+// Flawless (won a match without losing a single Pokemon)
 
 function awardFlawless(
   leagueId: string,

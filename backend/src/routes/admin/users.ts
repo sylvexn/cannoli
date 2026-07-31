@@ -9,7 +9,7 @@ import { requireStaff } from '../../lib/auth-guards';
 export const userRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── Users (admin read) ──────────────────────────────────────────────
+  // Users (admin read)
 
   .get('/api/users', () => {
     return db.select({
@@ -28,7 +28,7 @@ export const userRoutes = new Elysia()
       .map(u => ({ ...u, id: String(u.id) }));
   })
 
-  // ─── Users CRUD ─────────────────────────────────────────────────────
+  // Users CRUD
 
   .post('/api/users', ({ body, user, set }) => {
     const { username, role } = body as { username: string; role?: string };

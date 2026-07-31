@@ -44,7 +44,7 @@ export function AdminTierList() {
    */
   const [activeLeagues, setActiveLeagues] = useState<ActiveLeague[]>([]);
 
-  // ─── Cost format selector ─────────────────────────────────────────────────
+  // Cost format selector
   const [costFormats, setCostFormats] = useState<ApiCostFormat[]>([]);
   const [selectedFormat, setSelectedFormat] = useState<string>(DEFAULT_FORMAT);
 

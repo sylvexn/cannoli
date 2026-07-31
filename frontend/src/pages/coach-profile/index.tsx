@@ -257,7 +257,7 @@ export function CoachProfilePage() {
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────
+// Sub-components
 
 /** Small team-color square + abbrev pill placed in the identity header so
  *  the team affiliation reads even when the avatar's glow is subtle. The

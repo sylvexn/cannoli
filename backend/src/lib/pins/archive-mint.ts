@@ -88,7 +88,7 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
   return summary;
 }
 
-// ─── Pure helpers (testable without DB) ───────────────────────────────────
+// Pure helpers (testable without DB)
 
 export interface ChampionFinalsRow {
   homeTeamId: string | null;
@@ -246,7 +246,7 @@ export function pickSweeper(rows: SweeperMatchRow[]): SweeperWinner[] {
     .map(([teamId, c]) => ({ teamId, sweeps: c }));
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// Helpers
 
 function teamUserId(teamId: string): number | null {
   const team = db.select({ userId: schema.teams.userId })
@@ -275,7 +275,7 @@ function tryInsert(
   return false;
 }
 
-// ─── Champion (finals winner) ─────────────────────────────────────────────
+// Champion (finals winner)
 
 function awardChampion(
   leagueId: string,
@@ -312,7 +312,7 @@ function awardChampion(
   );
 }
 
-// ─── High Score (most kills by a single Pokemon in a single match) ────────
+// High Score (most kills by a single Pokemon in a single match)
 
 function awardHighScore(
   leagueId: string,
@@ -356,7 +356,7 @@ function awardHighScore(
   }
 }
 
-// ─── Steal of the Draft (best K-per-point on a drafted Pokemon) ───────────
+// Steal of the Draft (best K-per-point on a drafted Pokemon)
 // Uses costAtDraft (or falls back to roster.tier) so trade arrivals don't
 // skew a team's "draft value". Minimum 1 GP and cost >= 1 to avoid div-by-0
 // and silly steals from $0 picks.
@@ -407,7 +407,7 @@ function awardStealOfTheDraft(
   }
 }
 
-// ─── Sweeper (most 6-0 sweeps logged across the season) ──────────────────
+// Sweeper (most 6-0 sweeps logged across the season)
 // A sweep = winning a match with 0 deaths. Reuses the same logic as the
 // per-match `flawless` award but aggregated over the season.
 

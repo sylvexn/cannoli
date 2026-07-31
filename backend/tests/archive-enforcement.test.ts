@@ -115,7 +115,7 @@ afterAll(() => {
   // (Re-adding rmSync here is the TEST-ISOLATION regression; leave it out.)
 });
 
-// ── Blocking on archived rows ─────────────────────────────────────────────────
+// Blocking on archived rows
 
 describe('archived season blocks writes (no force)', () => {
   test('checkSeasonArchived blocks an archived season', () => {
@@ -144,7 +144,7 @@ describe('archived season blocks writes (no force)', () => {
   });
 });
 
-// ── Active rows pass ──────────────────────────────────────────────────────────
+// Active rows pass
 
 describe('active (non-archived) season allows writes', () => {
   test('checkSeasonArchived passes an active season', () => {
@@ -161,7 +161,7 @@ describe('active (non-archived) season allows writes', () => {
   });
 });
 
-// ── force=1 bypass ────────────────────────────────────────────────────────────
+// force=1 bypass
 
 describe('?force=1 bypasses the guard on archived rows', () => {
   test.each(['1', 'true', true])('force=%p bypasses checkSeasonArchived', (force) => {
@@ -179,7 +179,7 @@ describe('?force=1 bypasses the guard on archived rows', () => {
   });
 });
 
-// ── Non-existent rows pass through to the route's own 404 ─────────────────────
+// Non-existent rows pass through to the route's own 404
 
 describe('missing rows pass through (do not mask 404)', () => {
   test('unknown season/league/team/match all return null', () => {
@@ -190,7 +190,7 @@ describe('missing rows pass through (do not mask 404)', () => {
   });
 });
 
-// ── FA pickup and release share the same checkLeagueArchived guard ────────────
+// FA pickup and release share the same checkLeagueArchived guard
 // The routes /free-agents/pickup and /free-agents/release both call
 // checkLeagueArchived(leagueId, query.force) at the top of their handlers —
 // they had NO archive guard before this fix. Verify the guard function

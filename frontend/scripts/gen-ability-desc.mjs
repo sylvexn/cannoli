@@ -27,7 +27,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const REPO_ROOT = resolve(ROOT, '..');
 
-// ─── 1. Load Showdown's ability text and extract the object literal ──
+// 1. Load Showdown's ability text and extract the object literal
 // The file is `export const AbilitiesText: {...} = { <literal> };`. Slice from
 // the first `{` after the `=` to the final `}`, then eval it as plain JS (it's
 // trusted local data with unquoted keys, so JSON.parse won't do).
@@ -45,7 +45,7 @@ if (eqIdx === -1 || start === -1 || end === -1) {
 const AbilitiesText = eval('(' + text.slice(start, end + 1) + ')');
 console.log(`Loaded ${Object.keys(AbilitiesText).length} ability text entries from Showdown.`);
 
-// ─── 2. Build name → shortDesc from Showdown (skip the noability sentinel) ──
+// 2. Build name → shortDesc from Showdown (skip the noability sentinel)
 
 const showdownDesc = {};
 for (const id of Object.keys(AbilitiesText)) {
@@ -58,14 +58,14 @@ for (const id of Object.keys(AbilitiesText)) {
 }
 console.log(`  Usable Showdown descriptions: ${Object.keys(showdownDesc).length}`);
 
-// ─── 3. Merge — curated wins, Showdown fills the gaps ───────────────
+// 3. Merge — curated wins, Showdown fills the gaps
 
 const merged = { ...showdownDesc, ...CURATED };
 const curatedCount = Object.keys(CURATED).length;
 const addedCount = Object.keys(merged).length - curatedCount;
 console.log(`  Curated kept: ${curatedCount} | filled from Showdown: ${addedCount} | total: ${Object.keys(merged).length}`);
 
-// ─── 4. Emit the TypeScript file (alphabetical, same shape as before) ──
+// 4. Emit the TypeScript file (alphabetical, same shape as before)
 
 function esc(s) {
   return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");

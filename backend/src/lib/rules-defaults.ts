@@ -40,7 +40,7 @@ export interface RulesContent {
 
 export type RulesCostFormat = 'natdex' | 'natdexplus';
 
-// ─── Shared baseline (identical across S11 formats) ─────────────────────────
+// Shared baseline (identical across S11 formats)
 
 const SHARED_DRAFT_RULES: string[] = [
   'You have up to 110 points with which to draft 10–12 Pokémon. Costs are listed on the draft board. You do not have to spend your full budget.',
@@ -84,7 +84,7 @@ const SHARED_BANNED_MOVES = [
   'Last Respects', 'Pursuit', 'Return', 'Revival Blessing', 'Shed Tail', 'Swagger',
 ];
 
-// ─── Format-specific defaults (Season 11 workbooks) ─────────────────────────
+// Format-specific defaults (Season 11 workbooks)
 
 /** Emerald — restricted pool (legendaries/paradoxes/mythicals banned). */
 const NATDEX_DEFAULT: RulesContent = {
@@ -135,7 +135,7 @@ export function defaultRulesFor(costFormat: string | null | undefined): RulesCon
   return structuredClone(DEFAULT_RULES[key]);
 }
 
-// ─── Validation / normalization ─────────────────────────────────────────────
+// Validation / normalization
 
 const MAX_NOTES = 8_000;
 const MAX_ITEM = 600;   // a single rule / clause description line

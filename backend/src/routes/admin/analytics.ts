@@ -34,7 +34,7 @@ function countScalar(sql: string, ...params: (string | number)[]): number {
 
 export const analyticsAdminRoutes = new Elysia()
 
-  // ── 1. Summary (tiles + timeline + breakdowns) ────────────────────────────
+  // 1. Summary (tiles + timeline + breakdowns)
 
   .get('/api/admin/analytics/summary', ({ query }) => {
     const days = clampDays(query.days as string | undefined, 30);
@@ -120,7 +120,7 @@ export const analyticsAdminRoutes = new Elysia()
     return { tiles, timeline, topRoutes, events, devices, referrers };
   }, { beforeHandle: requireDev })
 
-  // ── 2. Per-coach activity (logged-in users only) ──────────────────────────
+  // 2. Per-coach activity (logged-in users only)
 
   .get('/api/admin/analytics/coaches', ({ query }) => {
     const days = clampDays(query.days as string | undefined, 7);
@@ -164,7 +164,7 @@ export const analyticsAdminRoutes = new Elysia()
     };
   }, { beforeHandle: requireDev })
 
-  // ── 3. Live feed (last 5 minutes) ─────────────────────────────────────────
+  // 3. Live feed (last 5 minutes)
 
   .get('/api/admin/analytics/live', () => {
     const entries = sqlite.query<

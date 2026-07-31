@@ -196,7 +196,7 @@ export const PHASE_COLORS: Record<string, string> = {
   offseason: 'text-text-muted bg-surface-overlay',
 };
 
-// ─── Profile / settings limits ───────────────────────────────────────────────
+// Profile / settings limits
 export const MAX_DISPLAY_NAME = 32;
 export const MAX_BIO = 280;
 export const MAX_TEAM_BIO = 280;
@@ -220,7 +220,7 @@ export const DEFAULT_LANDING_OPTIONS: Array<{ value: string; label: string }> = 
   { value: '/replays', label: 'Replays' },
 ];
 
-// ─── Announcement category display metadata ───────────────────────────────────
+// Announcement category display metadata
 
 export interface AnnouncementCategoryMeta {
   label: string;

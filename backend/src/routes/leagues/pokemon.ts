@@ -18,7 +18,7 @@ function normalizePokemonKey(name: string): string {
 
 export const pokemonRoutes = new Elysia()
 
-  // ─── Pokemon reference data ──────────────────────────────────────────
+  // Pokemon reference data
 
   .get('/api/pokemon', ({ query }) => {
     const limit = parseInt(query.limit as string) || 100;
@@ -49,7 +49,7 @@ export const pokemonRoutes = new Elysia()
       .find(p => normalizePokemonKey(p.name) === key) || null;
   })
 
-  // ─── Move Categories ────────────────────────────────────────────────
+  // Move Categories
 
   .get('/api/move-categories', () => {
     const cats = db.select().from(schema.moveCategories)
@@ -73,7 +73,7 @@ export const pokemonRoutes = new Elysia()
     });
   })
 
-  // ─── Tier List ─────────────────────────────────────────────────────
+  // Tier List
 
   // Per-cost-format tier list. `?format=` selects the cost sheet (default
   // 'natdexplus'); each format prices/bans species differently (Emerald's

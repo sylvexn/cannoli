@@ -238,7 +238,7 @@ export function DraftCompleteSummary({
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// Sub-components
 
 interface RoundRowProps {
   round: number;

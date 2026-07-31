@@ -54,7 +54,7 @@ export function DraftTeamSidebar(props: DraftTeamSidebarProps) {
   );
 }
 
-// ─── 1024–1440 + unpinned-large: rail + floating overlay ──────────────────
+// 1024–1440 + unpinned-large: rail + floating overlay
 
 interface RailWithOverlayShellProps extends DraftTeamSidebarProps {
   showPinToggle: boolean;
@@ -133,7 +133,7 @@ function RailWithOverlayShell(props: RailWithOverlayShellProps) {
   );
 }
 
-// ─── <1024px: bottom sheet ────────────────────────────────────────────────
+// <1024px: bottom sheet
 
 function BottomSheetShell(props: DraftTeamSidebarProps) {
   const {

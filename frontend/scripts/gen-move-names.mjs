@@ -29,7 +29,7 @@ const ROOT = resolve(__dirname, '..');
 // Repo root is one level above the frontend dir (ROOT).
 const REPO_ROOT = resolve(ROOT, '..');
 
-// ─── 1. Load the Showdown moves.json (id → { name, ... }) ─────────
+// 1. Load the Showdown moves.json (id → { name, ... })
 
 const LOCAL_MOVES = resolve(
   REPO_ROOT,
@@ -68,7 +68,7 @@ for (const [id, data] of Object.entries(movesRaw)) {
 }
 console.log(`  Loaded ${nameById.size} move names from moves.json.`);
 
-// ─── 2. Extract move IDs used by the draft-pool learnsets ─────────
+// 2. Extract move IDs used by the draft-pool learnsets
 
 const learnsetsSrc = readFileSync(resolve(ROOT, 'src/data/pokemon-learnsets.ts'), 'utf8');
 
@@ -84,7 +84,7 @@ while ((m = tokenRe.exec(learnsetsSrc)) !== null) {
 }
 console.log(`  Found ${usedIds.size} distinct move IDs in pokemon-learnsets.ts.`);
 
-// ─── 3. Emit src/data/move-names.ts ───────────────────────────────
+// 3. Emit src/data/move-names.ts
 
 const sortedIds = [...usedIds].sort();
 

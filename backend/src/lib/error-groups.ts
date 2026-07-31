@@ -23,7 +23,7 @@ const SPIKE_THRESHOLD = 10;
 /** Window length (minutes) for the spike check. */
 const SPIKE_WINDOW_MINUTES = 5;
 
-// ─── Fingerprinting ──────────────────────────────────────────────────────────
+// Fingerprinting
 
 /**
  * Normalize a raw error message so that two occurrences of the same bug
@@ -99,7 +99,7 @@ export function computeFingerprint(input: {
   }
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// Types
 
 export interface OccurrenceInput {
   fingerprint: string;
@@ -124,7 +124,7 @@ export interface RecordResult {
   samplePath: string | null;
 }
 
-// ─── Recent count helper ─────────────────────────────────────────────────────
+// Recent count helper
 
 /**
  * Count request_logs rows with a given fingerprint within the last N minutes.
@@ -146,7 +146,7 @@ export function recentCount(fingerprint: string, minutes: number): number {
   }
 }
 
-// ─── Occurrence recording ────────────────────────────────────────────────────
+// Occurrence recording
 
 /**
  * Upsert an error_groups row for this fingerprint, track the distinct user (if
@@ -172,7 +172,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
       version,
     } = input;
 
-    // ── 1. Check whether this fingerprint already has a group row ────────────
+    // 1. Check whether this fingerprint already has a group row
     const existing = sqlite
       .query<
         {
@@ -195,7 +195,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
 
     const isNew = existing == null;
 
-    // ── 2. Determine whether to reopen a resolved regression ─────────────────
+    // 2. Determine whether to reopen a resolved regression
     // A group was marked resolved at a specific version. If we see a fresh
     // occurrence from a *different* version, the fix didn't hold — reopen it.
     const shouldReopen =
@@ -204,7 +204,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
       existing!.resolved_version != null &&
       version !== existing!.resolved_version;
 
-    // ── 3. Upsert the group row ───────────────────────────────────────────────
+    // 3. Upsert the group row
     if (isNew) {
       sqlite
         .query(
@@ -251,7 +251,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
         .run(version, fingerprint);
     }
 
-    // ── 4. Track distinct users ───────────────────────────────────────────────
+    // 4. Track distinct users
     if (userId != null) {
       // INSERT OR IGNORE enforces the (fingerprint, user_id) unique index
       // defined in the migration — the count only goes up on genuinely new users.
@@ -274,7 +274,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
         .run(fingerprint, fingerprint);
     }
 
-    // ── 5. Read final state for the result ───────────────────────────────────
+    // 5. Read final state for the result
     const final = sqlite
       .query<
         {
@@ -292,7 +292,7 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
       )
       .get(fingerprint);
 
-    // ── 6. Spike detection ───────────────────────────────────────────────────
+    // 6. Spike detection
     // A newly-created group can't be a spike (no prior baseline to compare
     // against) — we'd always fire on first occurrence. Skip for isNew.
     const isSpike =

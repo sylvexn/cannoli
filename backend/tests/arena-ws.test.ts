@@ -43,7 +43,7 @@ beforeAll(() => {
 // Shared on-disk dev DB → wait for concurrent-writer locks instead of throwing.
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
-// ─── Server harness ──────────────────────────────────────────────────────────
+// Server harness
 
 let app: Elysia;
 let port: number;
@@ -59,7 +59,7 @@ afterAll(() => {
   try { cleanupFixture(); } catch { /* DB closed during suite teardown */ }
 });
 
-// ─── Tiny WS client with a message queue ───────────────────────────────────────
+// Tiny WS client with a message queue
 
 interface Client {
   ws: WebSocket;
@@ -95,7 +95,7 @@ async function waitFor(c: Client, pred: (msgs: any[]) => boolean, ms = 1500): Pr
 const countType = (c: Client, type: string) => c.msgs.filter((m) => m.type === type).length;
 const lastOfType = (c: Client, type: string) => [...c.msgs].reverse().find((m) => m.type === type);
 
-// ─── Fixture: league(regular), 2 teams, owning users+sessions, 1 scheduled match ──
+// Fixture: league(regular), 2 teams, owning users+sessions, 1 scheduled match
 
 const tag = `arena-${Date.now()}`;
 const leagueId = `${tag}-lg`;
@@ -182,9 +182,7 @@ function resetBoth() {
 
 const cookie = (s: string) => `session=${s}`;
 
-// ───────────────────────────────────────────────────────────────────────────
 // 1. Auth + identify on connect
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('arena connect + identify', () => {
   test('a cookie-authed client receives an identified frame with its teamId', async () => {
@@ -196,9 +194,7 @@ describe('arena connect + identify', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 2. Ready-up race: both ready ~simultaneously → exactly one 2/2 transition
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('ready-up race', () => {
   test('both teams readying simultaneously flips status to ready exactly once', async () => {
@@ -292,9 +288,7 @@ describe('ready-up race', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 2b. Invite-flow cleanup: unready cancels the pending PS invite room
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('invite-flow unready cancels orphaned PS room', () => {
   // With the invite flow, a both-ready match has an invite room created
@@ -332,9 +326,7 @@ describe('invite-flow unready cancels orphaned PS room', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 3. Spectator count sync across clients
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('spectator count sync', () => {
   test('count increments as spectators subscribe and decrements on unsubscribe', async () => {
@@ -372,9 +364,7 @@ describe('spectator count sync', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 4. Scrim lobby create / join / leave churn
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('scrim lobby churn', () => {
   test('create → join → leave keeps the player list + lobby lifecycle consistent', async () => {
@@ -453,9 +443,7 @@ describe('scrim lobby churn', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 5. Topic isolation: scrim messages don't leak to match-only subscribers
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('topic isolation', () => {
   test('scrim_state is delivered on arena:scrim, not arena:match', async () => {
@@ -489,9 +477,7 @@ describe('topic isolation', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 6. Pick which week to battle (issue #15: early / make-up battles)
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('pick battle week', () => {
   test('GET /api/arena/state lists weeks within the lookahead, current week flagged', async () => {

@@ -15,7 +15,7 @@ import * as schema from '../src/db/schema';
 
 type DB = ReturnType<typeof drizzle<typeof schema>>;
 
-// ─── System accounts ────────────────────────────────────────────────────────
+// System accounts
 
 /** Seed the syl (dev) + root (bot) system accounts. Idempotent. */
 export function seedSystemAccounts(sqlite: Database, db: DB): void {
@@ -50,7 +50,7 @@ export function seedSystemAccounts(sqlite: Database, db: DB): void {
   console.log('  Created: syl (dev), root (bot)');
 }
 
-// ─── Site settings ──────────────────────────────────────────────────────────
+// Site settings
 
 /** Seed the single site_settings row. Idempotent. */
 export function seedSiteSettings(sqlite: Database, db: DB): void {
@@ -64,7 +64,7 @@ export function seedSiteSettings(sqlite: Database, db: DB): void {
   console.log('Site settings seeded.');
 }
 
-// ─── Pin definitions ────────────────────────────────────────────────────────
+// Pin definitions
 //
 // Net-new auto-pin defs added when the archive feature shipped. The earlier
 // award set lives in migration 0022_real_awards.sql. These four close the
@@ -90,7 +90,7 @@ export function seedPinDefinitions(sqlite: Database, db: DB): void {
   else console.log('Pin definitions already exist, skipping.');
 }
 
-// ─── Move categories ────────────────────────────────────────────────────────
+// Move categories
 
 const MOVE_CATEGORIES = [
   { id: 'hazards', name: 'Hazards', sortOrder: 1, entries: [

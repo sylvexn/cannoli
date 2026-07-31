@@ -154,7 +154,7 @@ describe('admin auth guard — dev-only routes', () => {
   }
 });
 
-// ─── Role escalation whitelist ────────────────────────────────────────────────
+// Role escalation whitelist
 // PUT /api/users/:id is the only endpoint that can change a user's role.
 // An admin must NOT be able to set role='dev' (platform-highest tier) via this
 // endpoint — the whitelist allows only 'user' and 'admin'.

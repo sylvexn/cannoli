@@ -76,7 +76,7 @@ export function isMegaForm(name: string): boolean {
   return getFormCategory(name) === 'mega';
 }
 
-// ─── Conflict detection ────────────────────────────────────────────────────
+// Conflict detection
 
 /** Cheapest mon in the tier list — used as the floor when reserving budget for remaining picks. */
 export const MIN_PICK_COST = 1;
@@ -216,7 +216,7 @@ export function describeWarning(w: PickWarning): string {
   }
 }
 
-// ─── Captain-budget headroom ───────────────────────────────────────────────
+// Captain-budget headroom
 
 /**
  * Worst-case extra points a team would need to designate `slots` captains

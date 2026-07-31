@@ -235,7 +235,7 @@ export function formatTimestamp(input: DateInput, opts: { tz?: string } = {}): s
   return formatDateTime(input, { tz: opts.tz });
 }
 
-// ─── React hooks ──────────────────────────────────────────────────────────
+// React hooks
 //
 // These read the active user zone from the auth context once and return
 // stable formatter functions. Components call e.g.

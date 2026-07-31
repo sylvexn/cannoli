@@ -9,7 +9,7 @@ import {
 } from '../lib/auth';
 import { createPsSession, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie, parsePsSid, validatePsSid } from '../lib/ps-login';
 
-// ─── Login rate limiter ─────────────────────────────────────────────────────
+// Login rate limiter
 // In-memory, per-IP. Max 5 failed attempts per 15-minute window; once
 // exceeded, the IP is locked out for 15 minutes. Successful login resets
 // the counter for that IP. No external deps.
@@ -226,7 +226,7 @@ export const authRoutes = new Elysia()
     return { success: true };
   })
 
-  // ── Demo session (mock-only) ────────────────────────────────────────────────
+  // Demo session (mock-only)
   // Creates a session for the `demo` user without a password check.
   // Hard-gated on CANNOLI_MODE=mock — returns 404 in live mode so this
   // endpoint does not exist from an attacker's perspective on the real site.

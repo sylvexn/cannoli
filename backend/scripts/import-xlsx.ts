@@ -44,7 +44,7 @@ function readTeamColorFromSheet(wb: XLSX.WorkBook, abbrev: string): string | nul
   return `#${rgb.toUpperCase()}`;
 }
 
-// ─── Color helpers ──────────────────────────────────────────────────────────
+// Color helpers
 // Used to derive a user-accent secondary color from a single team color so
 // CoachLink gradient text + avatar tinting reads as the team identity rather
 // than the generic cyan→violet fallback. Tertiary stays null and the frontend
@@ -105,7 +105,7 @@ export function deriveSecondaryFromTeamColor(primary: string): string {
   return hslToHex(newH, newS, newL);
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 function sheet(wb: XLSX.WorkBook, name: string): any[][] {
   const ws = wb.Sheets[name];
@@ -135,7 +135,7 @@ function isTeraCaptain(name: string): boolean {
   return /\(T\)\s*$/.test(name);
 }
 
-// ─── Season config ──────────────────────────────────────────────────────────
+// Season config
 
 interface SeasonConfig {
   seasonNumber: number;
@@ -202,7 +202,7 @@ export const S9_CONFIG: SeasonConfig = {
   ],
 };
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// Main
 
 export interface ImportResult {
   /** Map of coach name → user ID for all created user accounts */
@@ -357,7 +357,7 @@ export function importSeason(
   const allCoachTeamIds = new Map<string, string>();
   const allCoachUserIds = new Map<string, number>();
 
-  // ─── Season ──────────────────────────────────────────────────────────────
+  // Season
 
   console.log(`Creating season ${config.seasonNumber}...`);
   const seasonRow = db.insert(schema.seasons).values({
@@ -372,11 +372,11 @@ export function importSeason(
   const leagueCurrentWeek = config.currentWeek ?? 11;
   const leagueTotalWeeks = config.totalWeeks ?? 11;
 
-  // ─── Pokemon reference table (from any league's Pokemon sheet) ──────────
+  // Pokemon reference table (from any league's Pokemon sheet)
 
   importPokemonReference(sqlite, resolve(IMPORTS_DIR, config.files[0].file));
 
-  // ─── Per-league data ─────────────────────────────────────────────────────
+  // Per-league data
 
   for (const league of config.files) {
     console.log(`\nImporting ${league.name}...`);
@@ -400,7 +400,7 @@ export function importSeason(
       ...(config.playoffTeamCount ? { playoffTeamCount: config.playoffTeamCount } : {}),
     }).run();
 
-    // ─── Teams from Standings sheet ──────────────────────────────────────
+    // Teams from Standings sheet
 
     const standings = sheet(wb, 'Standings');
     const teamIds: string[] = [];
@@ -449,7 +449,7 @@ export function importSeason(
     }
     console.log(`  ${teamIds.length} teams created`);
 
-    // ─── Create user accounts for coaches ────────────────────────────────
+    // Create user accounts for coaches
 
     if (createUsers) {
       const passwordHash = hashSync(DEFAULT_USER_PASSWORD, 10);
@@ -512,7 +512,7 @@ export function importSeason(
       return null;
     }
 
-    // ─── Rosters from team tabs ──────────────────────────────────────────
+    // Rosters from team tabs
 
     // Team tabs are named by abbreviation (POW, AK, etc.)
     const sheetNames = wb.SheetNames;
@@ -589,7 +589,7 @@ export function importSeason(
         console.log(`  ${abbrev}: ${rosterCount} Pokemon on roster`);
       }
 
-      // ─── Nicknames (team-summary card on the team sheet) ─────────────────
+      // Nicknames (team-summary card on the team sheet)
       // Two 3-cell rows of Pokemon names (rows 13/22, cols Q/V/AA = 16/21/26)
       // pair with nickname rows directly below them (rows 14/23). Cells holding
       // the literal "NICKNAME" placeholder or the same string as the Pokemon
@@ -627,7 +627,7 @@ export function importSeason(
       }
     }
 
-    // ─── Draft picks ─────────────────────────────────────────────────────
+    // Draft picks
 
     const draftSheet = sheet(wb, 'Draft');
     // Row 6 = "Coach:" row with team names at cols 2,6,10,14,18,22 (Pool A)
@@ -701,7 +701,7 @@ export function importSeason(
     }
     console.log(`  ${draftCount} draft picks`);
 
-    // ─── Schedule + Match results ────────────────────────────────────────
+    // Schedule + Match results
 
     const scheduleSheet = sheet(wb, 'Schedule');
     // Layout: weeks separated by "Week #N" label rows
@@ -758,7 +758,7 @@ export function importSeason(
     }
     console.log(`  ${matchCount} matches`);
 
-    // ─── Match Stats (per-pokemon K/D) ───────────────────────────────────
+    // Match Stats (per-pokemon K/D)
 
     const matchStats = sheet(wb, 'Match Stats');
     // Layout: 15 weeks horizontally, each 11 cols wide
@@ -855,7 +855,7 @@ export function importSeason(
     }
     console.log(`  ${matchPokemonCount} match pokemon entries`);
 
-    // ─── Playoffs ────────────────────────────────────────────────────────
+    // Playoffs
 
     const playoffSheet = sheet(wb, 'Playoffs');
     const ROUND_LABELS: Record<string, { round: string; week: number }> = {
@@ -924,7 +924,7 @@ export function importSeason(
     }
     console.log(`  ${playoffMatchCount} playoff matches`);
 
-    // ─── Playoff Match Stats ─────────────────────────────────────────────
+    // Playoff Match Stats
 
     if (wb.SheetNames.includes('Playoff Match Stats')) {
       const playoffMatchStats = sheet(wb, 'Playoff Match Stats');
@@ -1001,7 +1001,7 @@ export function importSeason(
       console.log(`  ${playoffPokemonCount} playoff pokemon entries`);
     }
 
-    // ─── Transactions ────────────────────────────────────────────────────
+    // Transactions
 
     const txSheet = sheet(wb, 'Transactions');
     let txCount = 0;
@@ -1045,7 +1045,7 @@ export function importSeason(
     }
     console.log(`  ${txCount} transactions`);
 
-    // ─── Update roster acquisition method from transactions ──────────────
+    // Update roster acquisition method from transactions
 
     const allTx = sqlite.prepare(
       `SELECT * FROM transactions WHERE league_id = ? ORDER BY week`
@@ -1064,7 +1064,7 @@ export function importSeason(
     }
   }
 
-  // ─── Summary ───────────────────────────────────────────────────────────
+  // Summary
 
   console.log(`\n=== Season ${config.seasonNumber} Import Summary ===`);
   const counts = {
@@ -1082,7 +1082,7 @@ export function importSeason(
   return { coachUserIds: allCoachUserIds, coachTeamIds: allCoachTeamIds };
 }
 
-// ─── Team logos (from the Setup sheet's IMAGE() formulas) ────────────────────
+// Team logos (from the Setup sheet's IMAGE() formulas)
 
 /**
  * The default/placeholder team logo on the Cannoli sheet template. Teams that
@@ -1139,7 +1139,7 @@ export function importTeamLogos(
   return { set, placeholder };
 }
 
-// ─── Post-import: rewind a season's finals to "pending" ─────────────────────
+// Post-import: rewind a season's finals to "pending"
 
 /**
  * Roll a season's bracket forward to "finals pending":
@@ -1168,7 +1168,7 @@ export function rewindToFinalsPending(sqlite: Database, leagueIds: string[]): {
   let matchPokemonDeleted = 0;
 
   for (const leagueId of leagueIds) {
-    // ─── 1. Make sure semifinals have results ───────────────────────────
+    // 1. Make sure semifinals have results
     type SfRow = {
       id: string;
       home_team_id: string;
@@ -1212,7 +1212,7 @@ export function rewindToFinalsPending(sqlite: Database, leagueIds: string[]): {
 
     if (sfWinners.length < 2) continue;
 
-    // ─── 2. Seed the finals match ───────────────────────────────────────
+    // 2. Seed the finals match
     const [winnerA, winnerB] = sfWinners;
     // Ordering: best seed (lowest number) on home side, when both seeds are
     // known. Falls back to the first SF winner as home.
@@ -1270,7 +1270,7 @@ export function rewindToFinalsPending(sqlite: Database, leagueIds: string[]): {
   return { sfFabricated, finalsCleared, finalsCreated, matchPokemonDeleted };
 }
 
-// ─── Post-import: fabricate a complete playoff bracket ─────────────────────
+// Post-import: fabricate a complete playoff bracket
 
 /**
  * Fill in missing semifinal + final matches so a league archive can render a
@@ -1413,7 +1413,7 @@ export function fabricatePlayoffBracket(
   return { sfsCreated, finalsCreated };
 }
 
-// ─── Post-import: assign finish_position + finish_label to teams ────────────
+// Post-import: assign finish_position + finish_label to teams
 
 /**
  * Walk a season's playoff brackets per league and stamp `finish_position` /
@@ -1502,7 +1502,7 @@ export function assignFinishPositions(sqlite: Database, leagueIds: string[]): {
   return { teamsUpdated };
 }
 
-// ─── Standalone runner ──────────────────────────────────────────────────────
+// Standalone runner
 
 if (import.meta.main) {
   const sqlite = new Database(DB_PATH);

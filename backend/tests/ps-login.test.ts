@@ -35,8 +35,10 @@ const { publicKey: PUB_PEM, privateKey: PRIV_PEM } = generateKeyPairSync('rsa', 
 
 // Must be set before the module is imported (getPrivateKey caches).
 process.env.PS_RSA_PRIVATE_KEY = PRIV_PEM;
-process.env.PS_HOSTNAME = 'cannoli.live';
 process.env.PS_KEY_ID = '4';
+// PS_HOSTNAME deliberately NOT set here: sibling test files import ps-login
+// (via ps-bot) before this one runs, so the module-level const is already
+// captured and assigning it now would only desync env from what's signed.
 
 const m = await import('../src/lib/ps-login');
 const {
@@ -95,7 +97,11 @@ describe('signAssertion', () => {
     expect(fields[1]).toBe('someunknownuser');
     expect(fields[2]).toBe('2'); // default usertype
     expect(Number.isFinite(parseInt(fields[3], 10))).toBe(true);
-    expect(fields[4]).toBe('cannoli.live');
+    // ps-login caches PS_HOSTNAME in a module-level const at import time, and
+    // sibling test files import it (via ps-bot) before this file sets the env,
+    // so assert against the value the module actually captured — a local .env
+    // with PS_HOSTNAME=localhost otherwise fails this only on dev machines.
+    expect(fields[4]).toBe(process.env.PS_HOSTNAME || 'cannoli.live');
     // Unknown user → empty s-fields.
     expect(fields[5]).toBe('');
     expect(fields[6]).toBe('');

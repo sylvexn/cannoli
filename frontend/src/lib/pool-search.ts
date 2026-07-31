@@ -67,7 +67,7 @@ export function moveDisplayName(id: string): string {
   return MOVE_NAMES[id] ?? id;
 }
 
-// ─── Lazy indexes (built once, reused across keystrokes) ───────────
+// Lazy indexes (built once, reused across keystrokes)
 
 let _names: string[] | null = null;
 function pokemonNames(): string[] {
@@ -102,7 +102,7 @@ function moveIndex(format: DraftFormat): MoveEntry[] {
   return entries;
 }
 
-// ─── Suggestions ───────────────────────────────────────────────────
+// Suggestions
 
 /** Build grouped suggestions (top `perGroup` per axis) for the typed query,
  *  excluding anything already committed as a chip. */
@@ -154,7 +154,7 @@ export function hasAnySuggestion(s: GroupedSuggestions): boolean {
   return s.pokemon.length > 0 || s.abilities.length > 0 || s.moves.length > 0;
 }
 
-// ─── Matchers (used by the pool filter) ────────────────────────────
+// Matchers (used by the pool filter)
 
 /** Broad-OR match of the raw free text against a Pokemon's name/abilities/moves.
  *  Returns `reason` when the *only* reason it matched was an ability or move, so

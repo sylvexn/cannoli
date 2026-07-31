@@ -208,7 +208,7 @@ describe('runAutoAwards season-end re-run cleanup (Fix 4)', () => {
   });
 });
 
-// ─── mintManualPins league-scope isolation ────────────────────────────────
+// mintManualPins league-scope isolation
 //
 // Regression guard for the pre-fix bug: mintManualPins cleared overlap auto-pins
 // (cannoli/cynthia/garchomp) scoped only by season_id, so bulk-minting league A's

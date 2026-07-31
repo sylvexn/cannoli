@@ -46,7 +46,7 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     return map;
   }, [players]);
 
-  // Ownership map ────────────────────────────────────────────────
+  // Ownership map
   // CURRENT ownership is authoritative from rosters (`players[].roster`), which
   // is complete and already reflects trades + free agencies. `state.allPicks`
   // (the draft_picks event log) only ENRICHES draft round/pick detail and covers
@@ -109,7 +109,7 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     return map;
   }, [players, state.allPicks, state.trades, state.view]);
 
-  // Filtered pool + match reasons ────────────────────────────────
+  // Filtered pool + match reasons
   const { filteredPool, matchReasons } = useMemo(() => {
     const tierList = getTierList(format);
     const reasons = new Map<string, MatchReason>();

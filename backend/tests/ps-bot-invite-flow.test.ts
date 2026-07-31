@@ -26,7 +26,7 @@ import {
   cancelBattle,
 } from '../src/lib/ps-bot';
 
-// ─── Fixture: league(regular), 2 teams, owning users, 1 ready match ──────────
+// Fixture: league(regular), 2 teams, owning users, 1 ready match
 
 const tag = `botinvite-${Date.now()}`;
 const leagueId = `${tag}-lg`;

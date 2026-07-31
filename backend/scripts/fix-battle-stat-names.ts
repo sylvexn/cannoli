@@ -148,7 +148,7 @@ for (const r of rows) {
   }
 }
 
-// ── Report ────────────────────────────────────────────────────────────────
+// Report
 if (changes.length === 0) {
   console.log('No rewrites proposed — every row already matches its roster slot.');
 } else {
@@ -173,7 +173,7 @@ if (discrepancies.length > 0) {
   console.log('');
 }
 
-// ── Apply ───────────────────────────────────────────────────────────────────
+// Apply
 if (APPLY && changes.length > 0) {
   tx(() => {
     for (const c of changes) {

@@ -55,7 +55,7 @@ export function deriveHeadlines({
 }: DeriveInput): Headline[] {
   const out: Headline[] = [];
 
-  // ─── Longest streak ────────────────────────────────────────────────
+  // Longest streak
   // Approximated from team record alone — we don't have raw match log
   // available without an extra fetch. Take the team with the highest
   // current win count across all leagues currently in `regular`. This is
@@ -83,7 +83,7 @@ export function deriveHeadlines({
     });
   }
 
-  // ─── Recent upset ──────────────────────────────────────────────────
+  // Recent upset
   // Pull from activity log: match_reported events where the metadata
   // names a winner whose pre-match rank was lower than the loser's.
   // Without rank-at-time, fall back to current standings: if winner is
@@ -115,7 +115,7 @@ export function deriveHeadlines({
     }
   }
 
-  // ─── Biggest trade ─────────────────────────────────────────────────
+  // Biggest trade
   // Across all leagues, sort accepted trades by total pokemon involved
   // and take the largest. Ties broken by recency.
   const allAccepted: Array<{ trade: ApiTrade; leagueId: string }> = [];

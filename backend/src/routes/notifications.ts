@@ -17,7 +17,7 @@ import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
 import { getChangelogEntries } from './changelog';
 import { getCurrentMatchReminder } from '../lib/arena-state';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
 
@@ -41,7 +41,7 @@ interface ApiBanner {
   createdAt: string;
 }
 
-// ─── Visibility predicate ────────────────────────────────────────────────────
+// Visibility predicate
 // Returns a raw SQL predicate for "this announcement is visible to the viewer".
 // An announcement is visible iff:
 //   active = 1
@@ -79,14 +79,14 @@ function announcementVisibilityGuest() {
   )`;
 }
 
-// ─── GET /api/notifications ──────────────────────────────────────────────────
+// GET /api/notifications
 
 export const notificationRoutes = new Elysia()
 
   .get('/api/notifications', ({ user }) => {
     const items: NotificationItem[] = [];
 
-    // ── 1. Changelog items ───────────────────────────────────────────────────
+    // 1. Changelog items
     // Read seenAt for unread comparison. Guests: all unread.
     let changelogSeenAt: string | null = null;
     if (user) {
@@ -111,7 +111,7 @@ export const notificationRoutes = new Elysia()
       });
     }
 
-    // ── 2. Announcements ─────────────────────────────────────────────────────
+    // 2. Announcements
     // Only for authenticated users. Only bell-surface (banner-only must NOT
     // appear in the pane). Apply the shared visibility predicate.
     if (user) {
@@ -147,7 +147,7 @@ export const notificationRoutes = new Elysia()
       }
     }
 
-    // ── 3. Directed notifications ─────────────────────────────────────────────
+    // 3. Directed notifications
     if (user) {
       const directed = db.select().from(schema.notifications)
         .where(eq(schema.notifications.userId, parseInt(user.id)))
@@ -167,7 +167,7 @@ export const notificationRoutes = new Elysia()
       }
     }
 
-    // ── 4. Match reminder ─────────────────────────────────────────────────────
+    // 4. Match reminder
     if (user) {
       const reminder = getCurrentMatchReminder(parseInt(user.id));
       if (reminder) {
@@ -184,10 +184,10 @@ export const notificationRoutes = new Elysia()
       }
     }
 
-    // ── Sort newest-first ─────────────────────────────────────────────────────
+    // Sort newest-first
     items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 
-    // ── Compute counts ────────────────────────────────────────────────────────
+    // Compute counts
     const unreadItems = items.filter(i => !i.read);
     const unreadCount = unreadItems.length;
     const unreadBySource = {
@@ -200,7 +200,7 @@ export const notificationRoutes = new Elysia()
     return { items, unreadCount, unreadBySource };
   })
 
-  // ─── POST /api/notifications/seen ────────────────────────────────────────
+  // POST /api/notifications/seen
   // Stamps changelogSeenAt + announcementsSeenAt = now,
   // and bulk-reads all unread directed notifications.
   .post('/api/notifications/seen', ({ user, set }) => {
@@ -242,7 +242,7 @@ export const notificationRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── POST /api/notifications/read ────────────────────────────────────────
+  // POST /api/notifications/read
   // Mark specific directed notifications read by prefixed id.
   .post('/api/notifications/read', ({ user, body, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
@@ -269,7 +269,7 @@ export const notificationRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── GET /api/banners ────────────────────────────────────────────────────
+  // GET /api/banners
   // Public. Returns active banner-surface announcements visible to the viewer,
   // excluding those the authed user has already dismissed.
   .get('/api/banners', ({ user }): ApiBanner[] => {
@@ -321,7 +321,7 @@ export const notificationRoutes = new Elysia()
     }));
   })
 
-  // ─── POST /api/announcements/:id/dismiss ──────────────────────────────────
+  // POST /api/announcements/:id/dismiss
   // Authenticated: records a dismissal for this user+announcement pair.
   // Guest: no-op (return success so the UI can still clear the banner client-side).
   .post('/api/announcements/:id/dismiss', ({ user, params, set }) => {

@@ -45,7 +45,7 @@ interface PokemonAward extends ManualAwardBase {
 
 export type ManualAward = UsernameAward | PokemonAward;
 
-// ─── Season 9 ─────────────────────────────────────────────────────────────
+// Season 9
 
 export const S9_AWARDS: ManualAward[] = [
   // Garchomp = most KOs (per league, by Pokemon → recipient is owner)
@@ -117,7 +117,7 @@ export const S9_AWARDS: ManualAward[] = [
   { pin: 'red', season: 9, username: 'christina' },
 ];
 
-// ─── Season 10 ────────────────────────────────────────────────────────────
+// Season 10
 
 export const S10_AWARDS: ManualAward[] = [
   // Garchomp
@@ -185,7 +185,7 @@ export const S10_AWARDS: ManualAward[] = [
   { pin: 'red', season: 10, username: 'gabe' },
 ];
 
-// ─── Minter ───────────────────────────────────────────────────────────────
+// Minter
 
 export interface ManualMintSummary {
   inserted: number;

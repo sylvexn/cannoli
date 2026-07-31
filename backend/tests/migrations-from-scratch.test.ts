@@ -50,7 +50,7 @@ afterAll(() => {
   try { rmSync(tmpDir, { recursive: true, force: true }); } catch {}
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 /** Tables present in the migrated DB, excluding sqlite_* and drizzle bookkeeping. */
 function liveTables(): string[] {
@@ -103,7 +103,7 @@ function schemaTables(): Map<string, Set<string>> {
   return parseSchemaDdl(schemaDdl);
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+// Tests
 
 describe('migration chain applies from scratch', () => {
   test('every migration file in drizzle/ was recorded as applied', () => {

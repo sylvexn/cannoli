@@ -51,7 +51,7 @@ interface MatchRecord {
   scrapedAt: string;
 }
 
-// ─── HTTP ────────────────────────────────────────────────────────────────────
+// HTTP
 
 async function fetchText(url: string, retries = 3): Promise<string> {
   for (let i = 0; i < retries; i++) {
@@ -68,7 +68,7 @@ async function fetchText(url: string, retries = 3): Promise<string> {
   throw new Error('unreachable');
 }
 
-// ─── Crawling ────────────────────────────────────────────────────────────────
+// Crawling
 
 function uniq(xs: string[]): string[] {
   return Array.from(new Set(xs));
@@ -78,7 +78,7 @@ async function listMatchSlugs(league: League): Promise<{
   regular: { week: number; slug: string }[];
   playoffs: { round: 'qf' | 'sf' | 'f'; matchNumber: number; slug: string }[];
 }> {
-  // ── Regular season ──
+  // Regular season
   const regSeasonHtml = await fetchText(`${ROOT}/${league}-regular-season`);
   const weekHrefRe = new RegExp(
     `${league}-regular-season/(week-(\\d+)[a-z])`,
@@ -98,7 +98,7 @@ async function listMatchSlugs(league: League): Promise<{
     }
   }
 
-  // ── Playoffs ──
+  // Playoffs
   const playoffs: { round: 'qf' | 'sf' | 'f'; matchNumber: number; slug: string }[] = [];
   const ROUND_MAP: Record<string, 'qf' | 'sf' | 'f'> = {
     [`${league}-quarterfinals`]: 'qf',
@@ -121,7 +121,7 @@ async function listMatchSlugs(league: League): Promise<{
   return { regular, playoffs };
 }
 
-// ─── Match page parsing ──────────────────────────────────────────────────────
+// Match page parsing
 
 /**
  * The Google Sites HTML double-encodes the embedded battle-log-data block.
@@ -170,7 +170,7 @@ function parseMatchPage(html: string): {
   return { replayId, log, players, uploadTime };
 }
 
-// ─── Slug → team-pair parsing ────────────────────────────────────────────────
+// Slug → team-pair parsing
 
 function parseTeamPair(matchSlug: string): {
   homeAbbrev: string;
@@ -196,7 +196,7 @@ function parseTeamPair(matchSlug: string): {
   return { homeAbbrev: home, awayAbbrev: away, forfeitSide };
 }
 
-// ─── Worker pool ─────────────────────────────────────────────────────────────
+// Worker pool
 
 async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
@@ -212,7 +212,7 @@ async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Prom
   return out;
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// Main
 
 async function scrapeLeague(league: League) {
   if (ONLY_LEAGUE && ONLY_LEAGUE !== league) return { saved: 0, skipped: 0, errors: 0 };

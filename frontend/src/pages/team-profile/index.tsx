@@ -32,7 +32,7 @@ import { ScheduleTab } from './schedule-tab';
 import type { ScheduleRow } from './schedule-tab';
 import { TeamProfileSkeleton } from '@/components/skeletons';
 
-// ─── Main Page ───────────────────────────────────────────────────
+// Main Page
 export function TeamProfilePage() {
   const { id } = useParams<{ id: string }>();
   const { players, standings, loading } = useLeagueData();

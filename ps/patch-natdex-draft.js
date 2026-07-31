@@ -61,13 +61,13 @@ const MARKER = '/* cannoli-natdex-draft-patch */';
 let src = fs.readFileSync(absTarget, 'utf8');
 let changed = false;
 
-// ── Patch 1: NatDex Draft banlist (convergent) ──────────────────────────────
+// Patch 1: NatDex Draft banlist (convergent)
 {
 	const res = patchBanlist(src);
 	if (res.changed) { src = res.src; changed = true; }
 }
 
-// ── Patch 3: strip 'Tera Type Preview' back out of NatDex Draft ────────────
+// Patch 3: strip 'Tera Type Preview' back out of NatDex Draft
 // See module doc above — the vanilla rule can't show correct data for
 // bot-created battles (the player's own team never has teraType set), so
 // Cannoli replaces it with its own roster-sourced preview instead. This is
@@ -79,7 +79,7 @@ let changed = false;
 	if (res.changed) { src = res.src; changed = true; }
 }
 
-// ── Patch 4: disable teraPreviewDefault for NatDex Draft (convergent) ───────
+// Patch 4: disable teraPreviewDefault for NatDex Draft (convergent)
 // Companion to Patch 3 — see module doc item 4. Only touches the NatDex Draft
 // block (bounded so it can't flip another format's flag).
 {
@@ -87,7 +87,7 @@ let changed = false;
 	if (res.changed) { src = res.src; changed = true; }
 }
 
-// ── Patch 2: guard the empty Tera Captains line in upstream's Draft Factory ──
+// Patch 2: guard the empty Tera Captains line in upstream's Draft Factory
 // onTeamPreview() builds `buf` only for sides that have Tera Captains, then
 // unconditionally `this.add(`${buf}`)`. A side with none adds an empty line.
 // NOTE: this is the "[Gen 9] Draft Factory" format's OWN onTeamPreview (a

@@ -63,7 +63,7 @@ export interface TierEntry {
   teraBanned: boolean;
 }
 
-// ─── Tera cost schedule (tiers 9 and below cost more as captains) ───
+// Tera cost schedule (tiers 9 and below cost more as captains)
 const TERA_COST_MAP: Record<number, number> = {
   9: 12, 8: 10, 7: 9, 6: 8, 5: 6, 4: 5, 3: 4, 2: 2, 1: 1,
 };
@@ -72,7 +72,7 @@ export function getTermCost(baseTier: number): number {
   return TERA_COST_MAP[baseTier] ?? baseTier;
 }
 
-// ─── Raw per-format data ────────────────────────────────────────
+// Raw per-format data
 interface FormatData { banned: string[]; teraBanned: string[]; tiers: [number, string[]][]; }
 const FORMAT_DATA: Record<CostFormat, FormatData> = {
 ${FORMATS.map(formatBlock).join('\n')}
@@ -108,7 +108,7 @@ function fmt(format?: CostFormat): BuiltFormat {
   return BUILT[format ?? DEFAULT_FORMAT] ?? BUILT[DEFAULT_FORMAT];
 }
 
-// ─── Per-format accessors ───────────────────────────────────────
+// Per-format accessors
 export function getTierList(format?: CostFormat): TierEntry[] { return fmt(format).tierList; }
 export function getBanned(format?: CostFormat): string[] { return fmt(format).banned; }
 export function getTeraBanned(format?: CostFormat): string[] { return fmt(format).teraBanned; }
@@ -133,7 +133,7 @@ export function canBeTeraCaptain(name: string, format?: CostFormat): boolean {
   return true;
 }
 
-// ─── Format-agnostic exports (default '${DEFAULT_FORMAT}') ───────
+// Format-agnostic exports (default '${DEFAULT_FORMAT}')
 export const TIER_LIST: TierEntry[] = BUILT[DEFAULT_FORMAT].tierList;
 export const BANNED: string[] = BUILT[DEFAULT_FORMAT].banned;
 export const TERA_BANNED: string[] = BUILT[DEFAULT_FORMAT].teraBanned;

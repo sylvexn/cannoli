@@ -216,7 +216,7 @@
     font-family: var(--font-heading);
   }
 
-  /* ─── Global focus-visible ───
+  /* Global focus-visible
      Keyboard-only focus ring; matches the neon accent and skips :focus to
      avoid showing a ring after click/tap on buttons & links. Components that
      prefer the ruby/pink/team-color edge can override `--focus-ring`. */
@@ -228,7 +228,7 @@
   }
 }
 
-/* ─── Animated color tokens ───
+/* Animated color tokens
    Register --pick-type / --user-primary / --card-accent so transitions
    between Pokemon types and team colors interpolate smoothly instead of
    snap-swapping. Default stays neon. */
@@ -254,7 +254,7 @@
   initial-value: 0deg;
 }
 
-/* ─── Background texture ─── */
+/* Background texture */
 body::before {
   content: '';
   position: fixed;
@@ -267,17 +267,17 @@ body::before {
   pointer-events: none;
 }
 
-/* ─── Card depth ─── */
+/* Card depth */
 .bg-surface-raised {
   box-shadow: var(--shadow-card);
 }
 
-/* ─── Sidebar depth ─── */
+/* Sidebar depth */
 aside {
   box-shadow: 4px 0 16px rgba(0,0,0,0.3);
 }
 
-/* ─── Rank medals ─── */
+/* Rank medals */
 
 @keyframes glint {
   0%   { transform: translateX(-180%) translateY(-180%) rotate(-45deg); }
@@ -290,7 +290,7 @@ aside {
 }
 .animate-shimmer { animation: shimmer 3s ease-in-out infinite; }
 
-/* ─── Skeleton shimmer ───
+/* Skeleton shimmer
    Used by `<Skeleton />`. A translucent diagonal sheen sweeps left→right
    across a low-contrast base. Feels more premium than animate-pulse and
    reads even on dense pages where many skeletons are mounted at once. */
@@ -387,7 +387,7 @@ aside {
   border: 1.5px solid rgba(205, 127, 50, 0.4);
 }
 
-/* ─── League banners ─── */
+/* League banners */
 
 .league-banner {
   position: relative;
@@ -465,7 +465,7 @@ aside {
   text-shadow: 0 0 8px rgba(187,247,208,0.4), 0 1px 3px rgba(0,0,0,0.5);
 }
 
-/* ── Sapphire — faceted gemstone ── */
+/* Sapphire — faceted gemstone */
 .league-banner-sapphire {
   background:
     linear-gradient(135deg, rgba(37,99,235,0) 20%, rgba(96,165,250,0.4) 35%, rgba(37,99,235,0) 50%),
@@ -479,7 +479,7 @@ aside {
     inset 0 -1px 1px rgba(23, 37, 84, 0.4);
 }
 
-/* ── Ruby — faceted gemstone ── */
+/* Ruby — faceted gemstone */
 .league-banner-ruby {
   background:
     linear-gradient(135deg, rgba(220,38,38,0) 20%, rgba(252,165,165,0.35) 35%, rgba(220,38,38,0) 50%),
@@ -493,7 +493,7 @@ aside {
     inset 0 -1px 1px rgba(69, 10, 10, 0.4);
 }
 
-/* ── Emerald — faceted gemstone ── */
+/* Emerald — faceted gemstone */
 .league-banner-emerald {
   background:
     linear-gradient(135deg, rgba(22,163,74,0) 20%, rgba(134,239,172,0.35) 35%, rgba(22,163,74,0) 50%),
@@ -507,7 +507,7 @@ aside {
     inset 0 -1px 1px rgba(5, 46, 22, 0.4);
 }
 
-/* ── Gem 3D interactive treatment (sidebar nav, opt-in via .gem-3d) ──
+/* Gem 3D interactive treatment (sidebar nav, opt-in via .gem-3d)
    Pointer-tracked tilt + cursor specular + hue-matched glow. No conic sheen.
    --mx/--my (0–1) are written by usePointerTilt on the .league-banner itself.
    The glow uses filter: drop-shadow (not box-shadow) because the banner has a
@@ -573,7 +573,7 @@ aside {
   }
 }
 
-/* ─── Neon Logo ─── */
+/* Neon Logo */
 
 /* Initial stroke draw animation */
 @keyframes neon-trace {
@@ -732,7 +732,7 @@ aside {
   background-color: var(--color-text-muted);
 }
 
-/* ─── Design pass primitives ───────────────────────────────────────────── */
+/* Design pass primitives */
 
 /* List entrance — applied to row maps for staggered fade-in.
    Set `style={{ '--i': Math.min(i, 20) }}` on each item.   */
@@ -895,7 +895,7 @@ aside {
   }
 }
 
-/* ─── Slice 7 — Draft pick celebration ────────────────────────────────────
+/* Slice 7 — Draft pick celebration
    Played on every pick on every connected client. The keyframes split
    sprite, glow, tier-badge, and row-border highlights so each layer can
    compose without re-running its neighbour. */
@@ -971,7 +971,7 @@ aside {
   }
 }
 
-/* ─── Identity glow ───────────────────────────────────────────────────────
+/* Identity glow
    Ambient neon glow for surfaces that *belong* to a person/team — profile
    banners, team detail headers, the user's own row in standings. Set
    `--user-primary` (or `--card-accent`) on the surface for a per-identity
@@ -994,7 +994,7 @@ aside {
     0 16px 64px -20px color-mix(in oklab, var(--identity-color) 20%, transparent);
 }
 
-/* ─── Slice 7C — On-the-clock pulse glow ──────────────────────────────────
+/* Slice 7C — On-the-clock pulse glow
    Breathing 4px inset shadow in the user's accent color. Scoped to the
    draft-board root via `.pulse-glow` when it's the user's turn. */
 @keyframes pulse-glow {
@@ -1014,7 +1014,7 @@ aside {
   }
 }
 
-/* ─── Draft pokemon popover — entry pop ───────────────────────────────────
+/* Draft pokemon popover — entry pop
    Used by `DraftPokemonPopover` (preview / quick-draft / detail-summary).
    The view-transition for the sprite handoff uses the pokemon-card-* rule
    below; this only animates the popover container's own framing. */
@@ -1034,7 +1034,7 @@ aside {
   }
 }
 
-/* ─── Unified pokemon-card view-transition ────────────────────────────────
+/* Unified pokemon-card view-transition
    One name pattern (`pokemon-card-${name}`) is stamped on:
      • the actively-animating pool card (DraftPoolGrid + PokemonCompactCard)
      • the corresponding sidebar roster slot during pick-land (DraftTeamSidebar)
@@ -1063,7 +1063,7 @@ aside {
   }
 }
 
-/* ─── On-the-clock hero entrance ──────────────────────────────────────────
+/* On-the-clock hero entrance
    Used by `DraftOnTheClock` (applied to its parent wrapper). Two layers:
      1. The hero itself fades + slides in from above (320ms ease-out).
      2. A neon edge glow ramps in from 0 → full over 600ms with a 100ms
@@ -1103,7 +1103,7 @@ aside {
   }
 }
 
-/* ─── Colorblind mode (deuteranopia-safe) ───────────────────────────────────
+/* Colorblind mode (deuteranopia-safe)
  *
  * Activated by AuthProvider stamping <html data-colorblind="true"> when the
  * user opts in. Retargets the red/green semantic tokens to an orange/blue
@@ -1154,7 +1154,7 @@ aside {
 [data-colorblind='true'] .bg-\[\#3b1515\]         { background-color: #4a2c0a; }
 [data-colorblind='true'] .bg-\[\#5c1a1a\]         { background-color: #6b3410; }
 
-/* ─── Glow + gradient kit ───
+/* Glow + gradient kit
    color-mix-driven glows already live on .card-interactive / .identity-glow.
    These add the two continuous-gradient pieces from the FX showcase. Both are
    gated below on prefers-reduced-motion AND GPU tier. */
@@ -1199,7 +1199,7 @@ aside {
 .btn-gradient:hover { filter: brightness(1.08); }
 @keyframes btn-flow { to { background-position: 300% 0; } }
 
-/* ─── Performance gate: no hardware acceleration → freeze continuous FX ───
+/* Performance gate: no hardware acceleration → freeze continuous FX
    Keyed on the GPU tier set once at boot by gpu-capability.ts. Mirrors the set
    of continuous animations that the reduced-motion blocks already neutralize.
    Hover-only / discrete effects (gem tilt, card glow, gradient buttons' static

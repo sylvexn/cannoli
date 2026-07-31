@@ -36,7 +36,7 @@ function userHasTeamInLeague(userId: number, leagueId: string, exceptTeamId?: st
 export const membershipRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── Membership overview ────────────────────────────────────────────────
+  // Membership overview
   // The current (latest) season's leagues, each with its coaches, an editable
   // flag (+ reason when locked), and each coach's career record so the UI can
   // make plain that stats are coach-tied, not team-tied.
@@ -108,7 +108,7 @@ export const membershipRoutes = new Elysia()
     return { seasonNumber: season.seasonNumber, leagues: out };
   })
 
-  // ─── Add a coach to a league ────────────────────────────────────────────
+  // Add a coach to a league
   // Binds an EXISTING user to a new team in the league (never auto-creates a
   // user — that would fork a coach's identity and split their career stats).
 
@@ -167,7 +167,7 @@ export const membershipRoutes = new Elysia()
     return { id: teamId };
   })
 
-  // ─── Move a coach between leagues ───────────────────────────────────────
+  // Move a coach between leagues
   // Relocates the team row in place (same id / userId / cosmetics) so career
   // stats follow the coach. Reconciles draft order on both leagues and clears
   // the team's draft queue (the destination's pool/format may differ).
@@ -216,7 +216,7 @@ export const membershipRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Replace a team's coach ─────────────────────────────────────────────
+  // Replace a team's coach
   // Swaps the human (teams.userId + coachName) while keeping the SAME team row,
   // so rosters, draft picks, completed results, standings and trades all stay
   // intact (everything competitive is keyed on teams.id, not userId). This is a
@@ -293,7 +293,7 @@ export const membershipRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Remove a coach from a league ───────────────────────────────────────
+  // Remove a coach from a league
   // Deletes the team (in-window there is no competitive data to lose). The
   // user account is untouched — only their participation in this league.
 

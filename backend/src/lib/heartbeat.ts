@@ -18,16 +18,12 @@ import { getBotStatus } from './ps-bot';
 import { GIT_SHA } from './version';
 import { alertHealthFlip } from './alert';
 
-// ---------------------------------------------------------------------------
 // Config
-// ---------------------------------------------------------------------------
 
 /** How often to run the full probe sweep (ms). */
 const INTERVAL_MS = 60_000;
 
-// ---------------------------------------------------------------------------
 // Module state
-// ---------------------------------------------------------------------------
 
 /** Guards against double-starting (e.g. hot-reload). */
 let _started = false;
@@ -42,9 +38,7 @@ let _intervalHandle: NodeJS.Timeout | null = null;
  */
 const _prevStatus = new Map<string, 'ok' | 'degraded' | 'down'>();
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 type ProbeStatus = 'ok' | 'degraded' | 'down';
 
@@ -55,9 +49,7 @@ interface ProbeResult {
   latencyMs: number;
 }
 
-// ---------------------------------------------------------------------------
 // Individual probes
-// ---------------------------------------------------------------------------
 
 /** Probe: SQLite database reachability. */
 function probeDb(): ProbeResult {
@@ -120,9 +112,7 @@ function probePsBot(): ProbeResult {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Upsert helper
-// ---------------------------------------------------------------------------
 
 /**
  * Persist a probe result to health_checks via a raw upsert.
@@ -147,9 +137,7 @@ function upsertProbe(result: ProbeResult): void {
     .run(result.name, result.status, result.detail, result.latencyMs, result.status);
 }
 
-// ---------------------------------------------------------------------------
 // Alert helper
-// ---------------------------------------------------------------------------
 
 /**
  * Compare the new status against the tracked previous value and fire
@@ -179,9 +167,7 @@ function maybeAlert(result: ProbeResult): void {
   _prevStatus.set(result.name, curr);
 }
 
-// ---------------------------------------------------------------------------
 // Sweep
-// ---------------------------------------------------------------------------
 
 /** Run all configured probes and persist + alert results. Best-effort. */
 function runSweep(): void {
@@ -210,9 +196,7 @@ function runSweep(): void {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Start the background heartbeat sweep. Idempotent — safe to call multiple
@@ -243,9 +227,7 @@ export function stopHeartbeat(): void {
   _started = false;
 }
 
-// ---------------------------------------------------------------------------
 // Snapshot
-// ---------------------------------------------------------------------------
 
 /** Shape returned by getHealthSnapshot() and consumed by the dashboard route. */
 export interface HealthSnapshot {

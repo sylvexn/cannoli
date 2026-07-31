@@ -27,7 +27,7 @@ const ROOT = resolve(__dirname, '..');
 // Repo root is one level above the frontend dir (ROOT).
 const REPO_ROOT = resolve(ROOT, '..');
 
-// ─── 1. Load the Showdown pokedex (local file, network fallback) ───
+// 1. Load the Showdown pokedex (local file, network fallback)
 
 const LOCAL_POKEDEX = resolve(
   REPO_ROOT,
@@ -59,7 +59,7 @@ if (existsSync(LOCAL_POKEDEX)) {
 }
 console.log(`  Loaded ${Object.keys(pokedex).length} pokedex entries.`);
 
-// ─── 2. Collect every Pokemon name from the tier list (all formats) ─
+// 2. Collect every Pokemon name from the tier list (all formats)
 
 const nameSet = new Set();
 for (const fmt of COST_FORMATS) {
@@ -68,7 +68,7 @@ for (const fmt of COST_FORMATS) {
 const names = [...nameSet].sort();
 console.log(`  Found ${names.length} Pokemon names across ${COST_FORMATS.join(' + ')}.`);
 
-// ─── 3. Name → Pokedex ID mapping ──────────────────────────────────
+// 3. Name → Pokedex ID mapping
 // Pokedex keys are lowercase with no spaces/hyphens. Forms strip cleanly in
 // most cases (e.g. "Iron Valiant" → "ironvaliant", "Oricorio-Pau" →
 // "oricoriopau"); the overrides below cover the cases where the display name
@@ -131,7 +131,7 @@ function getPokedexId(name) {
   return toPokedexId(name);
 }
 
-// ─── 4. Match and collect data ──────────────────────────────────────
+// 4. Match and collect data
 
 const matched = [];
 const unmatched = [];
@@ -172,7 +172,7 @@ if (unmatched.length > 0) {
   }
 }
 
-// ─── 5. Generate TypeScript output ──────────────────────────────────
+// 5. Generate TypeScript output
 
 function escName(n) {
   return n.replace(/'/g, "\\'");

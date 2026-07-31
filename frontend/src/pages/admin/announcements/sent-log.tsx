@@ -18,7 +18,7 @@ import { Bell, Tv, BellDot } from 'lucide-react';
 
 const VALID_CATEGORIES = new Set<string>(['info', 'feature', 'event', 'maintenance']);
 
-// ─── Surface badge ─────────────────────────────────────────────────────────────
+// Surface badge
 
 function SurfaceBadge({ surface }: { surface: string | null }) {
   if (!surface) return null;
@@ -38,7 +38,7 @@ function SurfaceBadge({ surface }: { surface: string | null }) {
   );
 }
 
-// ─── Log entry row ─────────────────────────────────────────────────────────────
+// Log entry row
 
 function LogEntryRow({ entry, leagueName, leagueColor }: {
   entry: AdminNotificationLogEntry;
@@ -142,7 +142,7 @@ function LogEntryRow({ entry, leagueName, leagueColor }: {
   );
 }
 
-// ─── Sent log ──────────────────────────────────────────────────────────────────
+// Sent log
 
 export function SentLog() {
   const { leagues } = useAppData();

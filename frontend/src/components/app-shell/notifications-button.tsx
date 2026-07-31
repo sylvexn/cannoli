@@ -21,7 +21,7 @@ import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-// ─── Source + category icon/accent maps ──────────────────────────────────────
+// Source + category icon/accent maps
 
 const CHANGELOG_META: Record<ChangelogCategory, { label: string; color: string; Icon: typeof Sparkles }> = {
   feature:     { label: 'New',      color: 'var(--color-neon, #34d399)',      Icon: Sparkles },
@@ -48,7 +48,7 @@ function getItemMeta(item: NotificationItem) {
   return SOURCE_DEFAULTS[item.source];
 }
 
-// ─── Notification row ─────────────────────────────────────────────────────────
+// Notification row
 
 // Exported for use by admin preview surfaces.
 export function NotificationRowView({
@@ -156,7 +156,7 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// Main component
 
 interface NotificationsButtonProps {
   /** When true, renders an icon-only button (collapsed rail mode). */
@@ -303,7 +303,7 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
     </PopoverContent>
   );
 
-  // ── Collapsed rail (icon-only) ────────────────────────────────────────────
+  // Collapsed rail (icon-only)
   if (collapsed) {
     return (
       <Popover open={open} onOpenChange={handleOpenChange}>
@@ -325,7 +325,7 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
     );
   }
 
-  // ── Expanded sidebar row ──────────────────────────────────────────────────
+  // Expanded sidebar row
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:bg-surface-overlay hover:text-text-primary transition-colors outline-none">

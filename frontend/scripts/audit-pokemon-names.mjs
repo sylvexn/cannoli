@@ -49,7 +49,7 @@ import { showdownNameCandidates, normalizePokemonKey } from '../src/lib/pokemon-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../..');
 
-// ─── 1. Showdown pokedex ─────────────────────────────────────────────
+// 1. Showdown pokedex
 const LOCAL_POKEDEX = resolve(
   REPO_ROOT,
   'showdown/client/play.pokemonshowdown.com/data/pokedex.json',
@@ -65,7 +65,7 @@ if (existsSync(LOCAL_POKEDEX)) {
 const dexEntries = Object.values(pokedex);
 console.log(`Pokedex entries: ${dexEntries.length}`);
 
-// ─── 2. Cannoli DB names (read-only) ─────────────────────────────────
+// 2. Cannoli DB names (read-only)
 const DB_PATH = resolve(REPO_ROOT, 'backend/data/cannoli.db');
 const db = new Database(DB_PATH, { readonly: true });
 const dbNames = db.query('SELECT name FROM pokemon ORDER BY name').all().map(r => r.name);
@@ -82,7 +82,7 @@ for (const name of dbNames) {
   dbByKey.set(key, name);
 }
 
-// ─── 3. Filter to real, teambuilder-selectable species ───────────────
+// 3. Filter to real, teambuilder-selectable species
 const excluded = { capOrFake: 0, lgpe: 0, future: 0, unobtainable: 0, totem: 0, gmax: 0 };
 const species = []; // { name, baseSpecies }
 
@@ -113,7 +113,7 @@ console.log(
   `totem ${excluded.totem}, gmax ${excluded.gmax})`,
 );
 
-// ─── 4. Resolve every species; track reachable DB rows ───────────────
+// 4. Resolve every species; track reachable DB rows
 const reachable = new Set();
 const unresolved = [];
 
@@ -129,7 +129,7 @@ for (const s of species) {
 
 console.log(`\nResolved: ${species.length - unresolved.length}/${species.length}`);
 
-// ─── 5. Report ────────────────────────────────────────────────────────
+// 5. Report
 // Residue is only OK when the whole species family is absent from the pool.
 // If the BASE species resolves but this forme doesn't, the resolver has a gap.
 const gaps = unresolved.filter(s =>

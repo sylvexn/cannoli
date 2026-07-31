@@ -51,9 +51,7 @@ function freshState(leagueId: string) {
   return db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, leagueId)).get()!;
 }
 
-// ───────────────────────────────────────────────────────────────────────────
 // 1. Timer expiry → pause-at-expiry (handleTimerExpiry)
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('timer expiry — pause-at-expiry', () => {
   test('expiry pauses the draft and flags the on-clock team (does NOT auto-pick)', () => {
@@ -86,9 +84,7 @@ describe('timer expiry — pause-at-expiry', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 2. Deadline math + multiple concurrent drafts (tick scheduler)
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('tick scheduler — deadline math, multiple concurrent drafts', () => {
   test('not expired one second before the deadline; expired at/after it', () => {
@@ -137,9 +133,7 @@ describe('tick scheduler — deadline math, multiple concurrent drafts', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 3. Admin auto-pick resolves the paused-at-expiry state
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('auto-pick after expiry', () => {
   test('executeAutoPick only works from the paused+flagged state', () => {
@@ -180,9 +174,7 @@ describe('auto-pick after expiry', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 3b. Queue-aware auto-pick (AUTOPICK-QUEUE)
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('queue-aware auto-pick', () => {
   test('setDraftQueue persists, dedupes, caps at 3, preserves order', () => {
@@ -239,9 +231,7 @@ describe('queue-aware auto-pick', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 4. Skip resolves the paused state without drafting
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('skip after expiry', () => {
   test('skip from paused+flagged advances index, clears flag, makes no pick', () => {
@@ -272,9 +262,7 @@ describe('skip after expiry', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 5. Undo — incl. captain-lock reset on undo of the completing pick
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('undo last pick', () => {
   test('undo removes the pick + roster row and rewinds the index', () => {
@@ -321,9 +309,7 @@ describe('undo last pick', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 6. Completion: last pick completes the draft, stops the timer
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('draft completion', () => {
   test('the final snake slot completes the draft and nulls the timer', () => {
@@ -351,9 +337,7 @@ describe('draft completion', () => {
   });
 });
 
-// ───────────────────────────────────────────────────────────────────────────
 // 7. Turn enforcement (non-override pick path)
-// ───────────────────────────────────────────────────────────────────────────
 
 describe('turn enforcement', () => {
   test('a team that is not on the clock is rejected with not_your_turn', () => {

@@ -51,7 +51,7 @@ import {
   checkTeamArchived,
 } from '../src/lib/archive-guard';
 
-// ─── Fixture identity (unique, collision-proof) ──────────────────────────────
+// Fixture identity (unique, collision-proof)
 
 const PFX = 'lifecyclespec';
 const LEAGUE_ID = `${PFX}-league`;
@@ -68,7 +68,7 @@ function teamNum(id: string): number {
   return parseInt(id.match(/team(\d+)$/)![1]!, 10);
 }
 
-// ─── Phase advance — mirrors POST /api/leagues/:id/phase (admin/leagues.ts:200) ─
+// Phase advance — mirrors POST /api/leagues/:id/phase (admin/leagues.ts:200)
 // The production route's transition logic is inline in the closure; we mirror
 // the precondition checks + side effects (schedule gen on draft→regular,
 // currentWeek reset) here. Returns the same { success, code } shape the route
@@ -136,7 +136,7 @@ function advancePhase(
   return { success: true, scheduleGenerated };
 }
 
-// ─── Playoff bracket gen — mirrors POST /playoffs/generate (matches.ts:701) ──
+// Playoff bracket gen — mirrors POST /playoffs/generate (matches.ts:701)
 // 6-team bracket: QF(3v6, 4v5) + SF(1 v TBD, 2 v TBD) + F. Seeds via the REAL
 // computeStandings. This is the exact matchup table from the production route.
 
@@ -181,7 +181,7 @@ function generatePlayoffBracket(leagueId: string, seedCount = 6): { success: boo
   return { success: true };
 }
 
-// ─── World builder (predraft league + drafted rosters) ───────────────────────
+// World builder (predraft league + drafted rosters)
 
 /** Pick `count` distinct real Pokemon names to seed rosters with. */
 function pickPokemon(count: number): { name: string; tier: number }[] {
@@ -282,7 +282,6 @@ function playMatch(
   return recordMatchResult(matchId, { homeScore, awayScore, pokemonData }, 'lifecycle-test');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 
 const referencePresent = hasReferenceData();
 

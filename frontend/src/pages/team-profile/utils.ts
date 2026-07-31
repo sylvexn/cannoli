@@ -5,7 +5,7 @@ import { getTierList, type CostFormat } from '@/data/tier-list';
 import { POKEMON_DATA } from '@/data/pokemon-data';
 import { TYPE_CHART } from '@/lib/type-effectiveness';
 
-// ─── Interfaces ──────────────────────────────────────────────────
+// Interfaces
 export interface TypeHit { name: string; mult: number }
 export interface TypeProfileEntry {
   x4: TypeHit[];   // 4x super effective
@@ -29,7 +29,7 @@ export interface TeraEdit {
   teraTypes: PokemonType[];
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// Helpers
 export function getTeamDefensiveProfile(roster: RosterPokemon[]) {
   const profile: Record<PokemonType, TypeProfileEntry> = {} as any;
   for (const t of POKEMON_TYPES) profile[t] = { x4: [], x2: [], x05: [], x025: [], x0: [] };

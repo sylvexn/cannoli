@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 export interface MatchTeam {
   id: string;
@@ -95,7 +95,7 @@ export interface ArenaState {
   lastMatchError: string | null;
 }
 
-// ─── Hook ───────────────────────────────────────────────────────────────────
+// Hook
 
 export function useArenaWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -312,7 +312,7 @@ export function useArenaWebSocket() {
     };
   }, [connect]);
 
-  // ─── Actions ────────────────────────────────────────────────────────
+  // Actions
 
   const send = useCallback((data: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

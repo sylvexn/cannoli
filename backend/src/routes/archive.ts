@@ -22,7 +22,7 @@ import { computeStandings } from '../lib/standings';
 
 export const archiveDeepRoutes = new Elysia()
 
-  // ─── League full archive ────────────────────────────────────────────
+  // League full archive
   .get('/api/archive/leagues/:leagueId/full', ({ params, set }) => {
     const league = db.select().from(schema.leagues)
       .where(eq(schema.leagues.id, params.leagueId)).get();
@@ -205,7 +205,7 @@ export const archiveDeepRoutes = new Elysia()
     };
   })
 
-  // ─── Single team-season report ──────────────────────────────────────
+  // Single team-season report
   .get('/api/archive/leagues/:leagueId/teams/:teamId', ({ params, set }) => {
     const team = db.select().from(schema.teams)
       .where(and(
@@ -352,7 +352,7 @@ export const archiveDeepRoutes = new Elysia()
     };
   })
 
-  // ─── Season awards (every pin awarded with this seasonId) ──────────
+  // Season awards (every pin awarded with this seasonId)
   .get('/api/archive/seasons/:seasonId/awards', ({ params, set }) => {
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
@@ -392,7 +392,7 @@ export const archiveDeepRoutes = new Elysia()
     };
   })
 
-  // ─── All-time aggregates ────────────────────────────────────────────
+  // All-time aggregates
   .get('/api/archive/all-time', () => {
     // Champions per (season, league) — finals winner. Single query, then
     // fold in-memory.

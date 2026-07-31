@@ -18,7 +18,7 @@ const sizeMap = {
   xl: 'w-24 h-24',
 };
 
-// ─── Global sprite cache ───────────────────────────────────────
+// Global sprite cache
 // Tracks loading state across all instances to avoid duplicate fetches
 // and provide instant rendering for already-loaded sprites.
 type CacheState = 'loading' | 'loaded' | 'error';

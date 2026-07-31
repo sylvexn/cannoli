@@ -11,7 +11,7 @@ import { speedTierRoutes } from './speed-tiers';
 
 export const leagueRoutes = new Elysia()
 
-  // ─── Leagues ─────────────────────────────────────────────────────────
+  // Leagues
 
   .get('/api/leagues', ({ query }) => {
     // `?all=1` returns leagues across EVERY season (incl. archived) — used by
@@ -93,14 +93,14 @@ export const leagueRoutes = new Elysia()
     });
   })
 
-  // ─── Season ──────────────────────────────────────────────────────────
+  // Season
 
   .get('/api/season', () => {
     const season = db.select().from(schema.seasons).get();
     return season || null;
   })
 
-  // ─── News (PS client compatibility) ─────────────────────────────────
+  // News (PS client compatibility)
   //
   // Pokemon Showdown's "Latest News" pseudo-PM expects an array of
   // `{ id, title, summaryHTML, author, date }` (date in unix seconds) at
@@ -164,7 +164,7 @@ export const leagueRoutes = new Elysia()
     }];
   })
 
-  // ─── Site Settings ──────────────────────────────────────────────────
+  // Site Settings
 
   .get('/api/site-settings', () => {
     // Practice draft visibility defaults to true on mock (so the simulator is
@@ -188,7 +188,7 @@ export const leagueRoutes = new Elysia()
     };
   })
 
-  // ─── Rules content (public, per-league) ─────────────────────────────
+  // Rules content (public, per-league)
   // Returns the resolved structured rules for one league: the admin-saved
   // document if present, otherwise the cost-format default. `isCustom` tells
   // the admin UI whether the league has been overridden. `defaults` is always

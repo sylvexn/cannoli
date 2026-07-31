@@ -33,7 +33,7 @@ type Category = (typeof VALID_CATEGORIES)[number];
 
 export const pinRoutes = new Elysia()
 
-  // ─── GET /api/users/:username/pins (public) ────────────────────────────
+  // GET /api/users/:username/pins (public)
   .get('/api/users/:username/pins', ({ params, set }) => {
     const username = params.username.toLowerCase().trim();
     if (username === 'me') { set.status = 404; return { error: 'Not found' }; }
@@ -80,7 +80,7 @@ export const pinRoutes = new Elysia()
     }));
   })
 
-  // ─── GET /api/admin/pin-definitions ────────────────────────────────────
+  // GET /api/admin/pin-definitions
   .get('/api/admin/pin-definitions', ({ user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     return db.select().from(schema.pinDefinitions)
@@ -88,7 +88,7 @@ export const pinRoutes = new Elysia()
       .all();
   })
 
-  // ─── POST /api/admin/pin-definitions ───────────────────────────────────
+  // POST /api/admin/pin-definitions
   .post('/api/admin/pin-definitions', ({ body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const b = body as Partial<{
@@ -132,7 +132,7 @@ export const pinRoutes = new Elysia()
     return { success: true, id };
   })
 
-  // ─── PATCH /api/admin/pin-definitions/:id ──────────────────────────────
+  // PATCH /api/admin/pin-definitions/:id
   .patch('/api/admin/pin-definitions/:id', ({ params, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const existing = db.select().from(schema.pinDefinitions)
@@ -184,7 +184,7 @@ export const pinRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── POST /api/admin/pins/award ────────────────────────────────────────
+  // POST /api/admin/pins/award
   .post('/api/admin/pins/award', ({ query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const b = body as { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null };
@@ -257,7 +257,7 @@ export const pinRoutes = new Elysia()
     return { success: true, id: out.id };
   })
 
-  // ─── PATCH /api/admin/pins/:id ─────────────────────────────────────────
+  // PATCH /api/admin/pins/:id
   // Re-point an existing pin to a different user. Used by the admin UI to
   // override an auto-awarded pin (e.g. correcting Garchomp after a stat
   // recompute) without deleting + re-awarding. Idempotent: setting the same
@@ -328,7 +328,7 @@ export const pinRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── DELETE /api/admin/pins/:id ────────────────────────────────────────
+  // DELETE /api/admin/pins/:id
   .delete('/api/admin/pins/:id', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const id = parseInt(params.id);
@@ -363,7 +363,7 @@ export const pinRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── GET /api/admin/pins/recent (for admin UI's recently-awarded list) ──
+  // GET /api/admin/pins/recent (for admin UI's recently-awarded list)
   .get('/api/admin/pins/recent', ({ query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const limit = Math.min(Math.max(parseInt(String(query?.limit ?? 50)) || 50, 1), 200);
@@ -389,7 +389,7 @@ export const pinRoutes = new Elysia()
     return rows.map(r => ({ ...r, metadata: r.metadata ? safeJson(r.metadata) : null }));
   })
 
-  // ─── GET /api/admin/pins/manual-awards/:season ─────────────────────────
+  // GET /api/admin/pins/manual-awards/:season
   // Surface the per-season hand-curated award list (the same data the seed
   // job mints from) so the admin Bulk-Mint Wizard can render a preview
   // before committing. Returns the raw rows from awards-data.ts; the wizard
@@ -403,7 +403,7 @@ export const pinRoutes = new Elysia()
     return { season, awards };
   })
 
-  // ─── POST /api/admin/pins/mint-season ───────────────────────────────────
+  // POST /api/admin/pins/mint-season
   // Re-run mintManualPins for a hand-curated season. Idempotent: existing
   // pins survive the (user, def, season) unique index. Returns the
   // ManualMintSummary so the wizard can show inserted/skipped/unresolved
@@ -441,7 +441,7 @@ export const pinRoutes = new Elysia()
     return { success: true, ...summary };
   })
 
-  // ─── POST /api/admin/pins/run-auto ─────────────────────────────────────
+  // POST /api/admin/pins/run-auto
   // Run the auto-award (season-end) job for every league belonging to a
   // season. Idempotent: each insert goes through the (user, def, season)
   // unique index. Intended to be called from the admin Pins tab once the

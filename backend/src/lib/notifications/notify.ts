@@ -15,7 +15,7 @@ import { db, schema, sqlite } from '../../db';
 import { eq, inArray } from 'drizzle-orm';
 import { Octokit } from 'octokit';
 
-// ─── notifyUser ──────────────────────────────────────────────────────────────
+// notifyUser
 
 export type NotifyResult = 'inserted' | 'skipped';
 
@@ -79,7 +79,7 @@ export function notifyUser(userId: number, opts: NotifyOpts): NotifyResult {
   }
 }
 
-// ─── notifyStaff ─────────────────────────────────────────────────────────────
+// notifyStaff
 
 /**
  * Notify every dev/admin user with the same directed notification. Used for
@@ -103,7 +103,7 @@ export function notifyStaff(opts: NotifyOpts): void {
   }
 }
 
-// ─── parseReporterUsername ───────────────────────────────────────────────────
+// parseReporterUsername
 
 /**
  * Extract the reporter username from the GitHub issue body.
@@ -120,7 +120,7 @@ export function parseReporterUsername(body: string | null | undefined): string |
   return m ? m[1] : null;
 }
 
-// ─── notifyFeedbackResolved ──────────────────────────────────────────────────
+// notifyFeedbackResolved
 
 export type FeedbackNotifyResult = 'inserted' | 'skipped' | 'no-user';
 
@@ -153,7 +153,7 @@ export function notifyFeedbackResolved(args: {
   return result;
 }
 
-// ─── backfillFeedbackNotifications ──────────────────────────────────────────
+// backfillFeedbackNotifications
 
 export interface BackfillResult {
   inserted: number;

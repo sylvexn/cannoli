@@ -12,7 +12,7 @@ import { ANNOUNCEMENT_CATEGORY_META } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 
-// ─── Presentational strip ─────────────────────────────────────────────────────
+// Presentational strip
 
 export function AnnouncementBannerStrip({
   title,
@@ -93,7 +93,7 @@ export function AnnouncementBannerStrip({
   );
 }
 
-// ─── Container ────────────────────────────────────────────────────────────────
+// Container
 
 const DISMISSED_KEY = 'cannoli:dismissedBanners';
 

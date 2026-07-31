@@ -5,7 +5,7 @@ import { computeStandings, type TeamStandingRow } from '../../lib/standings';
 
 export const archiveRoutes = new Elysia()
 
-  // ─── Archive (multi-season) ──────────────────────────────────────────
+  // Archive (multi-season)
 
   .get('/api/seasons', () => {
     // Lifecycle fields now live per-league. Surface a per-season summary by

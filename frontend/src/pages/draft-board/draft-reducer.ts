@@ -63,7 +63,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
     case 'SET_USER_TEAM':
       return { ...state, userTeamId: action.teamId };
 
-    // ─── History view: sync season data ───────────────────────────────
+    // History view: sync season data
     case 'SYNC_DATA':
       // Trades are always tracked (the team sidebar surfaces them outside an
       // active draft too), but historical picks must NEVER overwrite an active
@@ -78,7 +78,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         currentPickIndex: action.allPicks.length,
       };
 
-    // ─── Active draft lifecycle ───────────────────────────────────────
+    // Active draft lifecycle
     case 'DRAFT_START':
       return {
         ...state,
@@ -146,7 +146,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         liveTimerExpiresAt: null,
       };
 
-    // ─── Server-source authoritative sync (WS / state fetch) ───────────
+    // Server-source authoritative sync (WS / state fetch)
     case 'LIVE_SYNC': {
       const snap = action.snapshot;
       const snakeOrder: SnakeSlot[] = (snap.snakeOrder ?? []).map(s => ({
@@ -196,7 +196,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       };
     }
 
-    // ─── Timer controls (admin/dev) ──────────────────────────────────
+    // Timer controls (admin/dev)
     case 'SET_TIMER_DURATION': {
       const draftActive = state.view === 'active' && state.status !== 'idle' && state.status !== 'configuring';
       return {
@@ -215,7 +215,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
     case 'ADD_TIME':
       return { ...state, timerSeconds: state.timerSeconds + action.seconds };
 
-    // ─── Draft queue ──────────────────────────────────────────────────
+    // Draft queue
     case 'QUEUE_ADD': {
       if (state.draftQueue.length >= 3 || state.draftQueue.includes(action.name)) return state;
       return { ...state, draftQueue: [...state.draftQueue, action.name] };

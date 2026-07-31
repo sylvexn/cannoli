@@ -218,7 +218,7 @@ export function FreeAgentsPage() {
     }
   }
 
-  // ─── Empty states ──────────────────────────────────────────────────
+  // Empty states
 
   if (phase === 'predraft' || phase === 'draft') {
     return (

@@ -13,7 +13,7 @@ import { notifyStaff } from '../../lib/notifications/notify';
 
 export const teamRoutes = new Elysia()
 
-  // ─── Tera Captain Management ──────────────────────────────────────
+  // Tera Captain Management
 
   .put('/api/teams/:teamId/tera-captains', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
@@ -213,7 +213,7 @@ export const teamRoutes = new Elysia()
     });
   })
 
-  // ─── Tera Captain Change Request (locked teams, feedback #51) ──────
+  // Tera Captain Change Request (locked teams, feedback #51)
   // When a coach's captains are locked, the direct PUT is forbidden; instead
   // they submit a tera-change REQUEST that an admin approves (approval applies
   // the change). Reuses the FA approval queue infrastructure (feedback #42).
@@ -283,7 +283,7 @@ export const teamRoutes = new Elysia()
     return { success: true, pending: true, requestId: row.id };
   })
 
-  // ─── Shiny Toggle ─────────────────────────────────────────────────
+  // Shiny Toggle
 
   .put('/api/teams/:teamId/shiny', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
@@ -317,7 +317,7 @@ export const teamRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Free Agent Pool ────────────────────────────────────────────────
+  // Free Agent Pool
 
   .get('/api/leagues/:leagueId/free-agents', ({ params, query }) => {
     // Get all rostered pokemon names in this league

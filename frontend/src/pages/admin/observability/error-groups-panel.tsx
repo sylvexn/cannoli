@@ -54,7 +54,7 @@ function statusBadgeClasses(status: ErrorGroupStatus): string {
   return 'border-loss/40 text-loss bg-loss/10';
 }
 
-// ─── Expanded detail ──────────────────────────────────────────────────────────
+// Expanded detail
 
 interface GroupDetailProps {
   group: ApiErrorGroup;
@@ -196,7 +196,7 @@ function GroupDetail({ group, onStatusChange }: GroupDetailProps) {
   );
 }
 
-// ─── Group row ────────────────────────────────────────────────────────────────
+// Group row
 
 interface GroupRowProps {
   group: ApiErrorGroup;
@@ -285,7 +285,7 @@ function GroupRow({ group, index, onStatusChange }: GroupRowProps) {
   );
 }
 
-// ─── Panel ────────────────────────────────────────────────────────────────────
+// Panel
 
 export function ErrorGroupsPanel() {
   const [data, setData] = useState<ApiObservabilityOverview | null>(null);

@@ -16,9 +16,7 @@
 // Vite injects this at build time via the `define` block in vite.config.ts.
 declare const __COMMIT_HASH__: string;
 
-// ---------------------------------------------------------------------------
 // Types
-// ---------------------------------------------------------------------------
 
 export interface Breadcrumb {
   /** ISO timestamp so the server can reconstruct a timeline. */
@@ -29,9 +27,7 @@ export interface Breadcrumb {
   meta?: Record<string, unknown>;
 }
 
-// ---------------------------------------------------------------------------
 // Ring buffer
-// ---------------------------------------------------------------------------
 
 const MAX = 20;
 const buffer: Breadcrumb[] = [];
@@ -67,9 +63,7 @@ export function getBreadcrumbs(): Breadcrumb[] {
   }
 }
 
-// ---------------------------------------------------------------------------
 // APP_VERSION
-// ---------------------------------------------------------------------------
 
 /**
  * The git commit hash injected by Vite at build time. Lets the backend tie a
@@ -88,9 +82,7 @@ export const APP_VERSION: string = (() => {
   }
 })();
 
-// ---------------------------------------------------------------------------
 // Auto-instrumentation
-// ---------------------------------------------------------------------------
 
 let _installed = false;
 

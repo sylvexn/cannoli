@@ -25,7 +25,7 @@ import { randomBytes } from 'crypto';
 
 const CANNOLI_MODE = process.env.CANNOLI_MODE || 'mock';
 
-// ─── Config ─────────────────────────────────────────────────────────────────
+// Config
 
 const PS_HOSTNAME = process.env.PS_HOSTNAME || 'cannoli.live';
 const PS_KEY_ID = parseInt(process.env.PS_KEY_ID || '4', 10);
@@ -48,7 +48,7 @@ export function getKeyId(): number {
   return PS_KEY_ID;
 }
 
-// ─── PS Session Management ──────────────────────────────────────────────────
+// PS Session Management
 //
 // PS uses its own `sid` cookie separate from our app session cookie.
 // Format: "username,sessionId,sidhash"
@@ -196,7 +196,7 @@ export function clearPsSidCookieString(): string {
   return parts.join('; ');
 }
 
-// ─── Assertion Signing ──────────────────────────────────────────────────────
+// Assertion Signing
 
 /**
  * Resolve Cannoli role + league memberships for the assertion's optional
@@ -292,7 +292,7 @@ export function signAssertion(challstr: string, userid: string, userType: string
   }
 }
 
-// ─── User Lookup ────────────────────────────────────────────────────────────
+// User Lookup
 
 /**
  * Normalize a username to a userid (PS convention: lowercase, strip non-alnum).
@@ -372,7 +372,7 @@ function autoCreateMockUser(userid: string, password: string) {
   return inserted;
 }
 
-// ─── Parse PS sid from cookie header ────────────────────────────────────────
+// Parse PS sid from cookie header
 
 export function parsePsSid(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;

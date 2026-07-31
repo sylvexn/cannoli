@@ -150,7 +150,7 @@ export function backfillMatchPokemon(database?: Database, opts: BackfillOptions 
         continue;
       }
 
-      // ── Side → team mapping ──────────────────────────────────────────
+      // Side → team mapping
       const homeUser = teamOwnerUserid.get(m.homeTeamId) as { username: string | null } | undefined;
       const awayUser = teamOwnerUserid.get(m.awayTeamId) as { username: string | null } | undefined;
       const homeUserid = homeUser?.username ? toUserid(homeUser.username) : '';

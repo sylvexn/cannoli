@@ -49,7 +49,7 @@
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 
-// ─── Paths ──────────────────────────────────────────────────────────────────
+// Paths
 
 const URL_LIST = resolve(import.meta.dir, '../imports/replays/google-sites-urls.txt');
 const OUT_ROOT = resolve(import.meta.dir, '../imports/replays/s10');
@@ -58,7 +58,7 @@ const CONCURRENCY = 4;
 
 const FORCE = process.argv.includes('--force');
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 type Phase = 'regular' | 'qf' | 'sf' | 'f';
 type League = 'sapphire' | 'ruby' | 'emerald' | '_unsorted';
@@ -88,7 +88,7 @@ interface MatchRecord {
   scrapedAt: string;
 }
 
-// ─── HTTP ────────────────────────────────────────────────────────────────────
+// HTTP
 
 async function fetchText(url: string, retries = 3): Promise<string> {
   for (let i = 0; i < retries; i++) {
@@ -104,7 +104,7 @@ async function fetchText(url: string, retries = 3): Promise<string> {
   throw new Error('unreachable');
 }
 
-// ─── URL list parsing ────────────────────────────────────────────────────────
+// URL list parsing
 
 const VALID_LEAGUES: League[] = ['sapphire', 'ruby', 'emerald'];
 
@@ -167,7 +167,7 @@ function parseUrlList(text: string): UrlEntry[] {
   return entries;
 }
 
-// ─── HTML inspection ────────────────────────────────────────────────────────
+// HTML inspection
 
 /** Decode the entity layers Google Sites wraps embedded HTML in. */
 function decodeEntities(s: string): string {
@@ -205,7 +205,7 @@ function extractReplayIds(html: string): string[] {
   return [...ids];
 }
 
-// ─── PS replay JSON fetch ────────────────────────────────────────────────────
+// PS replay JSON fetch
 
 interface PsReplay {
   id: string;
@@ -223,7 +223,7 @@ async function fetchPsReplay(replayId: string): Promise<PsReplay> {
   return (await r.json()) as PsReplay;
 }
 
-// ─── Slug -> abbrev pair (best effort) ───────────────────────────────────────
+// Slug -> abbrev pair (best effort)
 
 function parseTeamPair(slug: string): {
   homeAbbrev: string;
@@ -247,7 +247,7 @@ function parseTeamPair(slug: string): {
   return { homeAbbrev: home, awayAbbrev: away, forfeitSide };
 }
 
-// ─── Worker pool ─────────────────────────────────────────────────────────────
+// Worker pool
 
 async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
@@ -263,7 +263,7 @@ async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Prom
   return out;
 }
 
-// ─── Output path ─────────────────────────────────────────────────────────────
+// Output path
 
 function outFileFor(entry: UrlEntry, suffix: string): string {
   const phaseDir =
@@ -279,7 +279,7 @@ function outFileFor(entry: UrlEntry, suffix: string): string {
   return resolve(OUT_ROOT, entry.league, phaseDir, filename);
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+// Main
 
 async function main() {
   if (!existsSync(URL_LIST)) {

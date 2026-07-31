@@ -4,7 +4,7 @@ import type { ApiLeague, ApiTeam, ApiMatch, ApiMatchPokemon, ApiTransaction } fr
 import type { League, Player, Match, MatchPokemonEntry, LeagueSeason, RosterPokemon } from './types';
 import type { PokemonType } from './pokemon';
 
-// ─── Hooks ───────────────────────────────────────────────────────────────────
+// Hooks
 
 export function useLeagues() {
   const [leagues, setLeagues] = useState<League[]>([]);
@@ -81,7 +81,7 @@ export function useLeagueTransactions(leagueId: string) {
   return { transactions, loading };
 }
 
-// ─── Converters (API → frontend types) ───────────────────────────────────────
+// Converters (API → frontend types)
 
 function toLeague(a: ApiLeague): League {
   const season: LeagueSeason = a.season ? {

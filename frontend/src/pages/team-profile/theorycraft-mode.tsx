@@ -183,7 +183,7 @@ export function SwapPicker({
   );
 }
 
-// ─── Add Picker ─────────────────────────────────────────────────
+// Add Picker
 
 interface AddPickerProps {
   activeRoster: RosterPokemon[];

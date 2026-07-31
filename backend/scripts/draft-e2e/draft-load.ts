@@ -33,7 +33,7 @@ const POOL = (fixture as any[])
 let poolIdx = 0;
 const nextName = () => POOL[poolIdx++];
 
-// ── backend ───────────────────────────────────────────────────────────────────
+// backend
 function startBackend() {
   const proc = Bun.spawn(['bun', 'run', 'src/index.ts'], {
     cwd: BACKEND_DIR,
@@ -45,7 +45,7 @@ function startBackend() {
   return proc;
 }
 
-// ── auth ────────────────────────────────────────────────────────────────────
+// auth
 async function login(username: string): Promise<{ cookie: string; csrf: string }> {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -65,7 +65,7 @@ function api(method: string, path: string, auth: { cookie: string; csrf: string 
   });
 }
 
-// ── draft WS client ───────────────────────────────────────────────────────────
+// draft WS client
 class DraftClient {
   snapshot: any = null;
   picksObserved: { clientRequestId?: string; idempotent?: boolean }[] = [];
@@ -95,7 +95,7 @@ class DraftClient {
   close() { try { this.ws.close(); } catch {} }
 }
 
-// ── main ────────────────────────────────────────────────────────────────────
+// main
 console.log('[draft-harness] seeding (fresh DB)');
 for (const suf of ['', '-wal', '-shm']) { try { require('fs').rmSync(DB_PATH + suf); } catch {} }
 seedDraft();
@@ -196,7 +196,7 @@ if (healthy) {
   const idempEchoes = clients.flatMap((c) => c.picksObserved).filter((p) => p.clientRequestId === idempReqId);
   check(idempEchoes.some((p) => p.idempotent === true), 'duplicate pick returned idempotent=true');
 
-  // ── Captain gate ────────────────────────────────────────────────────────────
+  // Captain gate
   const phaseBefore = await leaguePhase();
   check(phaseBefore === 'draft', `league still in 'draft' after draft completes (captain gate holds)`);
 
@@ -222,7 +222,7 @@ backend.kill();
 await sleep(300);
 process.exit(FAILS === 0 ? 0 : 1);
 
-// ── helpers that close over clients ───────────────────────────────────────────
+// helpers that close over clients
 function currentSnap(): any { return (globalThis as any).__clients?.find((c: any) => c.snapshot)?.snapshot ?? null; }
 async function waitSnap(pred: (s: any) => boolean, ms: number) {
   for (let end = Date.now() + ms; Date.now() < end; await sleep(150)) { const s = currentSnap(); if (s && pred(s)) return s; }

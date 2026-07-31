@@ -157,7 +157,7 @@ export function DraftFilterBar({
   );
 }
 
-// ─── Type-filter pill — collapsed by default, popover expands the chip grid ─
+// Type-filter pill — collapsed by default, popover expands the chip grid
 
 interface TypeFilterPillProps {
   filters: DraftFilters;

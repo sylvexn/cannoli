@@ -171,7 +171,7 @@ export function CoachLink({
   );
 }
 
-// ─── Hover card ───────────────────────────────────────────────────────────
+// Hover card
 
 interface CoachLinkPopoverProps {
   coach: CoachRef;

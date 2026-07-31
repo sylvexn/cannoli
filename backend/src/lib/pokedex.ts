@@ -1,18 +1,7 @@
 /**
- * Lightweight Pokemon name classifier — covers the rules we need without
- * shipping a full Pokedex:
- *
- *   - getBaseFormName("Mega Charizard X")      → "Charizard"
- *   - getBaseFormName("Charizard-Mega-X")      → "Charizard"
- *   - getBaseFormName("Tauros-Paldea-Aqua")    → "Tauros-Paldea-Aqua" (regional stays distinct)
- *   - getBaseFormName("Greninja-Ash")          → "Greninja"
- *   - getFormCategory("Mega Charizard X")      → "mega"
- *   - getFormCategory("Tauros-Paldea-Aqua")    → "regional"
- *
- * The base-form name is what we use to enforce "no duplicate species on a roster".
- * Two megas of the same species (e.g. Mega Charizard X and Mega Charizard Y) both
- * normalize to "Charizard" and are caught as duplicates. A regional form is
- * considered a distinct species for roster-uniqueness purposes.
+ * Pokemon name classifier. Base-form name enforces "no duplicate species on a
+ * roster": Mega Charizard X and Y both collapse to "Charizard" and collide.
+ * Regional forms stay distinct species and must NOT collapse.
  */
 
 export type FormCategory = 'base' | 'mega' | 'regional' | 'other';
@@ -30,17 +19,10 @@ const COSMETIC_SUFFIXES = new Set([
 ]);
 
 /**
- * In-battle transform formes a Pokemon flips INTO mid-battle (ability / item /
- * HP-triggered) but which are never separately draftable. Showdown's battle log
- * emits these forme names (via |detailschange|), yet the roster only ever stores
- * the base species. Stripping the trailing segment lets a battle-log name reduce
- * to the same species key as its drafted roster slot (e.g. "Palafin-Hero" →
- * "Palafin", "Aegislash-Blade" → "Aegislash").
- *
- * This is deliberately SEPARATE from COSMETIC_SUFFIXES: those (Therian, regional,
- * etc.) are draftable-distinct species and must keep their identity. Only the
- * *final* dash-segment is stripped, so a regional that also transforms keeps its
- * region (e.g. "Darmanitan-Galar-Zen" → "Darmanitan-Galar").
+ * Mid-battle transform formes. Showdown emits these via |detailschange| but the
+ * roster stores only the base species, so the final dash-segment is stripped.
+ * Keep SEPARATE from COSMETIC_SUFFIXES — those are draftable-distinct species.
+ * Only the last segment goes, so "Darmanitan-Galar-Zen" keeps its region.
  */
 const BATTLE_ONLY_SUFFIXES = new Set([
   'Zero', 'Hero',        // Palafin (Zero to Hero)

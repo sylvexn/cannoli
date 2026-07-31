@@ -105,7 +105,7 @@ function isValidIanaZone(tz: string): boolean {
 
 export const userRoutes = new Elysia()
 
-  // ─── PATCH /api/users/me ──────────────────────────────────────────────
+  // PATCH /api/users/me
   // Self-only edit endpoint. Accepts any subset of:
   //   displayName        — overrides username in UI (≤ 32)
   //   bio                — markdown-light, ≤ 280
@@ -225,7 +225,7 @@ export const userRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── PATCH /api/users/:username (staff-only profile edit) ─────────────
+  // PATCH /api/users/:username (staff-only profile edit)
   // Mirrors the field set of PATCH /api/users/me, but lets dev/admin edit
   // someone else's bio / status / banner. Owner edits still go through /me —
   // this route hard-rejects owner self-targeting so we don't silently route
@@ -309,7 +309,7 @@ export const userRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── POST /api/users/me/avatar ────────────────────────────────────────
+  // POST /api/users/me/avatar
   .post('/api/users/me/avatar', async ({ request, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const form = await request.formData().catch(() => null);
@@ -350,7 +350,7 @@ export const userRoutes = new Elysia()
     return { success: true, path: `/uploads/${relativePath}` };
   })
 
-  // ─── DELETE /api/users/me/avatar ─────────────────────────────────────
+  // DELETE /api/users/me/avatar
   .delete('/api/users/me/avatar', async ({ user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
 
@@ -373,7 +373,7 @@ export const userRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── POST /api/users/me/banner ────────────────────────────────────────
+  // POST /api/users/me/banner
   // Banner image upload. Stored under uploads/user-banners/<userId>.<ext>;
   // the static-file route in admin/teams.ts (`GET /uploads/:dir/:file`) is
   // the shared server — its allow-list now includes user-banners.
@@ -418,7 +418,7 @@ export const userRoutes = new Elysia()
     return { success: true, path: publicPath };
   })
 
-  // ─── GET /api/users/me/preferences ────────────────────────────────────
+  // GET /api/users/me/preferences
   .get('/api/users/me/preferences', ({ user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const row = db.select().from(schema.userPreferences)
@@ -455,7 +455,7 @@ export const userRoutes = new Elysia()
     };
   })
 
-  // ─── PUT /api/users/me/preferences ────────────────────────────────────
+  // PUT /api/users/me/preferences
   .put('/api/users/me/preferences', ({ body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const { theme, density, defaultLandingPath, timezone, colorblindMode, spoilerFreeMode } =
@@ -506,7 +506,7 @@ export const userRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── POST /api/users/me/spoiler-reveal ────────────────────────────────
+  // POST /api/users/me/spoiler-reveal
   // Reveal a league's results THROUGH a given week — bumps the per-league
   // high-water mark to max(existing, week). Revealing week N reveals weeks 1..N
   // (catch-up), so the client un-veils every result for weeks <= N at once.
@@ -535,7 +535,7 @@ export const userRoutes = new Elysia()
     return { spoilerRevealedThrough: map };
   })
 
-  // ─── POST /api/users/me/spoiler-reveal-match ──────────────────────────
+  // POST /api/users/me/spoiler-reveal-match
   // Reveal a SINGLE match individually (schedule/replays per-match tag). Adds
   // the match ID to the user's revealed set (deduped). The reveal persists
   // across reloads, independent of the per-week reveal high-water mark.
@@ -562,13 +562,13 @@ export const userRoutes = new Elysia()
     return { success: true, spoilerRevealedMatches: list };
   })
 
-  // ─── GET /api/users/me/lifetime-stats ─────────────────────────────────
+  // GET /api/users/me/lifetime-stats
   .get('/api/users/me/lifetime-stats', ({ user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     return computeLifetimeStats(parseInt(user.id));
   })
 
-  // ─── GET /api/users/:username (public profile) ────────────────────────
+  // GET /api/users/:username (public profile)
   // NOTE: route order matters — this must come AFTER /api/users/me/* so
   // 'me' isn't matched as a username. Elysia resolves longer-prefix routes
   // first, but we keep the literal routes above for clarity.
@@ -738,7 +738,7 @@ export const userRoutes = new Elysia()
     };
   });
 
-// ─── Helpers ──────────────────────────────────────────────────────────────
+// Helpers
 
 export function computeLifetimeStats(userId: number) {
   const userTeams = db.select({

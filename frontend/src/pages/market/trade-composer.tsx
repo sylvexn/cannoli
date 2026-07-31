@@ -250,7 +250,7 @@ export function TradeComposer({
   );
 }
 
-// ── Roster picker ───────────────────────────────────────────────────────────
+// Roster picker
 
 const TONE: Record<'win' | 'loss', { text: string; border: string }> = {
   win: { text: 'text-win', border: 'border-win/30' },

@@ -11,7 +11,7 @@ import { effectiveCost } from './tera-cost';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
 
-// ─── Structured error codes ────────────────────────────────────────────────
+// Structured error codes
 // Mirrors frontend draft-rules ConflictReason kinds — wire-formatted for the
 // `code` field on 422 responses so clients can render a translated message.
 export type PickErrorCode =
@@ -30,7 +30,7 @@ export type PickErrorCode =
   | 'league_not_found'
   | 'season_not_found';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 export interface SnakePick {
   round: number;
@@ -69,7 +69,7 @@ export interface PickValidation {
   code?: PickErrorCode;
 }
 
-// ─── Snake Order Generation ─────────────────────────────────────────────────
+// Snake Order Generation
 
 /** Generate the full snake-draft pick sequence for N teams × R rounds. */
 export function generateSnakeOrder(teamOrder: string[], rounds: number): SnakePick[] {
@@ -88,7 +88,7 @@ export function generateSnakeOrder(teamOrder: string[], rounds: number): SnakePi
   return picks;
 }
 
-// ─── Pick Validation ────────────────────────────────────────────────────────
+// Pick Validation
 
 /** Cheapest mon — used to reserve budget for remaining roster slots. */
 const MIN_PICK_COST = 1;
@@ -287,7 +287,7 @@ export function validatePick(
   return { valid: true };
 }
 
-// ─── Auto-Pick ──────────────────────────────────────────────────────────────
+// Auto-Pick
 
 /**
  * Select a Pokemon for auto-pick (admin-triggered after a timer expiry pause).
@@ -422,7 +422,7 @@ export function getAutoPick(
   return { name: best.name, tier: costMap.get(best.name)?.tier ?? best.tier };
 }
 
-// ─── Draft Queue (per-team auto-pick preference list) ────────────────────────
+// Draft Queue (per-team auto-pick preference list)
 
 /** Max queued mons per team. Mirrors the frontend reducer cap (draftQueue ≤ 3). */
 export const DRAFT_QUEUE_LIMIT = 3;
@@ -460,7 +460,7 @@ export function setDraftQueue(leagueId: string, teamId: string, names: string[])
   });
 }
 
-// ─── Draft State Operations ─────────────────────────────────────────────────
+// Draft State Operations
 
 /** Get the current draft state snapshot for a league. */
 export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {

@@ -11,7 +11,7 @@
 
 import { toCannoliSpeciesName } from './pokedex';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 export interface PokemonMatchStats {
   species: string;
@@ -85,7 +85,7 @@ export interface ValidationWarning {
   warnOnly?: boolean;
 }
 
-// ─── Per-league ban lists ────────────────────────────────────────────────────
+// Per-league ban lists
 //
 // Move/ability/item bans that DIFFER between Cannoli leagues, keyed by the
 // league's COST FORMAT id ('natdex' = Emerald, 'natdexplus' = Ruby/Sapphire) —
@@ -109,7 +109,7 @@ export const LEAGUE_BANNED_MOVES = new Map<string, string[]>([
 export const LEAGUE_BANNED_ABILITIES = new Map<string, string[]>();
 export const LEAGUE_BANNED_ITEMS = new Map<string, string[]>();
 
-// ─── Parser ─────────────────────────────────────────────────────────────────
+// Parser
 
 export class ReplayParser {
   // Player info
@@ -340,7 +340,7 @@ export class ReplayParser {
     };
   }
 
-  // ─── Protocol Handlers ──────────────────────────────────────────────────
+  // Protocol Handlers
 
   /** |player|p1|USERNAME|AVATAR| */
   private handlePlayer(parts: string[]): boolean {
@@ -783,7 +783,7 @@ export class ReplayParser {
     return false;
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────
+  // Helpers
 
   /** Parse species from "Species, L100, M" or "Species-Mega, F" or "Species, F, tera:Fire" */
   private parseSpecies(raw: string): string {
@@ -854,7 +854,7 @@ export class ReplayParser {
   }
 }
 
-// ─── Validation ─────────────────────────────────────────────────────────────
+// Validation
 
 /**
  * Validate a parsed match result against team rosters and tera captain rules.

@@ -78,7 +78,7 @@ export function assignLeagueCostFormats(db: Database): number {
   );
 }
 
-// ─── Standalone entry ────────────────────────────────────────────────────────
+// Standalone entry
 if (import.meta.main) {
   const DB_PATH = process.env.CANNOLI_DB_PATH || resolve(import.meta.dir, '../data/cannoli.db');
   const DRY = process.argv.includes('--dry-run');

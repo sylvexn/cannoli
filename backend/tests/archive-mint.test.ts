@@ -10,7 +10,7 @@ import {
   type SweeperMatchRow,
 } from '../src/lib/pins/archive-mint';
 
-// ─── Champion ──────────────────────────────────────────────────────────────
+// Champion
 
 describe('pickChampion', () => {
   test('single decisive final → home wins', () => {
@@ -80,7 +80,7 @@ describe('pickChampion', () => {
   });
 });
 
-// ─── High Score ────────────────────────────────────────────────────────────
+// High Score
 
 function hs(teamId: string, pokemon: string, kills: number, matchId = 'm1', week: number | null = 1, phase = 'regular'): HighScoreRow {
   return { teamId, pokemonName: pokemon, matchId, kills, week, phase };
@@ -148,7 +148,7 @@ describe('pickHighScore', () => {
   });
 });
 
-// ─── Steal of the Draft ────────────────────────────────────────────────────
+// Steal of the Draft
 
 function sr(teamId: string, pokemon: string, kills: number, gp: number, cost: number | null): StealRow {
   return { teamId, pokemonName: pokemon, kills, gp, cost };
@@ -244,7 +244,7 @@ describe('pickStealOfTheDraft', () => {
   });
 });
 
-// ─── Sweeper ───────────────────────────────────────────────────────────────
+// Sweeper
 
 function swm(matchId: string, winnerTeamId: string, winnerDeaths: number, winnerGp = 6): SweeperMatchRow {
   return { matchId, winnerTeamId, winnerGp, winnerDeaths };

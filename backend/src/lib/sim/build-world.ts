@@ -43,7 +43,7 @@ import { runAutoAwards } from '../pins/auto-award';
 import { mintArchivePins } from '../pins/archive-mint';
 import { seedLeagueTrades } from './seed-trades';
 
-// ── Tunables ────────────────────────────────────────────────────────────────
+// Tunables
 
 /** Default master seed — fixed so `bun run seed:sim` is reproducible. */
 export const DEFAULT_SIM_SEED = 0xcafe;
@@ -85,7 +85,7 @@ export interface BuildSimWorldResult {
   totals: { seasons: number; leagues: number; teams: number; matches: number };
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 /**
  * Derive a stable per-(season,gem) sub-seed from the master seed so each
@@ -283,7 +283,7 @@ function seedAvailability(leagueId: string, currentWeek: number, weekDates: Reco
   return inserted;
 }
 
-// ── Entry point ─────────────────────────────────────────────────────────────
+// Entry point
 
 /**
  * Build the full simulator world. Assumes the DB is freshly migrated and empty
@@ -312,7 +312,7 @@ export function buildSimWorld(opts: { masterSeed?: number } = {}): BuildSimWorld
 /** Inner builder — runs with FK enforcement off (see {@link buildSimWorld}). */
 function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
 
-  // ── Base data ─────────────────────────────────────────────────────────────
+  // Base data
   seedSystemAccounts(sqlite, db);
   seedSiteSettings(sqlite, db);
   // Sim-only welcome notice, now an announcement (site_settings.announcement
@@ -327,7 +327,7 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
   seedPinDefinitions(sqlite, db);
   seedMoveCategories(sqlite, db);
 
-  // ── demo admin user (login is via a separate demo-session endpoint) ───────
+  // demo admin user (login is via a separate demo-session endpoint)
   let demoUser = db.select().from(schema.users)
     .where(eq(schema.users.username, 'demo')).get();
   if (!demoUser) {
@@ -345,7 +345,7 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
     console.log('  demo user already exists, skipping.');
   }
 
-  // ── Pokemon reference data ────────────────────────────────────────────────
+  // Pokemon reference data
   importPokemonOnly(sqlite);
 
   const usernamesTaken = new Set<string>(
@@ -356,7 +356,7 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
   const rng = new MockRng(masterSeed);
   const seasons: SimWorldSeasonSummary[] = [];
 
-  // ── FINISHED season ───────────────────────────────────────────────────────
+  // FINISHED season
   // Season number 1 of the simulator world. Drafted last autumn, fully played.
   {
     const seasonNumber = 1;
@@ -431,7 +431,7 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
     seasons.push({ seasonId, seasonNumber, status: 'finished', leagues: leagueSummaries });
   }
 
-  // ── LIVE season ───────────────────────────────────────────────────────────
+  // LIVE season
   // Season 2: drafted, regular season played through week 4, still running.
   {
     const seasonNumber = 2;
@@ -492,7 +492,7 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
     seasons.push({ seasonId, seasonNumber, status: 'live', leagues: leagueSummaries });
   }
 
-  // ── Totals ────────────────────────────────────────────────────────────────
+  // Totals
   const totals = {
     seasons: (sqlite.prepare('SELECT COUNT(*) c FROM seasons').get() as { c: number }).c,
     leagues: (sqlite.prepare('SELECT COUNT(*) c FROM leagues').get() as { c: number }).c,

@@ -26,7 +26,7 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
 import * as React from 'react';
 import { playCry } from '@/lib/pokemon';
 
-// ─── ViewTransition feature-detect ─────────────────────────────────────────
+// ViewTransition feature-detect
 // React 19.2.4 stable doesn't yet ship the ViewTransition runtime export
 // (it lives in canary). Types come from @types/react canary.d.ts so we can
 // reference it during typechecking, but at runtime we fall back to

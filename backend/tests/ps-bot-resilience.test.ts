@@ -31,7 +31,7 @@ const REAL_LOG = readFileSync(
   'utf-8',
 ).split('\n');
 
-// ─── Disk-replay fallback: cases not in disk-replay-fallback.test.ts ─────────
+// Disk-replay fallback: cases not in disk-replay-fallback.test.ts
 
 describe('readReplayLogFromDisk — additional edge cases', () => {
   let root: string;
@@ -82,7 +82,7 @@ describe('formatFromRoomId — drives the disk-replay format-dir lookup', () => 
   });
 });
 
-// ─── Real-log: the bot's handleMessage room-prefix + |win| contract ──────────
+// Real-log: the bot's handleMessage room-prefix + |win| contract
 
 describe('bot message framing against a REAL PS server log', () => {
   // Mirror handleMessage: a chunk begins with ">battle-..." then the room's
@@ -142,7 +142,7 @@ describe('bot message framing against a REAL PS server log', () => {
   });
 });
 
-// ─── homeSide orientation math (the "half of matches swapped" bug) ───────────
+// homeSide orientation math (the "half of matches swapped" bug)
 
 describe('home/away orientation resolution (pure model of the bot path)', () => {
   // Mirrors checkForOfficialMatch / handleMatchEnd orientation logic:
@@ -190,7 +190,7 @@ describe('home/away orientation resolution (pure model of the bot path)', () => 
   });
 });
 
-// ─── Idle-battle eviction ────────────────────────────────────────────────────
+// Idle-battle eviction
 
 describe('sweepIdleBattles — evicts stale entries, retains fresh ones', () => {
   const map = getMonitoredBattlesForTest();
@@ -262,7 +262,7 @@ describe('sweepIdleBattles — evicts stale entries, retains fresh ones', () => 
   });
 });
 
-// ─── Unmatched-battle detection ──────────────────────────────────────────────
+// Unmatched-battle detection
 
 describe('unmatched-battle classification (checkForOfficialMatch gate)', () => {
   // The bot logs an activity_log `bot_unmatched_battle` only when BOTH players
@@ -288,7 +288,7 @@ describe('unmatched-battle classification (checkForOfficialMatch gate)', () => {
   });
 });
 
-// ─── Send-queue ───────────────────────────────────────────────────────────────
+// Send-queue
 
 describe('sendToPs send-queue — buffers when socket not OPEN', () => {
   // The bot's module-level `ws` is null in test context (no real WS), so
@@ -325,7 +325,7 @@ describe('sendToPs send-queue — buffers when socket not OPEN', () => {
   });
 });
 
-// ─── 6-field vs 5-field PM contract ─────────────────────────────────────────
+// 6-field vs 5-field PM contract
 
 describe('cannoli-battle-created PM field contract', () => {
   // Replicate the parse logic from handleBotPm to pin the contract without

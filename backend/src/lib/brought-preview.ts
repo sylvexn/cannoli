@@ -102,7 +102,7 @@ export function inferHomeSide(
 
   if (p1Appeared.size === 0 && p2Appeared.size === 0) return null;
 
-  // ── PRIMARY: overlap with the home team's recorded (appeared) rows. ──
+  // PRIMARY: overlap with the home team's recorded (appeared) rows.
   if (opts.homeTeamId) {
     const homeRecorded = new Set(
       opts.recorded
@@ -123,7 +123,7 @@ export function inferHomeSide(
     }
   }
 
-  // ── FALLBACK: roster ownership. ──
+  // FALLBACK: roster ownership.
   const homeRoster = new Set(opts.homeRoster.map(s => s.toLowerCase()));
   const awayRoster = new Set(opts.awayRoster.map(s => s.toLowerCase()));
   const score = (s: Set<string>, roster: Set<string>) => {

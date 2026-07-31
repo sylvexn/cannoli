@@ -63,7 +63,7 @@ export function HeaderCoach({
   );
 }
 
-// ─── Pending trades ───────────────────────────────────────────────────
+// Pending trades
 
 function PendingTradesCard({
   pendingTradesForMe, leagues,
@@ -115,7 +115,7 @@ function PendingTradesCard({
   );
 }
 
-// ─── Action items ─────────────────────────────────────────────────────
+// Action items
 
 function ActionItemsCard({
   myTeams, pendingTradesForMe,
@@ -364,7 +364,7 @@ function ActionItemList({
   );
 }
 
-// ─── My team card ─────────────────────────────────────────────────────
+// My team card
 
 function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
   const { league, team, teams, schedule, rank, totalTeams } = entry;
@@ -583,7 +583,7 @@ function QuickLink({
   );
 }
 
-// ─── Matchup widget ───────────────────────────────────────────────────
+// Matchup widget
 
 function MatchupWidget({
   league, team, teams, match, nextMatch, isBye,

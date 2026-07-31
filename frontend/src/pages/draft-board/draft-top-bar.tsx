@@ -272,7 +272,7 @@ export function DraftTopBar({
   );
 }
 
-// ─── Cluster button + density popout ──────────────────────────────────────
+// Cluster button + density popout
 
 interface ClusterButtonProps {
   onClick: () => void;

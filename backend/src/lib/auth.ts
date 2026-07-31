@@ -7,7 +7,7 @@ import { randomUUID, createHmac } from 'crypto';
 import { db, schema } from '../db';
 import { eq, and, gt } from 'drizzle-orm';
 
-// ─── Password ───────────────────────────────────────────────────────────────
+// Password
 
 export function hashPassword(plain: string): string {
   return hashSync(plain, 10);
@@ -17,7 +17,7 @@ export function verifyPassword(plain: string, hash: string): boolean {
   return compareSync(plain, hash);
 }
 
-// ─── Sessions ───────────────────────────────────────────────────────────────
+// Sessions
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -63,7 +63,7 @@ export function deleteSession(token: string) {
   db.delete(schema.sessions).where(eq(schema.sessions.id, token)).run();
 }
 
-// ─── Cookies ────────────────────────────────────────────────────────────────
+// Cookies
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 const COOKIE_DOMAIN = IS_PROD ? '.cannoli.live' : undefined;
@@ -127,7 +127,7 @@ export function parseSessionToken(cookieHeader: string | undefined): string | nu
   return match ? match[1] : null;
 }
 
-// ─── CSRF (double-submit token tied to session) ─────────────────────────────
+// CSRF (double-submit token tied to session)
 // Token is derived deterministically from the session token via HMAC, so we
 // don't need a DB column. Anyone holding the cookie can compute it; the point
 // is that a cross-site attacker cannot read the cookie value (httpOnly

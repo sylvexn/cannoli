@@ -88,7 +88,7 @@ export function OfficialMatchCard({
   );
 }
 
-// ─── Week picker pill ────────────────────────────────────────────────────────
+// Week picker pill
 
 function WeekPill({ match, active, onClick }: { match: ArenaMatch; active: boolean; onClick: () => void }) {
   const opponent = match.isHome ? match.awayTeam : match.homeTeam;
@@ -118,7 +118,7 @@ function WeekPill({ match, active, onClick }: { match: ArenaMatch; active: boole
   );
 }
 
-// ─── Bot status indicator ────────────────────────────────────────────────────
+// Bot status indicator
 
 function BotStatus({ connected }: { connected: boolean }) {
   return (
@@ -131,7 +131,7 @@ function BotStatus({ connected }: { connected: boolean }) {
   );
 }
 
-// ─── Selected match detail ───────────────────────────────────────────────────
+// Selected match detail
 
 function SelectedMatch({
   match, currentWeek, onReady, onUnready, botConnected, matchError,

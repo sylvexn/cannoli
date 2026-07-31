@@ -19,7 +19,7 @@ import {
   Copy, Check,
 } from 'lucide-react';
 
-// ─── Filter types ─────────────────────────────────────────────────────────────
+// Filter types
 
 type CategoryFilter = FeedbackCategory | 'all';
 type StatusFilter = 'open' | 'resolved' | 'all';
@@ -35,7 +35,7 @@ const CATEGORY_LABELS: Record<CategoryFilter, string> = {
 const CATEGORY_FILTERS: CategoryFilter[] = ['all', 'bug', 'feature', 'league', 'general'];
 const STATUS_FILTERS: StatusFilter[] = ['open', 'resolved', 'all'];
 
-// ─── Category accent styles ───────────────────────────────────────────────────
+// Category accent styles
 
 function categoryClass(cat: FeedbackCategory): string {
   switch (cat) {
@@ -46,7 +46,7 @@ function categoryClass(cat: FeedbackCategory): string {
   }
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// Main component
 
 export function AdminFeedback() {
   const [items, setItems] = useState<ApiFeedbackItem[]>([]);
@@ -196,7 +196,7 @@ export function AdminFeedback() {
   );
 }
 
-// ─── Row ─────────────────────────────────────────────────────────────────────
+// Row
 
 function FeedbackRow({
   item,

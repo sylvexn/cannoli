@@ -111,7 +111,7 @@ export function TeamLink({
   );
 }
 
-// ─── Hover card ───────────────────────────────────────────────────────────
+// Hover card
 
 interface TeamLinkPopoverProps {
   team: TeamRef;

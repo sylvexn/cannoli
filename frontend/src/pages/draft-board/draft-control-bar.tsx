@@ -143,7 +143,7 @@ export function DraftControlBar({
     setForceStartOpen(false);
   }, [isServer, startLiveDraft, startSimulatorDraft]);
 
-  // ─── Pre-start configuration ──────────────────────────────────────────────
+  // Pre-start configuration
   if (isConfiguring) {
     return (
       <>
@@ -346,7 +346,7 @@ export function DraftControlBar({
     );
   }
 
-  // ─── In-progress / completed: chrome only (timer/OTC live in DraftOnTheClock hero) ──
+  // In-progress / completed: chrome only (timer/OTC live in DraftOnTheClock hero)
   const progress = state.snakeOrder.length > 0
     ? (state.currentPickIndex / state.snakeOrder.length) * 100
     : 0;

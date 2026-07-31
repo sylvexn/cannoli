@@ -32,7 +32,7 @@ if (process.env.CANNOLI_MODE !== 'mock') {
   process.exit(1);
 }
 
-// ─── Step 1: wipe in place ──────────────────────────────────────────────────
+// Step 1: wipe in place
 
 (function wipeInPlace() {
   const sqlite = new Database(DB_PATH, { create: true });
@@ -48,7 +48,7 @@ if (process.env.CANNOLI_MODE !== 'mock') {
   console.log(`[seed:sim] wiped ${tables.length} tables in ${DB_PATH}`);
 })();
 
-// ─── Step 2: build the world ────────────────────────────────────────────────
+// Step 2: build the world
 // Dynamic import so `src/db` (and its auto-migrate) runs AFTER the wipe above.
 
 const { buildSimWorld, DEFAULT_SIM_SEED } = await import('../src/lib/sim/build-world');
@@ -58,7 +58,7 @@ const masterSeed = seedArg ? Number.parseInt(seedArg, 0) : DEFAULT_SIM_SEED;
 
 const result = buildSimWorld({ masterSeed });
 
-// ─── Step 3: summary ────────────────────────────────────────────────────────
+// Step 3: summary
 
 console.log('\n=== Simulator world built ===');
 console.log(`  masterSeed: 0x${result.masterSeed.toString(16)}`);

@@ -23,14 +23,14 @@ import { genErrorId } from '../../lib/request-log';
 // heartbeat.ts is a future module — import will resolve once it is created.
 import { getHealthSnapshot } from '../../lib/heartbeat';
 
-// ─── In-memory "last seen" markers ──────────────────────────────────────────
+// In-memory "last seen" markers
 //
 // Best-effort: the Map resets on process restart. A database-backed marker
 // would survive restarts but this badge is dev tooling, not mission-critical.
 // Key: user.id (string), value: SQLite datetime string 'YYYY-MM-DD HH:MM:SS'.
 const lastSeenMarkers = new Map<string, string>();
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 /** Clamp limit to [1, max]. */
 function clampLimit(raw: string | undefined, def: number, max: number): number {
@@ -82,7 +82,7 @@ function loadSparks(fingerprints: string[]): Map<string, number[]> {
   return result;
 }
 
-// ─── Demo error seeding (dev tooling) ─────────────────────────────────────────
+// Demo error seeding (dev tooling)
 //
 // Injects realistic-looking fake faults so the Observability dashboard + API
 // Logs tab can be demonstrated/screenshotted without waiting for a real crash.
@@ -232,11 +232,11 @@ function seedDemoErrors(): { groups: number; occurrences: number } {
   return { groups: DEMO_FAULTS.length, occurrences: occTotal };
 }
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+// Routes
 
 export const observabilityRoutes = new Elysia()
 
-  // ── 1. Error group list ────────────────────────────────────────────────────
+  // 1. Error group list
   //
   // Returns a filtered + paginated list of error_groups with per-group spark
   // data and global status-breakdown stats. The stats row always covers the
@@ -331,7 +331,7 @@ export const observabilityRoutes = new Elysia()
     };
   }, { beforeHandle: requireDev })
 
-  // ── 2. Error group detail ─────────────────────────────────────────────────
+  // 2. Error group detail
   //
   // Full group fields + sampleStack + most recent 50 request_log occurrences
   // (matched by fingerprint). 404 when the id doesn't exist.
@@ -394,7 +394,7 @@ export const observabilityRoutes = new Elysia()
     };
   }, { beforeHandle: requireDev })
 
-  // ── 3. Update group status ────────────────────────────────────────────────
+  // 3. Update group status
   //
   // PATCH-style via POST (consistent with other admin status mutations in this
   // codebase). 'resolved' stamps resolved_at + resolved_version; clearing status
@@ -434,7 +434,7 @@ export const observabilityRoutes = new Elysia()
     body: t.Object({ status: t.Union([t.Literal('open'), t.Literal('resolved'), t.Literal('muted')]) }),
   })
 
-  // ── 4. Request trends ────────────────────────────────────────────────────
+  // 4. Request trends
   //
   // Bucketed traffic analysis over request_logs.
   //
@@ -567,7 +567,7 @@ export const observabilityRoutes = new Elysia()
     return { buckets, slowestEndpoints };
   }, { beforeHandle: requireDev })
 
-  // ── 5. Health snapshot ───────────────────────────────────────────────────
+  // 5. Health snapshot
   //
   // Thin pass-through to getHealthSnapshot() from lib/heartbeat.ts.
   // Shape: { checks: [{name, status, detail, latencyMs, checkedAt, lastOkAt}],
@@ -577,7 +577,7 @@ export const observabilityRoutes = new Elysia()
     return getHealthSnapshot();
   }, { beforeHandle: requireDev })
 
-  // ── 6. Unread badge count ────────────────────────────────────────────────
+  // 6. Unread badge count
   //
   // Returns the number of 'open' error groups the calling dev has NOT seen yet.
   // "Seen" is tracked per-user in a module-level Map (in-memory, resets on
@@ -612,7 +612,7 @@ export const observabilityRoutes = new Elysia()
     return { unread };
   }, { beforeHandle: requireDev })
 
-  // ── 7. Mark as seen ───────────────────────────────────────────────────────
+  // 7. Mark as seen
   //
   // Sets the calling dev's last-seen marker to now, collapsing the unread count
   // to zero. Called when the dev opens the Observability tab.
@@ -629,7 +629,7 @@ export const observabilityRoutes = new Elysia()
     return { success: true };
   }, { beforeHandle: requireDev })
 
-  // ── 8. Seed demo errors (dev tooling) ─────────────────────────────────────
+  // 8. Seed demo errors (dev tooling)
   //
   // Injects fake-but-realistic error groups + request_logs occurrences so the
   // dashboard can be demonstrated/screenshotted. Re-seeding wipes the prior
@@ -639,7 +639,7 @@ export const observabilityRoutes = new Elysia()
     return { success: true, ...seedDemoErrors() };
   }, { beforeHandle: requireDev })
 
-  // ── 9. Clear demo errors ──────────────────────────────────────────────────
+  // 9. Clear demo errors
   //
   // Removes exactly the demo groups + their occurrences (matched by the fixed
   // demo fingerprints). Leaves all real errors untouched.

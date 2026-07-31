@@ -82,7 +82,7 @@ export function ManageRosterModal(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // ─── Derived values ───────────────────────────────────────────────
+  // Derived values
   const pointsUsed = roster.reduce(
     (sum, mon, i) => sum + (captain[i] ? getTermCost(mon.tier) : mon.tier),
     0,
@@ -148,7 +148,7 @@ export function ManageRosterModal(props: {
     });
   }
 
-  // ─── Save ─────────────────────────────────────────────────────────
+  // Save
   async function handleSave() {
     setSaving(true);
     try {

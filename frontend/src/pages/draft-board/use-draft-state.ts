@@ -52,13 +52,13 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   const { players, standings, transactions } = useLeagueData();
   const { user } = useAuth();
 
-  // ─── Presence tracking ───────────────────────────────────────────
+  // Presence tracking
   const [presence, setPresence] = useState<DraftPresenceData>({ players: [], spectators: [] });
 
-  // ─── Draft settings from admin ──────────────────────────────────
+  // Draft settings from admin
   const { draftTimerEnabled, draftDemoVisible } = useDraftSettings();
 
-  // ─── Season data (historical picks from API) ─────────────────────
+  // Season data (historical picks from API)
   // Track both the picks AND the league they belong to so we can detect
   // and reject stale picks from a previous league during transitions.
   const [draftPicksState, setDraftPicksState] = useState<{
@@ -108,7 +108,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
   const trades = useMemo(() => transactionsToTrades(transactions), [transactions]);
 
-  // ─── Reducer ──────────────────────────────────────────────────────
+  // Reducer
   const initialState: DraftState = {
     view: 'history',
     status: 'idle',
@@ -172,23 +172,23 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     return Math.max(0, remaining - (picksLeft - 1));
   }, [state.userTeamId, state.view, state.allPicks, state.currentPickIndex, state.snakeOrder, state.pointCap]);
 
-  // ─── Pool, ownership, lookups ────────────────────────────────────
+  // Pool, ownership, lookups
   const draftFormat = league.format;
   const { rosterLookup, playerLookup, ownershipMap, filteredPool, poolByTier, matchReasons }
     = useDraftPool(state, players, { affordCap: selfAffordCap, format, draftFormat });
 
-  // ─── Team-derived data (rosters, points, picks-left, drafted set) ─
+  // Team-derived data (rosters, points, picks-left, drafted set)
   const {
     draftedSet, demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
     teamRosters, teamPoints, draftOrder,
   } = useDraftTeams(state, players, standings, ownershipMap, format);
 
-  // ─── Timer derive ────────────────────────────────────────────────
+  // Timer derive
   const { displayTimerSeconds } = useDraftTimer(state, dispatch);
 
   const teraCaptainSlots = league.season.teraCaptainSlots ?? 0;
 
-  // ─── Pick animation queue (presentational) ────────────────────────
+  // Pick animation queue (presentational)
   // Serializes pick celebrations so batched picks (reconnect catch-up, fast
   // auto-picks) play one at a time. Owns cry playback on the landing-phase
   // boundary — draft-board.tsx no longer plays cries eagerly.
@@ -197,7 +197,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   const pickQueue = usePickAnimationQueue({ mute: muted });
   const { enqueue: enqueuePickAnimation, queueIdle } = pickQueue;
 
-  // ─── Auto-pickers (simulator AI + queue auto-draft + your-turn toast) ──
+  // Auto-pickers (simulator AI + queue auto-draft + your-turn toast)
   // Gated on queueIdle so picks land one at a time without overlapping.
   const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
     state, dispatch, draftedSet,
@@ -205,7 +205,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     teraCaptainSlots, queueIdle, format,
   });
 
-  // ─── Enqueue new picks into the animation queue ──────────────────
+  // Enqueue new picks into the animation queue
   // Watches state.allPicks length and pushes any new tail entries. Works for
   // both sources (simulator dispatches PICK_LANDED; server applies LIVE_SYNC
   // which also grows allPicks) without double-counting.
@@ -240,7 +240,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
   const isDraftComplete = state.view === 'active' && state.status === 'complete';
 
-  // ─── Server-source: WebSocket connection ──────────────────────────
+  // Server-source: WebSocket connection
   const wsEnabled = state.source === 'server' && state.view === 'active';
 
   const { connected: wsConnected, sendPick: wsSendPick, identify: wsIdentify } = useDraftWebSocket({
@@ -305,7 +305,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     wsSendPick(pokemonName, state.userTeamId);
   }, [state.source, isUserTurn, state.userTeamId, wsSendPick]);
 
-  // ─── User pick handler ────────────────────────────────────────────
+  // User pick handler
   const handleUserPick = useCallback((pokemonName: string) => {
     if (!isUserTurn) return;
 
@@ -344,7 +344,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     dispatch({ type: 'PICK_LANDED', pokemonName, tier: entry.tier });
   }, [state.source, isUserTurn, draftedSet, buildConflictRoster, state.userTeamId, state.pointCap, handleLivePick]);
 
-  // ─── Current pick info ───────────────────────────────────────────
+  // Current pick info
   const currentPick = useMemo((): DraftPickEntry | null => {
     if (state.view !== 'active') return null;
     if (state.status !== 'running') return null;

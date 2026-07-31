@@ -13,12 +13,12 @@
 
 'use strict';
 
-// ─── Server Identity ────────────────────────────────────────────────────────
+// Server Identity
 
 exports.port = 8000;
 exports.bindaddress = '0.0.0.0';
 
-// ─── Login Server (our Elysia backend) ──────────────────────────────────────
+// Login Server (our Elysia backend)
 
 // Point at Cannoli's PS login endpoints
 exports.loginserver = process.env.PS_LOGIN_SERVER_URL || 'https://cannoli.live/api/ps/';
@@ -30,7 +30,7 @@ exports.loginserverpublickey = process.env.PS_RSA_PUBLIC_KEY || '';
 // RSA-SHA1 is the standard PS algorithm
 exports.loginserverkeyalgo = 'RSA-SHA1';
 
-// ─── Replays ────────────────────────────────────────────────────────────────
+// Replays
 
 // Auto-upload every finished battle's replay (to the replay route, if configured).
 exports.autosavereplays = true;
@@ -43,7 +43,7 @@ exports.autosavereplays = true;
 // Cannoli backend reads for replay parsing / match import / offline recovery.
 exports.logchallenges = true;
 
-// ─── Routes / Domains ───────────────────────────────────────────────────────
+// Routes / Domains
 
 exports.routes = {
 	root: 'sim.cannoli.live',
@@ -53,17 +53,17 @@ exports.routes = {
 // Legal hosts for assertion hostname validation
 exports.legalhosts = ['cannoli.live', 'sim.cannoli.live'];
 
-// ─── Format ─────────────────────────────────────────────────────────────────
+// Format
 
 // [Gen 9] NatDex Draft is a built-in format — no custom format needed.
 // League-specific bans are applied via the chat plugin or /banlist command.
 
-// ─── Bot / Admin ────────────────────────────────────────────────────────────
+// Bot / Admin
 
 // CannoliBot gets global voice so it can join any room and use /cannoli-battle
 // Add to config/usergroups.csv: cannolibot,+
 
-// ─── Misc ───────────────────────────────────────────────────────────────────
+// Misc
 
 exports.reportjoins = false;
 exports.pokemonshowdowncom = false; // We're not smogon
@@ -79,7 +79,7 @@ exports.watchdog = true;
 // use the REPL in production — turn it off.
 exports.repl = false;
 
-// ─── Cannoli league rooms (startup + periodic sync) ─────────────────────────
+// Cannoli league rooms (startup + periodic sync)
 //
 // Fetch active leagues from the Cannoli backend and ensure a chat room exists
 // for each one. The backend returns slug/name/displayName/phase/currentWeek; we

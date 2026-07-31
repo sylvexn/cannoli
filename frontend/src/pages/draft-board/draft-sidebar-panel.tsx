@@ -353,7 +353,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
   );
 }
 
-// ─── Unified team row template ─────────────────────────────────────────────
+// Unified team row template
 
 interface UnifiedTeamRowProps {
   player: Player;

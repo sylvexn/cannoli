@@ -10,7 +10,7 @@ import {
   type StreakMatch,
 } from '../src/lib/pins/auto-award';
 
-// ─── Garchomp ──────────────────────────────────────────────────────────────
+// Garchomp
 
 describe('pickGarchompWinners', () => {
   test('top kill total → single winner', () => {
@@ -63,7 +63,7 @@ describe('pickGarchompWinners', () => {
   });
 });
 
-// ─── Cannoli ──────────────────────────────────────────────────────────────
+// Cannoli
 
 function rec(teamId: string, userId: number | null, wins: number, losses: number, diff: number, played = wins + losses): CannoliRecord {
   return { teamId, userId, wins, losses, diff, played };
@@ -110,7 +110,7 @@ describe('pickCannoliWinners', () => {
   });
 });
 
-// ─── Cynthia (streak helpers) ──────────────────────────────────────────────
+// Cynthia (streak helpers)
 
 function m(home: string, away: string, hs: number | null, as: number | null, forfeitedBy?: 'home' | 'away' | 'both' | null): StreakMatch {
   return { homeTeamId: home, awayTeamId: away, homeScore: hs, awayScore: as, forfeitedBy: forfeitedBy ?? null };

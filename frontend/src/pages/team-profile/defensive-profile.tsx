@@ -6,7 +6,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/lib/auth-context';
 
-// ─── Multiplier styles ───────────────────────────────────────────
+// Multiplier styles
 export const MULT_STYLES: Record<string, { bg: string; hover: string; border: string; text: string; label: string; textCls: string }> = {
   '4':    { bg: 'rgba(220,38,38,0.7)',  hover: 'rgba(220,38,38,0.9)',  border: '#fca5a5', text: '#fff', label: '4x',  textCls: 'text-loss font-bold' },
   '2':    { bg: 'rgba(239,68,68,0.5)',  hover: 'rgba(239,68,68,0.75)', border: '#f87171', text: '#fff', label: '2x',  textCls: 'text-loss' },
@@ -19,7 +19,7 @@ function getMultKey(mult: number): string {
   return mult === 4 ? '4' : mult === 2 ? '2' : mult === 0.5 ? '0.5' : mult === 0.25 ? '0.25' : '0';
 }
 
-// ─── MultChip ────────────────────────────────────────────────────
+// MultChip
 export function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'md' }) {
   const s = MULT_STYLES[getMultKey(mult)];
   const px = size === 'sm' ? 18 : 22;
@@ -48,7 +48,7 @@ export function MultChip({ mult, size = 'md' }: { mult: number; size?: 'sm' | 'm
   );
 }
 
-// ─── DefSegment ──────────────────────────────────────────────────
+// DefSegment
 export function DefSegment({ name, mult, pct, types }: { name: string; mult: number; pct: number; types: PokemonType[] }) {
   const s = MULT_STYLES[getMultKey(mult)];
   const { colorblindMode } = useAuth();

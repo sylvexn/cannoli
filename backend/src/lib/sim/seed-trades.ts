@@ -142,7 +142,7 @@ export function seedLeagueTrades(
   let pending = 0;
   let listings = 0;
 
-  // ── Accepted trades (Trade History) ─────────────────────────────────────
+  // Accepted trades (Trade History)
   // 3–4 historical 1-for-1 swaps. Tiers are kept within 2 of each other so a
   // glance at the history reads as a fair trade. Each slot retries a few
   // pairings to find a fair one rather than silently producing nothing — so
@@ -182,7 +182,7 @@ export function seedLeagueTrades(
     accepted++;
   }
 
-  // ── Pending proposals (Proposals tab) — live leagues only ───────────────
+  // Pending proposals (Proposals tab) — live leagues only
   if (!finished) {
     const pendingCount = rng.int(2, 3);
     for (let i = 0; i < pendingCount; i++) {
@@ -204,7 +204,7 @@ export function seedLeagueTrades(
     }
   }
 
-  // ── Trade-block listings ("On the Block") ───────────────────────────────
+  // Trade-block listings ("On the Block")
   // ~half the teams list a single mon. Skip any mon already listed (the
   // accepted-trade swaps above won't have re-listed anything).
   const listed = new Set<string>();

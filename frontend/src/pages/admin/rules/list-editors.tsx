@@ -85,7 +85,7 @@ function RowControls({
   );
 }
 
-/* ─────────────────────────── StringListEditor ─────────────────────────── */
+/* StringListEditor */
 
 export function StringListEditor({
   items,
@@ -145,7 +145,7 @@ export function StringListEditor({
   );
 }
 
-/* ──────────────────────────── PairListEditor ──────────────────────────── */
+/* PairListEditor */
 
 export interface PairItem {
   a: string;
@@ -246,7 +246,7 @@ export function PairListEditor({
   );
 }
 
-/* ────────────────────────────── ChipEditor ────────────────────────────── */
+/* ChipEditor */
 
 export function ChipEditor({
   items,

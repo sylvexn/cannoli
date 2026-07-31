@@ -25,7 +25,7 @@ import {
 } from './ps-bot';
 import { ReplayParser } from './replay-parser';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 
 /** How a disk replay relates to a Cannoli match. */
 export type LinkStatus = 'attached' | 'recoverable' | 'unlinked';
@@ -105,7 +105,7 @@ interface RawReplayFile {
   log?: string[];
 }
 
-// ─── File reading ──────────────────────────────────────────────────────────────
+// File reading
 
 function readRawFile(path: string): RawReplayFile | null {
   try {
@@ -123,7 +123,7 @@ function toIso(timestamp: string | undefined): string | null {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-// ─── Log fallbacks ──────────────────────────────────────────────────────────────
+// Log fallbacks
 //
 // When a top-level field is missing we recover it from the protocol `log`:
 //   |player|p1|NAME|...   → p1 / p2 usernames
@@ -200,7 +200,7 @@ function broughtForSide(
   return broughtFromLog(log, side);
 }
 
-// ─── Row extraction ──────────────────────────────────────────────────────────────
+// Row extraction
 
 /** Build a (link-less) PsReplayRow from a parsed file. Returns null when the
  *  room id can't be resolved (so the row would be useless). */
@@ -241,7 +241,7 @@ function rowFromRaw(raw: RawReplayFile, filePath: string): Omit<PsReplayRow, 'ma
   };
 }
 
-// ─── Directory walk ──────────────────────────────────────────────────────────────
+// Directory walk
 
 /** Numeric battle suffix from a room id (`battle-...-78` → 78). -Infinity when
  *  absent so unparsable ids sort last. */
@@ -329,7 +329,7 @@ export function listDiskReplaysRaw(limit = 100): {
   return { available: true, dir, total, rows };
 }
 
-// ─── Match linking ────────────────────────────────────────────────────────────────
+// Match linking
 
 /**
  * Best-effort resolve a disk replay (by its two PS usernames) to a Cannoli
@@ -437,7 +437,7 @@ function applyLink(row: PsReplayRow): PsReplayRow {
   return row;
 }
 
-// ─── Public API ────────────────────────────────────────────────────────────────
+// Public API
 
 /**
  * List disk replays (newest-first) with each row cross-referenced to a Cannoli

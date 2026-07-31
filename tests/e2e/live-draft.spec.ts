@@ -67,7 +67,7 @@ test.describe('12-coach live draft', () => {
   test('all 12 connect, draft completes via HTTP picks', async ({ browser, request, playwright }) => {
     const captured: string[] = [];
 
-    // ─── Phase 1: admin walks sapphire back to draft phase + sets order ──
+    // Phase 1: admin walks sapphire back to draft phase + sets order
     await login(request, 'syl', 'admin');
 
     const teamsList = await request.get(`/api/leagues/${LEAGUE_ID}/teams`).then((r) => r.json());
@@ -85,7 +85,7 @@ test.describe('12-coach live draft', () => {
     const toDraft = await csrfPost(request, `/api/leagues/${LEAGUE_ID}/phase`, { phase: 'draft' });
     expect(toDraft.ok(), `→ draft: ${toDraft.status()} ${await toDraft.text()}`).toBeTruthy();
 
-    // ─── Phase 2: clear must_change_password on each coach via the API ───
+    // Phase 2: clear must_change_password on each coach via the API
     for (const username of COACH_USERNAMES) {
       const ctx = await playwright.request.newContext({ baseURL: 'http://localhost:5173' });
       try {
@@ -103,7 +103,7 @@ test.describe('12-coach live draft', () => {
       }
     }
 
-    // ─── Phase 3: spawn 12 browser contexts, login each, open the draft ──
+    // Phase 3: spawn 12 browser contexts, login each, open the draft
     const coaches: { username: string; teamId: string; ctx: BrowserContext; page: Page; api: APIRequestContext }[] = [];
     for (const username of COACH_USERNAMES) {
       const ctx = await browser.newContext();
@@ -163,7 +163,7 @@ test.describe('12-coach live draft', () => {
       return (body.players ?? []).length;
     }, { timeout: 30_000, message: 'waiting for 12 players in presence map' }).toBeGreaterThanOrEqual(12);
 
-    // ─── Phase 4: admin starts the draft ─────────────────────────────────
+    // Phase 4: admin starts the draft
     const startRes = await csrfPost(
       request,
       `/api/leagues/${LEAGUE_ID}/draft/start`,
@@ -171,7 +171,7 @@ test.describe('12-coach live draft', () => {
     );
     expect(startRes.ok(), `startDraft: ${startRes.status()} ${await startRes.text()}`).toBeTruthy();
 
-    // ─── Phase 5: pick driver ────────────────────────────────────────────
+    // Phase 5: pick driver
     // Cheapest-first: ascending tier keeps every team in budget. Server
     // validates dup-species / mega-cap / captain-reserve; any 422 means
     // "try the next candidate".
@@ -220,7 +220,7 @@ test.describe('12-coach live draft', () => {
       }
     }
 
-    // ─── Phase 6: verify completion ──────────────────────────────────────
+    // Phase 6: verify completion
     const finalRes = await request.get(`/api/leagues/${LEAGUE_ID}/draft/state`);
     const final: DraftSnapshot = await finalRes.json();
     expect(final.status).toBe('completed');

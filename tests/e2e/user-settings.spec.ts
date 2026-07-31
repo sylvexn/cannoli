@@ -14,7 +14,7 @@ test.describe('User settings — preferences', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
   test('toggles persist and the colorblind palette actually swaps', async ({ page }) => {
-    // ── Login (mock seed user `syl` with admin password — same pattern as
+    // Login (mock seed user `syl` with admin password — same pattern as
     //    profile-colors.spec.ts).
     await page.goto('/login');
     await page.getByLabel(/username/i).fill('syl');
@@ -33,7 +33,7 @@ test.describe('User settings — preferences', () => {
     const themeTrigger = page.locator('label:has-text("Theme")').locator('..').getByRole('combobox');
     await expect(themeTrigger).toHaveText(/dark/i);
 
-    // ── Density: flip comfortable → compact and back so the persistence
+    // Density: flip comfortable → compact and back so the persistence
     //    code path runs end-to-end without leaving the user's account in a
     //    surprising state. We don't assert any DOM side-effect here because
     //    density is read by individual components on next render — the
@@ -42,14 +42,14 @@ test.describe('User settings — preferences', () => {
     await densityTrigger.click();
     await page.getByRole('option', { name: /compact/i }).click();
 
-    // ── Default landing path: pick whatever the second option is so we
+    // Default landing path: pick whatever the second option is so we
     //    don't depend on the exact label set in DEFAULT_LANDING_OPTIONS.
     const landingTrigger = page.locator('label:has-text("Default landing page")').locator('..').getByRole('combobox');
     await landingTrigger.click();
     const options = page.getByRole('option');
     await options.nth(1).click();
 
-    // ── Colorblind toggle ON.
+    // Colorblind toggle ON.
     const cbSwitch = page.locator('text=Colorblind mode').locator('..').locator('..').getByRole('switch');
     await cbSwitch.click();
 
@@ -57,12 +57,12 @@ test.describe('User settings — preferences', () => {
     await page.getByRole('button', { name: /save preferences/i }).click();
     await expect(page.getByText(/preferences saved/i).first()).toBeVisible({ timeout: 5_000 });
 
-    // ── data-colorblind attribute should be stamped.
+    // data-colorblind attribute should be stamped.
     await expect.poll(async () =>
       page.evaluate(() => document.documentElement.getAttribute('data-colorblind')),
     ).toBe('true');
 
-    // ── Computed style proof: an element consuming `--color-loss` must now
+    // Computed style proof: an element consuming `--color-loss` must now
     //    render orange (#f97316 → rgb(249, 115, 22)), not red.
     const lossColor = await page.evaluate(() => {
       const probe = document.createElement('span');
@@ -75,7 +75,7 @@ test.describe('User settings — preferences', () => {
     });
     expect(lossColor.replace(/\s+/g, '')).toBe('rgb(249,115,22)');
 
-    // ── Toggle colorblind back OFF and save; assert it reverts.
+    // Toggle colorblind back OFF and save; assert it reverts.
     await cbSwitch.click();
     await page.getByRole('button', { name: /save preferences/i }).click();
     await expect(page.getByText(/preferences saved/i).first()).toBeVisible({ timeout: 5_000 });
@@ -96,7 +96,7 @@ test.describe('User settings — preferences', () => {
     // Default --color-loss is #f87171 → rgb(248, 113, 113).
     expect(revertedLoss.replace(/\s+/g, '')).toBe('rgb(248,113,113)');
 
-    // ── Round-trip via the API: the saved values from the second save
+    // Round-trip via the API: the saved values from the second save
     //    should match what the server echoes back.
     const me = await page.request.get('/api/users/me/preferences');
     expect(me.ok()).toBeTruthy();

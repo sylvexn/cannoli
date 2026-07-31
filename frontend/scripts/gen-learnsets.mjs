@@ -64,7 +64,7 @@ function moveSourceMatchesFormat(source, format) {
   return source.startsWith('9');
 }
 
-// ─── 1. Load the Showdown learnsets (local file, network fallback) ─
+// 1. Load the Showdown learnsets (local file, network fallback)
 
 const LOCAL_LEARNSETS = resolve(
   REPO_ROOT,
@@ -118,7 +118,7 @@ if (existsSync(LOCAL_POKEDEX)) {
 }
 console.log(`  Loaded ${Object.keys(pokedex).length} pokedex entries.`);
 
-// ─── 2. Collect every Pokemon name from the tier list (all formats) ─
+// 2. Collect every Pokemon name from the tier list (all formats)
 // The union across cost formats is the complete roster-eligible universe.
 
 const nameSet = new Set();
@@ -128,7 +128,7 @@ for (const fmt of COST_FORMATS) {
 const names = [...nameSet].sort();
 console.log(`  Found ${names.length} Pokemon names across ${COST_FORMATS.join(' + ')}.`);
 
-// ─── 3. Name → Showdown learnset ID mapping ──────────────────────
+// 3. Name → Showdown learnset ID mapping
 // Reuse exact same logic from gen-pokemon-data.mjs
 
 function strip(s) {
@@ -183,7 +183,7 @@ function getLearnsetId(name) {
   return toPokedexId(name);
 }
 
-// ─── 4. Match and collect learnsets ───────────────────────────────
+// 4. Match and collect learnsets
 // For Mega forms, also include the base form's learnset (Megas inherit).
 // For each format, filter the merged source list down to legal sources.
 
@@ -275,7 +275,7 @@ if (unmatched.length > 0) {
   }
 }
 
-// ─── 5. Generate TypeScript output ────────────────────────────────
+// 5. Generate TypeScript output
 
 function escName(n) {
   return n.replace(/'/g, "\\'");

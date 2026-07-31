@@ -240,7 +240,7 @@ export function ArenaFooter({ forceOpenArena = false }: { forceOpenArena?: boole
   );
 }
 
-// ─── Pill button ──────────────────────────────────────────────────────────
+// Pill button
 
 type Accent = 'orange' | 'blue' | 'green';
 

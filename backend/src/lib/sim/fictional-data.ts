@@ -12,7 +12,7 @@
  */
 import type { MockRng } from './mock-rng';
 
-// ── Coach name banks ───────────────────────────────────────────────────────
+// Coach name banks
 // First names skew toward handle-like / gamer-tag style so they read clearly
 // as fictional alongside the invented surnames.
 const COACH_FIRST = [
@@ -31,7 +31,7 @@ const COACH_LAST = [
   'Yarrow', 'Ambermoor', 'Blackwater', 'Cravensworth', 'Dunmore',
 ];
 
-// ── Team name banks ────────────────────────────────────────────────────────
+// Team name banks
 const TEAM_ADJECTIVE = [
   'Crimson', 'Obsidian', 'Radiant', 'Verdant', 'Tidal', 'Gilded', 'Frostbound',
   'Emberlit', 'Stormcrest', 'Ashen', 'Azure', 'Thundering', 'Shrouded',
@@ -46,7 +46,7 @@ const TEAM_NOUN = [
   'Coyotes',
 ];
 
-// ── Team color palette ─────────────────────────────────────────────────────
+// Team color palette
 // Vivid dark-theme-friendly hexes; secondary is a deterministic lighter mate.
 const TEAM_COLORS = [
   '#ef4444', '#f97316', '#eab308', '#84cc16', '#22c55e', '#14b8a6',

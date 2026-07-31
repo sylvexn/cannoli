@@ -33,7 +33,7 @@ import { startHeartbeat, stopHeartbeat } from './lib/heartbeat';
 import { GIT_SHA } from './lib/version';
 import { sqlite } from './db';
 
-// ─── Boot-time env guards ───────────────────────────────────────────────────
+// Boot-time env guards
 // Catch foot-guns before they cause silent corruption / silent auth failure.
 
 const MODE = process.env.CANNOLI_MODE || 'mock';
@@ -110,7 +110,7 @@ const app = new Elysia()
     return { user: user as AuthUser | null, sessionToken: token };
   })
 
-  // ── Request logging (admin "API Logs" tab) ─────────────────────────────────
+  // Request logging (admin "API Logs" tab)
   // onError captures the thrown error's class/message/stack; onAfterResponse
   // writes the final row (deduped per Request, so an errored request that also
   // fires afterResponse produces exactly one row). Both are best-effort and
@@ -151,7 +151,7 @@ const app = new Elysia()
     if (rid) set.headers['x-request-id'] = rid;
   })
 
-  // ── Auth guards on state-changing requests ─────────────────────────────────
+  // Auth guards on state-changing requests
   // Two checks fire on the same set of requests (POST/PUT/PATCH/DELETE under
   // /api), in order:
   //   1. CSRF double-submit token: header X-CSRF-Token must match csrf_token
@@ -170,7 +170,7 @@ const app = new Elysia()
     const path = url.pathname;
     if (!path.startsWith('/api/')) return;
 
-    // ── CSRF double-submit ──
+    // CSRF double-submit
     // Exempt login itself (no session yet). Exempt the PS action.php proxy
     // path because Showdown's testclient does not participate in our CSRF
     // scheme; that endpoint has its own auth (sid cookie + signed assertion).
@@ -191,7 +191,7 @@ const app = new Elysia()
       }
     }
 
-    // ── Force password change ──
+    // Force password change
     if (user?.mustChangePassword) {
       const allowed =
         path === '/api/auth/change-password' ||

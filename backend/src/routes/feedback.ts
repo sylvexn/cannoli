@@ -17,7 +17,7 @@ type FeedbackCategory = typeof VALID_CATEGORIES[number];
 
 export const feedbackRoutes = new Elysia()
 
-  // ─── POST /api/feedback ─────────────────────────────────────────────────────
+  // POST /api/feedback
   // Multipart form. Fields: category, title, description, optional page,
   // optional errorRef, optional screenshot (File).
   // ALWAYS inserts a `feedback` row. For bug/feature + GitHub configured:
@@ -48,7 +48,7 @@ export const feedbackRoutes = new Elysia()
     if (!title) { set.status = 400; return { error: 'title is required' }; }
     if (!description) { set.status = 400; return { error: 'description is required' }; }
 
-    // ── Screenshot upload (best-effort) ────────────────────────────────────
+    // Screenshot upload (best-effort)
     let screenshotPath: string | null = null;
     const screenshotField = form.get('screenshot');
     if (screenshotField instanceof File && screenshotField.size > 0) {
@@ -75,7 +75,7 @@ export const feedbackRoutes = new Elysia()
       }
     }
 
-    // ── Insert feedback row ───────────────────────────────────────────────
+    // Insert feedback row
     const inserted = db.insert(schema.feedback).values({
       userId: parseInt(user.id),
       category: category as FeedbackCategory,
@@ -88,7 +88,7 @@ export const feedbackRoutes = new Elysia()
 
     const feedbackId = inserted!.id;
 
-    // ── Discord mirror (always) ───────────────────────────────────────────
+    // Discord mirror (always)
     // NOTE: if issueUrl is set below (after GitHub issue creation), alertFeedback
     // is called again with it. The first call fires immediately so Discord
     // always gets notified even if GitHub is slow or fails.
@@ -102,7 +102,7 @@ export const feedbackRoutes = new Elysia()
       category,
     });
 
-    // ── GitHub issue (bug/feature only, when configured) ──────────────────
+    // GitHub issue (bug/feature only, when configured)
     let issueNumber: number | null = null;
     let issueUrl: string | null = null;
 
@@ -166,7 +166,7 @@ export const feedbackRoutes = new Elysia()
     return { success: true, id: feedbackId, issueNumber, issueUrl };
   })
 
-  // ─── Feedback resolution sync (silent; called on login) ─────────────────────
+  // Feedback resolution sync (silent; called on login)
   // Detects GitHub issues — both new `feedback` rows and any legacy
   // `feedback_submissions` — that have been closed since last checked, and emits
   // a directed pane notification to the reporter via notifyUser. Idempotent on
@@ -232,7 +232,7 @@ export const feedbackRoutes = new Elysia()
     return { notified };
   })
 
-  // ─── GET /api/admin/feedback ─────────────────────────────────────────────────
+  // GET /api/admin/feedback
   // Admin triage list. Filters: category, status, hasGithub. Default = all.
 
   .get('/api/admin/feedback', ({ query, set, user }) => {
@@ -297,7 +297,7 @@ export const feedbackRoutes = new Elysia()
     }));
   })
 
-  // ─── POST /api/admin/feedback/:id/resolve ──────────────────────────────────
+  // POST /api/admin/feedback/:id/resolve
   // Marks a feedback item resolved, stores optional admin response,
   // and notifies the reporter.
 

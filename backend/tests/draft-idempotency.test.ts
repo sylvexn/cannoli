@@ -34,7 +34,7 @@ import {
   type IdempotentResult,
 } from '../src/routes/draft';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 let leagueCounter = 0;
 /** A fresh, never-before-used league id so the global buffer starts empty. */
@@ -53,9 +53,7 @@ function failPick(error: string): IdempotentResult {
   return { ok: false, error, code: 'not_your_turn' };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 1. Cache hit — same clientRequestId
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('lookupIdempotent — cache hit', () => {
   test('an unrecorded request id misses', () => {
@@ -83,9 +81,7 @@ describe('lookupIdempotent — cache hit', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 2. Per-league isolation
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('idempotency — per-league isolation', () => {
   test('the same request id in two leagues is independent', () => {
@@ -109,9 +105,7 @@ describe('idempotency — per-league isolation', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 3. Ring-buffer eviction (IDEMPOTENCY_LIMIT = 64, insertion-order trim)
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('idempotency — ring-buffer eviction', () => {
   test('IDEMPOTENCY_LIMIT is 64', () => {
@@ -172,9 +166,7 @@ describe('idempotency — ring-buffer eviction', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 4. Cached failures replay as failures
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('idempotency — failure replay', () => {
   test('a recorded failure is replayed verbatim, not retried', () => {
@@ -201,9 +193,7 @@ describe('idempotency — failure replay', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 5. evictIdempotentByPokemon — undo clears the cache
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('evictIdempotentByPokemon', () => {
   test('removes only the entry whose pokemon name matches', () => {
@@ -247,9 +237,7 @@ describe('evictIdempotentByPokemon', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 6. Undo-then-retry end-to-end (DB + engine)
-// ─────────────────────────────────────────────────────────────────────────────
 // These tests use real DB fixtures. They prove that after an admin undo, a
 // client re-submitting the original clientRequestId does NOT receive the
 // stale cached success — instead the pick is re-executed (or rejected).

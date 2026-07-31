@@ -31,7 +31,7 @@ import {
   csrfTokenForSession, parseCsrfCookie, parseSessionToken,
 } from '../src/lib/auth';
 
-// ── Fixtures: a dedicated login user with a known password ──────────────────
+// Fixtures: a dedicated login user with a known password
 const TEST_USERNAME = 'authsec-login-fixture';
 const TEST_PASSWORD = 'correct-horse';
 
@@ -68,9 +68,7 @@ async function login(ip: string, username: string, password: string): Promise<Re
   }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // Login rate-limit lockout
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('login rate-limit lockout (5 fails / 15min / IP)', () => {
   test('locks out the 6th attempt after 5 failures with 429 + Retry-After', async () => {
@@ -142,9 +140,7 @@ describe('login rate-limit lockout (5 fails / 15min / IP)', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // CSRF + mustChangePassword guard (replicates index.ts onBeforeHandle)
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Faithful re-implementation of the index.ts onBeforeHandle guard for the two

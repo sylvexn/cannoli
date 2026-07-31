@@ -61,20 +61,20 @@ if (missingFiles.length > 0) {
 console.log(`Seeding database in ${MODE} mode (Season ${PRIMARY_CONFIG.seasonNumber})...`);
 console.log(`Database: ${DB_PATH}`);
 
-// ─── Init DB ────────────────────────────────────────────────────────────────
+// Init DB
 
 const sqlite = new Database(DB_PATH, { create: true });
 sqlite.exec('PRAGMA journal_mode = WAL');
 sqlite.exec('PRAGMA foreign_keys = ON');
 const db = drizzle(sqlite, { schema });
 
-// ─── Run migrations ─────────────────────────────────────────────────────────
+// Run migrations
 
 console.log('Running migrations...');
 migrate(db, { migrationsFolder: DRIZZLE_DIR });
 console.log('Migrations complete.');
 
-// ─── Seed system accounts ───────────────────────────────────────────────────
+// Seed system accounts
 
 function seedSystemAccounts() {
   console.log('\nSeeding system accounts...');
@@ -109,7 +109,7 @@ function seedSystemAccounts() {
   console.log('  Created: syl (dev), root (bot)');
 }
 
-// ─── Seed site settings ─────────────────────────────────────────────────────
+// Seed site settings
 
 function seedSiteSettings() {
   const existing = sqlite.prepare('SELECT COUNT(*) as c FROM site_settings').get() as any;
@@ -122,7 +122,7 @@ function seedSiteSettings() {
   console.log('Site settings seeded.');
 }
 
-// ─── Seed pin definitions ───────────────────────────────────────────────────
+// Seed pin definitions
 //
 // Net-new auto-pin defs added when the archive feature shipped. The earlier
 // award set (garchomp/cannoli/cynthia/kingslayer/flawless + manual pins) lives
@@ -180,7 +180,7 @@ function seedPinDefinitions() {
   else console.log('Pin definitions already exist, skipping.');
 }
 
-// ─── Seed move categories ───────────────────────────────────────────────────
+// Seed move categories
 
 function seedMoveCategories() {
   const existing = sqlite.prepare('SELECT COUNT(*) as c FROM move_categories').get() as any;
@@ -332,12 +332,12 @@ function seedMoveCategories() {
   console.log(`  ${categories.length} categories, ${categories.reduce((a, c) => a + c.entries.length, 0)} entries`);
 }
 
-// ─── Seed mock-only data ────────────────────────────────────────────────────
+// Seed mock-only data
 
 function seedMockData(coachTeamIds: Map<string, string>) {
   console.log('\nSeeding mock-only data...');
 
-  // ─── Trade proposals (not completed transactions — those come from XLSX) ──
+  // Trade proposals (not completed transactions — those come from XLSX)
   const sapphireTeams = [...coachTeamIds.entries()]
     .filter(([, tid]) => tid.startsWith('sapphire-'))
     .map(([, tid]) => tid);
@@ -398,7 +398,7 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     console.log('  4 trade proposals seeded');
   }
 
-  // ─── Trade block listings ─────────────────────────────────────────────────
+  // Trade block listings
 
   const listingCount = (sqlite.prepare('SELECT COUNT(*) as c FROM trade_block_listings').get() as any).c;
   if (listingCount === 0) {
@@ -418,13 +418,13 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     console.log(`  ${listings.length} trade block listings seeded`);
   }
 
-  // ─── Mark scored matches completed ────────────────────────────────────────
+  // Mark scored matches completed
   // Real replay URLs land via importReplays() against the scraped JSON cache
   // at backend/imports/replays/. Just ensure status is set so any UI that
   // filters on `status = 'completed'` picks them up.
   sqlite.prepare(`UPDATE matches SET status = 'completed' WHERE home_score IS NOT NULL`).run();
 
-  // ─── Activity log ─────────────────────────────────────────────────────────
+  // Activity log
 
   const logCount = (sqlite.prepare('SELECT COUNT(*) as c FROM activity_log').get() as any).c;
   if (logCount === 0) {
@@ -462,7 +462,7 @@ function seedMockData(coachTeamIds: Map<string, string>) {
     console.log(`  ${events.length} activity log events seeded`);
   }
 
-  // ─── Player availability (WT-B) ─────────────────────────────────────────
+  // Player availability (WT-B)
   // Seed a logical-but-random availability blob across every team in every
   // active S10 league for the current week ± 2. Weighted toward Available on
   // weekends and Maybe/Busy on weekdays so the schedule aggregate has visible
@@ -563,7 +563,7 @@ function seedMockData(coachTeamIds: Map<string, string>) {
   }
 }
 
-// ─── Run ────────────────────────────────────────────────────────────────────
+// Run
 
 // Check if already seeded
 const seasonCount = (sqlite.prepare('SELECT COUNT(*) as c FROM seasons').get() as any).c;
@@ -613,7 +613,7 @@ if (s9Missing.length === 0) {
 // fabrication so the rewritten finals/SF rows are present in the matches
 // table by the time we look them up.)
 
-// ─── S10: finalize the season ─────────────────────────────────────────────
+// S10: finalize the season
 // Discord-announced champions are GABE (emerald-abs), TAYLOR (ruby-vgk),
 // DYLAN (sapphire-dwg). The seed playoffs from the XLSX import already put
 // gabe and dylan in the finals; ruby's bracket has the wrong finalist
@@ -784,7 +784,7 @@ if (PRIMARY_CONFIG.seasonNumber === 10) {
   }
 }
 
-// ─── S9: complete the bracket (importS9 only produces QF rows) ──────────
+// S9: complete the bracket (importS9 only produces QF rows)
 // fabricatePlayoffBracket is a no-op for any league that already has SF/F
 // rows; for S9 it walks the QF results and stamps synthetic SF + finals
 // matches so the archive can render a complete bracket and the
@@ -894,7 +894,7 @@ if (s9Missing.length === 0) {
   );
 }
 
-// ─── S10: award pins (auto + archive + manual) ───────────────────────────
+// S10: award pins (auto + archive + manual)
 // Runs after the finalize block above. Same shape as S9 but the season
 // stays unarchived.
 if (PRIMARY_CONFIG.seasonNumber === 10) {
@@ -942,7 +942,7 @@ if (MODE === 'mock') {
   }
 }
 
-// ─── Schedule variety (mock-only) ──────────────────────────────────────────
+// Schedule variety (mock-only)
 // Stamps deadlines on every regular-season match across the active S10
 // leagues + flips one league (sapphire) into a mid-season state so the
 // /schedule surface has a realistic mix of completed / in-progress /
@@ -1117,7 +1117,7 @@ if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
   console.log(`  ${ACTIVE_LEAGUE} reset to regular wk${ACTIVE_WEEK}: ${pretty} (deleted ${playoffDeleted.changes} playoff rows)`);
 }
 
-// ─── Per-league cost formats ─────────────────────────────────────────────────
+// Per-league cost formats
 // Pokemon + leagues exist by now. Populate format_costs for both cost sheets
 // (NatDex / NatDex+), refresh the pokemon baseline to NatDex+, and assign each
 // league its format (Emerald → natdex, others → natdexplus). Same code path as
@@ -1134,7 +1134,7 @@ if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
   console.log(`\n  cost formats: format_costs(${perFmt}), ${fmt.leaguesChanged} leagues assigned`);
 }
 
-// ─── Final summary ──────────────────────────────────────────────────────────
+// Final summary
 
 console.log('\n=== Seed Complete ===');
 const tables = ['users', 'seasons', 'leagues', 'teams', 'pokemon', 'rosters', 'draft_picks',

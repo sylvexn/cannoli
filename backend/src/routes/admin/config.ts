@@ -12,7 +12,7 @@ import { normalizeRules } from '../../lib/rules-defaults';
 export const configRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── Site Settings ──────────────────────────────────────────────────
+  // Site Settings
 
   .put('/api/site-settings', ({ body, set }) => {
     const s = body as Record<string, unknown>;
@@ -30,7 +30,7 @@ export const configRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Rules content (admin write, per-league) ────────────────────────
+  // Rules content (admin write, per-league)
   // Saves the structured rules document for one league. The body is coerced
   // through normalizeRules (length-capped, shape-validated) before storage.
 
@@ -78,7 +78,7 @@ export const configRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Tier List ──────────────────────────────────────────────────────
+  // Tier List
 
   .put('/api/tier-list/:name', ({ params, body, user, set }) => {
     const { format: rawFormat, tier, status, force, confirmLeague } = body as {
@@ -185,7 +185,7 @@ export const configRoutes = new Elysia()
     return { success: true, forced: activeLeagues.length > 0 };
   })
 
-  // ─── Move Categories CRUD ──────────────────────────────────────────
+  // Move Categories CRUD
 
   .post('/api/move-categories', ({ body, user, set }) => {
     const { name } = body as { name: string };

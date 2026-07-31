@@ -31,16 +31,16 @@
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { Elysia } from 'elysia';
 
-// ── Guard functions (read env at call time, safe to test with save/restore) ──
+// Guard functions (read env at call time, safe to test with save/restore)
 import { isMock, assertMockMode } from '../src/lib/sim/sim-guard';
 
-// ── Route groups (module-load-time evaluation for simRoutesGated) ────────────
+// Route groups (module-load-time evaluation for simRoutesGated)
 // Imported after env manipulation is not needed because we test them at
 // request time using controlled process.env mutation.
 import { simRoutes, simRoutesGated } from '../src/routes/admin/sim';
 import { authRoutes } from '../src/routes/auth';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 function withEnv(key: string, value: string | undefined, fn: () => unknown) {
   const prev = process.env[key];
@@ -83,9 +83,7 @@ async function hit(
   return app.handle(req);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 1. Guard functions
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('isMock()', () => {
   test('returns false when CANNOLI_MODE is unset', () => {
@@ -133,12 +131,10 @@ describe('assertMockMode()', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 2. Mount-time gate: simRoutesGated
 //
 // The test runner starts with CANNOLI_MODE unset, so simRoutesGated is the
 // empty Elysia branch. Every sim path must produce a 404.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const SIM_PATHS_GET: string[] = [
   '/api/admin/sim/state',
@@ -183,14 +179,12 @@ describe('simRoutesGated — mount-time gate (live / unset mode)', () => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 3. Per-request gate: simRoutes (the unmounted real group)
 //
 // Even if the mount-time gate were bypassed and simRoutes itself were mounted,
 // every handler calls assertMockMode() via gate(), which converts the throw
 // into a flat 404 when CANNOLI_MODE != 'mock'. We verify this by hitting
 // simRoutes directly with CANNOLI_MODE=live.
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('simRoutes — per-request gate (CANNOLI_MODE=live)', () => {
   for (const path of SIM_PATHS_GET) {
@@ -212,12 +206,10 @@ describe('simRoutes — per-request gate (CANNOLI_MODE=live)', () => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 4. demo-session gate
 //
 // POST /api/auth/demo-session checks process.env.CANNOLI_MODE at request time,
 // so no re-import is required to test both branches.
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('POST /api/auth/demo-session — live mode gate', () => {
   test('returns 404 when CANNOLI_MODE=live', async () => {

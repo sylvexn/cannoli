@@ -19,7 +19,6 @@ function feed(parser: ReplayParser, lines: string[]): void {
 }
 
 describe('ReplayParser — K/D edge cases', () => {
-  // ──────────────────────────────────────────────────────────────────────
   // 1. Belly Drum suicide
   //
   // p1's Linoone uses Belly Drum at 50% HP, faints from the HP cost. No
@@ -28,7 +27,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // fromTag like `move: Belly Drum` or no fromTag at all on the user. We use
   // a generic self-damage line; either way no opposing Pokemon should be
   // credited with a kill.
-  // ──────────────────────────────────────────────────────────────────────
   test('Belly Drum self-faint awards no kill credit', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -62,7 +60,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(totalKills).toBe(0);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 2. Future Sight delayed KO
   //
   // p1's Slowking-Galar uses Future Sight on turn 1; switches to Tyranitar.
@@ -70,7 +67,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // line carries `[from] move: Future Sight|[of] p1a: Slowking-Galar` even
   // though Slowking is no longer the active Pokemon. The `[of]` branch in
   // handleDamage credits the original caster.
-  // ──────────────────────────────────────────────────────────────────────
   test('Future Sight credits the original caster via [of]', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -104,7 +100,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(tyranitar?.kills).toBe(0);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 3. Perish Song KO — DOCUMENTED PARSER GAP
   //
   // PS emits `|-end|p2a: Foo|perish0` followed directly by `|faint|p2a: Foo`
@@ -117,7 +112,6 @@ describe('ReplayParser — K/D edge cases', () => {
   //
   // We assert the current behaviour rather than the desired one, with a TODO
   // so the gap is visible in test output.
-  // ──────────────────────────────────────────────────────────────────────
   test('Perish Song faint produces no kill credit (documented limitation)', () => {
     // TODO: Parser cannot attribute Perish Song KOs because PS emits no
     // |-damage| line for the perish faint. To fix, track perish-song casters
@@ -158,7 +152,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(politoed?.kills).toBe(0);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 4. End-of-turn double-faint (poison/poison)
   //
   // p1's Gliscor toxics p2's Heatran; p2's Heatran (already toxic'd) lays
@@ -166,7 +159,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // tick down to 0. Each |-damage|...|[from] tox line fires; the parser
   // credits whoever last attacked the target (the toxin source). We expect
   // 1 kill on each side.
-  // ──────────────────────────────────────────────────────────────────────
   test('mutual end-of-turn poison KOs credit each toxin setter', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -205,7 +197,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(heatran?.kills).toBe(1);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 5. Recoil-only faint after exchange
   //
   // p2's Talonflame uses Brave Bird and KOs p1's Tangrowth. Earlier this
@@ -215,7 +206,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // killerNick = null. handleFaint now distinguishes "no entry"
   // from "explicit null decision" via pendingKiller.has(), so the
   // posthumous lastAttacker fallback is correctly skipped.
-  // ──────────────────────────────────────────────────────────────────────
   test('Recoil faint after KOing target does not credit the dead target', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -259,7 +249,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(totalDeaths).toBe(2);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 5b. Recoil with NO prior attacker — proves the handleDamage fix works
   //
   // Same as test 5 but the recoiler was never attacked by the target before
@@ -271,7 +260,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // The realistic check here is: a clean recoil suicide produces zero
   // kills total. This catches a regression where the handleDamage fromTag
   // chain accidentally credits the recoiler or the target.
-  // ──────────────────────────────────────────────────────────────────────
   test('Recoil suicide with no prior attacker awards no kill', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -301,7 +289,6 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(lax?.deaths).toBe(0);
   });
 
-  // ──────────────────────────────────────────────────────────────────────
   // 6. Hazard chip on switch-in (setter already fainted)
   //
   // p2's Landorus-Therian sets Stealth Rock on p1's side. Lando-T then
@@ -312,7 +299,6 @@ describe('ReplayParser — K/D edge cases', () => {
   // Note: |-sidestart| credits the active Pokemon on the OPPOSITE side of
   // where the hazard lands. So p2's Lando-T (active when SR was set) is
   // recorded as the setter for p1's side hazards.
-  // ──────────────────────────────────────────────────────────────────────
   test('Stealth Rock credits original setter even after setter faints', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -365,17 +351,13 @@ describe('ReplayParser — K/D edge cases', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // New tests: |replace|, |swap|, tie, forfeit/score clamping, validateMatchResult,
 // and malformed-line robustness.
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('ReplayParser — Illusion (|replace|)', () => {
-  // ──────────────────────────────────────────────────────────────────────
   // Zoroark disguises as Garchomp; p2 attacks it; Illusion breaks, revealing
   // Zoroark. p2 then KOs Zoroark.  Kill must attribute to Zoroark, not to
   // Garchomp (the disguise target that never actually appeared).
-  // ──────────────────────────────────────────────────────────────────────
   test('|replace| re-keys species: kills/deaths attribute to the revealed mon', () => {
     const parser = new ReplayParser();
     feed(parser, [
@@ -461,11 +443,9 @@ describe('ReplayParser — Illusion (|replace|)', () => {
 });
 
 describe('ReplayParser — |swap| (Ally Switch)', () => {
-  // ──────────────────────────────────────────────────────────────────────
   // Doubles scenario: p1 has two active slots (p1a, p1b).
   // Ally Switch swaps them. After the swap, a kill attributed to the
   // original p1a nick should still go to the right species.
-  // ──────────────────────────────────────────────────────────────────────
   test('|swap| does not corrupt state — kill attribution still correct after swap', () => {
     const parser = new ReplayParser();
     feed(parser, [

@@ -188,7 +188,7 @@ export function recordMatchResult(
       metadata: JSON.stringify({ matchId, homeScore, awayScore, warningCount: mergedWarnings.length }),
     }).run();
 
-    // ─── Playoff auto-advancement ─────────────────────────────────
+    // Playoff auto-advancement
     if (newStatus === 'completed' && match.phase === 'playoffs' && match.playoffRound) {
       // home/away are guaranteed non-null here — the TBD guard near the top of
       // this function returns early for an undetermined bracket slot.
@@ -210,7 +210,7 @@ export function recordMatchResult(
       });
     }
 
-    // ─── Auto-award per-match pins (Kingslayer, Flawless) ─────────
+    // Auto-award per-match pins (Kingslayer, Flawless)
     // Idempotent — re-running on a re-record (after dismiss-warnings) will
     // skip already-awarded rows via the unique index. Safe to run on
     // disputed-status results too: the helpers gate on status='completed'

@@ -87,7 +87,7 @@ async function main() {
 
   console.log(`Found ${leagues.length} league(s): ${leagues.map(l => `${l.id}(${l.phase})`).join(', ')}`);
 
-  // ─── 1. Score pending finals ─────────────────────────────────────────────
+  // 1. Score pending finals
   const finalsToScore: {
     matchId: string;
     leagueId: string;
@@ -124,7 +124,7 @@ async function main() {
     });
   }
 
-  // ─── 2-6. Apply changes ──────────────────────────────────────────────────
+  // 2-6. Apply changes
   if (argv.dryRun) {
     console.log('\nDry-run plan:');
     for (const f of finalsToScore) {

@@ -25,7 +25,7 @@ import { advancePlayoffWinner } from './playoff-advance';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
-// ─── Config ─────────────────────────────────────────────────────────────────
+// Config
 
 const PS_SERVER_URL = process.env.PS_SERVER_WS_URL || 'ws://localhost:8000/showdown/websocket';
 const BOT_USERNAME = process.env.BOT_USERNAME || 'CannoliBot';
@@ -52,7 +52,7 @@ const PS_LOGS_DIR = resolve(
   process.env.PS_LOGS_DIR || './showdown/server/logs',
 );
 
-// ─── State ──────────────────────────────────────────────────────────────────
+// State
 
 interface MonitoredBattle {
   roomId: string;
@@ -90,7 +90,7 @@ let connected = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let challstr: string | null = null;
 
-// ─── Send queue ───────────────────────────────────────────────────────────────
+// Send queue
 // Messages that arrive while the socket is not OPEN are buffered here and flushed
 // in order from the onopen handler. Prevents lost |/join and |/cannoli-battle
 // commands across reconnect windows. Bounded at SEND_QUEUE_CAP (FIFO eviction).
@@ -104,7 +104,7 @@ function flushSendQueue() {
   }
 }
 
-// ─── Staleness reconnect ─────────────────────────────────────────────────────
+// Staleness reconnect
 // If the socket claims OPEN but no inbound line has arrived within this window,
 // assume the connection is dead and force-reconnect. PS emits traffic
 // continuously, so 90s of total silence is a reliable dead-connection signal.
@@ -113,7 +113,7 @@ const STALENESS_THRESHOLD_MS = 90_000;
 let lastInboundAt: number = Date.now();
 let stalenessTimer: ReturnType<typeof setInterval> | undefined;
 
-// ─── Connection-change listeners ──────────────────────────────────────────────
+// Connection-change listeners
 // Decoupled hook so other modules (e.g. the Arena route) can react to the bot
 // going connected↔disconnected WITHOUT this file importing arena/topic
 // specifics. Listeners fire on each transition, after `connected` is updated.
@@ -207,7 +207,7 @@ export function getMonitoredBattlesForTest() {
   return monitoredBattles;
 }
 
-// ─── Idle-battle eviction ────────────────────────────────────────────────────
+// Idle-battle eviction
 
 /**
  * Sweep `monitoredBattles` for entries whose last protocol line is older than
@@ -251,7 +251,7 @@ function startIdleSweep() {
   idleSweepTimer.unref();
 }
 
-// ─── Public API ─────────────────────────────────────────────────────────────
+// Public API
 
 export function startBot() {
   refreshUserMap();
@@ -342,7 +342,7 @@ export function handleMessageForTest(raw: string) {
   handleMessage(raw);
 }
 
-// ─── Connection ─────────────────────────────────────────────────────────────
+// Connection
 
 function connect() {
   if (ws?.readyState === WebSocket.OPEN) return;
@@ -423,7 +423,7 @@ function stopStalenessTimer() {
   if (stalenessTimer) { clearInterval(stalenessTimer); stalenessTimer = undefined; }
 }
 
-// ─── Message Handling ───────────────────────────────────────────────────────
+// Message Handling
 
 function handleMessage(raw: string) {
   const lines = raw.split('\n');
@@ -723,7 +723,7 @@ export function locateReplayFile(
     `${roomId.replace(/^battle-/, '')}.log.json`,
   ]));
 
-  // ── Deterministic scan: {YYYY-MM}/{tier}/{YYYY-MM-DD}/{replayId}.log.json ──
+  // Deterministic scan: {YYYY-MM}/{tier}/{YYYY-MM-DD}/{replayId}.log.json
   // List year-month dirs, newest first.
   let monthDirs: string[];
   try {
@@ -754,7 +754,7 @@ export function locateReplayFile(
     }
   }
 
-  // ── Safety fallback: bounded recursive search for the named file. ──
+  // Safety fallback: bounded recursive search for the named file.
   // Catches non-standard layouts the deterministic scan can't anticipate.
   // Depth 4 covers {YYYY-MM}/{tier}/{YYYY-MM-DD}/{file} plus a little slack.
   return findReplayFileRecursive(rootDir, fileNames, 4);
@@ -1031,13 +1031,13 @@ export function extractReplayLogLines(replay: string): string[] | null {
 
   let lines: string[] | null = null;
 
-  // ── 1. PS replay HTML ──
+  // 1. PS replay HTML
   const htmlMatch = /<script[^>]*class="battle-log-data"[^>]*>([\s\S]*?)<\/script>/.exec(raw);
   if (htmlMatch) {
     lines = htmlMatch[1].split('\n');
   }
 
-  // ── 2. JSON with a `log` field ──
+  // 2. JSON with a `log` field
   if (!lines) {
     try {
       const parsed = JSON.parse(raw) as { log?: unknown };
@@ -1051,7 +1051,7 @@ export function extractReplayLogLines(replay: string): string[] | null {
     }
   }
 
-  // ── 3. Raw protocol text ──
+  // 3. Raw protocol text
   if (!lines && raw.split('\n').some(l => l.startsWith('|'))) {
     lines = raw.split('\n');
   }
@@ -1310,7 +1310,7 @@ function handleBattleLine(room: string, line: string) {
   }
 }
 
-// ─── Tera Preview ───────────────────────────────────────────────────────────
+// Tera Preview
 
 /**
  * A team's league Tera Captains (rosters.isTeraCaptain), each with the
@@ -1359,7 +1359,7 @@ function sendTeraPreview(battle: MonitoredBattle) {
   sendToPs(`${battle.roomId}|/cannoli-tera-preview ${JSON.stringify(p1Captains)}|${JSON.stringify(p2Captains)}`);
 }
 
-// ─── Match Detection ────────────────────────────────────────────────────────
+// Match Detection
 
 function checkForOfficialMatch(battle: MonitoredBattle) {
   const team1 = useridToTeam.get(battle.p1);
@@ -1510,7 +1510,7 @@ function transitionMatchToInProgress(battle: MonitoredBattle) {
   clearReadyTimerForMatch(match.id);
 }
 
-// ─── Match Result ───────────────────────────────────────────────────────────
+// Match Result
 
 function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) {
   const result = battle.parser.getResult();
@@ -1794,7 +1794,7 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
   monitoredBattles.delete(battle.roomId);
 }
 
-// ─── Live Stats Broadcasting ────────────────────────────────────────────────
+// Live Stats Broadcasting
 
 function broadcastLiveStats(battle: MonitoredBattle) {
   const broadcaster = getArenaBroadcaster();
@@ -1812,7 +1812,7 @@ function broadcastLiveStats(battle: MonitoredBattle) {
   }));
 }
 
-// ─── Auth ───────────────────────────────────────────────────────────────────
+// Auth
 
 function authenticate() {
   if (!challstr) return;
@@ -1827,7 +1827,7 @@ function authenticate() {
   }
 }
 
-// ─── User Map ───────────────────────────────────────────────────────────────
+// User Map
 
 /**
  * Build a map from showdown userids → team IDs.

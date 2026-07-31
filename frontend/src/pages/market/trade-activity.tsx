@@ -168,7 +168,7 @@ export function TradeActivity({
   );
 }
 
-// ── Trade card ────────────────────────────────────────────────────────────────
+// Trade card
 
 function TradeCard({
   trade,

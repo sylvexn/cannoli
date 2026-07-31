@@ -75,7 +75,7 @@ export function StreamPage() {
   const [controlsVisible, setControlsVisible] = useState(true);
   const idleTimerRef = useRef<number | null>(null);
 
-  // ── Fetch queue ───────────────────────────────────────────────────────────
+  // Fetch queue
   useEffect(() => {
     if (leaguesLoading || leagues.length === 0 || !week) return;
 
@@ -123,7 +123,7 @@ export function StreamPage() {
     });
   }, [leagues, leaguesLoading, week]);
 
-  // ── Restore persisted state ──────────────────────────────────────────────
+  // Restore persisted state
   useEffect(() => {
     if (loading || entries.length === 0) return;
     const raw = localStorage.getItem(storageKey(weekParam));
@@ -147,7 +147,7 @@ export function StreamPage() {
     dispatch({ type: 'decline-resume' });
   }
 
-  // ── Persist on changes ───────────────────────────────────────────────────
+  // Persist on changes
   useEffect(() => {
     if (loading || entries.length === 0) return;
     if (streamMode !== 'live') return;
@@ -160,7 +160,7 @@ export function StreamPage() {
     localStorage.setItem(storageKey(weekParam), JSON.stringify(persisted));
   }, [entries, activeIndex, featured, prerollDelayMs, streamMode, loading, weekParam]);
 
-  // ── Idle-fade ─────────────────────────────────────────────────────────────
+  // Idle-fade
   useEffect(() => {
     if (streamMode !== 'live') return;
     function bump() {
@@ -180,7 +180,7 @@ export function StreamPage() {
 
   const active = entries[activeIndex];
 
-  // ── Queue drag-and-drop ──────────────────────────────────────────────────
+  // Queue drag-and-drop
   function handleDragStart(idx: number) {
     setDragIndex(idx);
   }
@@ -194,7 +194,7 @@ export function StreamPage() {
     setDragIndex(null);
   }
 
-  // ── Phase navigation ──────────────────────────────────────────────────────
+  // Phase navigation
   const goToNextMatch = useCallback(() => {
     if (activeIndex >= entries.length - 1) {
       // Stream finished
@@ -221,7 +221,7 @@ export function StreamPage() {
     navigate('/replays');
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // Render
   if (loading || leaguesLoading) {
     return (
       <div className="fixed inset-0 bg-surface flex items-center justify-center text-text-muted">
@@ -355,7 +355,7 @@ export function StreamPage() {
   );
 }
 
-// ─── Live (theater mode) ────────────────────────────────────────────────────
+// Live (theater mode)
 
 interface LiveProps {
   active: QueueEntry | undefined;

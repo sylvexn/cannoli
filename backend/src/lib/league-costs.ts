@@ -33,7 +33,7 @@ export const COST_FORMAT_LABELS: Record<string, string> = {
 
 export const DEFAULT_COST_FORMAT = 'natdexplus';
 
-// ─── Cache ──────────────────────────────────────────────────────────────────
+// Cache
 // Building a format's cost map scans format_costs + pokemon, so cache per format.
 // Picks/edits are human-paced, but draft validation can read several times per
 // pick. League → format is NOT cached (a cheap single-row read) so changing a

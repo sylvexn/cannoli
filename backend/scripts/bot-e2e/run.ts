@@ -32,7 +32,7 @@ process.env.PS_SERVER_WS_URL ||= 'ws://localhost:8000/showdown/websocket';
 
 const { PSClient } = await import('./ps-client');
 
-// ── tiny utils ───────────────────────────────────────────────────────────────
+// tiny utils
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let FAILS = 0;
 function check(cond: boolean, msg: string) {
@@ -45,7 +45,7 @@ async function until<T>(fn: () => T | null | undefined, ms: number, every = 500)
   return null;
 }
 
-// ── backend process + stdout line watching ────────────────────────────────────
+// backend process + stdout line watching
 type Matcher = { re: RegExp; resolve: () => void };
 const matchers = new Set<Matcher>();
 function onStdoutLine(line: string) {
@@ -96,7 +96,7 @@ function startBackend() {
   return proc;
 }
 
-// ── cannoli login → Cookie header ─────────────────────────────────────────────
+// cannoli login → Cookie header
 async function login(username: string): Promise<string> {
   const res = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',
@@ -108,7 +108,7 @@ async function login(username: string): Promise<string> {
   return cookies.join('; ');
 }
 
-// ── arena WS client (ready-up) ────────────────────────────────────────────────
+// arena WS client (ready-up)
 function arenaReady(cookie: string, label: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(ARENA_WS, { headers: { Cookie: cookie } } as any);
@@ -126,7 +126,7 @@ function arenaReady(cookie: string, label: string): Promise<void> {
   });
 }
 
-// ── DB readers ────────────────────────────────────────────────────────────────
+// DB readers
 function readMatch(id: string) {
   const db = new Database(DB_PATH, { readonly: true });
   try { return db.query('SELECT status, home_score h, away_score a, winner_team_id w, ps_room_id r FROM matches WHERE id = ?').get(id) as any; }
@@ -138,7 +138,7 @@ function readMons(id: string) {
   finally { db.close(); }
 }
 
-// ── scenarios ─────────────────────────────────────────────────────────────────
+// scenarios
 async function runMatch(opts: {
   title: string; matchId: string; home: string; away: string; homeTeam: string; awayTeam: string;
   play: boolean; forfeitBy?: string;
@@ -195,7 +195,7 @@ async function runMatch(opts: {
   Object.values(ps).forEach((c) => c.close());
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
+// main
 console.log('[harness] seeding e2e world (fresh DB)');
 for (const suf of ['', '-wal', '-shm']) { try { require('fs').rmSync(DB_PATH + suf); } catch {} }
 seedE2E();

@@ -18,7 +18,7 @@ export interface DraftSearchProps {
   onUpdate: (partial: { search?: string; searchChips?: SearchChip[] }) => void;
 }
 
-// ─── Kind metadata ──────────────────────────────────────────────────────────
+// Kind metadata
 
 const KIND_META: Record<SearchChipKind, { label: string; icon: React.ElementType; chipClass: string }> = {
   name:    { label: 'Pokemon',   icon: CircleDot, chipClass: 'border-blue-400/40 bg-blue-400/10 text-blue-300' },
@@ -26,7 +26,7 @@ const KIND_META: Record<SearchChipKind, { label: string; icon: React.ElementType
   move:    { label: 'Moves',     icon: Swords,    chipClass: 'border-amber-400/40 bg-amber-400/10 text-amber-300' },
 };
 
-// ─── DraftSearch ─────────────────────────────────────────────────────────────
+// DraftSearch
 
 export function DraftSearch({ search, chips, format, onUpdate }: DraftSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,7 +35,7 @@ export function DraftSearch({ search, chips, format, onUpdate }: DraftSearchProp
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const listboxId = useId();
 
-  // ── Compute suggestions whenever search text changes ──────────────────────
+  // Compute suggestions whenever search text changes
   const grouped = useMemo(
     () => (search.trim() ? buildSuggestions(search, format, { perGroup: 3, exclude: chips }) : null),
     [search, format, chips],
@@ -49,7 +49,7 @@ export function DraftSearch({ search, chips, format, onUpdate }: DraftSearchProp
 
   const isOpen = open && !!grouped && hasAnySuggestion(grouped);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
+  // Handlers
 
   const handleTextChange = useCallback((text: string) => {
     onUpdate({ search: text });
@@ -263,7 +263,7 @@ export function DraftSearch({ search, chips, format, onUpdate }: DraftSearchProp
   );
 }
 
-// ─── SuggestionGroup ─────────────────────────────────────────────────────────
+// SuggestionGroup
 
 interface SuggestionGroupProps {
   label: string;
@@ -312,7 +312,7 @@ function SuggestionGroup({
   );
 }
 
-// ─── Row renderers ────────────────────────────────────────────────────────────
+// Row renderers
 
 function PokemonRow({ suggestion }: { suggestion: Suggestion }) {
   return (

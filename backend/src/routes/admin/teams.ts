@@ -75,7 +75,7 @@ function collectRosterLegalityWarnings(
 
 export const teamAdminRoutes = new Elysia()
 
-  // ─── Team creation (per-league) ────────────────────────────────────
+  // Team creation (per-league)
 
   .post('/api/leagues/:leagueId/teams', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -119,7 +119,7 @@ export const teamAdminRoutes = new Elysia()
     return { id: teamId };
   })
 
-  // ─── Team update ──────────────────────────────────────────────────
+  // Team update
 
   .put('/api/teams/:teamId', ({ params, query, body, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -172,7 +172,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Roster override (staff-only, free-reign add/remove) ───────────
+  // Roster override (staff-only, free-reign add/remove)
   // Lets an admin freely add/remove Pokemon on ANY team's roster, persisting
   // straight to the rosters table and BYPASSING every free-agency gate (budget,
   // deadline, playoff lockout, already-rostered, roster band, point/mega/legality
@@ -211,7 +211,7 @@ export const teamAdminRoutes = new Elysia()
       const removed: string[] = [];
       const warnings: string[] = [];
 
-      // ── Removes first ──
+      // Removes first
       // Delete only rows that exist AND belong to this team; silently skip ids
       // that don't. Mirror the FA release cleanup (clear any trade-block listing).
       for (const id of removeIds) {
@@ -228,7 +228,7 @@ export const teamAdminRoutes = new Elysia()
         removed.push(row.pokemonName);
       }
 
-      // ── Adds ──
+      // Adds
       // Track names already on the team AFTER removes so the unique
       // (teamId, pokemonName) index can never be hit — a same-team dup would
       // throw and abort the whole tx, so pre-check and warn instead.
@@ -276,7 +276,7 @@ export const teamAdminRoutes = new Elysia()
         added.push(name);
       }
 
-      // ── Warnings on the RESULTING roster (soft, never blocking) ──
+      // Warnings on the RESULTING roster (soft, never blocking)
       const finalRoster = db.select().from(schema.rosters)
         .where(eq(schema.rosters.teamId, params.teamId)).all();
 
@@ -353,7 +353,7 @@ export const teamAdminRoutes = new Elysia()
     return result;
   })
 
-  // ─── Roster nickname (owner or admin) ──────────────────────────────
+  // Roster nickname (owner or admin)
 
   .put('/api/teams/:teamId/rosters/:rosterId/nickname', ({ params, query, body, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -394,7 +394,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true, nickname: normalized };
   })
 
-  // ─── Team delete (with safety: forbid if has roster/picks/match-results) ─
+  // Team delete (with safety: forbid if has roster/picks/match-results)
 
   .delete('/api/teams/:teamId', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -444,7 +444,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Team logo upload ──────────────────────────────────────────────
+  // Team logo upload
 
   .post('/api/teams/:teamId/logo', async ({ params, query, request, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -487,7 +487,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true, path: storedPath };
   })
 
-  // ─── Team logo remove ──────────────────────────────────────────────
+  // Team logo remove
 
   .delete('/api/teams/:teamId/logo', ({ params, query, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -509,7 +509,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Team banner upload ────────────────────────────────────────────
+  // Team banner upload
 
   .post('/api/teams/:teamId/banner', async ({ params, query, request, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -544,7 +544,7 @@ export const teamAdminRoutes = new Elysia()
     return { success: true, path: `/uploads/${relativePath}` };
   })
 
-  // ─── Static upload serving ─────────────────────────────────────────
+  // Static upload serving
 
   .get('/uploads/:dir/:file', async ({ params, set }) => {
     // Whitelist directories — only the ones we write to

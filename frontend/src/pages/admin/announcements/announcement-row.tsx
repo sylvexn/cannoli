@@ -14,7 +14,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { ANNOUNCEMENT_CATEGORY_META } from '@/lib/constants';
 import { Bell, Tv, BellDot, Pencil, X } from 'lucide-react';
 
-// ─── Surface badge ────────────────────────────────────────────────────────────
+// Surface badge
 
 function SurfaceBadge({ surface }: { surface: ApiAnnouncement['surface'] }) {
   const map = {
@@ -34,7 +34,7 @@ function SurfaceBadge({ surface }: { surface: ApiAnnouncement['surface'] }) {
   );
 }
 
-// ─── Row ──────────────────────────────────────────────────────────────────────
+// Row
 
 interface AnnouncementRowProps {
   item: ApiAnnouncement;

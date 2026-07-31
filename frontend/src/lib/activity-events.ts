@@ -17,7 +17,7 @@
  * to the description string. Acceptable: legacy rows already work that way.
  */
 
-// ─── Per-event metadata shapes ─────────────────────────────────────────────
+// Per-event metadata shapes
 
 export interface DraftPickMetadata {
   pickNumber: number;
@@ -127,7 +127,7 @@ export interface TeraCaptainsUpdatedMetadata {
   captains: string[];
 }
 
-// ─── Discriminator ─────────────────────────────────────────────────────────
+// Discriminator
 
 /** Map event type → metadata shape for typed narrowing. */
 export interface EventMetadataMap {

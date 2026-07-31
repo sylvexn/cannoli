@@ -24,7 +24,7 @@ type TargetRole = typeof VALID_TARGET_ROLES[number];
 export const announcementsRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── GET /api/admin/announcements ─────────────────────────────────────────
+  // GET /api/admin/announcements
 
   .get('/api/admin/announcements', () => {
     const rows = db.select({
@@ -63,7 +63,7 @@ export const announcementsRoutes = new Elysia()
     }));
   })
 
-  // ─── POST /api/admin/announcements ────────────────────────────────────────
+  // POST /api/admin/announcements
 
   .post('/api/admin/announcements', ({ user, body, set }) => {
     const { title, body: bodyText, link, category, surface, leagueId, targetRole } = body as {
@@ -136,7 +136,7 @@ export const announcementsRoutes = new Elysia()
     return { id: result?.id };
   })
 
-  // ─── PATCH /api/admin/announcements/:id ──────────────────────────────────
+  // PATCH /api/admin/announcements/:id
 
   .patch('/api/admin/announcements/:id', ({ params, user, body, set }) => {
     const id = parseInt(params.id);
@@ -226,7 +226,7 @@ export const announcementsRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── DELETE /api/admin/announcements/:id ──────────────────────────────────
+  // DELETE /api/admin/announcements/:id
 
   .delete('/api/admin/announcements/:id', ({ params, user, set }) => {
     const id = parseInt(params.id);

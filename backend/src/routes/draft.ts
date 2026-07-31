@@ -25,7 +25,7 @@ function wsKey(ws: any): object {
   return ws && ws.raw ? ws.raw : ws;
 }
 
-// ─── Presence tracking per league ──────────────────────────────────────────
+// Presence tracking per league
 
 interface DraftPresence {
   teamId: string | null; // null = spectator/admin
@@ -48,7 +48,7 @@ interface DraftSocketData {
 
 const leaguePresence = new Map<string, Map</* wsKey */ object, DraftPresence>>();
 
-// ─── Idempotency cache ─────────────────────────────────────────────────────
+// Idempotency cache
 // Per-league ring buffer of recent (clientRequestId → result) pairs. Lets a
 // flaky client safely re-send a pick after a disconnect without double-picking.
 // Bounded so a misbehaving client can't OOM us.
@@ -113,7 +113,7 @@ function broadcastDraftState(leagueId: string) {
   publishWs(`draft:${leagueId}`, JSON.stringify({ type: 'draft_state', data: snapshot }));
 }
 
-// ─── Server-side timer scheduler ───────────────────────────────────────────
+// Server-side timer scheduler
 // One global tick at 1Hz; checks every active draft's deadline and fires
 // auto-pick when the timer hits zero. Cheaper than per-league setTimeouts and
 // survives pick/pause/resume transitions without leaks.
@@ -227,7 +227,7 @@ export const draftRoutes = new Elysia()
     return snapshot;
   })
 
-  // ─── Per-team draft queue (auto-pick preference list) ───────────────
+  // Per-team draft queue (auto-pick preference list)
   // A coach pre-sets an ordered list; on timer-expiry auto-pick the engine
   // walks it top-down for the first eligible mon (see getAutoPick).
   .get('/api/leagues/:leagueId/draft/queue', ({ params, user, set }) => {
@@ -332,7 +332,7 @@ export const draftRoutes = new Elysia()
     return result;
   })
 
-  // ─── Staff override: force a pick on behalf of any team ─────────────
+  // Staff override: force a pick on behalf of any team
   .post('/api/leagues/:leagueId/draft/force-pick', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const archived = checkLeagueArchived(params.leagueId, query.force);
@@ -360,7 +360,7 @@ export const draftRoutes = new Elysia()
     return result;
   })
 
-  // ─── Staff override: undo last pick ─────────────────────────────────
+  // Staff override: undo last pick
   .post('/api/leagues/:leagueId/draft/undo', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const archived = checkLeagueArchived(params.leagueId, query.force);
@@ -469,7 +469,7 @@ export const draftRoutes = new Elysia()
     return result;
   })
 
-  // ─── Draft WebSocket ──────────────────────────────────────────────
+  // Draft WebSocket
 
   .ws('/ws/draft/:leagueId', {
     open(ws) {

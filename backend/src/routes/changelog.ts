@@ -95,7 +95,7 @@ export function getChangelogEntries(): ChangelogEntry[] {
 
 export const changelogRoutes = new Elysia()
 
-  // ─── GET /api/changelog ───────────────────────────────────────────────
+  // GET /api/changelog
   // Public. Returns the full feed plus the caller's last-seen timestamp so the
   // client can compute its own unread count (guests fall back to localStorage).
   .get('/api/changelog', ({ user }) => {
@@ -110,7 +110,7 @@ export const changelogRoutes = new Elysia()
     return { entries: getChangelogEntries(), lastSeenAt };
   })
 
-  // ─── POST /api/changelog/seen ─────────────────────────────────────────
+  // POST /api/changelog/seen
   // Stamp the user's changelog_seen_at to now. Lazy-upserts the prefs row the
   // same way PUT /api/users/me/preferences does, so a user who has never saved
   // a preference still gets their read-state recorded.
@@ -136,7 +136,7 @@ export const changelogRoutes = new Elysia()
     return { success: true, seenAt };
   })
 
-  // ─── GET /api/admin/changelog ─────────────────────────────────────────
+  // GET /api/admin/changelog
   // Staff-only management list — includes created/updated audit columns the
   // public feed omits.
   .get('/api/admin/changelog', ({ user, set }) => {
@@ -147,7 +147,7 @@ export const changelogRoutes = new Elysia()
       .all();
   })
 
-  // ─── POST /api/admin/changelog ────────────────────────────────────────
+  // POST /api/admin/changelog
   // Publish a new entry. Body: { id, date, category, title, body? }. `id` is a
   // stable kebab slug; `date` is ISO-8601 UTC and drives the unread pulse, so a
   // new release should carry a date newer than the previous entry. This is the
@@ -191,7 +191,7 @@ export const changelogRoutes = new Elysia()
     return { success: true, id: slug };
   })
 
-  // ─── PUT /api/admin/changelog/:id ─────────────────────────────────────
+  // PUT /api/admin/changelog/:id
   // Partial update of an existing entry (any of date/category/title/body).
   .put('/api/admin/changelog/:id', ({ params, user, body, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
@@ -239,7 +239,7 @@ export const changelogRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── DELETE /api/admin/changelog/:id ──────────────────────────────────
+  // DELETE /api/admin/changelog/:id
   // Hard-delete (the feed is curated; there's no audit value in keeping a
   // retracted release note around — the activity log records the removal).
   .delete('/api/admin/changelog/:id', ({ params, user, set }) => {

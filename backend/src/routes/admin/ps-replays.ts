@@ -27,7 +27,7 @@ const DEFAULT_LIMIT = 100;
 export const psReplaysRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── List disk replays ──────────────────────────────────────────────
+  // List disk replays
   .get('/api/admin/ps-replays', ({ query }) => {
     const requested = parseInt(query.limit as string, 10);
     const limit = Number.isFinite(requested)
@@ -37,7 +37,7 @@ export const psReplaysRoutes = new Elysia()
     return { available, dir, total, truncated, replays: rows };
   }, { beforeHandle: requireDev })
 
-  // ─── Replay detail ──────────────────────────────────────────────────
+  // Replay detail
   // :roomId may be URL-encoded (PS room ids contain no slashes, but normalize
   // + decode defensively in case a full URL was passed).
   .get('/api/admin/ps-replays/:roomId', ({ params, set }) => {
@@ -50,7 +50,7 @@ export const psReplaysRoutes = new Elysia()
     return detail;
   }, { beforeHandle: requireDev })
 
-  // ─── Raw download ───────────────────────────────────────────────────
+  // Raw download
   .get('/api/admin/ps-replays/:roomId/download', ({ params, set }) => {
     const roomId = normalizeRoomId(decodeURIComponent(params.roomId));
     const file = readDiskReplayFileRaw(roomId);

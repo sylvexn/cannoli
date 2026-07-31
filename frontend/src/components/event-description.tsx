@@ -172,7 +172,7 @@ export function EventDescription({ event, teamsPerLeague, stripActorPrefix = tru
   return <DescriptionFallback event={event} stripActor={stripActorPrefix} />;
 }
 
-// ─── Inline helpers ─────────────────────────────────────────────────────
+// Inline helpers
 
 function DescriptionFallback({ event, stripActor }: { event: ApiActivityEvent; stripActor: boolean }) {
   let text = event.description;

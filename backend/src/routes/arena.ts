@@ -51,7 +51,7 @@ function wsKey(ws: any): object {
   return ws && ws.raw ? ws.raw : ws;
 }
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Types
 
 interface ArenaClient {
   userId: number;
@@ -72,7 +72,7 @@ interface ScrimLobby {
   psRoomId: string | null;
 }
 
-// ─── State ──────────────────────────────────────────────────────────────────
+// State
 
 const arenaClients = new Map</* wsKey */ object, ArenaClient>();
 const scrimLobbies = new Map<string, ScrimLobby>();
@@ -363,7 +363,7 @@ const UNREADY_GRACE_MS = parseInt(process.env.UNREADY_GRACE_MS || '8000');
 const pendingUnready = new Map<string, NodeJS.Timeout>();
 function clientKey(userId: number, teamId: string) { return `${userId}|${teamId}`; }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 // Core helpers are now in lib/arena-state.ts and imported above.
 // Local aliases preserve the original call sites unchanged.
 
@@ -465,7 +465,7 @@ function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
   senderWs?.send(payload);
 }
 
-// ─── Route ──────────────────────────────────────────────────────────────────
+// Route
 
 export const arenaRoutes = new Elysia()
   .onStart((app) => { registerBroadcastServer((app as any).server); registerBotConnectionListener(); })
@@ -531,7 +531,7 @@ export const arenaRoutes = new Elysia()
     return { myMatch, myMatches, liveMatches, scrimLobbies: lobbies, botConnected: isBotConnected() };
   })
 
-  // ─── Arena WebSocket ────────────────────────────────────────────────
+  // Arena WebSocket
 
   .ws('/ws/arena', {
     open(ws) {
@@ -977,7 +977,7 @@ export const arenaRoutes = new Elysia()
     },
   });
 
-// ─── Bot connectivity → Arena WS + auto-resume ────────────────────────────────
+// Bot connectivity → Arena WS + auto-resume
 
 /**
  * Drive every both-ready-but-never-started match forward. Called when the PS

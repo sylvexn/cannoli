@@ -54,7 +54,7 @@ function normalizePokemonName(name: string): string {
 export function importS9(db: Database) {
   db.exec('PRAGMA foreign_keys = OFF');
 
-  // ─── Season 9 ──────────────────────────────────────────────────────────
+  // Season 9
 
   console.log('Creating Season 9...');
   const seasonRow = db.prepare(`INSERT INTO seasons (season_number, point_cap, tera_captain_slots)
@@ -72,7 +72,7 @@ export function importS9(db: Database) {
       league.id, league.name, league.color, seasonId
     );
 
-    // ─── Teams from Standings ──────────────────────────────────────────
+    // Teams from Standings
 
     const standings = sheet(wb, 'Standings');
     const teamIds: string[] = [];
@@ -134,7 +134,7 @@ export function importS9(db: Database) {
       return null;
     }
 
-    // ─── Rosters ───────────────────────────────────────────────────────
+    // Rosters
 
     const rosters = sheet(wb, 'Rosters');
     let rosterCount = 0;
@@ -199,7 +199,7 @@ export function importS9(db: Database) {
     }
     console.log(`  ${rosterCount} roster entries`);
 
-    // ─── Draft picks from RawDrafts ────────────────────────────────────
+    // Draft picks from RawDrafts
 
     let draftCount = 0;
     if (wb.SheetNames.includes('RawDrafts')) {
@@ -233,7 +233,7 @@ export function importS9(db: Database) {
     }
     console.log(`  ${draftCount} draft picks`);
 
-    // ─── Schedule ──────────────────────────────────────────────────────
+    // Schedule
 
     const scheduleSheet = sheet(wb, 'Schedule');
     let matchCount = 0;
@@ -291,7 +291,7 @@ export function importS9(db: Database) {
     }
     console.log(`  ${matchCount} matches`);
 
-    // ─── RawKills (per-pokemon per-week K/D) ───────────────────────────
+    // RawKills (per-pokemon per-week K/D)
 
     let killsCount = 0;
     if (wb.SheetNames.includes('RawKills')) {
@@ -328,7 +328,7 @@ export function importS9(db: Database) {
     // Instead of per-match, let's just note the count — stats will compute from rosters
     console.log(`  ${killsCount} pokemon with stats (aggregate only)`);
 
-    // ─── Playoffs ──────────────────────────────────────────────────────
+    // Playoffs
 
     const playoffSheet = sheet(wb, 'Playoffs');
     let playoffCount = 0;
@@ -403,7 +403,7 @@ export function importS9(db: Database) {
     }
     console.log(`  ${playoffCount} playoff matches`);
 
-    // ─── Transactions from Trades sheet ─────────────────────────────────
+    // Transactions from Trades sheet
 
     let txCount = 0;
     const tradesSheet = sheet(wb, 'Trades');
@@ -438,7 +438,7 @@ export function importS9(db: Database) {
     console.log(`  ${txCount} transactions`);
   }
 
-  // ─── Summary ─────────────────────────────────────────────────────────
+  // Summary
 
   console.log('\n=== S9 Import Summary ===');
   console.log('Season 9 teams:', (db.prepare("SELECT COUNT(*) as c FROM teams WHERE league_id LIKE 's9-%'").get() as any).c);

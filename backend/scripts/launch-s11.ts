@@ -64,15 +64,15 @@ if (!seasonNums.includes(10)) {
   process.exit(1);
 }
 
-// ─── Import S11 ──────────────────────────────────────────────────────────────
+// Import S11
 console.log('\n── Importing Season 11 ──');
 importSeason(sqlite, S11_CONFIG, { createUsers: true, clearExisting: false });
 
-// ─── Team logos ──────────────────────────────────────────────────────────────
+// Team logos
 console.log('\n── Importing S11 team logos ──');
 const logos = importTeamLogos(sqlite, S11_CONFIG);
 
-// ─── Backfill schedules for any league whose XLSX had no matchups ─────────────
+// Backfill schedules for any league whose XLSX had no matchups
 // Some source spreadsheets ship with the round-robin unfilled (e.g. S11 Ruby).
 // Generate a balanced round-robin for any S11 league that imported zero matches
 // so every league launches week 1 with a full schedule. Uses the same pure
@@ -105,7 +105,7 @@ for (const leagueId of s11LeagueIds) {
   console.log(`  ${leagueId}: generated ${fixtures.length} matches + ${byes.length} byes (round-robin)`);
 }
 
-// ─── Verification summary ────────────────────────────────────────────────────
+// Verification summary
 sqlite.exec('PRAGMA wal_checkpoint(TRUNCATE)');
 
 const s11Id = (sqlite.prepare('SELECT id FROM seasons WHERE season_number = 11').get() as any).id;

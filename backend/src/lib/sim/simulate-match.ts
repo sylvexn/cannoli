@@ -1,34 +1,12 @@
 /**
- * simulateMatch — synthetic Pokemon-draft match result generator.
+ * simulateMatch — synthetic match result generator. Pure, no DB access.
  *
- * Pure function: NO database access. Given two rosters and a MockRng it
- * produces a score + per-Pokemon K/D table that the season driver feeds
- * verbatim through `recordMatchResult`.
+ * Output MUST pass validatePokemonData (match-validation.ts) with zero errors
+ * AND zero warnings. Scoring is standard draft KO scoring: a team's score is
+ * the opponent's total deaths, the winner reaches 6, each brought mon faints at
+ * most once. Change what this emits and the validator will reject it.
  *
- * ── Validation contract ──────────────────────────────────────────────────
- * The output MUST pass `validatePokemonData` (match-validation.ts) with zero
- * errors AND zero warnings. The validator's checks, and how we satisfy each:
- *
- *   1. Every entry's teamId ∈ {home, away}        — we only emit those two.
- *   2. Every pokemonName on that team's roster     — we only pick from rosters.
- *   3. homeScore === Σ away-team deaths            — see scoring model below.
- *   4. awayScore === Σ home-team deaths            — see scoring model below.
- *   5. ≤ 6 entries per team                        — we bring exactly 6 each.
- *
- * Scoring model (standard Pokemon draft KO scoring):
- *   - homeScore = number of opposing (away) mons knocked out by home.
- *   - awayScore = number of home mons knocked out by away.
- *   - A team's score therefore equals the opponent's total deaths. So we set
- *     Σ(deaths on away team) = homeScore and Σ(deaths on home team) = awayScore.
- *   - Each brought mon faints 0 or 1 time (singles, no revives) → deaths are a
- *     0/1 flag and exactly `opponentScore` of a team's 6 mons faint.
- *   - The winner reaches 6 KOs (all 6 enemy mons fainted); the loser scores
- *     0..5. So the losing team always has all 6 mons fainted, the winning team
- *     has `loserScore` mons fainted.
- *   - Total kills are distributed so Σ(kills on a team) = opponent deaths, and
- *     overall Σ kills === Σ deaths — internally coherent.
- *
- * simulateMatch self-asserts every invariant before returning.
+ * Self-asserts every invariant before returning.
  */
 import type { PokemonDataEntry } from '../match-service';
 import type { MockRng } from './mock-rng';
@@ -141,16 +119,16 @@ export function simulateMatch(input: SimulateMatchInput): SimulateMatchResult {
     throw new Error('simulateMatch: both rosters must be non-empty');
   }
 
-  // ── Decide the winner ────────────────────────────────────────────────
+  // Decide the winner
   const homeValue = homeRoster.reduce((s, m) => s + m.tier, 0);
   const awayValue = awayRoster.reduce((s, m) => s + m.tier, 0);
   const homeWins = rng.next() < winProbability(homeValue, awayValue);
 
-  // ── Brought teams (6 each, or fewer if roster is short) ──────────────
+  // Brought teams (6 each, or fewer if roster is short)
   const broughtHome = pickBrought(homeRoster, Math.min(6, homeRoster.length), rng);
   const broughtAway = pickBrought(awayRoster, Math.min(6, awayRoster.length), rng);
 
-  // ── Score: winner takes a full 6, loser a weighted 0..5 ──────────────
+  // Score: winner takes a full 6, loser a weighted 0..5
   // Winner's KO count is capped by how many mons the loser actually brought.
   const winnerBrought = homeWins ? broughtHome : broughtAway;
   const loserBrought = homeWins ? broughtAway : broughtHome;
@@ -168,19 +146,19 @@ export function simulateMatch(input: SimulateMatchInput): SimulateMatchResult {
   const homeScore = homeWins ? winnerScore : loserScore;
   const awayScore = homeWins ? loserScore : winnerScore;
 
-  // ── Death flags: a team's faints = opponent's score ──────────────────
+  // Death flags: a team's faints = opponent's score
   // homeScore KOs inflicted on away ⇒ away has homeScore deaths.
   const awayDeathFlags = pickDeathFlags(broughtAway, homeScore, rng);
   const homeDeathFlags = pickDeathFlags(broughtHome, awayScore, rng);
 
-  // ── Kill distribution ────────────────────────────────────────────────
+  // Kill distribution
   // Home team's kills must sum to homeScore (deaths it inflicted on away).
   const homeSurvived = homeDeathFlags.map(d => !d);
   const awaySurvived = awayDeathFlags.map(d => !d);
   const homeKills = distributeKills(broughtHome, homeSurvived, homeScore, rng);
   const awayKills = distributeKills(broughtAway, awaySurvived, awayScore, rng);
 
-  // ── Tera: ~1 mon per team terastallizes ──────────────────────────────
+  // Tera: ~1 mon per team terastallizes
   const homeTeraIdx = rng.bool(0.85) ? rng.int(0, broughtHome.length - 1) : -1;
   const awayTeraIdx = rng.bool(0.85) ? rng.int(0, broughtAway.length - 1) : -1;
 

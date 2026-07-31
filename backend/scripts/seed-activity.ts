@@ -39,7 +39,7 @@ const sqlite = new Database(DB_PATH);
 sqlite.exec('PRAGMA foreign_keys = ON;');
 const db = drizzle(sqlite, { schema });
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// Helpers
 
 type Row = typeof schema.activityLog.$inferInsert;
 
@@ -146,7 +146,7 @@ function loadCaptainPicks(teamId: string): string[] {
   return rows.map(r => r.pokemon_name);
 }
 
-// ─── Build events ───────────────────────────────────────────────────────────
+// Build events
 
 const coachByTeam = loadCoachByTeam();
 const teamMeta = loadTeamMeta();
@@ -190,7 +190,7 @@ function pushMatchResult(
   });
 }
 
-// ─── 1. FA scrambles (Apr 13–17) ────────────────────────────────────────
+// 1. FA scrambles (Apr 13–17)
 const FA_SLOTS = [
   { date: '2026-04-13', time: '21:30:00' },
   { date: '2026-04-15', time: '19:45:00' },
@@ -221,7 +221,7 @@ faPicked.forEach((fa, i) => {
   });
 });
 
-// ─── 2. W11 regular-season sweeps (Apr 18–20) ───────────────────────────
+// 2. W11 regular-season sweeps (Apr 18–20)
 const SWEEP_SLOTS = [
   { date: '2026-04-18', time: '18:30:00' },
   { date: '2026-04-19', time: '20:00:00' },
@@ -233,7 +233,7 @@ w11Sweeps.forEach((m, i) => {
   pushMatchResult(m, iso(slot.date, slot.time));
 });
 
-// ─── 3. Playoffs generated × 3 (Apr 22) ─────────────────────────────────
+// 3. Playoffs generated × 3 (Apr 22)
 const PLAYOFFS_GEN_TIMES = ['16:00:00', '16:05:00', '16:10:00'];
 S10_LEAGUES.forEach((lid, i) => {
   const seedings = bracketSeedings.get(lid) ?? [];
@@ -251,7 +251,7 @@ S10_LEAGUES.forEach((lid, i) => {
   });
 });
 
-// ─── 4. QF match_results (Apr 27–30) ────────────────────────────────────
+// 4. QF match_results (Apr 27–30)
 const qfs = playoffMatches.filter(m => m.playoff_round === 'qf');
 // Stagger 12 QF results across 4 evenings (Mon–Thu of playoff week 12).
 const QF_SLOTS = [
@@ -262,7 +262,7 @@ const QF_SLOTS = [
 ];
 qfs.forEach((m, i) => pushMatchResult(m, QF_SLOTS[i] ?? QF_SLOTS[QF_SLOTS.length - 1]));
 
-// ─── 5. Pre-SF tera adjustments (May 3–4) ───────────────────────────────
+// 5. Pre-SF tera adjustments (May 3–4)
 const TERA_SLOTS = ['2026-05-03T18:30:00Z', '2026-05-03T20:00:00Z', '2026-05-04T17:15:00Z'];
 S10_LEAGUES.forEach((lid, i) => {
   const teamId = PRE_SF_TERA_TEAMS[lid];
@@ -282,7 +282,7 @@ S10_LEAGUES.forEach((lid, i) => {
   });
 });
 
-// ─── 6. SF match_results (May 5–6) — most recent ────────────────────────
+// 6. SF match_results (May 5–6) — most recent
 const sfs = playoffMatches.filter(m => m.playoff_round === 'sf');
 const SF_SLOTS = [
   '2026-05-05T19:00:00Z', '2026-05-05T20:30:00Z', '2026-05-05T22:00:00Z',
@@ -290,7 +290,7 @@ const SF_SLOTS = [
 ];
 sfs.forEach((m, i) => pushMatchResult(m, SF_SLOTS[i] ?? SF_SLOTS[SF_SLOTS.length - 1]));
 
-// ─── Insert ─────────────────────────────────────────────────────────────────
+// Insert
 
 console.log(`Built ${events.length} activity events for S10 backfill.`);
 

@@ -12,7 +12,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { getLeague } from './queries';
 import { createBattle, effectivePsUserid } from './ps-bot';
 
-// ─── Team resolution ─────────────────────────────────────────────────────────
+// Team resolution
 
 /**
  * The coach's team in their CURRENT league. A coach who has played past seasons
@@ -35,7 +35,7 @@ export function getUserTeam(userId: number): { teamId: string; leagueId: string 
   return team ? { teamId: team.id, leagueId: team.leagueId } : null;
 }
 
-// ─── Playable-match window ────────────────────────────────────────────────────
+// Playable-match window
 
 /**
  * How many weeks ahead of the current week a coach may battle early. Past
@@ -96,7 +96,7 @@ export function getCurrentMatch(teamId: string, leagueId: string) {
   return getPlayableMatches(teamId, leagueId).find(m => m.week === league.currentWeek) ?? null;
 }
 
-// ─── PS battle creation for ready matches ──────────────────────────────────────
+// PS battle creation for ready matches
 
 /**
  * Resolve the PS-account username a team plays under. PS battles are created
@@ -176,7 +176,7 @@ export function findResumableReadyMatches() {
   });
 }
 
-// ─── Match reminder ───────────────────────────────────────────────────────────
+// Match reminder
 
 export interface MatchReminder {
   matchId: string;

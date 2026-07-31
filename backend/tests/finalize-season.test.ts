@@ -25,7 +25,7 @@ import { describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { assignFinishPositions } from '../scripts/import-xlsx';
 
-// ─── Minimal fixture schema ──────────────────────────────────────────────────
+// Minimal fixture schema
 // Only the columns finalize-season.ts / assignFinishPositions actually read or
 // write. Kept deliberately tiny and self-contained.
 
@@ -117,9 +117,7 @@ function teamFinish(db: Database, teamId: string): { pos: number | null; label: 
   return row;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 1. assignFinishPositions — placement labels
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe('assignFinishPositions', () => {
   test('stamps champion / runner-up / SF / QF / regular labels', () => {
@@ -176,9 +174,7 @@ describe('assignFinishPositions', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 2. Score-pending-finals logic — higher seed wins 4-3
-// ─────────────────────────────────────────────────────────────────────────────
 //
 // Mirrors the score step in finalize-season.ts: a scheduled finals match with
 // NULL scores is stamped 4-3 in favour of the better (lower-numbered) seed.
@@ -226,9 +222,7 @@ describe('score-pending-finals', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
 // 3. Archive isolation — finalizing S11 must not touch S9/S10
-// ─────────────────────────────────────────────────────────────────────────────
 //
 // finalize-season.ts archives via `UPDATE seasons SET archived = 1 WHERE id = ?`
 // — scoped to the single resolved season id. We verify that scoping holds.

@@ -18,9 +18,7 @@
  *   PUBLIC_BASE_URL          — base for deep-link URLs (default cannoli.live)
  */
 
-// ---------------------------------------------------------------------------
 // Config
-// ---------------------------------------------------------------------------
 
 const ERROR_WEBHOOK = process.env.DISCORD_ERROR_WEBHOOK ?? null;
 const FEEDBACK_WEBHOOK = process.env.DISCORD_FEEDBACK_WEBHOOK ?? ERROR_WEBHOOK;
@@ -38,18 +36,14 @@ const COLOR = {
   green: 0x48bb78,
 } as const;
 
-// ---------------------------------------------------------------------------
 // Re-entrancy guard
-// ---------------------------------------------------------------------------
 
 /** True while we are inside any alert dispatch — prevents recursive alerting
  *  if something in this module itself throws and an upstream handler calls
  *  alertFault again. */
 let _dispatching = false;
 
-// ---------------------------------------------------------------------------
 // Coalescing state
-// ---------------------------------------------------------------------------
 
 interface CoalesceEntry {
   /** Extra occurrences accumulated during the open window. */
@@ -62,9 +56,7 @@ interface CoalesceEntry {
 
 const coalesceMap = new Map<string, CoalesceEntry>();
 
-// ---------------------------------------------------------------------------
 // Internal helpers
-// ---------------------------------------------------------------------------
 
 /** Truncate a string to `max` chars, appending "…" if cut. */
 function trunc(s: string, max: number): string {
@@ -137,9 +129,7 @@ function groupUrl(groupId: number | null | undefined): string | undefined {
   return `${BASE_URL}/admin/observability?group=${groupId}`;
 }
 
-// ---------------------------------------------------------------------------
 // alertFault
-// ---------------------------------------------------------------------------
 
 /**
  * Post a Discord alert for a server-side or client-side error group.
@@ -269,9 +259,7 @@ function _postRollup(firstArgs: Parameters<typeof alertFault>[0], extra: number)
   postWebhook(ERROR_WEBHOOK!, embed);
 }
 
-// ---------------------------------------------------------------------------
 // alertFeedback
-// ---------------------------------------------------------------------------
 
 /**
  * Post a Discord embed for a user feedback submission.
@@ -327,9 +315,7 @@ export function alertFeedback(args: {
   }
 }
 
-// ---------------------------------------------------------------------------
 // alertHealthFlip
-// ---------------------------------------------------------------------------
 
 /**
  * Post a Discord embed when a health-probe transitions state.

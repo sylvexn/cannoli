@@ -34,7 +34,7 @@ const MOBILE_UA_RE = /Mobi|Android|iPhone|iPad/i;
 
 let insertsSincePrune = 0;
 
-// ─── Anonymous visitor id ────────────────────────────────────────────────────
+// Anonymous visitor id
 
 /** Cache the daily salt: (utcDay → salt). Recomputed when the UTC day rolls. */
 let saltDay = '';
@@ -57,7 +57,7 @@ function anonId(ip: string, ua: string): string {
   return createHash('sha256').update(dailySalt() + ip + ua).digest('hex').slice(0, 16);
 }
 
-// ─── Sanitization ────────────────────────────────────────────────────────────
+// Sanitization
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -106,7 +106,7 @@ function clientIp(request: Request): string {
   return request.headers.get('x-real-ip') ?? '';
 }
 
-// ─── Ingest ──────────────────────────────────────────────────────────────────
+// Ingest
 
 /**
  * Record one beacon hit. `input` is the raw (untrusted, possibly text/plain
@@ -167,7 +167,7 @@ function prune() {
   }
 }
 
-// ─── Daily rollup ────────────────────────────────────────────────────────────
+// Daily rollup
 
 /**
  * Aggregate every completed UTC day still present in usage_events into

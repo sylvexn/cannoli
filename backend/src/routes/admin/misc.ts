@@ -12,7 +12,7 @@ import { backfillFeedbackNotifications } from '../../lib/notifications/notify';
 export const miscRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
 
-  // ─── PS Bot Status ──────────────────────────────────────────────────
+  // PS Bot Status
   //
   // DEV-ONLY: the per-route requireDev guard narrows these below the group's
   // requireStaff — PS Bot monitoring/control is dev tooling, not for admins.
@@ -51,7 +51,7 @@ export const miscRoutes = new Elysia()
     return result;
   })
 
-  // ─── Manual job trigger (admin tool) ────────────────────────────────
+  // Manual job trigger (admin tool)
 
   .post('/api/admin/jobs/:name/run', async ({ params, user, set }) => {
     const ok = await runOnce(params.name);
@@ -67,7 +67,7 @@ export const miscRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Force match result (admin override for forfeits / disputes) ────
+  // Force match result (admin override for forfeits / disputes)
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
     const archived = checkMatchArchived(params.matchId, query.force);
@@ -192,7 +192,7 @@ export const miscRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Swap match home/away sides (fix teams on the wrong side) ───────
+  // Swap match home/away sides (fix teams on the wrong side)
   //
   // Flips which column each team sits in WITHOUT changing the result. Swaps
   // homeTeamId↔awayTeamId, homeScore↔awayScore, and homeSeed↔awaySeed (playoff
@@ -234,7 +234,7 @@ export const miscRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Import a played battle into a scheduled match ──────────────────
+  // Import a played battle into a scheduled match
   //
   // Attaches a finished PS battle (e.g. one played outside the Arena flow) to
   // a scheduled match and records it through the regular completion path
@@ -320,14 +320,14 @@ export const miscRoutes = new Elysia()
     };
   })
 
-  // ─── Activity Log ───────────────────────────────────────────────────
+  // Activity Log
 
   .get('/api/activity-log', ({ query }) => {
     const baseRows = db.select().from(schema.activityLog)
       .orderBy(desc(schema.activityLog.timestamp))
       .all();
 
-    // ─── Results-reveal gate: redact unpublished match scores ──────────────
+    // Results-reveal gate: redact unpublished match scores
     // Score-bearing match entries leak the result through their description
     // text (e.g. "...: 3-2") and metadata. When the entry's match falls in an
     // UNPUBLISHED week (its league's resultsRevealedThrough is non-null AND the
@@ -425,7 +425,7 @@ export const miscRoutes = new Elysia()
     };
   })
 
-  // ─── API Request Logs (raw HTTP traffic + errors) ───────────────────
+  // API Request Logs (raw HTTP traffic + errors)
   //
   // Backs the admin "API Logs" tab. Server-side filtered + paginated (the
   // table can hold thousands of rows). `stats` is computed over the whole
@@ -520,7 +520,7 @@ export const miscRoutes = new Elysia()
     };
   }, { beforeHandle: requireDev })
 
-  // ─── Backfill feedback notifications from GitHub ─────────────────────
+  // Backfill feedback notifications from GitHub
   // Re-run the issue-close detector for historical issues. Safe to re-run —
   // dedupeKey on notifications ensures no double-notifications.
 
