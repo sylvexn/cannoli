@@ -262,24 +262,44 @@ describe('GET /api/users/:username/pins — results-reveal redaction', () => {
     ]).run();
   });
 
-  test('anonymous caller: unrevealed-match pin has spoiler fields stripped, revealed-match pin is untouched', async () => {
+  test('anonymous caller: unrevealed-match pin is omitted entirely, revealed-match pin is untouched', async () => {
     const res = await hit(null, 'GET', `/api/users/${recipient.username}/pins`);
     expect(res.status).toBe(200);
     const rows = await res.json() as { pinDefId: string; metadata: Record<string, unknown> | null }[];
 
-    const hidden = rows.find(r => r.pinDefId === defHidden);
-    expect(hidden).toBeTruthy();
-    expect(hidden!.metadata).not.toHaveProperty('matchId');
-    expect(hidden!.metadata).not.toHaveProperty('winnerRank');
-    expect(hidden!.metadata).not.toHaveProperty('loserRank');
-    // Non-spoiler fields survive the redaction.
-    expect((hidden!.metadata as any).winnerTeamId).toBeTruthy();
+    // Stripping spoiler fields is not enough: the pin's own existence leaks the
+    // result ("won Flawless in week 6" names the winner even with no scoreline),
+    // so an unrevealed pin must not appear in the payload at all.
+    expect(rows.find(r => r.pinDefId === defHidden)).toBeUndefined();
 
     const revealed = rows.find(r => r.pinDefId === defRevealed);
     expect(revealed).toBeTruthy();
     expect((revealed!.metadata as any).matchId).toBe(REVEALED_MATCH);
     expect((revealed!.metadata as any).winnerRank).toBe(3);
     expect((revealed!.metadata as any).loserRank).toBe(2);
+  });
+
+  test('the pin owner sees their own unrevealed pin — they played the match', async () => {
+    const res = await hit(
+      { id: String(recipient.id), username: recipient.username, role: 'user' },
+      'GET', `/api/users/${recipient.username}/pins`,
+    );
+    expect(res.status).toBe(200);
+    const rows = await res.json() as { pinDefId: string; metadata: Record<string, unknown> | null }[];
+    const hidden = rows.find(r => r.pinDefId === defHidden);
+    expect(hidden).toBeTruthy();
+    expect((hidden!.metadata as any).matchId).toBe(HIDDEN_MATCH);
+  });
+
+  test('a different non-staff user does NOT see the unrevealed pin', async () => {
+    const res = await hit(
+      { id: '999998', username: `${PFX}-nosy`, role: 'user' },
+      'GET', `/api/users/${recipient.username}/pins`,
+    );
+    expect(res.status).toBe(200);
+    const rows = await res.json() as { pinDefId: string }[];
+    expect(rows.find(r => r.pinDefId === defHidden)).toBeUndefined();
+    expect(rows.find(r => r.pinDefId === defRevealed)).toBeTruthy();
   });
 
   test('staff caller sees full metadata for both matches', async () => {

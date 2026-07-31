@@ -41,6 +41,7 @@ import {
   S9_AWARDS, S10_AWARDS, mintManualPins, type ManualAward,
 } from '../lib/pins/awards-data';
 import { runAutoAwards } from '../lib/pins/auto-award';
+import { mintArchivePins } from '../lib/pins/archive-mint';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -72,6 +73,8 @@ export const pinRoutes = new Elysia()
       id: schema.pins.id,
       pinDefId: schema.pins.pinDefId,
       seasonId: schema.pins.seasonId,
+      leagueId: schema.pins.leagueId,
+      source: schema.pins.source,
       awardedAt: schema.pins.awardedAt,
       awardedBy: schema.pins.awardedBy,
       metadata: schema.pins.metadata,
@@ -88,25 +91,36 @@ export const pinRoutes = new Elysia()
       .orderBy(desc(schema.pins.awardedAt))
       .all();
 
-    return rows.map(r => ({
-      id: r.id,
-      pinDefId: r.pinDefId,
-      seasonId: r.seasonId,
-      awardedAt: r.awardedAt,
-      awardedBy: r.awardedBy,
-      metadata: r.metadata
-        ? redactUnrevealedMetadata(safeJson(r.metadata) as Record<string, unknown> | null, viewer)
-        : null,
-      definition: {
-        id: r.pinDefId,
-        name: r.defName,
-        description: r.defDescription,
-        iconName: r.defIconName,
-        color: r.defColor,
-        category: r.defCategory,
-        isAuto: r.defIsAuto,
-      },
-    }));
+    // A pin IS a result. "Flawless" naming the winning team gives away an
+    // unrevealed week just as surely as the scoreline does, so stripping
+    // spoiler fields is not enough — the whole pin stays hidden until its
+    // match is revealed. Staff bypass the gate, and so does the owner, who
+    // played the match and already knows how it went.
+    const isOwner = viewer?.id != null && parseInt(String(viewer.id)) === user.id;
+    const bypassGate = isOwner || isStaff(viewer);
+
+    return rows
+      .map(r => ({ ...r, meta: r.metadata ? safeJson(r.metadata) as Record<string, unknown> | null : null }))
+      .filter(r => bypassGate || !referencesUnrevealedMatch(r.meta, viewer))
+      .map(r => ({
+        id: r.id,
+        pinDefId: r.pinDefId,
+        seasonId: r.seasonId,
+        leagueId: r.leagueId,
+        source: r.source,
+        awardedAt: r.awardedAt,
+        awardedBy: r.awardedBy,
+        metadata: bypassGate ? r.meta : redactUnrevealedMetadata(r.meta, viewer),
+        definition: {
+          id: r.pinDefId,
+          name: r.defName,
+          description: r.defDescription,
+          iconName: r.defIconName,
+          color: r.defColor,
+          category: r.defCategory,
+          isAuto: r.defIsAuto,
+        },
+      }));
   })
 
   // GET /api/pin-definitions (public badge catalog — no auth)
@@ -611,16 +625,27 @@ export const pinRoutes = new Elysia()
     let totalAwarded = 0;
     let totalSkipped = 0;
     const perLeague: { leagueId: string; awarded: number; skipped: number }[] = [];
+    const unresolved: Record<string, unknown>[] = [];
 
     for (const league of leagues) {
+      // Both minters, in the same order the phase→offseason route and the
+      // archive ceremony use. Running only runAutoAwards here left champion /
+      // high-score / steal-of-the-draft / sweeper with no re-run path at all
+      // from the admin UI — this is the one button that reconciles every
+      // stat-derived pin, so it has to cover all of them.
+      const archive = mintArchivePins(league.id, { awardedBy: adminId });
       const summary = runAutoAwards(league.id, { trigger: 'season-end', awardedBy: adminId });
-      totalAwarded += summary.awarded.length;
-      totalSkipped += summary.skipped;
-      perLeague.push({
-        leagueId: league.id,
-        awarded: summary.awarded.length,
-        skipped: summary.skipped,
-      });
+      const awarded = archive.awarded.length + summary.awarded.length;
+      const skipped = archive.skipped + summary.skipped;
+      totalAwarded += awarded;
+      totalSkipped += skipped;
+      perLeague.push({ leagueId: league.id, awarded, skipped });
+      // Previously dropped on the floor. An award that cannot be minted (team
+      // has no linked user, a manual pin owns the slot, no eligible matches)
+      // must reach the admin — silent skips are how S9 Ruby lost its champion.
+      for (const u of [...(archive.unresolved ?? []), ...(summary.unresolved ?? [])]) {
+        unresolved.push({ leagueId: league.id, ...u });
+      }
     }
 
     db.insert(schema.activityLog).values({
@@ -635,10 +660,11 @@ export const pinRoutes = new Elysia()
         leagues: perLeague,
         totalAwarded,
         totalSkipped,
+        unresolved,
       }),
     }).run();
 
-    return { success: true, season: seasonNumber, totalAwarded, totalSkipped, perLeague };
+    return { success: true, season: seasonNumber, totalAwarded, totalSkipped, perLeague, unresolved };
   });
 
 function safeJson(s: string): unknown {
@@ -688,13 +714,29 @@ function checkMetadataSize(metadata: unknown): string | null {
 }
 
 /**
- * Results-reveal gate for pin metadata. Kingslayer/Flawless carry
- * `metadata.matchId` (see lib/pins/auto-award.ts) — resolving it to the
- * match's leagueId/week lets this reuse the exact same `isMatchRevealed` gate
- * routes/matches.ts already applies (commit 48d5124) instead of inventing a
- * parallel one. Staff bypass; everyone else has the revealing fields (score,
- * rank shakeup, K/D) stripped when the match hasn't been revealed yet — the
- * pin itself, and any non-revealing metadata, still shows.
+ * True when this pin points at a match the viewer isn't allowed to see yet.
+ * Kingslayer/Flawless carry `metadata.matchId` (see lib/pins/auto-award.ts), so
+ * resolving it to the match's leagueId/week reuses the exact `isMatchRevealed`
+ * gate routes/matches.ts already applies (commit 48d5124) rather than inventing
+ * a parallel one. Callers drop the whole pin when this is true.
+ */
+function referencesUnrevealedMatch(
+  metadata: Record<string, unknown> | null,
+  viewer: { role: string } | null | undefined,
+): boolean {
+  if (!metadata || typeof metadata.matchId !== 'string') return false;
+  const match = db.select({ leagueId: schema.matches.leagueId, week: schema.matches.week })
+    .from(schema.matches)
+    .where(eq(schema.matches.id, metadata.matchId))
+    .get();
+  return !!match && !isMatchRevealed(match, viewer);
+}
+
+/**
+ * Field-level backstop for the same gate. The list endpoint already drops
+ * unrevealed pins outright, so this only fires for viewers who bypass the gate
+ * or for metadata that leaks a result without a resolvable `matchId` — keep it
+ * as defence in depth rather than the primary control.
  */
 function redactUnrevealedMetadata(
   metadata: Record<string, unknown> | null,
