@@ -64,8 +64,12 @@ beforeAll(() => {
     })
     .use(matchRoutes);
 
-  const season = db.select().from(schema.seasons).limit(1).all()[0];
-  if (!season) throw new Error('no season in dev DB — run `bun run seed:sim` first');
+  // Self-seed rather than requiring a seeded dev DB: CI runs against an empty
+  // database, where demanding `bun run seed:sim` first fails the whole file.
+  // Every other row this suite needs (league, teams, matches) is created below,
+  // so a bare season row is the only external dependency.
+  const season = db.select().from(schema.seasons).limit(1).all()[0]
+    ?? db.insert(schema.seasons).values({ seasonNumber: 9100, archived: false }).returning().get();
 
   const staff = db.insert(schema.users).values({
     username: `${PFX}-admin`, passwordHash: 'x', role: 'admin',
