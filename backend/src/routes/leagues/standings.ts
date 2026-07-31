@@ -4,18 +4,17 @@ import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { computeStandings, type TeamStandingRow } from '../../lib/standings';
 import { getLeagueCostMap } from '../../lib/league-costs';
+import { revealedMaxWeek } from '../../lib/queries';
 
 export const standingsRoutes = new Elysia()
 
-  // ─── Teams (with rosters + computed records) ─────────────────────────
+  // Teams (with rosters + computed records)
 
   .get('/api/leagues/:leagueId/teams', ({ params }) => {
     // Results-reveal gate: when an admin has set resultsRevealedThrough on this
     // league, standings/records are computed only through that week so nothing
     // moves until later weeks are revealed (NULL = gate off = full visibility).
-    const league = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, params.leagueId)).get();
-    const maxWeek = league?.resultsRevealedThrough ?? null;
+    const maxWeek = revealedMaxWeek(params.leagueId);
 
     // Compute standings using the documented tiebreaker hierarchy.
     // Use 'all' phase here so playoff-era views still render correct W-L; the
@@ -160,16 +159,14 @@ export const standingsRoutes = new Elysia()
     });
   })
 
-  // ─── Schedule ────────────────────────────────────────────────────────
+  // Schedule
 
   .get('/api/leagues/:leagueId/schedule', ({ params }) => {
     // Results-reveal gate: when an admin has set resultsRevealedThrough on this
     // league, scores for later (unrevealed) weeks are withheld so the schedule
     // can't be used to spoil who won before standings catch up. Same gate the
     // standings/stats endpoints already honor (NULL = gate off = full scores).
-    const league = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, params.leagueId)).get();
-    const maxWeek = league?.resultsRevealedThrough ?? null;
+    const maxWeek = revealedMaxWeek(params.leagueId);
 
     const matches = db.select().from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
@@ -207,7 +204,7 @@ export const standingsRoutes = new Elysia()
     return { matches, byes };
   })
 
-  // ─── Player Availability ─────────────────────────────────────────────
+  // Player Availability
 
   .get('/api/leagues/:leagueId/availability', ({ params }) => {
     return db.select().from(schema.playerAvailability)
@@ -257,7 +254,7 @@ export const standingsRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Transactions ────────────────────────────────────────────────────
+  // Transactions
 
   .get('/api/leagues/:leagueId/transactions', ({ params }) => {
     return db.select().from(schema.transactions)
@@ -278,7 +275,7 @@ export const standingsRoutes = new Elysia()
       }));
   })
 
-  // ─── Draft Picks ─────────────────────────────────────────────────────
+  // Draft Picks
 
   .get('/api/leagues/:leagueId/draft', ({ params }) => {
     return db.select().from(schema.draftPicks)
@@ -294,14 +291,12 @@ export const standingsRoutes = new Elysia()
       }));
   })
 
-  // ─── Pokemon Stats (league-wide aggregated) ──────────────────────────
+  // Pokemon Stats (league-wide aggregated)
 
   .get('/api/leagues/:leagueId/stats', ({ params }) => {
     // Results-reveal gate: when resultsRevealedThrough is set, aggregate only
     // matchPokemon whose match is in a revealed week (NULL = no gate).
-    const league = db.select().from(schema.leagues)
-      .where(eq(schema.leagues.id, params.leagueId)).get();
-    const maxWeek = league?.resultsRevealedThrough ?? null;
+    const maxWeek = revealedMaxWeek(params.leagueId);
 
     const matchIds = db.select({ id: schema.matches.id })
       .from(schema.matches)

@@ -7,24 +7,28 @@ import { tx } from '../lib/tx';
 import { advancePlayoffWinner, buildPlayoffMatchups } from '../lib/playoff-advance';
 import { computeStandings, matchWinner } from '../lib/standings';
 import { runAutoAwards } from '../lib/pins/auto-award';
-import { getLeague } from '../lib/queries';
+import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
 
 export const matchRoutes = new Elysia()
 
-  // ─── Replay summary (MVP / sweep / teras / score line) ──────────────
+  // Replay summary (MVP / sweep / teras / score line)
   //
   // Cheap computation from matchPokemon (already has per-mon K/D + tera) plus
   // the match row's scores. No log parsing required — this is what powers the
   // replay-row glance line and post-roll mini-card on the stream cockpit.
 
-  .get('/api/matches/:matchId/replay-summary', ({ params }) => {
+  .get('/api/matches/:matchId/replay-summary', ({ params, user }) => {
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
       .get();
     if (!match) return null;
+    // Results-reveal gate — a summary carries `scoreLine` straight off the match
+    // row, so serving it for an unrevealed week hands out the exact score the
+    // schedule endpoint withholds. Same null shape as "no such match".
+    if (!isMatchRevealed(match, user)) return null;
 
     // LEFT JOIN to rosters (team_id, pokemon_name) so each replay row can
     // surface the team's chosen nickname + shiny flag for that mon. match_pokemon
@@ -83,7 +87,7 @@ export const matchRoutes = new Elysia()
       (awayScore === 6 && homeScore === 0)
     );
 
-    // ── Full 12-mon grid: merge brought team-of-6 (incl. benched mons) with
+    // Full 12-mon grid: merge brought team-of-6 (incl. benched mons) with
     // the real appeared K/D from match_pokemon. The K/D / MVP / teraCount /
     // sweep above stay sourced purely from match_pokemon (appeared-only) —
     // only the returned display arrays gain the benched slots.
@@ -242,7 +246,7 @@ export const matchRoutes = new Elysia()
     };
   })
 
-  // ─── Replay payload (PS-format JSON for the in-site replay viewer) ───
+  // Replay payload (PS-format JSON for the in-site replay viewer)
   //
   // Returns the protocol log + minimal metadata in the shape the upstream
   // Pokemon Showdown replay client (replay.pokemonshowdown.com SPA) expects.
@@ -254,11 +258,13 @@ export const matchRoutes = new Elysia()
   // either sim.cannoli.live or cannoli.live can fetch directly if we ever
   // skip the nginx proxy.
 
-  .get('/api/matches/:matchId/replay.json', ({ params, set }) => {
+  .get('/api/matches/:matchId/replay.json', ({ params, set, user }) => {
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
       .get();
-    if (!match || !match.replayLog) {
+    // Results-reveal gate — the log is the whole battle, the strongest spoiler
+    // of the three. Indistinguishable from "no log stored".
+    if (!match || !match.replayLog || !isMatchRevealed(match, user)) {
       set.status = 404;
       return { error: 'Replay log not available for this match' };
     }
@@ -284,7 +290,12 @@ export const matchRoutes = new Elysia()
     const p2 = p2Match?.[1] || awayTeam?.coachName || 'Away';
 
     set.headers['Access-Control-Allow-Origin'] = '*';
-    set.headers['Cache-Control'] = 'public, max-age=300';
+    // This response now varies by viewer (staff bypass the reveal gate), so a
+    // shared cache must not hold a staff-visible log and replay it to anonymous
+    // callers. Only publicly cacheable once the week is revealed to everyone.
+    set.headers['Cache-Control'] = isMatchRevealed(match, null)
+      ? 'public, max-age=300'
+      : 'private, no-store';
     return {
       id: match.id,
       format,
@@ -301,9 +312,9 @@ export const matchRoutes = new Elysia()
     };
   })
 
-  // ─── Match Details (pokemon K/D for a specific match) ────────────────
+  // Match Details (pokemon K/D for a specific match)
 
-  .get('/api/matches/:matchId/pokemon', ({ params }) => {
+  .get('/api/matches/:matchId/pokemon', ({ params, user }) => {
     const entries = db.select({
       id: schema.matchPokemon.id,
       teamId: schema.matchPokemon.teamId,
@@ -329,7 +340,9 @@ export const matchRoutes = new Elysia()
       .where(eq(schema.matches.id, params.matchId))
       .get();
 
-    if (!match) return { home: [], away: [] };
+    // Results-reveal gate — per-mon K/D trivially reveals the winner. Same
+    // empty shape as "no such match".
+    if (!match || !isMatchRevealed(match, user)) return { home: [], away: [] };
 
     return {
       home: entries.filter(e => e.teamId === match.homeTeamId).map(e => ({
@@ -353,7 +366,7 @@ export const matchRoutes = new Elysia()
     };
   })
 
-  // ─── All matches (admin view — cross-league) ────────────────────────
+  // All matches (admin view — cross-league)
 
   .get('/api/admin/matches', ({ user, set, query }) => {
     if (!isStaff(user)) {
@@ -429,7 +442,7 @@ export const matchRoutes = new Elysia()
     }));
   })
 
-  // ─── Record match result ─────────────────────────────────────────────
+  // Record match result
 
   .post('/api/matches/:matchId/result', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -452,7 +465,7 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Dismiss match warnings ──────────────────────────────────────────
+  // Dismiss match warnings
 
   .post('/api/matches/:matchId/dismiss-warnings', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -516,7 +529,7 @@ export const matchRoutes = new Elysia()
     });
   })
 
-  // ─── Void match result (clear scores + per-pokemon, back to scheduled) ────
+  // Void match result (clear scores + per-pokemon, back to scheduled)
 
   .post('/api/matches/:matchId/void', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -528,7 +541,7 @@ export const matchRoutes = new Elysia()
       .get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
 
-    // ─── Playoff downstream chain handling ────────────────────────────
+    // Playoff downstream chain handling
     // If this match was a completed playoff round, its winner has already
     // been propagated into downstream cells. Compute downstream rounds and
     // the prior winner, then either reject (if any downstream is itself
@@ -657,7 +670,7 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Force-mark a match as disputed (admin freeze, pending review) ───
+  // Force-mark a match as disputed (admin freeze, pending review)
   // Unlike void this does NOT clear scores, pokemon data, or per-match pins —
   // it only flags the match for review. Use void to roll back.
 
@@ -694,7 +707,7 @@ export const matchRoutes = new Elysia()
     });
   })
 
-  // ─── Move match (week / deadline) ───────────────────────────────────────
+  // Move match (week / deadline)
 
   .patch('/api/matches/:matchId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -744,7 +757,7 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Delete match ────────────────────────────────────────────────────
+  // Delete match
 
   .delete('/api/matches/:matchId', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -819,7 +832,7 @@ export const matchRoutes = new Elysia()
     return { success: true };
   })
 
-  // ─── Schedule generation ─────────────────────────────────────────────
+  // Schedule generation
 
   .post('/api/leagues/:leagueId/schedule/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -897,7 +910,7 @@ export const matchRoutes = new Elysia()
     return { success: true, matchCount: result.matchCount, byeCount: result.byeCount };
   })
 
-  // ─── Playoff bracket generation ──────────────────────────────────────
+  // Playoff bracket generation
 
   .post('/api/leagues/:leagueId/playoffs/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
@@ -978,7 +991,7 @@ export const matchRoutes = new Elysia()
     });
   })
 
-  // ─── Scrims ──────────────────────────────────────────────────────────
+  // Scrims
 
   .get('/api/scrims', ({ query }) => {
     let rows = db.select().from(schema.scrims)

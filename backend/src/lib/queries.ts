@@ -13,6 +13,7 @@
 
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
+import { isStaff } from './auth';
 
 export type LeagueRow = typeof schema.leagues.$inferSelect;
 export type TeamRow = typeof schema.teams.$inferSelect;
@@ -28,10 +29,17 @@ export function isLeaguePhase(v: unknown): v is LeaguePhase {
 }
 
 /**
- * Whether a league's trade deadline has passed. Scoped to the league's own
- * `currentWeek` vs `tradeDeadlineWeek` (a non-positive deadline means "no
- * deadline"). Shared by the trade routes and the expire-trades job so the two
- * never disagree about when trading closes.
+ * Whether a league's trade deadline has passed (a non-positive deadline means
+ * "no deadline"). Shared by the trade routes and the expire-trades job so the
+ * two never disagree about when trading closes.
+ *
+ * `tradeDeadlineWeek` bounds the week a trade may LAND in, not the week it is
+ * signed off in — approvals take effect the following week (resolveEffectiveWeek
+ * defaults to currentWeek + 1), so the last week you can act is deadline - 1.
+ * That is why this is `>=` and not `>`: `currentWeek >= deadline` is exactly
+ * `landingWeek > deadline`, the same test lib/free-agency.ts applies to
+ * `stampWeek`. Do NOT "fix" it to `>` — that reopens trading during the
+ * deadline week and lands those trades a week past it.
  */
 export function isTradeDeadlinePassed(
   league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined,
@@ -46,6 +54,35 @@ export function getLeague(leagueId: string): LeagueRow | undefined {
   return db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
     .get();
+}
+
+/**
+ * Results-reveal gate: the highest week whose results are published for a
+ * league, or null when the gate is off (everything published).
+ */
+export function revealedMaxWeek(leagueId: string): number | null {
+  return getLeague(leagueId)?.resultsRevealedThrough ?? null;
+}
+
+/**
+ * Whether a single match's result may be shown to this viewer.
+ *
+ * Staff bypass the gate — the stream cockpit reviews results before publishing
+ * them, so admins must see an unrevealed week. Everyone else (including
+ * anonymous) is limited to the league's revealed high-water mark.
+ *
+ * Every endpoint that returns a match's scores, per-mon K/D, or replay log MUST
+ * route through this — the gate was previously copy-pasted per handler, which
+ * is exactly how /replay-summary, /pokemon and /replay.json ended up serving
+ * unrevealed results to anonymous callers.
+ */
+export function isMatchRevealed(
+  match: { leagueId: string; week: number | null },
+  user: { role: string } | null | undefined,
+): boolean {
+  if (isStaff(user)) return true;
+  const gate = revealedMaxWeek(match.leagueId);
+  return gate == null || (match.week ?? 0) <= gate;
 }
 
 /** Result of the membership-editability check — a structured ok/blocked shape
