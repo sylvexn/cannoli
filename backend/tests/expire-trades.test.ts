@@ -91,8 +91,8 @@ describe('runExpireTrades — deadline-based expiry', () => {
   test('a recent pending trade past the league deadline flips to expired', () => {
     sqlite.exec('BEGIN');
     try {
-      // currentWeek >= tradeDeadlineWeek → deadline reached.
-      const { leagueId, a, b } = setupLeague({ currentWeek: 7, tradeDeadlineWeek: 7 });
+      // currentWeek > tradeDeadlineWeek → deadline passed.
+      const { leagueId, a, b } = setupLeague({ currentWeek: 8, tradeDeadlineWeek: 7 });
       const t = insertTrade(leagueId, a, b, { proposedAt: RECENT });
       runExpireTrades();
       expect(statusOf(t.id)).toBe('expired');
@@ -101,13 +101,12 @@ describe('runExpireTrades — deadline-based expiry', () => {
     }
   });
 
-  test('the week BEFORE the deadline stays open — it lands exactly on it', () => {
+  test('the deadline week itself stays open — it is the last week to trade', () => {
     sqlite.exec('BEGIN');
     try {
-      // The deadline bounds the week a trade LANDS in, and an approval lands the
-      // following week, so week 6 is the last actionable week for a week-7
-      // deadline. Expiring here would close trading a full week early.
-      const { leagueId, a, b } = setupLeague({ currentWeek: 6, tradeDeadlineWeek: 7 });
+      // Week 7 of a week-7 deadline is still tradeable; expiring here closes
+      // trading a full week early (that trade lands in week 8, which is fine).
+      const { leagueId, a, b } = setupLeague({ currentWeek: 7, tradeDeadlineWeek: 7 });
       const t = insertTrade(leagueId, a, b, { proposedAt: RECENT });
       runExpireTrades();
       expect(statusOf(t.id)).toBe('pending');
@@ -175,25 +174,31 @@ describe('runExpireTrades — resolved trades untouched + idempotency', () => {
 
 /**
  * The rules doc states one deadline for BOTH trades and free agency ("The
- * deadline for Trades and Free Agencies is Week 7"), but the two gates are
- * written in different shapes and live in different files:
+ * deadline for Trades and Free Agencies is Week 7") and the deadline week is
+ * INCLUSIVE — it is the last week you can act, not the week the market is
+ * already shut. The two gates live in different files:
  *
- *   trades → lib/queries.ts     isTradeDeadlinePassed: currentWeek >= deadline
- *   FA     → lib/free-agency.ts stampWeek > faDeadline  (stampWeek = landing week)
+ *   trades → lib/queries.ts     isTradeDeadlinePassed: currentWeek > deadline
+ *   FA     → lib/free-agency.ts week > faDeadline || stampWeek > faDeadline + 1
  *
- * They are equivalent only because an approval lands on currentWeek + 1. This
- * pins that equivalence so a future edit to either shape can't silently open
- * one market a week longer than the other.
+ * This pins them together so a future edit to either can't silently open one
+ * market a week longer than the other.
  */
 describe('trade deadline agrees with the free-agency deadline', () => {
-  const landingWeek = (currentWeek: number) => Math.max(1, currentWeek + 1);
+  // FA gate shape. stampWeek is the landing week: currentWeek for a direct
+  // staff pickup, currentWeek + 1 for an approved claim.
+  const faClosed = (currentWeek: number, deadline: number, stampWeek: number) =>
+    currentWeek > deadline || stampWeek > deadline + 1;
 
   test('same open/closed answer for every week, at every deadline', () => {
     for (const deadline of [1, 5, 7, 12]) {
       for (let currentWeek = 0; currentWeek <= 20; currentWeek++) {
         const tradesClosed = isTradeDeadlinePassed({ currentWeek, tradeDeadlineWeek: deadline });
-        const faClosed = landingWeek(currentWeek) > deadline;
-        expect(`w${currentWeek}/d${deadline}:${tradesClosed}`).toBe(`w${currentWeek}/d${deadline}:${faClosed}`);
+        for (const stampWeek of [currentWeek, currentWeek + 1]) {
+          const fa = faClosed(currentWeek, deadline, stampWeek);
+          expect(`w${currentWeek}/s${stampWeek}/d${deadline}:${tradesClosed}`)
+            .toBe(`w${currentWeek}/s${stampWeek}/d${deadline}:${fa}`);
+        }
       }
     }
   });

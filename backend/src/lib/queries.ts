@@ -33,20 +33,18 @@ export function isLeaguePhase(v: unknown): v is LeaguePhase {
  * "no deadline"). Shared by the trade routes and the expire-trades job so the
  * two never disagree about when trading closes.
  *
- * `tradeDeadlineWeek` bounds the week a trade may LAND in, not the week it is
- * signed off in — approvals take effect the following week (resolveEffectiveWeek
- * defaults to currentWeek + 1), so the last week you can act is deadline - 1.
- * That is why this is `>=` and not `>`: `currentWeek >= deadline` is exactly
- * `landingWeek > deadline`, the same test lib/free-agency.ts applies to
- * `stampWeek`. Do NOT "fix" it to `>` — that reopens trading during the
- * deadline week and lands those trades a week past it.
+ * `tradeDeadlineWeek` is the LAST week trades may be made — week 7 deadline
+ * means week 7 still trades, week 8 does not. Approvals take effect the
+ * following week (resolveEffectiveWeek defaults to currentWeek + 1), so a
+ * deadline-week trade legitimately LANDS in deadline + 1; the landing bound in
+ * routes/trades.ts and lib/free-agency.ts is deadline + 1 for that reason.
  */
 export function isTradeDeadlinePassed(
   league: { tradeDeadlineWeek: number; currentWeek: number } | null | undefined,
 ): boolean {
   if (!league) return false;
   if (league.tradeDeadlineWeek <= 0) return false;
-  return league.currentWeek >= league.tradeDeadlineWeek;
+  return league.currentWeek > league.tradeDeadlineWeek;
 }
 
 /** Fetch a single league by id, or undefined if not found. */

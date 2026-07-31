@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'bun:test';
 import {
   validateTrade, pointDelta, tradePointSummary,
-  isTradeDeadlinePassed, tradeLandingWeek,
+  isTradeDeadlinePassed,
 } from './trade-validation';
 import type { Player, RosterPokemon } from '@/lib/types';
 
@@ -183,26 +183,25 @@ describe('tradePointSummary', () => {
 
 /**
  * Deadline gate. The league rule is "the deadline for Trades and Free Agencies
- * is Week 7", and an approval lands the FOLLOWING week — so week 6 is the last
- * week you can act, and a week-6 approval lands exactly on the week-7 deadline.
+ * is Week 7", and the deadline week is INCLUSIVE — week 7 is the last week you
+ * can trade, not the week trading is already over.
  *
  * These assertions are the frontend half of a cross-package invariant: the
- * backend's isTradeDeadlinePassed (lib/queries.ts, `currentWeek >= deadline`)
- * and the FA gate (lib/free-agency.ts, `stampWeek > deadline`) must agree with
- * this for every week, or the market UI offers trades the API rejects.
+ * backend's isTradeDeadlinePassed (lib/queries.ts, `currentWeek > deadline`)
+ * must agree with this for every week, or the market UI and the API disagree
+ * about who can trade.
  */
 describe('trade deadline', () => {
   const DEADLINE = 7;
 
-  test('the last actionable week lands exactly on the deadline week', () => {
-    expect(tradeLandingWeek(6)).toBe(DEADLINE);
+  test('the deadline week itself is still open', () => {
     expect(isTradeDeadlinePassed(6, DEADLINE)).toBe(false);
+    expect(isTradeDeadlinePassed(7, DEADLINE)).toBe(false);
   });
 
-  test('closes during the deadline week itself (a trade there would land past it)', () => {
-    expect(tradeLandingWeek(7)).toBe(8);
-    expect(isTradeDeadlinePassed(7, DEADLINE)).toBe(true);
+  test('closes the week after the deadline', () => {
     expect(isTradeDeadlinePassed(8, DEADLINE)).toBe(true);
+    expect(isTradeDeadlinePassed(9, DEADLINE)).toBe(true);
   });
 
   test('open in every week before that', () => {
@@ -211,15 +210,9 @@ describe('trade deadline', () => {
     }
   });
 
-  test('matches the backend rule `currentWeek >= deadline` for every week', () => {
+  test('matches the backend rule `currentWeek > deadline` for every week', () => {
     for (let w = 0; w <= 20; w++) {
-      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(w >= DEADLINE);
-    }
-  });
-
-  test('matches the FA rule `landingWeek > deadline` for every week', () => {
-    for (let w = 0; w <= 20; w++) {
-      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(tradeLandingWeek(w) > DEADLINE);
+      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(w > DEADLINE);
     }
   });
 

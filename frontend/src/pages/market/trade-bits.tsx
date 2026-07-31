@@ -17,7 +17,6 @@ import { pokemonRoute } from '@/lib/pokemon-route';
 import type { Player, Trade } from '@/lib/types';
 import {
   isTradeDeadlinePassed,
-  tradeLandingWeek,
   tradePointSummary,
   validateTrade,
   type ValidationIssue,
@@ -38,10 +37,9 @@ export const TRADE_STATUS: Record<Trade['status'], { label: string; className: s
 
 export function DeadlineBadge({ deadlineWeek, currentWeek }: { deadlineWeek: number; currentWeek: number }) {
   const passed = isTradeDeadlinePassed(currentWeek, deadlineWeek);
-  // Count down to the last week you can ACT, not to the deadline week itself.
-  // An approval lands the following week, so week 6 is the last chance to make
-  // a week-7 deadline — showing "1w left" there read as "week 7 still works".
-  const weeksLeft = deadlineWeek - tradeLandingWeek(currentWeek);
+  // The deadline week itself is still tradeable, so week 7 of a week-7 deadline
+  // is "last week to trade", not "0w left".
+  const weeksLeft = deadlineWeek - currentWeek;
   if (passed) {
     return (
       <Badge variant="outline" className="text-loss border-loss/30 bg-loss/10 gap-1.5 px-2.5 py-1">
