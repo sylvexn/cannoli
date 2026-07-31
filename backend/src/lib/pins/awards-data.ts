@@ -13,12 +13,14 @@
  *                          owner. Used for Pokemon-headlined awards (MVP,
  *                          most KOs, best nickname, etc).
  *
- * `mintManualPins` is the orchestrator. Idempotent: every insert is
- * INSERT OR IGNORE on (user_id, pin_def_id, season_id) — re-running on a
- * fully-seeded DB simply skips. Cannoli + Cynthia overlap with the auto
- * minter; the manual rows here are the source of truth and will overwrite
- * what the auto job picked when the data disagrees (we delete the auto pins
- * for those slugs before remint to keep things clean).
+ * `mintManualPins` is the orchestrator. Every row mints with `source =
+ * 'manual'` (human-authoritative — see migration 0069), and every insert is
+ * INSERT OR IGNORE on the `pins_identity_idx` unique index (user_id,
+ * pin_def_id, season_id, league_id) — re-running on a fully-seeded DB simply
+ * skips. Cannoli + Cynthia + Garchomp overlap with the auto minter; the
+ * manual rows here are the source of truth and will overwrite what the auto
+ * job picked when the data disagrees (we delete the auto (`source='auto'`)
+ * pins for those slugs, scoped per-league, before remint to keep things clean).
  */
 import { Database } from 'bun:sqlite';
 
@@ -198,19 +200,26 @@ export interface ManualMintSummary {
  *
  * Resolution per row:
  *   - `username` form: look up users by username (case-insensitive), file
- *     pin against (userId, pinDefId, seasonId) with metadata { leagueId? }.
+ *     pin against (userId, pinDefId, seasonId, leagueId) with metadata
+ *     { leagueId? } (leagueId is also written to the real `league_id` column).
  *   - `pokemon` form: find the team in `leagueId` whose roster contains the
  *     given pokemon name (exact-match — DB stores Mega prefix and form
  *     suffix literally), then file pin against the team's owner. Skipped
  *     with a warning when the team has no userId (orphan import).
  *
- * Idempotent: INSERT OR IGNORE against the (user_id, pin_def_id, season_id)
- * unique index. Re-running on a seeded DB is a no-op for existing rows.
+ * Every row here mints with `source = 'manual'` — these lists are
+ * human-curated, so the auto minters (auto-award.ts / archive-mint.ts) will
+ * never delete them or mint a competing row over them.
+ *
+ * Idempotent: INSERT OR IGNORE against the `pins_identity_idx` unique index
+ * on (user_id, pin_def_id, season_id, league_id). Re-running on a seeded DB
+ * is a no-op for existing rows.
  *
  * Before minting, this clears the auto-award rows for the slugs that overlap
  * (cannoli, cynthia, garchomp) for the relevant season — the manual list is
  * the source of truth, so we want the auto job's guesses out of the way.
- * Scoped by season_id + awarded_by IS NULL so admin-minted pins survive.
+ * Scoped by season_id + league_id + source = 'auto' so admin-minted (manual)
+ * pins always survive.
  */
 export function mintManualPins(
   sqlite: Database,
@@ -244,14 +253,14 @@ export function mintManualPins(
     `SELECT id FROM pin_definitions WHERE id = ?`,
   );
   const insertPin = sqlite.prepare(
-    `INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, league_id, awarded_by, source, metadata)
+     VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
   );
 
   // Collect the distinct leagues referenced by overlap-slug awards. We'll do
-  // a league-scoped clear (by metadata.teamId, matching auto-award.ts and
-  // archive-mint.ts) so a bulk-mint for one league can't delete sibling
-  // leagues' auto-pins that share the same season_id.
+  // a league-scoped clear (by the real league_id column, not metadata) so a
+  // bulk-mint for one league can't delete sibling leagues' auto-pins that
+  // share the same season_id.
   const overlap = new Set(['cannoli', 'cynthia', 'garchomp']);
   const overlapLeagues = new Set<string>(
     awards
@@ -259,23 +268,27 @@ export function mintManualPins(
       .map(a => a.leagueId as string),
   );
 
+  // Keyed on `source = 'auto'` (never `awarded_by`, which is provenance
+  // only) and the real `league_id` column. The old scoping — `awarded_by IS
+  // NULL AND json_extract(metadata,'$.teamId') IN (...)` — silently matched
+  // nothing for every username-form award, whose metadata only ever carried
+  // `leagueId`, not `teamId`.
   const clearOverlapByLeague = sqlite.prepare(
     `DELETE FROM pins
       WHERE pin_def_id IN ('cannoli', 'cynthia', 'garchomp')
         AND season_id = ?
-        AND awarded_by IS NULL
-        AND json_extract(metadata, '$.teamId') IN (
-          SELECT id FROM teams WHERE league_id = ?
-        )`,
+        AND source = 'auto'
+        AND league_id = ?`,
   );
 
   // Wrap the clear + all inserts in a single transaction so a crash between
   // them cannot leave the season's pins in a half-deleted state.
   sqlite.transaction(() => {
     // Clear overlapping auto-pins per league so the manual list takes over.
-    // Only touches awarded_by IS NULL (auto rows). Scoped by metadata.teamId
-    // to match the pattern used by runAutoAwards and mintArchivePins — avoids
-    // stomping on sibling-league auto-pins for coaches in multiple leagues.
+    // Only touches source='auto' rows — matches the pattern used by
+    // runAutoAwards and mintArchivePins — avoids stomping on sibling-league
+    // auto-pins for coaches in multiple leagues, and never touches a
+    // human-authoritative manual pin.
     for (const leagueId of overlapLeagues) {
       clearOverlapByLeague.run(seasonId, leagueId);
     }
@@ -327,6 +340,7 @@ export function mintManualPins(
         userId,
         a.pin,
         seasonId,
+        a.leagueId ?? null,
         awardedBy,
         Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null,
       );
