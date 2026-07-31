@@ -64,6 +64,7 @@ const GLOBAL_PAGES = [
   { path: '/archive', label: 'Season Archive', icon: Archive },
   { path: '/tiers', label: 'Tier List', icon: ListTree },
   { path: '/speed-tiers', label: 'Speed Tiers', icon: Gauge },
+  { path: '/badges', label: 'Badges', icon: Award },
   { path: '/rules', label: 'Rules', icon: ScrollText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
