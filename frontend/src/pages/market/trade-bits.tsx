@@ -16,13 +16,15 @@ import { useLeague } from '@/lib/league-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import type { Player, Trade } from '@/lib/types';
 import {
+  isTradeDeadlinePassed,
+  tradeLandingWeek,
   tradePointSummary,
   validateTrade,
   type ValidationIssue,
   type SidePoints,
 } from '@/lib/trade-validation';
 
-// ── Status config ───────────────────────────────────────────────────────────
+// Status config
 
 export const TRADE_STATUS: Record<Trade['status'], { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'text-draw border-draw/30 bg-draw/10' },
@@ -32,14 +34,14 @@ export const TRADE_STATUS: Record<Trade['status'], { label: string; className: s
   expired: { label: 'Expired', className: 'text-text-muted border-border-subtle bg-surface-overlay/50' },
 };
 
-// ── Deadline badge ────────────────────────────────────────────────────────────
+// Deadline badge
 
 export function DeadlineBadge({ deadlineWeek, currentWeek }: { deadlineWeek: number; currentWeek: number }) {
-  // Match the backend's deadline rule (isTradeDeadlinePassed: currentWeek >= deadline).
-  // Using `>` here let the badge show "open" during the deadline week itself while
-  // the backend was already rejecting trades.
-  const passed = currentWeek >= deadlineWeek;
-  const weeksLeft = deadlineWeek - currentWeek;
+  const passed = isTradeDeadlinePassed(currentWeek, deadlineWeek);
+  // Count down to the last week you can ACT, not to the deadline week itself.
+  // An approval lands the following week, so week 6 is the last chance to make
+  // a week-7 deadline — showing "1w left" there read as "week 7 still works".
+  const weeksLeft = deadlineWeek - tradeLandingWeek(currentWeek);
   if (passed) {
     return (
       <Badge variant="outline" className="text-loss border-loss/30 bg-loss/10 gap-1.5 px-2.5 py-1">
@@ -52,12 +54,14 @@ export function DeadlineBadge({ deadlineWeek, currentWeek }: { deadlineWeek: num
     <Badge variant="outline" className="text-neon border-neon/30 bg-neon/10 gap-1.5 px-2.5 py-1">
       <Clock size={12} />
       Trade deadline: Week {deadlineWeek}
-      <span className="text-text-muted">· {weeksLeft}w left</span>
+      <span className="text-text-muted">
+        · {weeksLeft <= 0 ? 'last week to trade' : `${weeksLeft}w left`}
+      </span>
     </Badge>
   );
 }
 
-// ── Mon chip ──────────────────────────────────────────────────────────────────
+// Mon chip
 
 /** Sprite + name link + optional tier badge. Sprite opens the side card. */
 export function MonChip({
@@ -99,7 +103,7 @@ export function MonChip({
   );
 }
 
-// ── Trade summary (two sides) ─────────────────────────────────────────────────
+// Trade summary (two sides)
 
 function tierOf(team: Player | null, name: string): number {
   return team?.roster.find(m => m.name === name)?.tier ?? 0;
@@ -182,7 +186,7 @@ function TeamRow({ team }: { team: Player }) {
   );
 }
 
-// ── Legality meter ────────────────────────────────────────────────────────────
+// Legality meter
 
 /**
  * Live legality + points-impact panel for the composer. Self-contained:

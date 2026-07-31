@@ -1,5 +1,8 @@
 import { test, expect, describe } from 'bun:test';
-import { validateTrade, pointDelta, tradePointSummary } from './trade-validation';
+import {
+  validateTrade, pointDelta, tradePointSummary,
+  isTradeDeadlinePassed, tradeLandingWeek,
+} from './trade-validation';
 import type { Player, RosterPokemon } from '@/lib/types';
 
 /**
@@ -175,5 +178,53 @@ describe('tradePointSummary', () => {
     const s = tradePointSummary(a, b, new Set(['Spare']), new Set(['Garchomp']), 110);
     expect(s.proposer.after).toBe(122);
     expect(s.proposer.over).toBe(true);
+  });
+});
+
+/**
+ * Deadline gate. The league rule is "the deadline for Trades and Free Agencies
+ * is Week 7", and an approval lands the FOLLOWING week — so week 6 is the last
+ * week you can act, and a week-6 approval lands exactly on the week-7 deadline.
+ *
+ * These assertions are the frontend half of a cross-package invariant: the
+ * backend's isTradeDeadlinePassed (lib/queries.ts, `currentWeek >= deadline`)
+ * and the FA gate (lib/free-agency.ts, `stampWeek > deadline`) must agree with
+ * this for every week, or the market UI offers trades the API rejects.
+ */
+describe('trade deadline', () => {
+  const DEADLINE = 7;
+
+  test('the last actionable week lands exactly on the deadline week', () => {
+    expect(tradeLandingWeek(6)).toBe(DEADLINE);
+    expect(isTradeDeadlinePassed(6, DEADLINE)).toBe(false);
+  });
+
+  test('closes during the deadline week itself (a trade there would land past it)', () => {
+    expect(tradeLandingWeek(7)).toBe(8);
+    expect(isTradeDeadlinePassed(7, DEADLINE)).toBe(true);
+    expect(isTradeDeadlinePassed(8, DEADLINE)).toBe(true);
+  });
+
+  test('open in every week before that', () => {
+    for (const w of [1, 2, 3, 4, 5]) {
+      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(false);
+    }
+  });
+
+  test('matches the backend rule `currentWeek >= deadline` for every week', () => {
+    for (let w = 0; w <= 20; w++) {
+      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(w >= DEADLINE);
+    }
+  });
+
+  test('matches the FA rule `landingWeek > deadline` for every week', () => {
+    for (let w = 0; w <= 20; w++) {
+      expect(isTradeDeadlinePassed(w, DEADLINE)).toBe(tradeLandingWeek(w) > DEADLINE);
+    }
+  });
+
+  test('a non-positive deadline means no deadline at all', () => {
+    expect(isTradeDeadlinePassed(99, 0)).toBe(false);
+    expect(isTradeDeadlinePassed(99, -1)).toBe(false);
   });
 });

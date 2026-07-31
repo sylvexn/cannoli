@@ -13,6 +13,7 @@ import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { api, type ApiTradeBlockListing, type ApiTrade } from '@/lib/api';
 import type { Trade } from '@/lib/types';
+import { isTradeDeadlinePassed } from '@/lib/trade-validation';
 import { Button } from '@/components/ui/button';
 import { useMarket } from './index';
 import { TheBlock } from './the-block';
@@ -31,16 +32,18 @@ export function TradeDeskPage() {
   const { actingTeam } = useMarket();
 
   const tradeDeadlineWeek = league.season.tradeDeadlineWeek ?? 7;
-  const deadlinePassed = league.season.currentWeek > tradeDeadlineWeek;
+  // Shared with the badge and the backend — this used to be a private `>` that
+  // left the Block offering trades the backend would reject during week 7.
+  const deadlinePassed = isTradeDeadlinePassed(league.season.currentWeek, tradeDeadlineWeek);
 
-  // ── Data: block listings ────────────────────────────────────────────────
+  // Data: block listings
   const [listings, setListings] = useState<ApiTradeBlockListing[]>([]);
   const reloadListings = useCallback(() => {
     api.getTradeBlock(league.id).then(setListings).catch(() => {});
   }, [league.id]);
   useEffect(() => { reloadListings(); }, [reloadListings]);
 
-  // ── Data: live trade proposals (pending/awaiting/rejected/expired) ───────
+  // Data: live trade proposals (pending/awaiting/rejected/expired)
   const [apiTrades, setApiTrades] = useState<ApiTrade[]>([]);
   const reloadTrades = useCallback(() => {
     api.getTrades(league.id).then(setApiTrades).catch(() => {});
@@ -48,11 +51,13 @@ export function TradeDeskPage() {
   useEffect(() => { reloadTrades(); }, [reloadTrades]);
 
   // Merge live trade rows with accepted FA/trade transactions into one list.
-  // Accepted trades arrive as transactions (to avoid double-counting the
-  // accepted live rows), everything else comes straight from the trade rows.
+  // APPLIED trades arrive as transactions (to avoid double-counting the
+  // accepted live rows), everything else comes straight from the trade rows —
+  // including trades approved for a FUTURE week, which have no transaction row
+  // yet and would otherwise vanish from both lists until they take effect.
   const trades: Trade[] = useMemo(() => {
     const fromApi: Trade[] = apiTrades
-      .filter(t => t.status !== 'accepted')
+      .filter(t => t.status !== 'accepted' || !t.appliedAt)
       .map(t => ({
         id: t.id,
         week: t.week,
@@ -63,6 +68,8 @@ export function TradeDeskPage() {
         requesting: t.requesting,
         proposedAt: t.proposedAt || '',
         resolvedAt: t.resolvedAt || '',
+        effectiveWeek: t.effectiveWeek,
+        appliedAt: t.appliedAt,
       }));
 
     // Trades map 1:1 — each accepted-trade transaction already carries both
@@ -117,7 +124,7 @@ export function TradeDeskPage() {
     return [...fromApi, ...fromTrades, ...fromFa];
   }, [apiTrades, transactions]);
 
-  // ── Composer ─────────────────────────────────────────────────────────────
+  // Composer
   const [composer, setComposer] = useState<ComposerState | null>(null);
   const closeComposer = useCallback(() => {
     setComposer(null);

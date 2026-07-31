@@ -20,6 +20,31 @@
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
 import type { Player, RosterPokemon } from '@/lib/types';
 
+/**
+ * The week an approval LANDS in. Trades and FA pickups take effect the week
+ * AFTER they are signed off (backend: resolveEffectiveWeek in
+ * lib/scheduled-transactions.ts), so an admin approving during week 6 is
+ * approving *for* week 7.
+ */
+export function tradeLandingWeek(currentWeek: number): number {
+  return Math.max(1, currentWeek + 1);
+}
+
+/**
+ * Whether trading is closed, mirroring the backend (isTradeDeadlinePassed in
+ * lib/queries.ts, and the FA gate in lib/free-agency.ts).
+ *
+ * `tradeDeadlineWeek` bounds the week a trade may LAND in, not the week it is
+ * signed off in — so the last week you can actually act is deadlineWeek - 1.
+ * That makes the backend's `currentWeek >= deadline` exactly this landing-week
+ * test; keep the two spelled the same way so they can't drift again. A
+ * non-positive deadline means "no deadline".
+ */
+export function isTradeDeadlinePassed(currentWeek: number, deadlineWeek: number): boolean {
+  if (deadlineWeek <= 0) return false;
+  return tradeLandingWeek(currentWeek) > deadlineWeek;
+}
+
 export interface ValidationIssue {
   /** Which side the issue lands on. */
   side: 'offering' | 'requesting';
