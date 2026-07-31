@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import * as LucideIcons from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { formatPinMetadata } from '@/lib/pin-metadata-schema';
 
@@ -24,14 +24,17 @@ interface PinProps {
   def: PinDefinitionLike;
   /** xs (12px inline icon), sm (24px circular), lg (48px trophy w/ glint). */
   size?: PinSize;
-  /** Season the pin was earned in — rendered as "Earned S{n}" in the tooltip
-   *  when present. Pin contexts no longer surface relative-time strings. */
+  /** Season the pin was earned in — rendered as "Earned S{n}" in the detail
+   *  card when present. Pin contexts no longer surface relative-time strings. */
   seasonId?: number | null;
-  /** Award metadata blob (pokemon/nickname/leagueId/etc.) — rendered per
-   *  the per-pin schema in `lib/pin-metadata-schema.ts`. */
+  /** League the pin is filed against (pins.leagueId, not metadata) — needed
+   *  to turn team references inside the metadata detail into real links. */
+  leagueId?: string | null;
+  /** Award metadata blob (pokemon/nickname/teamId/kills/etc.) — rendered per
+   *  the per-pin schema in `lib/pin-metadata-schema.tsx`. */
   metadata?: Record<string, unknown> | null;
   className?: string;
-  /** Hide the tooltip wrapper (e.g., when the parent already provides one). */
+  /** Hide the detail card wrapper (e.g., when the parent already provides one). */
   noTooltip?: boolean;
 }
 
@@ -45,7 +48,9 @@ function resolveIcon(name: string): LucideIconComponent {
   return LUCIDE_MAP[name] ?? LUCIDE_MAP.Award ?? LUCIDE_MAP.Trophy!;
 }
 
-export const Pin = memo(function Pin({ def, size = 'sm', seasonId, metadata, className, noTooltip }: PinProps) {
+export const Pin = memo(function Pin({
+  def, size = 'sm', seasonId, leagueId, metadata, className, noTooltip,
+}: PinProps) {
   const Icon = resolveIcon(def.iconName);
   const color = def.color || '#fbbf24';
 
@@ -103,41 +108,54 @@ export const Pin = memo(function Pin({ def, size = 'sm', seasonId, metadata, cla
 
   if (noTooltip) return body;
 
+  // Popover (not Tooltip) — the metadata detail can contain real links
+  // (Pokemon / team), and hover-only Tooltips can't host clickable content.
+  // Mirrors the openOnHover pattern used by TeamLink/PokemonLink/CoachLink.
   return (
-    <TooltipProvider delay={300}>
-      <Tooltip>
-        <TooltipTrigger className="inline-flex cursor-default">
-          {body}
-        </TooltipTrigger>
-        <TooltipContent>
-          <PinTooltipBody def={def} seasonId={seasonId} metadata={metadata} />
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Popover>
+      <PopoverTrigger
+        nativeButton={false}
+        openOnHover
+        delay={300}
+        closeDelay={120}
+        render={<span className="inline-flex cursor-default" />}
+      >
+        {body}
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="center"
+        sideOffset={6}
+        className="w-auto max-w-[240px] gap-0.5 p-2.5"
+      >
+        <PinDetailBody def={def} seasonId={seasonId} leagueId={leagueId} metadata={metadata} />
+      </PopoverContent>
+    </Popover>
   );
 });
 
-function PinTooltipBody({
-  def, seasonId, metadata,
+function PinDetailBody({
+  def, seasonId, leagueId, metadata,
 }: {
   def: PinDefinitionLike;
   seasonId?: number | null;
+  leagueId?: string | null;
   metadata?: Record<string, unknown> | null;
 }) {
-  const detail = formatPinMetadata(def.id, metadata ?? null);
+  const detail = formatPinMetadata(def.id, metadata ?? null, leagueId);
   return (
-    <div className="flex flex-col gap-0.5 max-w-[220px]">
+    <div className="flex flex-col gap-0.5">
       <div className="font-mono text-[11px] font-bold uppercase tracking-wide" style={{ color: def.color }}>
         {def.name}
       </div>
       {def.description && (
-        <div className="text-[11px] leading-snug opacity-90">{def.description}</div>
+        <div className="text-[11px] leading-snug text-text-secondary">{def.description}</div>
       )}
-      {detail && (
-        <div className="text-[11px] leading-snug opacity-90 italic">{detail}</div>
+      {detail != null && (
+        <div className="text-[11px] leading-snug text-text-secondary italic">{detail}</div>
       )}
       {seasonId != null && (
-        <div className="text-[10px] opacity-60 mt-0.5">Earned S{seasonId}</div>
+        <div className="text-[10px] text-text-muted mt-0.5">Earned S{seasonId}</div>
       )}
     </div>
   );
