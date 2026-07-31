@@ -483,7 +483,7 @@ export const matchRoutes = new Elysia()
     const hasFullScore = match.homeScore !== null && match.awayScore !== null;
     const flippedToCompleted = hasFullScore && match.status === 'disputed';
 
-    return tx(() => {
+    const outcome = tx(() => {
       db.update(schema.matches).set({
         warnings: null,
         status: hasFullScore ? 'completed' : match.status,
@@ -498,35 +498,43 @@ export const matchRoutes = new Elysia()
         metadata: JSON.stringify({ matchId: params.matchId }),
       }).run();
 
-      if (flippedToCompleted) {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
-
-        // If this was a playoff match, advance the bracket winner. This mirrors
-        // what recordMatchResult does on the normal result path — without it a
-        // dismissed disputed playoff match never fills the next-round slot.
-        if (match.phase === 'playoffs' && match.playoffRound) {
-          const winnerId = matchWinner({
-            winnerTeamId: match.winnerTeamId,
-            homeTeamId: match.homeTeamId,
-            awayTeamId: match.awayTeamId,
-            homeScore: match.homeScore,
-            awayScore: match.awayScore,
+      // If this was a playoff match, advance the bracket winner. This mirrors
+      // what recordMatchResult does on the normal result path — without it a
+      // dismissed disputed playoff match never fills the next-round slot.
+      if (flippedToCompleted && match.phase === 'playoffs' && match.playoffRound) {
+        const winnerId = matchWinner({
+          winnerTeamId: match.winnerTeamId,
+          homeTeamId: match.homeTeamId,
+          awayTeamId: match.awayTeamId,
+          homeScore: match.homeScore,
+          awayScore: match.awayScore,
+        });
+        if (winnerId) {
+          const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
+          advancePlayoffWinner({
+            matchId: params.matchId,
+            leagueId: match.leagueId,
+            playoffRound: match.playoffRound,
+            winnerId,
+            winnerSeed,
           });
-          if (winnerId) {
-            const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
-            advancePlayoffWinner({
-              matchId: params.matchId,
-              leagueId: match.leagueId,
-              playoffRound: match.playoffRound,
-              winnerId,
-              winnerSeed,
-            });
-          }
         }
       }
 
       return { success: true };
     });
+
+    // Auto-award per-match pins — AFTER the match write commits, not inside
+    // its transaction. A throw here must never unwind the status flip above.
+    if (flippedToCompleted) {
+      try {
+        runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
+      } catch (err) {
+        console.error(`[dismiss-warnings] runAutoAwards failed for ${params.matchId}:`, err);
+      }
+    }
+
+    return outcome;
   })
 
   // Void match result (clear scores + per-pokemon, back to scheduled)

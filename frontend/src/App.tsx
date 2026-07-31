@@ -17,6 +17,7 @@ import { ChangePasswordPage } from '@/pages/change-password';
 import { HomePage } from '@/pages/home';
 import { RulesPage } from '@/pages/rules';
 import { TierListPage } from '@/pages/tier-list';
+import { BadgesPage } from '@/pages/badges';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
@@ -133,6 +134,7 @@ export default function App() {
               </Route>
               <Route path="rules" element={<RulesPage />} />
               <Route path="tiers" element={<TierListPage />} />
+              <Route path="badges" element={<BadgesPage />} />
               <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
 
               {/* Protected global routes */}

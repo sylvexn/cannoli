@@ -130,7 +130,7 @@ export function recordMatchResult(
       ? match.awayTeamId
       : null;
 
-  return tx(() => {
+  const outcome = tx(() => {
     // Update match
     db.update(schema.matches).set({
       homeScore,
@@ -210,15 +210,23 @@ export function recordMatchResult(
       });
     }
 
-    // Auto-award per-match pins (Kingslayer, Flawless)
-    // Idempotent — re-running on a re-record (after dismiss-warnings) will
-    // skip already-awarded rows via the unique index. Safe to run on
-    // disputed-status results too: the helpers gate on status='completed'
-    // internally, so a 'disputed' record waits until warnings clear.
-    if (newStatus === 'completed') {
-      runAutoAwards(match.leagueId, { trigger: 'match', matchId });
-    }
-
     return { ok: true, result: { status: newStatus, warnings: mergedWarnings } };
   });
+
+  // Auto-award per-match pins (Kingslayer, Flawless) — AFTER the match write
+  // commits, not inside its transaction. Idempotent — re-running on a
+  // re-record (after dismiss-warnings) will skip already-awarded rows via the
+  // unique index. Safe to run on disputed-status results too: the helpers
+  // gate on status='completed' internally, so a 'disputed' record waits until
+  // warnings clear. A throw here must never unwind the match/matchPokemon
+  // rows we just committed — best-effort, logged and swallowed.
+  if (newStatus === 'completed') {
+    try {
+      runAutoAwards(match.leagueId, { trigger: 'match', matchId });
+    } catch (err) {
+      console.error(`[match-service] runAutoAwards failed for ${matchId}:`, err);
+    }
+  }
+
+  return outcome;
 }

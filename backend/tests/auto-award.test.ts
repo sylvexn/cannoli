@@ -12,12 +12,16 @@ import {
 
 // Garchomp
 
+function grow(teamId: string, pokemon: string, kills: number, deaths = 0, teamRank: number | null = null): GarchompRow {
+  return { teamId, pokemon, kills, deaths, teamRank };
+}
+
 describe('pickGarchompWinners', () => {
   test('top kill total → single winner', () => {
     const rows: GarchompRow[] = [
-      { teamId: 'a', pokemon: 'dragapult', kills: 16 },
-      { teamId: 'b', pokemon: 'garchomp', kills: 12 },
-      { teamId: 'c', pokemon: 'gholdengo', kills: 9 },
+      grow('a', 'dragapult', 16),
+      grow('b', 'garchomp', 12),
+      grow('c', 'gholdengo', 9),
     ];
     const out = pickGarchompWinners(rows);
     expect(out).toHaveLength(1);
@@ -25,22 +29,42 @@ describe('pickGarchompWinners', () => {
     expect(out[0].kills).toBe(16);
   });
 
-  test('tie at top → multiple winners', () => {
+  test('tie at top kills, no death/rank data → exactly one winner (lowest team id)', () => {
     const rows: GarchompRow[] = [
-      { teamId: 'a', pokemon: 'dragapult', kills: 14 },
-      { teamId: 'b', pokemon: 'garchomp', kills: 14 },
-      { teamId: 'c', pokemon: 'koraidon', kills: 10 },
+      grow('b', 'garchomp', 14),
+      grow('a', 'dragapult', 14),
+      grow('c', 'koraidon', 10),
     ];
     const out = pickGarchompWinners(rows);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'b']));
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('a');
+  });
+
+  test('tie on kills → fewest deaths on that Pokemon wins', () => {
+    const rows: GarchompRow[] = [
+      grow('a', 'dragapult', 14, 5),
+      grow('b', 'garchomp', 14, 1),
+    ];
+    const out = pickGarchompWinners(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
+  });
+
+  test('tie on kills and deaths → better (lower) standings rank wins', () => {
+    const rows: GarchompRow[] = [
+      grow('a', 'dragapult', 14, 2, 3),
+      grow('b', 'garchomp', 14, 2, 1),
+    ];
+    const out = pickGarchompWinners(rows);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
   });
 
   test('case-insensitive grouping ("Garchomp" + "garchomp" coalesce)', () => {
     const rows: GarchompRow[] = [
-      { teamId: 'a', pokemon: 'Garchomp', kills: 8 },
-      { teamId: 'a', pokemon: 'garchomp', kills: 7 },
-      { teamId: 'b', pokemon: 'Dragapult', kills: 10 },
+      grow('a', 'Garchomp', 8),
+      grow('a', 'garchomp', 7),
+      grow('b', 'Dragapult', 10),
     ];
     const out = pickGarchompWinners(rows);
     // a's coalesced kills = 15 > b's 10
@@ -51,10 +75,7 @@ describe('pickGarchompWinners', () => {
   });
 
   test('zero kills total → no winners', () => {
-    const rows: GarchompRow[] = [
-      { teamId: 'a', pokemon: 'dragapult', kills: 0 },
-      { teamId: 'b', pokemon: 'garchomp', kills: 0 },
-    ];
+    const rows: GarchompRow[] = [grow('a', 'dragapult', 0), grow('b', 'garchomp', 0)];
     expect(pickGarchompWinners(rows)).toEqual([]);
   });
 
@@ -65,8 +86,11 @@ describe('pickGarchompWinners', () => {
 
 // Cannoli
 
-function rec(teamId: string, userId: number | null, wins: number, losses: number, diff: number, played = wins + losses): CannoliRecord {
-  return { teamId, userId, wins, losses, diff, played };
+function rec(
+  teamId: string, userId: number | null, wins: number, losses: number, diff: number,
+  played = wins + losses, standingsRank = 99,
+): CannoliRecord {
+  return { teamId, userId, wins, losses, diff, played, standingsRank };
 }
 
 describe('pickCannoliWinners', () => {
@@ -90,14 +114,14 @@ describe('pickCannoliWinners', () => {
     expect(out[0].teamId).toBe('b');
   });
 
-  test('tie on wins AND diff → split (multiple winners)', () => {
+  test('tie on wins AND diff → canonical standings order (standingsRank) picks one', () => {
     const out = pickCannoliWinners([
-      rec('a', 1, 7, 3, 12),
-      rec('b', 2, 7, 3, 12),
+      rec('a', 1, 7, 3, 12, undefined, 2),
+      rec('b', 2, 7, 3, 12, undefined, 1), // better standingsRank
       rec('c', 3, 4, 6, 0),
     ]);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'b']));
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
   });
 
   test('teams with no games played are excluded', () => {
@@ -113,7 +137,7 @@ describe('pickCannoliWinners', () => {
 // Cynthia (streak helpers)
 
 function m(home: string, away: string, hs: number | null, as: number | null, forfeitedBy?: 'home' | 'away' | 'both' | null): StreakMatch {
-  return { homeTeamId: home, awayTeamId: away, homeScore: hs, awayScore: as, forfeitedBy: forfeitedBy ?? null };
+  return { homeTeamId: home, awayTeamId: away, homeScore: hs, awayScore: as, winnerTeamId: null, forfeitedBy: forfeitedBy ?? null };
 }
 
 describe('computeStreak', () => {
@@ -167,36 +191,54 @@ describe('computeStreak', () => {
     ];
     expect(computeStreak(matches, 'a')).toBe(3);
   });
+
+  test('a full-health forfeit (equal score, winner flag) extends the streak', () => {
+    const matches: StreakMatch[] = [
+      { homeTeamId: 'a', awayTeamId: 'x', homeScore: 5, awayScore: 0, winnerTeamId: null },
+      { homeTeamId: 'a', awayTeamId: 'y', homeScore: 2, awayScore: 2, winnerTeamId: 'a' }, // forfeit win
+    ];
+    expect(computeStreak(matches, 'a')).toBe(2);
+  });
 });
 
 describe('pickCynthiaWinners', () => {
   test('threshold min=2 → top streak of 1 yields no winners', () => {
     const streaks: CynthiaStreak[] = [
-      { teamId: 'a', userId: 1, best: 1 },
-      { teamId: 'b', userId: 2, best: 1 },
+      { teamId: 'a', userId: 1, best: 1, teamRank: null },
+      { teamId: 'b', userId: 2, best: 1, teamRank: null },
     ];
     expect(pickCynthiaWinners(streaks, 2)).toEqual([]);
   });
 
   test('threshold min=2 → top streak of 2 returns winners', () => {
     const streaks: CynthiaStreak[] = [
-      { teamId: 'a', userId: 1, best: 2 },
-      { teamId: 'b', userId: 2, best: 1 },
+      { teamId: 'a', userId: 1, best: 2, teamRank: null },
+      { teamId: 'b', userId: 2, best: 1, teamRank: null },
     ];
     const out = pickCynthiaWinners(streaks, 2);
     expect(out).toHaveLength(1);
     expect(out[0].teamId).toBe('a');
   });
 
-  test('multiple-team tie at top → all returned', () => {
+  test('multiple-team tie at top → better standings rank wins outright', () => {
     const streaks: CynthiaStreak[] = [
-      { teamId: 'a', userId: 1, best: 4 },
-      { teamId: 'b', userId: 2, best: 4 },
-      { teamId: 'c', userId: 3, best: 3 },
+      { teamId: 'a', userId: 1, best: 4, teamRank: 3 },
+      { teamId: 'b', userId: 2, best: 4, teamRank: 1 },
+      { teamId: 'c', userId: 3, best: 3, teamRank: 2 },
     ];
     const out = pickCynthiaWinners(streaks, 2);
-    expect(out).toHaveLength(2);
-    expect(new Set(out.map(w => w.teamId))).toEqual(new Set(['a', 'b']));
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('b');
+  });
+
+  test('multiple-team tie, no rank data → falls back to lowest team id', () => {
+    const streaks: CynthiaStreak[] = [
+      { teamId: 'b', userId: 2, best: 4, teamRank: null },
+      { teamId: 'a', userId: 1, best: 4, teamRank: null },
+    ];
+    const out = pickCynthiaWinners(streaks, 2);
+    expect(out).toHaveLength(1);
+    expect(out[0].teamId).toBe('a');
   });
 
   test('empty input → no winners', () => {

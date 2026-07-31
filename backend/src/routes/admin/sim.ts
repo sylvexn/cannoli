@@ -36,6 +36,9 @@ import { simulateMatch } from '../../lib/sim/simulate-match';
 import { recordMatchResult } from '../../lib/match-service';
 import { buildSimWorld, DEFAULT_SIM_SEED } from '../../lib/sim/build-world';
 import { applyDueTransactions } from '../../lib/scheduled-transactions';
+import { runAutoAwards } from '../../lib/pins/auto-award';
+import { mintArchivePins } from '../../lib/pins/archive-mint';
+import { assignFinishPositions } from '../../../scripts/import-xlsx';
 
 const MIGRATIONS_DIR = resolve(import.meta.dir, '../../../drizzle');
 const SIM_ACTOR = 'simulator';
@@ -101,6 +104,27 @@ function voidMatch(matchId: string): void {
         AND json_extract(metadata, '$.matchId') = ${matchId}
     `);
   });
+}
+
+/**
+ * Season finalization — mirrors routes/admin/leagues.ts's phase→offseason
+ * block: finish positions FIRST (champion/runner-up/SF/QF/regular), then the
+ * archive pins that depend on them, and only then the generic season-end
+ * auto-awards. Called AFTER the league is already sitting in `offseason` (not
+ * inside a write transaction) — a throw here must never unwind the match
+ * results that already committed, and every step is idempotent so a retry
+ * after a partial failure is safe.
+ */
+function finalizeSeason(leagueId: string, awardedBy: number | null): number {
+  try {
+    assignFinishPositions(sqlite, [leagueId]);
+    const archive = mintArchivePins(leagueId, { awardedBy });
+    const summary = runAutoAwards(leagueId, { trigger: 'season-end', awardedBy });
+    return summary.awarded.length + archive.awarded.length;
+  } catch (err) {
+    console.error(`[sim] season-end finalize failed for ${leagueId}:`, err);
+    return 0;
+  }
 }
 
 export const simRoutes = new Elysia()
@@ -320,11 +344,21 @@ export const simRoutes = new Elysia()
     const sim = simulatePlayoffs(leagueId, new MockRng(Date.now() >>> 0));
     if (!sim.success) { set.status = 400; return { error: sim.error }; }
 
+    // simulatePlayoffs already flipped the league to `offseason` internally
+    // (lib/sim/simulate-season.ts) — finalize the season now the same way the
+    // real phase-advance route does, so a sim'd bracket gets finish positions
+    // + archive pins + season-end awards just like a real one.
+    const pinsAwarded = finalizeSeason(
+      leagueId,
+      user!.id ? parseInt(user!.id) : null,
+    );
+
     return {
       ok: true,
       leagueId,
       matchesPlayed: sim.matchesPlayed,
       championId: sim.championId,
+      pinsAwarded,
     };
   })
 
@@ -401,17 +435,26 @@ export const simRoutes = new Elysia()
       }
       db.update(schema.leagues).set(updates)
         .where(eq(schema.leagues.id, leagueId)).run();
-      db.insert(schema.activityLog).values({
-        type: 'sim_phase_change',
-        category: 'admin',
-        actor: user!.username,
-        leagueId,
-        description: `Sim: ${league.name} phase ${previousPhase} → ${phase}`,
-        metadata: JSON.stringify({ leagueId, from: previousPhase, to: phase }),
-      }).run();
     });
 
-    return { ok: true, leagueId, from: previousPhase, to: phase, teams: teams.length };
+    // Season finalization — same "any transition into offseason" trigger as
+    // routes/admin/leagues.ts's real phase route. Runs AFTER the phase write
+    // commits (not inside its transaction) so a finalize failure can't unwind
+    // the phase change; idempotent, so a retry via another phase nudge is safe.
+    const pinsAwarded = phase === 'offseason' && previousPhase !== 'offseason'
+      ? finalizeSeason(leagueId, user!.id ? parseInt(user!.id) : null)
+      : 0;
+
+    db.insert(schema.activityLog).values({
+      type: 'sim_phase_change',
+      category: 'admin',
+      actor: user!.username,
+      leagueId,
+      description: `Sim: ${league.name} phase ${previousPhase} → ${phase}`,
+      metadata: JSON.stringify({ leagueId, from: previousPhase, to: phase, pinsAwarded }),
+    }).run();
+
+    return { ok: true, leagueId, from: previousPhase, to: phase, teams: teams.length, pinsAwarded };
   })
 
   // POST /reset — destructive full rebuild of the sim world

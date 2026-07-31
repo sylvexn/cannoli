@@ -5,6 +5,8 @@ import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot, importBattleForMatch, importBattleFromReplay } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
+import { runAutoAwards } from '../../lib/pins/auto-award';
+import { advancePlayoffWinner } from '../../lib/playoff-advance';
 import { checkMatchArchived } from '../../lib/archive-guard';
 import { requireStaff, requireDev } from '../../lib/auth-guards';
 import { backfillFeedbackNotifications } from '../../lib/notifications/notify';
@@ -187,7 +189,35 @@ export const miscRoutes = new Elysia()
         description: `Force-recorded ${params.matchId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}${reassign ? ` (teams reassigned: ${newHomeTeamId} vs ${newAwayTeamId})` : ''}${note ? ' — ' + note : ''}`,
         metadata: JSON.stringify({ matchId: params.matchId, homeScore, awayScore, forfeitedBy, note, pokemonRewritten: !!pokemonData, teamsReassigned: reassign, homeTeamId: newHomeTeamId, awayTeamId: newAwayTeamId }),
       }).run();
+
+      // Playoff auto-advancement — this is the admin's forfeit/dispute tool,
+      // so a forced playoff result must fill the next round's TBD slot the
+      // same way the normal result path does (lib/match-service.ts).
+      if (match.phase === 'playoffs' && match.playoffRound) {
+        const winnerId = forceWinnerTeamId ?? newHomeTeamId;
+        if (winnerId) {
+          const winnerSeed = winnerId === newHomeTeamId ? match.homeSeed : match.awaySeed;
+          advancePlayoffWinner({
+            matchId: params.matchId,
+            leagueId: match.leagueId,
+            playoffRound: match.playoffRound,
+            winnerId,
+            winnerSeed,
+          });
+        }
+      }
     });
+
+    // Auto-award per-match pins (Kingslayer, Flawless) — AFTER the match write
+    // commits, not inside its transaction. This is the messiest, most
+    // Kingslayer-relevant path (forfeits/disputes), so it must never silently
+    // skip pins. A throw here must never unwind the match write above —
+    // best-effort, logged and swallowed.
+    try {
+      runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
+    } catch (err) {
+      console.error(`[force-result] runAutoAwards failed for ${params.matchId}:`, err);
+    }
 
     return { success: true };
   })

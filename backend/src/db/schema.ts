@@ -718,19 +718,27 @@ export const pinDefinitions = sqliteTable('pin_definitions', {
 
 // Pins (awarded instances — many users × many definitions)
 //
-// Unique composite (user_id, pin_def_id, season_id) enforces "one Champion per
-// season per user", while still letting a user collect distinct seasons of the
-// same pin. season_id may be NULL for season-agnostic pins (e.g. lifetime
-// achievements, S1 alum).
+// Identity is (user_id, pin_def_id, season_id, league_id). A single UNIQUE
+// index `pins_identity_idx` enforces it, wrapping the two nullable columns in
+// COALESCE (season → -1, league → '') because SQLite treats every NULL as
+// DISTINCT in a unique index and would otherwise let duplicates through.
+// That one expression index replaces the old composite + partial-lifetime pair
+// (migrations 0019/0041); see migration 0069.
 //
-// IMPORTANT: SQLite treats every NULL as DISTINCT in a UNIQUE index, so the
-// composite index does NOT dedupe lifetime (season_id = NULL) pins on its own.
-// A separate PARTIAL unique index `pins_user_def_lifetime_idx` on
-// (user_id, pin_def_id) WHERE season_id IS NULL enforces "one lifetime pin per
-// user per definition" (migration 0041). Both indexes together give correct
-// INSERT OR IGNORE idempotency for season-scoped AND lifetime pins.
+// Scope combinations, all deduped correctly by that index:
+//   season + league  → the normal case ("Champion of Ruby, S11")
+//   season, no league → season-wide award across every league (`ash`, `red`)
+//   neither           → lifetime achievement
 //
-// `awarded_by` is NULL for the auto-award job; otherwise the admin's user id.
+// `source` carries recompute semantics and is the ONLY thing the season-end
+// minters key their cleanup on:
+//   'auto'   — owned by the minters; safe to delete and re-derive on a re-run.
+//   'manual' — human-authoritative (hand-awarded OR an admin override of an
+//              auto pick). Minters must never delete it, and must not mint a
+//              competing row for the same (pin_def_id, season_id, league_id).
+// `awarded_by` is pure provenance — who did it, NULL for the job. Do NOT use it
+// to decide what is recomputable; that conflation is what migration 0069 undid.
+//
 // `metadata` is free-form JSON (e.g. `{ pokemon: 'Cinderace' }` for a pin like
 // "Steal of the Draft") — admin authoring may attach context per-award.
 
@@ -740,9 +748,13 @@ export const pins = sqliteTable('pins', {
   pinDefId: text('pin_def_id').notNull().references(() => pinDefinitions.id, { onDelete: 'cascade' }),
   /** Season scope. NULL = lifetime / not season-specific. */
   seasonId: integer('season_id').references(() => seasons.id),
+  /** League scope. NULL = season-wide (or lifetime) rather than per-league. */
+  leagueId: text('league_id').references(() => leagues.id),
   awardedAt: text('awarded_at').default(sql`(datetime('now'))`),
-  /** Admin user id if hand-awarded; NULL if auto-awarded. */
+  /** Who awarded it — admin user id, or NULL for the auto job. Provenance only. */
   awardedBy: integer('awarded_by').references(() => users.id),
+  /** 'auto' = minter-owned and recomputable; 'manual' = human-authoritative. */
+  source: text('source', { enum: ['auto', 'manual'] }).notNull().default('auto'),
   /** JSON blob — e.g. `{ pokemon: 'Cinderace', context: 'steal' }` */
   metadata: text('metadata'),
 });

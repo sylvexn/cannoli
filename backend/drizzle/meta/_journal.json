@@ -484,6 +484,13 @@
       "when": 1784000000000,
       "tag": "0068_scheduled_transactions",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "6",
+      "when": 1784100000000,
+      "tag": "0069_pins_source_and_league",
+      "breakpoints": true
     }
   ]
 }

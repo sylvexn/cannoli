@@ -2,7 +2,7 @@ import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-route
 import { cn } from '@/lib/utils';
 import {
   Swords, Gamepad2,
-  Archive, Film, ScrollText, ListTree, Home, Gauge,
+  Archive, Film, ScrollText, ListTree, Home, Gauge, Award,
   PanelLeftClose, PanelLeftOpen, Menu, X,
 } from 'lucide-react';
 import {
@@ -402,6 +402,7 @@ export function AppShell() {
 
           <SidebarNavItem to="/tiers" icon={ListTree} label="Tier List" collapsed={collapsedRail} />
           <SidebarNavItem to="/speed-tiers" icon={Gauge} label="Speed Tiers" activeClass="bg-cyan-300/10 text-cyan-300" collapsed={collapsedRail} />
+          <SidebarNavItem to="/badges" icon={Award} label="Badges" activeClass="bg-amber-400/10 text-amber-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/rules" icon={ScrollText} label="Rules" activeClass="bg-pink/10 text-pink" collapsed={collapsedRail} />
         </nav>
 
