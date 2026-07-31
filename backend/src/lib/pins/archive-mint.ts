@@ -8,14 +8,26 @@
  * the admin "Archive Season" action so the UI sees one unified award set.
  *
  * Idempotent: every insert is INSERT OR IGNORE against the
- * (user_id, pin_def_id, season_id) unique index. Re-running on an already-
- * archived season is safe (and useful when stats are corrected post-archive).
+ * `pins_identity_idx` unique index on (user_id, pin_def_id, season_id,
+ * league_id). Re-running on an already-archived season is safe (and useful
+ * when stats are corrected post-archive).
+ *
+ * Every insert here is `source: 'auto'`. A `source: 'manual'` pin for the
+ * same (pinDefId, seasonId, leagueId) is human-authoritative — this job
+ * never deletes one and never mints a competing row over one; see
+ * `hasManualPin` below.
+ *
+ * Winners are read off `matches.winnerTeamId` (via the shared `matchWinner()`
+ * helper) rather than re-deriving from score comparison, so a forfeit at full
+ * health (equal KO score, e.g. 2-2, but a real winner) resolves a champion /
+ * sweeper correctly instead of being treated as an unfinished/tied series.
  *
  * Each minter tries to find a winner; on a tie we mint to all tied users
  * (rare; metadata records the value).
  *
  * Pure-vs-impure boundary mirrors lib/pins/auto-award.ts: each award has a
- * `pickXxx` pure function (input rows → output winners) for unit testing,
+ * `pickXxx` pure function (input rows → output winners, in
+ * archive-mint-pickers.ts, re-exported here for callers) for unit testing,
  * and a `awardXxx` orchestrator that queries DB → calls picker → inserts
  * pins.
  */
@@ -23,6 +35,22 @@
 import { db, schema } from '../../db';
 import { and, eq, sql } from 'drizzle-orm';
 import { tx } from '../tx';
+import { matchWinner } from '../standings';
+import {
+  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper,
+  type ChampionFinalsRow, type ChampionWinner,
+  type HighScoreRow, type HighScoreWinner,
+  type StealRow, type StealWinner,
+  type SweeperMatchRow, type SweeperWinner,
+} from './archive-mint-pickers';
+
+export {
+  pickChampion, pickHighScore, pickStealOfTheDraft, pickSweeper,
+  type ChampionFinalsRow, type ChampionWinner,
+  type HighScoreRow, type HighScoreWinner,
+  type StealRow, type StealWinner,
+  type SweeperMatchRow, type SweeperWinner,
+};
 
 const PIN = {
   champion: 'champion',
@@ -31,11 +59,19 @@ const PIN = {
   sweeper: 'sweeper',
 } as const;
 
+export interface UnresolvedEntry {
+  pinDefId: string;
+  reason: 'team-has-no-user' | 'no-eligible-matches' | 'manual-pin-present' | 'tie-unresolved';
+  teamId?: string;
+  leagueId?: string;
+}
+
 export interface ArchiveMintSummary {
   leagueId: string;
   seasonId: number;
   awarded: { pinDefId: string; userId: number; metadata: Record<string, unknown> }[];
   skipped: number;
+  unresolved: UnresolvedEntry[];
 }
 
 interface MintOpts {
@@ -52,6 +88,7 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
     seasonId: league?.seasonId ?? 0,
     awarded: [],
     skipped: 0,
+    unresolved: [],
   };
   if (!league) return summary;
 
@@ -60,8 +97,10 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
   const clear = opts.clearPrevious !== false;
 
   // Re-runs after stats corrections need a clean slate for THIS league's
-  // teams. Match auto-award.ts: scope by metadata.teamId to avoid stomping
-  // on sibling-league pins for coaches who play in multiple leagues.
+  // auto pins. Keyed on `source = 'auto'` (never `awarded_by`, which is
+  // provenance only — see migration 0069) and the real `league_id` column,
+  // so a coach who plays in multiple leagues never has a sibling league's pin
+  // touched, and a human-authoritative (`source = 'manual'`) pin survives.
   //
   // Wrapped in tx() so the clear and the re-inserts are atomic — a crash
   // between them can no longer leave this league's season pins in a deleted
@@ -72,10 +111,8 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
         DELETE FROM pins
         WHERE pin_def_id IN (${PIN.champion}, ${PIN.highScore}, ${PIN.stealOfTheDraft}, ${PIN.sweeper})
           AND season_id = ${seasonId}
-          AND awarded_by IS NULL
-          AND json_extract(metadata, '$.teamId') IN (
-            SELECT id FROM teams WHERE league_id = ${leagueId}
-          )
+          AND source = 'auto'
+          AND league_id = ${leagueId}
       `);
     }
 
@@ -88,165 +125,27 @@ export function mintArchivePins(leagueId: string, opts: MintOpts = {}): ArchiveM
   return summary;
 }
 
-// Pure helpers (testable without DB)
-
-export interface ChampionFinalsRow {
-  homeTeamId: string | null;
-  awayTeamId: string | null;
-  homeScore: number | null;
-  awayScore: number | null;
-}
-export interface ChampionWinner {
-  winnerTeamId: string;
-  loserTeamId: string;
-  winnerSum: number;
-  loserSum: number;
-}
-
-/**
- * Pick the finals winner from one or more finals matches (best-of-N is
- * resolved by summing scores). All matches are assumed to be the same
- * matchup (home/away pairing); the first row is used as the reference for
- * the team-id mapping.
- *
- * Returns null when:
- *   - no rows
- *   - any match is unfinished (homeScore/awayScore null)
- *   - the series is tied (homeSum === awaySum)
- */
-export function pickChampion(rows: ChampionFinalsRow[]): ChampionWinner | null {
-  if (rows.length === 0) return null;
-  let homeSum = 0;
-  let awaySum = 0;
-  for (const m of rows) {
-    if (m.homeScore == null || m.awayScore == null) return null;
-    homeSum += m.homeScore;
-    awaySum += m.awayScore;
-  }
-  if (homeSum === awaySum) return null;
-  const ref = rows[0];
-  // A scored finals always has both teams resolved (not a NULL bracket slot).
-  if (ref.homeTeamId == null || ref.awayTeamId == null) return null;
-  const winnerIsHome = homeSum > awaySum;
-  return {
-    winnerTeamId: winnerIsHome ? ref.homeTeamId : ref.awayTeamId,
-    loserTeamId: winnerIsHome ? ref.awayTeamId : ref.homeTeamId,
-    winnerSum: Math.max(homeSum, awaySum),
-    loserSum: Math.min(homeSum, awaySum),
-  };
-}
-
-export interface HighScoreRow {
-  teamId: string;
-  pokemonName: string;
-  matchId: string;
-  kills: number;
-  week: number | null;
-  phase: string | null;
-}
-export interface HighScoreWinner {
-  teamId: string;
-  pokemonName: string;
-  matchId: string;
-  kills: number;
-  week: number | null;
-  phase: string | null;
-}
-
-/**
- * Pick the highest single-match kill performance(s). Returns every row tied
- * at the top kill count. Returns [] when the top is 0 or input is empty.
- */
-export function pickHighScore(rows: HighScoreRow[]): HighScoreWinner[] {
-  if (rows.length === 0) return [];
-  const top = rows.reduce((a, r) => Math.max(a, r.kills ?? 0), 0);
-  if (top <= 0) return [];
-  return rows.filter(r => (r.kills ?? 0) === top).map(r => ({
-    teamId: r.teamId,
-    pokemonName: r.pokemonName,
-    matchId: r.matchId,
-    kills: r.kills,
-    week: r.week,
-    phase: r.phase,
-  }));
-}
-
-export interface StealRow {
-  teamId: string;
-  pokemonName: string;
-  kills: number;
-  gp: number;
-  cost: number | null;
-}
-export interface StealWinner {
-  teamId: string;
-  pokemonName: string;
-  kills: number;
-  cost: number;
-  ratio: number;
-}
-
-/**
- * Pick the best K-per-point ratio on a drafted Pokemon. Filters out rows
- * with no games played, no cost, or no kills (avoids div-by-0 and silly
- * "steals" from $0 picks). Ties on ratio mint to all.
- */
-export function pickStealOfTheDraft(rows: StealRow[]): StealWinner[] {
-  const candidates = rows
-    .filter(r => r.gp >= 1 && (r.cost ?? 0) >= 1 && r.kills > 0)
-    .map(r => ({
-      teamId: r.teamId,
-      pokemonName: r.pokemonName,
-      kills: r.kills,
-      cost: r.cost ?? 0,
-      ratio: r.kills / Math.max(1, r.cost ?? 0),
-    }));
-  if (candidates.length === 0) return [];
-  const top = candidates.reduce((a, r) => Math.max(a, r.ratio), 0);
-  return candidates
-    .filter(r => r.ratio === top)
-    .map(r => ({
-      teamId: r.teamId,
-      pokemonName: r.pokemonName,
-      kills: r.kills,
-      cost: r.cost,
-      ratio: Number(r.ratio.toFixed(3)),
-    }));
-}
-
-export interface SweeperMatchRow {
-  matchId: string;
-  winnerTeamId: string;
-  winnerGp: number;
-  winnerDeaths: number;
-}
-export interface SweeperWinner {
-  teamId: string;
-  sweeps: number;
-}
-
-/**
- * Pick the top sweeper(s) from per-match results. Each row represents one
- * completed, decided match plus the winning team's death/game-played totals.
- * A sweep = winner had 0 deaths and at least 1 Pokemon recorded. Returns
- * all teams tied at the top sweep count, or [] when nobody swept.
- */
-export function pickSweeper(rows: SweeperMatchRow[]): SweeperWinner[] {
-  const sweeps = new Map<string, number>();
-  for (const m of rows) {
-    if (m.winnerGp <= 0) continue;
-    if (m.winnerDeaths > 0) continue;
-    sweeps.set(m.winnerTeamId, (sweeps.get(m.winnerTeamId) ?? 0) + 1);
-  }
-  let topCount = 0;
-  for (const [, c] of sweeps) if (c > topCount) topCount = c;
-  if (topCount === 0) return [];
-  return [...sweeps.entries()]
-    .filter(([, c]) => c === topCount)
-    .map(([teamId, c]) => ({ teamId, sweeps: c }));
-}
-
 // Helpers
+
+/**
+ * True when a `source = 'manual'` pin already exists for this exact
+ * (pinDefId, seasonId, leagueId) slot. Manual pins are human-authoritative —
+ * this job must not mint a competing row for the slot even for a DIFFERENT
+ * winner/user, so callers check this once per award, before doing any
+ * per-winner work, and skip the whole slot when true.
+ */
+function hasManualPin(pinDefId: string, seasonId: number | null, leagueId: string): boolean {
+  const row = db.select({ c: sql<number>`COUNT(*)` })
+    .from(schema.pins)
+    .where(and(
+      eq(schema.pins.pinDefId, pinDefId),
+      eq(schema.pins.source, 'manual'),
+      seasonId == null ? sql`${schema.pins.seasonId} IS NULL` : eq(schema.pins.seasonId, seasonId),
+      eq(schema.pins.leagueId, leagueId),
+    ))
+    .get();
+  return (row?.c ?? 0) > 0;
+}
 
 function teamUserId(teamId: string): number | null {
   const team = db.select({ userId: schema.teams.userId })
@@ -258,17 +157,52 @@ function tryInsert(
   pinDefId: string,
   userId: number,
   seasonId: number,
+  leagueId: string,
   awardedBy: number | null,
   metadata: Record<string, unknown>,
   summary: ArchiveMintSummary,
 ): boolean {
   const res = db.run(sql`
-    INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
-    VALUES (${userId}, ${pinDefId}, ${seasonId}, ${awardedBy}, ${JSON.stringify(metadata)})
+    INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, league_id, awarded_by, source, metadata)
+    VALUES (${userId}, ${pinDefId}, ${seasonId}, ${leagueId}, ${awardedBy}, 'auto', ${JSON.stringify(metadata)})
   `);
   const changed = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
   if (changed > 0) {
     summary.awarded.push({ pinDefId, userId, metadata });
+
+    // Mirror auto-award.ts's tryInsert: emit a `pin_awarded` activity-log
+    // event so archive-minted pins show up in the admin Activity Log
+    // alongside hand-mints. Best-effort — don't fail the award if logging
+    // trips for any reason.
+    try {
+      const def = db.select().from(schema.pinDefinitions)
+        .where(eq(schema.pinDefinitions.id, pinDefId)).get();
+      const targetUser = db.select().from(schema.users)
+        .where(eq(schema.users.id, userId)).get();
+      const actor = awardedBy
+        ? db.select({ username: schema.users.username })
+            .from(schema.users).where(eq(schema.users.id, awardedBy)).get()?.username ?? 'system'
+        : 'system';
+      db.insert(schema.activityLog).values({
+        type: 'pin_awarded',
+        category: 'admin',
+        actor,
+        leagueId: null,
+        description: `Auto-awarded '${def?.name ?? pinDefId}' to ${targetUser?.username ?? 'user#' + userId}`,
+        metadata: JSON.stringify({
+          userId,
+          username: targetUser?.username ?? null,
+          pinDefId,
+          pinName: def?.name ?? pinDefId,
+          seasonId,
+          awardedById: awardedBy,
+          auto: true,
+          ...metadata,
+        }),
+      }).run();
+    } catch {
+      /* swallow — logging is best-effort */
+    }
     return true;
   }
   summary.skipped += 1;
@@ -283,6 +217,11 @@ function awardChampion(
   awardedBy: number | null,
   summary: ArchiveMintSummary,
 ) {
+  if (hasManualPin(PIN.champion, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.champion, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const finals = db.select().from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
@@ -290,19 +229,30 @@ function awardChampion(
       eq(schema.matches.playoffRound, 'f'),
     ))
     .all();
+  if (finals.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.champion, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const winner = pickChampion(finals.map(m => ({
     homeTeamId: m.homeTeamId,
     awayTeamId: m.awayTeamId,
     homeScore: m.homeScore,
     awayScore: m.awayScore,
+    winnerTeamId: m.winnerTeamId,
   })));
-  if (!winner) return;
+  if (!winner) {
+    summary.unresolved.push({ pinDefId: PIN.champion, reason: 'tie-unresolved', leagueId });
+    return;
+  }
 
   const uid = teamUserId(winner.winnerTeamId);
-  if (!uid) return;
+  if (!uid) {
+    summary.unresolved.push({ pinDefId: PIN.champion, reason: 'team-has-no-user', teamId: winner.winnerTeamId, leagueId });
+    return;
+  }
   tryInsert(
-    PIN.champion, uid, seasonId, awardedBy,
+    PIN.champion, uid, seasonId, leagueId, awardedBy,
     {
       teamId: winner.winnerTeamId,
       runnerUpTeamId: winner.loserTeamId,
@@ -320,6 +270,11 @@ function awardHighScore(
   awardedBy: number | null,
   summary: ArchiveMintSummary,
 ) {
+  if (hasManualPin(PIN.highScore, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.highScore, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const rows = db.select({
     pokemonName: schema.matchPokemon.pokemonName,
     teamId: schema.matchPokemon.teamId,
@@ -335,6 +290,10 @@ function awardHighScore(
       eq(schema.matches.status, 'completed'),
     ))
     .all();
+  if (rows.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.highScore, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const winners = pickHighScore(rows.map(r => ({
     teamId: r.teamId,
@@ -347,9 +306,12 @@ function awardHighScore(
 
   for (const r of winners) {
     const uid = teamUserId(r.teamId);
-    if (!uid) continue;
+    if (!uid) {
+      summary.unresolved.push({ pinDefId: PIN.highScore, reason: 'team-has-no-user', teamId: r.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.highScore, uid, seasonId, awardedBy,
+      PIN.highScore, uid, seasonId, leagueId, awardedBy,
       { teamId: r.teamId, pokemon: r.pokemonName, kills: r.kills, matchId: r.matchId, week: r.week, phase: r.phase },
       summary,
     );
@@ -367,6 +329,11 @@ function awardStealOfTheDraft(
   awardedBy: number | null,
   summary: ArchiveMintSummary,
 ) {
+  if (hasManualPin(PIN.stealOfTheDraft, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.stealOfTheDraft, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const rows = db.select({
     teamId: schema.matchPokemon.teamId,
     pokemonName: schema.matchPokemon.pokemonName,
@@ -387,6 +354,10 @@ function awardStealOfTheDraft(
     ))
     .groupBy(schema.matchPokemon.teamId, schema.matchPokemon.pokemonName)
     .all();
+  if (rows.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.stealOfTheDraft, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const winners = pickStealOfTheDraft(rows.map(r => ({
     teamId: r.teamId,
@@ -398,9 +369,12 @@ function awardStealOfTheDraft(
 
   for (const w of winners) {
     const uid = teamUserId(w.teamId);
-    if (!uid) continue;
+    if (!uid) {
+      summary.unresolved.push({ pinDefId: PIN.stealOfTheDraft, reason: 'team-has-no-user', teamId: w.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.stealOfTheDraft, uid, seasonId, awardedBy,
+      PIN.stealOfTheDraft, uid, seasonId, leagueId, awardedBy,
       { teamId: w.teamId, pokemon: w.pokemonName, kills: w.kills, cost: w.cost, ratio: w.ratio },
       summary,
     );
@@ -417,8 +391,16 @@ function awardSweeper(
   awardedBy: number | null,
   summary: ArchiveMintSummary,
 ) {
+  if (hasManualPin(PIN.sweeper, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.sweeper, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  if (teams.length === 0) return;
+  if (teams.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.sweeper, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
   const teamIds = new Set(teams.map(t => t.id));
 
   const matches = db.select({
@@ -427,6 +409,7 @@ function awardSweeper(
     awayTeamId: schema.matches.awayTeamId,
     homeScore: schema.matches.homeScore,
     awayScore: schema.matches.awayScore,
+    winnerTeamId: schema.matches.winnerTeamId,
   })
     .from(schema.matches)
     .where(and(
@@ -434,12 +417,17 @@ function awardSweeper(
       eq(schema.matches.status, 'completed'),
     ))
     .all();
+  if (matches.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.sweeper, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const sweeperRows: SweeperMatchRow[] = [];
   for (const m of matches) {
     if (m.homeScore == null || m.awayScore == null) continue;
-    if (m.homeScore === m.awayScore) continue;
-    const winnerId = m.homeScore > m.awayScore ? m.homeTeamId : m.awayTeamId;
+    // Winner via matchWinner() (winnerTeamId first, score fallback) so a
+    // full-health forfeit is still a decided match instead of a no-op tie.
+    const winnerId = matchWinner(m);
     if (winnerId == null || !teamIds.has(winnerId)) continue;
 
     const row = db.select({
@@ -463,9 +451,12 @@ function awardSweeper(
   const winners = pickSweeper(sweeperRows);
   for (const w of winners) {
     const uid = teamUserId(w.teamId);
-    if (!uid) continue;
+    if (!uid) {
+      summary.unresolved.push({ pinDefId: PIN.sweeper, reason: 'team-has-no-user', teamId: w.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.sweeper, uid, seasonId, awardedBy,
+      PIN.sweeper, uid, seasonId, leagueId, awardedBy,
       { teamId: w.teamId, sweeps: w.sweeps },
       summary,
     );

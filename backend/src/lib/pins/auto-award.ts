@@ -2,7 +2,8 @@
  * Auto-award job — hands out the season's stat-derived pins.
  *
  * Idempotent: every insert is `INSERT OR IGNORE` against the
- * (user_id, pin_def_id, season_id) unique index. Safe to re-run.
+ * `pins_identity_idx` unique index on (user_id, pin_def_id, season_id,
+ * league_id). Safe to re-run.
  *
  *   * `runAutoAwards(leagueId, { trigger: 'season-end' })` — called once when
  *     a league transitions to phase=offseason. Awards the season-scoped
@@ -13,13 +14,23 @@
  *     every recorded regular-season match result. Awards the per-match
  *     bonus pins: Kingslayer, Flawless.
  *
+ * Every insert here is `source: 'auto'` and carries the league_id it was
+ * computed for. A `source: 'manual'` pin for the same (pinDefId, seasonId,
+ * leagueId) is human-authoritative — this job never deletes one and never
+ * mints a competing row over one; see `hasManualPin` below.
+ *
+ * Winners are read off `matches.winnerTeamId` (via the shared `matchWinner()`
+ * helper) rather than re-deriving from score comparison, so a forfeit at full
+ * health (equal KO score, e.g. 2-2, but a real winner) is credited correctly.
+ *
  * The subjective Elite-4 / Mix / Player awards (Baxcalibur, Kingambit, Ash,
  * Best Draft, Dragapult, Charizard, Florges, Rotom, Pikachu, Red) are
  * minted by hand from the admin UI.
  */
 import { db, schema } from '../../db';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, lte, sql } from 'drizzle-orm';
 import { tx } from '../tx';
+import { matchWinner } from '../standings';
 
 type Trigger = 'season-end' | 'match';
 
@@ -31,12 +42,20 @@ interface RunOpts {
   awardedBy?: number | null;
 }
 
+export interface UnresolvedEntry {
+  pinDefId: string;
+  reason: 'team-has-no-user' | 'no-eligible-matches' | 'manual-pin-present' | 'tie-unresolved';
+  teamId?: string;
+  leagueId?: string;
+}
+
 interface AwardSummary {
   trigger: Trigger;
   leagueId: string;
   seasonId: number | null;
   awarded: { pinDefId: string; userId: number; metadata?: Record<string, unknown> }[];
   skipped: number;
+  unresolved: UnresolvedEntry[];
 }
 
 const PIN = {
@@ -55,6 +74,7 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
     seasonId: league?.seasonId ?? null,
     awarded: [],
     skipped: 0,
+    unresolved: [],
   };
   if (!league) return summary;
 
@@ -69,12 +89,11 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
 
   // trigger === 'season-end'
   // Clear prior auto-awarded season-end pins for THIS league/season so a
-  // re-run after a data correction picks the new winners cleanly. Scope
-  // by metadata.teamId (set by all three awarders) rather than user_id —
-  // a season runs 3 concurrent leagues, and a coach who plays in multiple
-  // leagues would otherwise have their sibling-league pins clobbered when
-  // any one league finalizes. Only touches awarded_by IS NULL rows (auto
-  // pins) — admin-minted pins are preserved.
+  // re-run after a data correction picks the new winners cleanly. Keyed on
+  // `source = 'auto'` (never `awarded_by`, which is provenance only — see
+  // migration 0069) and the real `league_id` column, so a coach who plays in
+  // multiple leagues never has a sibling league's pin touched, and a
+  // human-authoritative (`source = 'manual'`) pin is never deleted.
   //
   // Wrapped in tx() so the clear and the re-inserts are atomic — a crash
   // between them can no longer leave this league's season pins in a deleted
@@ -84,10 +103,8 @@ export function runAutoAwards(leagueId: string, opts: RunOpts): AwardSummary {
       DELETE FROM pins
       WHERE pin_def_id IN (${PIN.garchomp}, ${PIN.cannoli}, ${PIN.cynthia})
         AND season_id = ${seasonId}
-        AND awarded_by IS NULL
-        AND json_extract(metadata, '$.teamId') IN (
-          SELECT id FROM teams WHERE league_id = ${leagueId}
-        )
+        AND source = 'auto'
+        AND league_id = ${leagueId}
     `);
 
     awardGarchomp(leagueId, seasonId, opts.awardedBy ?? null, summary);
@@ -165,6 +182,8 @@ export interface StreakMatch {
   awayTeamId: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  /** Explicit winner flag — see matchWinner(). Null for legacy/sim rows. */
+  winnerTeamId: string | null;
   forfeitedBy?: 'home' | 'away' | 'both' | null;
 }
 
@@ -174,18 +193,17 @@ export interface StreakMatch {
  * Rules:
  *   - `forfeitedBy === 'both'` matches are SKIPPED (neither extend nor break).
  *   - NULL scores reset the streak (treated as a non-win).
- *   - Ties (homeScore === awayScore) reset the streak.
- *   - Wins increment current streak; current is reset on any loss/tie/null.
+ *   - The win/loss/tie call is `matchWinner(m)` (winnerTeamId first, score
+ *     comparison fallback) — a full-health forfeit (equal score, real winner)
+ *     correctly extends the streak instead of breaking it.
  */
 export function computeStreak(matches: StreakMatch[], teamId: string): number {
   let best = 0, current = 0;
   for (const m of matches) {
     if (m.forfeitedBy === 'both') continue;
     if (m.homeScore == null || m.awayScore == null) { current = 0; continue; }
-    const isHome = m.homeTeamId === teamId;
-    const my = isHome ? m.homeScore : m.awayScore;
-    const opp = isHome ? m.awayScore : m.homeScore;
-    if (my > opp) { current++; if (current > best) best = current; }
+    const winner = matchWinner(m);
+    if (winner === teamId) { current++; if (current > best) best = current; }
     else { current = 0; }
   }
   return best;
@@ -193,17 +211,38 @@ export function computeStreak(matches: StreakMatch[], teamId: string): number {
 
 // Helpers
 
+/**
+ * True when a `source = 'manual'` pin already exists for this exact
+ * (pinDefId, seasonId, leagueId) slot. Manual pins are human-authoritative —
+ * the auto job must not mint a competing row for the slot even for a
+ * DIFFERENT winner/user, so callers check this once per award, before doing
+ * any per-winner work, and skip the whole slot when true.
+ */
+function hasManualPin(pinDefId: string, seasonId: number | null, leagueId: string): boolean {
+  const row = db.select({ c: sql<number>`COUNT(*)` })
+    .from(schema.pins)
+    .where(and(
+      eq(schema.pins.pinDefId, pinDefId),
+      eq(schema.pins.source, 'manual'),
+      seasonId == null ? sql`${schema.pins.seasonId} IS NULL` : eq(schema.pins.seasonId, seasonId),
+      eq(schema.pins.leagueId, leagueId),
+    ))
+    .get();
+  return (row?.c ?? 0) > 0;
+}
+
 function tryInsert(
   pinDefId: string,
   userId: number,
   seasonId: number | null,
+  leagueId: string,
   awardedBy: number | null,
   metadata: Record<string, unknown> | null,
   summary: AwardSummary,
 ): boolean {
   const stmt = sql`
-    INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, awarded_by, metadata)
-    VALUES (${userId}, ${pinDefId}, ${seasonId}, ${awardedBy}, ${metadata ? JSON.stringify(metadata) : null})
+    INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, league_id, awarded_by, source, metadata)
+    VALUES (${userId}, ${pinDefId}, ${seasonId}, ${leagueId}, ${awardedBy}, 'auto', ${metadata ? JSON.stringify(metadata) : null})
   `;
   const res = db.run(stmt);
   const changed = (res as unknown as { changes?: number } | undefined)?.changes ?? 0;
@@ -266,6 +305,11 @@ function awardGarchomp(
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
+  if (hasManualPin(PIN.garchomp, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.garchomp, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   // NOTE: groups by LOWER(pokemonName) to coalesce casing variants. Does NOT
   // canonicalize form variants (e.g. "Urshifu" vs "Urshifu-Rapid-Strike") —
   // those still split. Admin UI re-canonicalizes display casing against roster.
@@ -283,14 +327,22 @@ function awardGarchomp(
     ))
     .groupBy(schema.matchPokemon.teamId, sql`LOWER(${schema.matchPokemon.pokemonName})`)
     .all();
+  if (rows.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.garchomp, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
+
   const winners = pickGarchompWinners(rows.map(r => ({
     teamId: r.teamId, pokemon: r.pokemon, kills: r.kills ?? 0,
   })));
   for (const r of winners) {
     const uid = teamUserId(r.teamId);
-    if (!uid) continue;
+    if (!uid) {
+      summary.unresolved.push({ pinDefId: PIN.garchomp, reason: 'team-has-no-user', teamId: r.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.garchomp, uid, seasonId, awardedBy,
+      PIN.garchomp, uid, seasonId, leagueId, awardedBy,
       { teamId: r.teamId, pokemon: r.pokemon, kills: r.kills },
       summary,
     );
@@ -307,8 +359,16 @@ function awardCannoli(
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
+  if (hasManualPin(PIN.cannoli, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.cannoli, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  if (teams.length === 0) return;
+  if (teams.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.cannoli, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const records = teams.map(t => {
     const matches = db.select().from(schema.matches).where(and(
@@ -324,16 +384,29 @@ function awardCannoli(
       const my = isHome ? m.homeScore : m.awayScore;
       const opp = isHome ? m.awayScore : m.homeScore;
       diff += my - opp;
-      if (my > opp) wins++; else if (opp > my) losses++;
+      // Winner via matchWinner() (winnerTeamId first, score fallback) so a
+      // full-health forfeit (equal score, real winner) counts as a W/L
+      // instead of neither.
+      const winner = matchWinner(m);
+      if (winner === t.id) wins++;
+      else if (winner != null) losses++;
     }
     return { teamId: t.id, userId: t.userId, wins, losses, diff, played: matches.length };
   }).filter(r => r.played > 0);
 
+  if (records.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.cannoli, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
+
   const finalists = pickCannoliWinners(records);
   for (const w of finalists) {
-    if (!w.userId) continue;
+    if (!w.userId) {
+      summary.unresolved.push({ pinDefId: PIN.cannoli, reason: 'team-has-no-user', teamId: w.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.cannoli, w.userId, seasonId, awardedBy,
+      PIN.cannoli, w.userId, seasonId, leagueId, awardedBy,
       { teamId: w.teamId, wins: w.wins, losses: w.losses, diff: w.diff },
       summary,
     );
@@ -350,8 +423,16 @@ function awardCynthia(
   awardedBy: number | null,
   summary: AwardSummary,
 ) {
+  if (hasManualPin(PIN.cynthia, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.cynthia, reason: 'manual-pin-present', leagueId });
+    return;
+  }
+
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
-  if (teams.length === 0) return;
+  if (teams.length === 0) {
+    summary.unresolved.push({ pinDefId: PIN.cynthia, reason: 'no-eligible-matches', leagueId });
+    return;
+  }
 
   const streaks = teams.map(t => {
     const matches = db.select().from(schema.matches).where(and(
@@ -367,9 +448,12 @@ function awardCynthia(
 
   const winners = pickCynthiaWinners(streaks, 2);
   for (const s of winners) {
-    if (!s.userId) continue;
+    if (!s.userId) {
+      summary.unresolved.push({ pinDefId: PIN.cynthia, reason: 'team-has-no-user', teamId: s.teamId, leagueId });
+      continue;
+    }
     tryInsert(
-      PIN.cynthia, s.userId, seasonId, awardedBy,
+      PIN.cynthia, s.userId, seasonId, leagueId, awardedBy,
       { teamId: s.teamId, streak: s.best },
       summary,
     );
@@ -377,7 +461,8 @@ function awardCynthia(
 }
 
 // Kingslayer (post-match: bottom-half team beat a top-3 team)
-// Snapshot the standings as of the match being recorded.
+// Snapshot the standings as of the match being recorded — only regular-season
+// matches through (and including) this match's week count toward rank.
 
 function awardKingslayer(
   leagueId: string,
@@ -390,11 +475,11 @@ function awardKingslayer(
   if (!match) return;
   if (match.phase !== 'regular' || match.status !== 'completed') return;
   if (match.homeScore == null || match.awayScore == null) return;
-  if (match.homeScore === match.awayScore) return;
 
-  const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
-  const loserId = match.homeScore > match.awayScore ? match.awayTeamId : match.homeTeamId;
-  if (winnerId == null || loserId == null) return; // undetermined bracket slot
+  const winnerId = matchWinner(match);
+  if (winnerId == null) return; // genuine tie / no-contest — no winner to credit
+  const loserId = winnerId === match.homeTeamId ? match.awayTeamId : match.homeTeamId;
+  if (loserId == null) return; // undetermined bracket slot (shouldn't happen in regular phase)
 
   const teams = db.select().from(schema.teams).where(eq(schema.teams.leagueId, leagueId)).all();
   if (teams.length === 0) return;
@@ -402,10 +487,13 @@ function awardKingslayer(
   const recordByTeam = new Map<string, { wins: number; losses: number; diff: number }>();
   for (const t of teams) recordByTeam.set(t.id, { wins: 0, losses: 0, diff: 0 });
 
+  // Point-in-time: only matches through this match's own week count toward
+  // the standings snapshot, matching the "as of the match" contract.
   const completed = db.select().from(schema.matches).where(and(
     eq(schema.matches.leagueId, leagueId),
     eq(schema.matches.phase, 'regular'),
     eq(schema.matches.status, 'completed'),
+    lte(schema.matches.week, match.week),
   )).all();
 
   for (const m of completed) {
@@ -413,15 +501,16 @@ function awardKingslayer(
     if (m.homeTeamId == null || m.awayTeamId == null) continue;
     const h = recordByTeam.get(m.homeTeamId);
     const a = recordByTeam.get(m.awayTeamId);
+    const w = matchWinner(m);
     if (h) {
       h.diff += m.homeScore - m.awayScore;
-      if (m.homeScore > m.awayScore) h.wins++;
-      else if (m.homeScore < m.awayScore) h.losses++;
+      if (w === m.homeTeamId) h.wins++;
+      else if (w === m.awayTeamId) h.losses++;
     }
     if (a) {
       a.diff += m.awayScore - m.homeScore;
-      if (m.awayScore > m.homeScore) a.wins++;
-      else if (m.awayScore < m.homeScore) a.losses++;
+      if (w === m.awayTeamId) a.wins++;
+      else if (w === m.homeTeamId) a.losses++;
     }
   }
 
@@ -438,12 +527,20 @@ function awardKingslayer(
   const half = Math.ceil(ranked.length / 2);
   const winnerIsBottomHalf = winnerRank > half;
   const loserIsTop3 = loserRank <= 3;
-  if (!winnerIsBottomHalf || !loserIsTop3) return;
+  if (!winnerIsBottomHalf || !loserIsTop3) return; // doesn't qualify — not an error, most matches don't
+
+  if (hasManualPin(PIN.kingslayer, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.kingslayer, reason: 'manual-pin-present', leagueId });
+    return;
+  }
 
   const uid = teamUserId(winnerId);
-  if (!uid) return;
+  if (!uid) {
+    summary.unresolved.push({ pinDefId: PIN.kingslayer, reason: 'team-has-no-user', teamId: winnerId, leagueId });
+    return;
+  }
   tryInsert(
-    PIN.kingslayer, uid, seasonId, awardedBy,
+    PIN.kingslayer, uid, seasonId, leagueId, awardedBy,
     { matchId, winnerTeamId: winnerId, loserTeamId: loserId, winnerRank, loserRank },
     summary,
   );
@@ -462,10 +559,9 @@ function awardFlawless(
   if (!match) return;
   if (match.status !== 'completed') return;
   if (match.homeScore == null || match.awayScore == null) return;
-  if (match.homeScore === match.awayScore) return;
 
-  const winnerId = match.homeScore > match.awayScore ? match.homeTeamId : match.awayTeamId;
-  if (winnerId == null) return; // undetermined bracket slot
+  const winnerId = matchWinner(match);
+  if (winnerId == null) return; // genuine tie / no-contest — no winner to credit
 
   const row = db.select({
     deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
@@ -477,13 +573,21 @@ function awardFlawless(
       eq(schema.matchPokemon.teamId, winnerId),
     ))
     .get();
-  if (!row || (row.rowCount ?? 0) === 0) return;
-  if ((row.deaths ?? 0) > 0) return;
+  if (!row || (row.rowCount ?? 0) === 0) return; // nothing recorded — not a sweep
+  if ((row.deaths ?? 0) > 0) return; // not a sweep — not an error, most wins aren't
+
+  if (hasManualPin(PIN.flawless, seasonId, leagueId)) {
+    summary.unresolved.push({ pinDefId: PIN.flawless, reason: 'manual-pin-present', leagueId });
+    return;
+  }
 
   const uid = teamUserId(winnerId);
-  if (!uid) return;
+  if (!uid) {
+    summary.unresolved.push({ pinDefId: PIN.flawless, reason: 'team-has-no-user', teamId: winnerId, leagueId });
+    return;
+  }
   tryInsert(
-    PIN.flawless, uid, seasonId, awardedBy,
+    PIN.flawless, uid, seasonId, leagueId, awardedBy,
     { matchId, winnerTeamId: winnerId, scoreLine: `${match.homeScore}-${match.awayScore}` },
     summary,
   );
