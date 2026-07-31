@@ -1610,11 +1610,16 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // leave a `completed` match with partial/zero match_pokemon rows — this
       // brings the bot path to parity with recordMatchResult. (The body is kept
       // at its existing indentation to keep this a minimal, reviewable diff.)
+      let updateApplied = true;
+      // Hoisted out of the tx closure below — runAutoAwards now runs AFTER
+      // the tx commits (see comment past the closing `});`), so this needs to
+      // survive past it.
+      let hasWarnings = false;
       tx(() => {
       // Update match record. Write-race guard: only write if the match is still
       // in a pre-completion state (prevents a double-write from a late disk-replay
       // or a concurrent admin force-result from clobbering an already-finalized row).
-      db.update(schema.matches)
+      const updateResult = db.update(schema.matches)
         .set({
           status: 'completed',
           homeScore,
@@ -1638,6 +1643,26 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
           inArray(schema.matches.status, ['scheduled', 'ready', 'in_progress']),
         ))
         .run();
+
+      // The where-guard above is a no-op, not a filter, when it doesn't match:
+      // if another path (admin force-result) already finalized this match
+      // between our read at the top of this function and this write, the
+      // UPDATE silently changes zero rows. Without checking that, we'd fall
+      // through and delete+reinsert match_pokemon with the bot's own K/D,
+      // clobbering whatever the other path just recorded. Bail cleanly.
+      if (updateResult.changes === 0) {
+        updateApplied = false;
+        console.log(`[PS Bot] Skipping result write for ${matchId}: status changed before update landed (${battle.roomId})`);
+        db.insert(schema.activityLog).values({
+          type: 'bot_result_skipped',
+          category: 'match',
+          actor: BOT_USERNAME,
+          leagueId: match.leagueId,
+          description: `Bot result skipped — match status changed before write landed (${battle.roomId})`,
+          metadata: JSON.stringify({ matchId, roomId: battle.roomId, p1: battle.p1, p2: battle.p2 }),
+        }).run();
+        return;
+      }
 
       // Write per-Pokemon K/D stats. Attribute by orientation, not by raw
       // p1/p2 → home/away mapping. The previous code used useridToTeam, which
@@ -1698,7 +1723,6 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
       // same; bot-flagged matches must not sneak through on blocking issues.
       // Fix 1 — only fire per-match auto-awards when no BLOCKING warnings; for a
       // disputed match we wait for dismiss-warnings to mint awards.
-      let hasWarnings = false;
       if (homeTeam && awayTeam) {
         const homeRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, homeTeam.id)).all();
         const awayRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, awayTeam.id)).all();
@@ -1740,15 +1764,6 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         }
       }
 
-      // Fix 1 — fire per-match auto-awards (Kingslayer / Flawless). The
-      // manual record handler does this; the bot is the primary recording
-      // path during a normal season and was missing the call. Skip when the
-      // match is now 'disputed' — dismiss-warnings will run the awards once
-      // an admin clears them.
-      if (!hasWarnings) {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId });
-      }
-
       // Advance the playoff bracket when a clean (non-disputed) playoff match
       // finalizes. The bot was the only recording path that never filled the
       // next-round slot, which stalled brackets until an admin stepped in.
@@ -1775,6 +1790,29 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         metadata: JSON.stringify({ matchId, homeScore, awayScore, winner: winnerUsername }),
       }).run();
       }); // end result-write transaction
+
+      if (!updateApplied) {
+        // Bailed above — nothing was written this pass, so there's no fresh
+        // result to broadcast and no PS room left to keep watching.
+        monitoredBattles.delete(battle.roomId);
+        return;
+      }
+
+      // Fix 1 — fire per-match auto-awards (Kingslayer / Flawless), AFTER the
+      // tx above commits, not inside it. The manual record handler does this;
+      // the bot is the primary recording path during a normal season and was
+      // missing the call. Skip when the match is now 'disputed' — dismiss-
+      // warnings will run the awards once an admin clears them. There's no
+      // caller here to retry on failure and the PS battle won't re-emit
+      // |win|, so a throw must never leave the match stuck mid-write —
+      // best-effort, logged and swallowed.
+      if (!hasWarnings) {
+        try {
+          runAutoAwards(match.leagueId, { trigger: 'match', matchId });
+        } catch (err) {
+          console.error(`[PS Bot] runAutoAwards failed for ${matchId}:`, err);
+        }
+      }
 
       // Broadcast result to Arena (after commit — clients only learn the result
       // once it's durably written).
