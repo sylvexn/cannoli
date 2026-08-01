@@ -150,6 +150,87 @@ describe('validateTrade', () => {
   });
 });
 
+describe('tera captain markup', () => {
+  // A captain's slot costs the marked-up price (tier 8 → 10), same as the
+  // backend's effectiveCost. Before this was mirrored, the composer said
+  // "both rosters legal" at 107/110 while the API rejected the same trade at
+  // 111 > 110.
+  test('counts a captain at its marked-up cost against the cap', () => {
+    const cap = 110;
+    const captain = { ...mon('Kingambit', 8), isTeraCaptain: true }; // 8 → 10
+    const a = team('a', 'AAA', [captain, mon('Filler', 98), mon('Bait', 2)]);
+    const b = team('b', 'BBB', [mon('Latios', 4)]);
+    // raw tiers: 8+98+2 = 108, swap Bait(2)→Latios(4) = 110 (looks legal)
+    // effective: 10+98+2 = 110, swap = 112 > 110
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Bait']), requesting: new Set(['Latios']),
+      pointCap: cap,
+    });
+    expect(issues.some(i => /point cap \(112 > 110\)/.test(i.message))).toBe(true);
+  });
+
+  test('an incoming mon sheds captaincy, so it only costs base tier', () => {
+    const captain = { ...mon('Kingambit', 8), isTeraCaptain: true };
+    const a = team('a', 'AAA', [mon('Bait', 2)]);
+    const b = team('b', 'BBB', [captain]);
+    const s = tradePointSummary(a, b, new Set(['Bait']), new Set(['Kingambit']), 110);
+    expect(s.recipient.before).toBe(10);  // captain marked up
+    expect(s.proposer.after).toBe(8);     // arrives as a plain 8pt mon
+    expect(s.recipient.after).toBe(2);
+  });
+});
+
+describe('scheduled moves (pending projection)', () => {
+  const cap = 110;
+  // Gaffz's case: an approved FA that drops a mon on Monday night hasn't
+  // applied yet, so the raw roster is 111/110 — but the trade can't land
+  // before the FA does, so it must validate against the projected roster.
+  const a = team('a', 'AAA', [mon('Ferrothorn', 5), mon('Filler', 103), mon('Bait', 2)]);
+  const b = team('b', 'BBB', [mon('Latios', 4)]);
+  const pending = {
+    a: {
+      moves: 1,
+      outgoing: ['Ferrothorn'],
+      roster: [
+        { name: 'Filler', tier: 103, isTeraCaptain: false },
+        { name: 'Bait', tier: 2, isTeraCaptain: false },
+        { name: 'Corviknight', tier: 3, isTeraCaptain: false }, // FA pickup
+      ],
+    },
+  };
+
+  test('current roster blocks the trade', () => {
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Bait']), requesting: new Set(['Latios']),
+      pointCap: cap,
+    });
+    expect(issues.some(i => /point cap/.test(i.message))).toBe(true);
+  });
+
+  test('projected roster allows it', () => {
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Bait']), requesting: new Set(['Latios']),
+      pointCap: cap, pending,
+    });
+    expect(issues).toEqual([]);
+    const s = tradePointSummary(a, b, new Set(['Bait']), new Set(['Latios']), cap, pending);
+    expect(s.proposer.before).toBe(108);  // 103 + 2 + 3 (FA pickup), Ferrothorn dropped
+    expect(s.proposer.after).toBe(110);   // -Bait(2) +Latios(4)
+  });
+
+  test('flags a mon already committed to a scheduled move', () => {
+    const issues = validateTrade({
+      proposer: a, recipient: b,
+      offering: new Set(['Ferrothorn']), requesting: new Set(['Latios']),
+      pointCap: cap, pending,
+    });
+    expect(issues.some(i => /committed to a scheduled move/.test(i.message))).toBe(true);
+  });
+});
+
 describe('pointDelta', () => {
   test('sums tier costs of the named subset', () => {
     const a = team('a', 'AAA', [mon('Gengar', 16), mon('Pikachu', 4), mon('Snorlax', 8)]);

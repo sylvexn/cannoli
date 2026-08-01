@@ -166,6 +166,8 @@ export function applyDueTransactions(leagueId?: string): number {
         leagueId: league.id,
         minRosterSize: league.minRosterSize ?? league.rosterSize,
         maxRosterSize: league.maxRosterSize ?? league.rosterSize,
+        // This row is itself pending — don't let the projection apply it twice.
+        excludeTradeId: trade.id,
       });
       if (invalid) {
         failScheduled('trade', trade.id, league.id, invalid, [trade.proposerId, trade.recipientId]);

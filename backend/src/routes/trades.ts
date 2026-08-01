@@ -12,6 +12,7 @@ import { refreshUserMap } from '../lib/ps-bot';
 import { notifyStaff } from '../lib/notifications/notify';
 import { validateProposedTrade, executeRosterSwap } from '../lib/trade-core';
 import { resolveEffectiveWeek, notifyTradeScheduled } from '../lib/scheduled-transactions';
+import { leaguePendingMoves } from '../lib/projected-roster';
 
 /**
  * Phase gate for trade actions. Trades may only be proposed, responded-to,
@@ -67,6 +68,14 @@ export const tradeRoutes = new Elysia()
         effectiveWeek: t.effectiveWeek,
         appliedAt: t.appliedAt,
       }));
+  })
+
+  // Projected rosters for teams with approved-but-unapplied moves, so the trade
+  // composer's point meter matches what validateProposedTrade will actually see.
+  // Keyed by team id; teams with nothing pending are omitted.
+  .get('/api/leagues/:leagueId/pending-moves', ({ params, user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    return leaguePendingMoves(params.leagueId);
   })
 
   .get('/api/leagues/:leagueId/trade-block', ({ params }) => {
@@ -127,6 +136,7 @@ export const tradeRoutes = new Elysia()
         leagueId: trade.leagueId,
         minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
         maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
+        excludeTradeId: tradeId,
       });
       if (legalityErr) {
         set.status = 409;
@@ -246,6 +256,7 @@ export const tradeRoutes = new Elysia()
       leagueId: trade.leagueId,
       minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
       maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
+      excludeTradeId: tradeId,
     });
     if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
 
