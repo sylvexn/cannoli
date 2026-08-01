@@ -10,9 +10,9 @@
  */
 import { db, schema } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
-import { getTeamRoster } from './queries';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
+import { projectRoster } from './projected-roster';
 
 /**
  * Validate that a proposed trade would leave both rosters legal:
@@ -26,6 +26,10 @@ import { validateRosterLegality } from './roster-legality';
  *   - no duplicate species/base-form on either team (e.g. Tornadus + Tornadus-Therian)
  *   - roster size: neither team may exceed league.rosterSize after the swap.
  *
+ * Both sides are checked against their PROJECTED roster (current roster plus
+ * every approved-but-unapplied FA request / scheduled trade — see
+ * projected-roster.ts), because a trade can never land before those do.
+ *
  * Returns null if valid, or an error message string.
  */
 export function validateProposedTrade(opts: {
@@ -37,6 +41,8 @@ export function validateProposedTrade(opts: {
   leagueId: string;
   minRosterSize?: number;
   maxRosterSize?: number;
+  /** Trade row being validated, so the projection doesn't count it twice. */
+  excludeTradeId?: number;
 }): string | null {
   const { proposerId, recipientId, offering, requesting, pointCap, leagueId, minRosterSize, maxRosterSize } = opts;
 
@@ -56,19 +62,24 @@ export function validateProposedTrade(opts: {
     return 'Requesting list contains duplicate Pokemon names';
   }
 
-  // Pull rosters
-  const proposerRoster = getTeamRoster(proposerId);
-  const recipientRoster = getTeamRoster(recipientId);
+  // Pull rosters as they will stand when the trade lands.
+  const proposerProjection = projectRoster(proposerId, leagueId, { excludeTradeId: opts.excludeTradeId });
+  const recipientProjection = projectRoster(recipientId, leagueId, { excludeTradeId: opts.excludeTradeId });
+  const proposerRoster = proposerProjection.roster;
+  const recipientRoster = recipientProjection.roster;
 
-  // Verify ownership
-  for (const name of offering) {
-    if (!proposerRoster.some(r => r.pokemonName === name)) {
-      return `Proposer no longer has ${name}`;
-    }
-  }
-  for (const name of requesting) {
-    if (!recipientRoster.some(r => r.pokemonName === name)) {
-      return `Recipient no longer has ${name}`;
+  // Verify ownership. A mon the team still holds today but has already
+  // committed to a scheduled move gets its own message — "no longer has" would
+  // be baffling while it's sitting right there on the roster page.
+  for (const [side, names, projection, roster] of [
+    ['Proposer', offering, proposerProjection, proposerRoster],
+    ['Recipient', requesting, recipientProjection, recipientRoster],
+  ] as const) {
+    for (const name of names) {
+      if (roster.some(r => r.pokemonName === name)) continue;
+      return projection.outgoing.includes(name)
+        ? `${side} already has ${name} committed to a scheduled move`
+        : `${side} no longer has ${name}`;
     }
   }
 

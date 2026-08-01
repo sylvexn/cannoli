@@ -6,7 +6,7 @@
  */
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, ArrowLeftRight, Check, Clock, UserPlus } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, CalendarClock, Check, Clock, UserPlus } from 'lucide-react';
 import { TeamLogo } from '@/components/team-logo';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
@@ -17,8 +17,10 @@ import { pokemonRoute } from '@/lib/pokemon-route';
 import type { Player, Trade } from '@/lib/types';
 import {
   isTradeDeadlinePassed,
+  pointDelta,
   tradePointSummary,
   validateTrade,
+  type PendingByTeam,
   type ValidationIssue,
   type SidePoints,
 } from '@/lib/trade-validation';
@@ -199,6 +201,7 @@ export function LegalityMeter({
   pointCap,
   submitError,
   rosterSize,
+  pending,
 }: {
   proposer: Player;
   recipient: Player;
@@ -207,21 +210,27 @@ export function LegalityMeter({
   pointCap: number;
   submitError?: string | null;
   rosterSize?: number;
+  /** Server-projected rosters for teams with approved-but-unapplied moves. */
+  pending?: PendingByTeam;
 }) {
   const league = useLeague();
   // Effective roster band — fall back to the draft rosterSize when unset, and
   // honor an explicit `rosterSize` prop override as the max.
   const effMax = rosterSize ?? league.season.maxRosterSize ?? league.season.rosterSize;
   const effMin = league.season.minRosterSize ?? league.season.rosterSize;
-  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, maxRosterSize: effMax, minRosterSize: effMin });
-  const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap);
+  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, maxRosterSize: effMax, minRosterSize: effMin, pending });
+  const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap, pending);
   const hasSelections = offering.size > 0 && requesting.size > 0;
   const isLegal = hasSelections && issues.length === 0;
 
   // Give/get point totals for unequal-swap awareness
-  const givePts = proposer.roster.filter(m => offering.has(m.name)).reduce((s, m) => s + (m.tier || 0), 0);
-  const getPts = recipient.roster.filter(m => requesting.has(m.name)).reduce((s, m) => s + (m.tier || 0), 0);
+  const givePts = pointDelta(proposer, offering, pending);
+  const getPts = pointDelta(recipient, requesting, pending);
   const isUnequal = offering.size !== requesting.size;
+
+  // Scheduled moves already baked into the totals above — say so, or the cap
+  // math looks wrong next to the roster page.
+  const scheduled = (pending?.[proposer.id]?.moves ?? 0) + (pending?.[recipient.id]?.moves ?? 0);
 
   return (
     <div className="space-y-2">
@@ -241,6 +250,16 @@ export function LegalityMeter({
         <PointsCard team={proposer} pts={pts.proposer} cap={pointCap} />
         <PointsCard team={recipient} pts={pts.recipient} cap={pointCap} />
       </div>
+
+      {scheduled > 0 && (
+        <div className="flex items-start gap-2 px-2.5 py-1.5 rounded-md bg-surface-overlay/40 border border-border-subtle text-[11px] text-text-muted">
+          <CalendarClock size={12} className="shrink-0 mt-0.5" />
+          <span>
+            Totals include {scheduled} approved move{scheduled === 1 ? '' : 's'} that
+            {' '}land{scheduled === 1 ? 's' : ''} before this trade would.
+          </span>
+        </div>
+      )}
 
       {hasSelections && issues.length > 0 && (
         <div className="rounded-md border border-loss/30 bg-loss/10 p-2.5 space-y-1">

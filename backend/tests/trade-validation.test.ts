@@ -24,6 +24,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../src/db';
 import { eq, like, inArray } from 'drizzle-orm';
 import { tradeRoutes } from '../src/routes/trades';
+import { invalidateCostCache } from '../src/lib/league-costs';
 
 const PFX = 'ttrade-';
 
@@ -70,6 +71,7 @@ function cleanupFixtures() {
   // Delete any trades involving the fixture teams first (FK to teams).
   const teamIds = db.select().from(schema.teams).where(like(schema.teams.id, `${PFX}%`)).all().map(t => t.id);
   if (teamIds.length) {
+    db.delete(schema.faRequests).where(inArray(schema.faRequests.teamId, teamIds)).run();
     db.delete(schema.trades).where(inArray(schema.trades.proposerId, teamIds)).run();
     db.delete(schema.tradeBlockListings).where(inArray(schema.tradeBlockListings.teamId, teamIds)).run();
     db.delete(schema.rosters).where(inArray(schema.rosters.teamId, teamIds)).run();
@@ -374,5 +376,116 @@ describe('trade deadline + phase enforcement at propose time', () => {
     } finally {
       db.update(schema.leagues).set({ currentWeek: savedWeek }).where(eq(schema.leagues.id, host.id)).run();
     }
+  });
+});
+
+/**
+ * Scheduled (approved-but-unapplied) moves must be projected onto both rosters
+ * before a trade is validated. An approved FA lands at the start of next week;
+ * a trade proposed today can't land any earlier, so validating it against the
+ * pre-FA roster rejects swaps that are legal by the time they take effect
+ * (reported in S11: "my FA solves that by giving me 1pt to play with").
+ */
+describe('trade validation — projects scheduled moves', () => {
+  if (!host) {
+    test.skip('no regular-phase league with open deadline — skipping', () => {});
+    return;
+  }
+
+  const cap = db.select().from(schema.seasons).where(eq(schema.seasons.id, host.seasonId)).get()?.pointCap ?? 110;
+  const currentWeek = db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()?.currentWeek ?? 1;
+
+  /** Proposer sits exactly AT the cap; the swap is +4, so it only fits if the
+   *  pending FA (drop 5pt, pick up 1pt) is counted. */
+  function seedAtCap() {
+    ensurePokemon(`${PFX}drop`, { tier: 5, dex: 9601 });
+    ensurePokemon(`${PFX}bait`, { tier: 1, dex: 9602 });
+    ensurePokemon(`${PFX}prize`, { tier: 5, dex: 9603 });
+    ensurePokemon(`${PFX}fapick`, { tier: 1, dex: 9604 });
+    invalidateCostCache(); // fixture mons were inserted after the map was built
+    const bulk = cap - 6; // drop(5) + bait(1) + bulk = cap
+    ensurePokemon(`${PFX}bulk`, { tier: bulk, dex: 9605 });
+    return seedTeams(host!.id, {
+      proposerMons: [
+        { name: `${PFX}drop`, cost: 5 },
+        { name: `${PFX}bait`, cost: 1 },
+        { name: `${PFX}bulk`, cost: bulk },
+      ],
+      recipientMons: [{ name: `${PFX}prize`, cost: 5 }],
+      padTo: HOST_ROSTER,
+    });
+  }
+
+  function scheduleFa(teamId: string, drops: string[], pickups: string[]) {
+    db.insert(schema.faRequests).values({
+      leagueId: host!.id, week: currentWeek, teamId,
+      status: 'approved', requestType: 'pickup',
+      pickups: JSON.stringify(pickups), drops: JSON.stringify(drops),
+      effectiveWeek: currentWeek + 1, appliedAt: null,
+    }).run();
+  }
+
+  test('rejects the swap while nothing is scheduled', async () => {
+    const { teamA, teamB } = seedAtCap();
+    const { status, json } = await propose(host.id, {
+      proposerId: teamA, recipientId: teamB,
+      offering: [`${PFX}bait`], requesting: [`${PFX}prize`],
+    });
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/point cap/i);
+  });
+
+  test('accepts the same swap once an approved FA frees the points', async () => {
+    const { teamA, teamB } = seedAtCap();
+    scheduleFa(teamA, [`${PFX}drop`], [`${PFX}fapick`]);
+    const { status, json } = await propose(host.id, {
+      proposerId: teamA, recipientId: teamB,
+      offering: [`${PFX}bait`], requesting: [`${PFX}prize`],
+    });
+    expect(status).toBe(200);
+    expect(json.id).toBeDefined();
+  });
+
+  test('an applied FA is not double-counted', async () => {
+    const { teamA, teamB } = seedAtCap();
+    // Same row, but already applied → the roster above is the real one, so the
+    // swap must go back to failing.
+    db.insert(schema.faRequests).values({
+      leagueId: host.id, week: currentWeek, teamId: teamA,
+      status: 'approved', requestType: 'pickup',
+      pickups: JSON.stringify([`${PFX}fapick`]), drops: JSON.stringify([`${PFX}drop`]),
+      effectiveWeek: currentWeek, appliedAt: new Date().toISOString(),
+    }).run();
+    const { status } = await propose(host.id, {
+      proposerId: teamA, recipientId: teamB,
+      offering: [`${PFX}bait`], requesting: [`${PFX}prize`],
+    });
+    expect(status).toBe(400);
+  });
+
+  test('GET /pending-moves reports the projected roster the composer needs', async () => {
+    const { teamA } = seedAtCap();
+    scheduleFa(teamA, [`${PFX}drop`], [`${PFX}fapick`]);
+    const res = await makeApp().handle(
+      new Request(`http://localhost/api/leagues/${host.id}/pending-moves`),
+    );
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json[teamA].moves).toBe(1);
+    expect(json[teamA].outgoing).toEqual([`${PFX}drop`]);
+    const names = json[teamA].roster.map((r: { name: string }) => r.name);
+    expect(names).toContain(`${PFX}fapick`);
+    expect(names).not.toContain(`${PFX}drop`);
+  });
+
+  test('a mon already committed to a scheduled drop cannot be traded', async () => {
+    const { teamA, teamB } = seedAtCap();
+    scheduleFa(teamA, [`${PFX}drop`], [`${PFX}fapick`]);
+    const { status, json } = await propose(host.id, {
+      proposerId: teamA, recipientId: teamB,
+      offering: [`${PFX}drop`], requesting: [`${PFX}prize`],
+    });
+    expect(status).toBe(400);
+    expect(json.error).toMatch(/committed to a scheduled move/i);
   });
 });

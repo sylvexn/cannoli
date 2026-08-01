@@ -4,7 +4,8 @@
  * (the backend re-verifies authoritatively).
  *
  * Rules mirrored:
- *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft)
+ *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft —
+ *     with the tera-captain markup applied, same as backend effectiveCost)
  *   - max 1 mega per team
  *   - no duplicate species (proxy for the national-dex check)
  *   - roster band: neither team may exceed its max NOR drop below its min after
@@ -13,12 +14,44 @@
  * Unequal (N-for-M) trades are allowed — each side just needs ≥1 and a legal
  * resulting roster.
  *
+ * Every side is measured on its PROJECTED roster when `pending` is supplied —
+ * approved-but-unapplied FA moves / scheduled trades, straight from the server
+ * (GET /api/leagues/:id/pending-moves). A proposal can't land before those do,
+ * so that's the roster the backend validator uses too.
+ *
  * Lives in lib/ (not under the old wizard/) so every market surface imports the
  * same copy — previously the propose dialog shipped a private fork that drifted.
  */
 
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
-import type { Player, RosterPokemon } from '@/lib/types';
+import { getTermCost } from '@/data/tier-list';
+import type { Player } from '@/lib/types';
+
+/** Server-projected roster for one team (see backend lib/projected-roster.ts). */
+export interface PendingMoves {
+  /** How many approved-but-unapplied rows fed the projection. */
+  moves: number;
+  /** Names the pending moves take OFF this roster. */
+  outgoing: string[];
+  roster: { name: string; tier: number; isTeraCaptain: boolean }[];
+}
+
+/** Keyed by team id; teams with nothing pending are absent. */
+export type PendingByTeam = Record<string, PendingMoves>;
+
+/** Roster slot — `RosterPokemon` and a projected slot are both assignable. */
+type Slot = { name: string; tier: number; isTeraCaptain?: boolean };
+
+/** The roster a proposal will actually meet: projected if pending, else current. */
+export function effectiveRoster(team: Player, pending?: PendingByTeam): Slot[] {
+  return pending?.[team.id]?.roster ?? team.roster;
+}
+
+/** Points a slot contributes — captains carry the tera markup (backend: effectiveCost). */
+function slotCost(m: Slot): number {
+  const tier = m.tier || 0;
+  return m.isTeraCaptain ? getTermCost(tier) : tier;
+}
 
 /**
  * Whether trading is closed, mirroring the backend (isTradeDeadlinePassed in
@@ -52,29 +85,49 @@ export interface ValidateTradeOpts {
   /** League roster band — effective min a side may hold after the swap.
    *  If provided, validates neither side falls below. */
   minRosterSize?: number;
+  /** Server-projected rosters for teams with scheduled moves. */
+  pending?: PendingByTeam;
 }
 
 export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
-  const { proposer, recipient, offering, requesting, pointCap, maxRosterSize, minRosterSize } = opts;
+  const { proposer, recipient, offering, requesting, pointCap, maxRosterSize, minRosterSize, pending } = opts;
   const issues: ValidationIssue[] = [];
 
   // Nothing selected on a side yet → not-yet-legal, but don't nag.
   if (offering.size === 0 || requesting.size === 0) return issues;
 
-  const offered = proposer.roster.filter(m => offering.has(m.name));
-  const requested = recipient.roster.filter(m => requesting.has(m.name));
+  const proposerRoster = effectiveRoster(proposer, pending);
+  const recipientRoster = effectiveRoster(recipient, pending);
 
-  // Build post-trade rosters
-  const postProposer: RosterPokemon[] = [
-    ...proposer.roster.filter(m => !offering.has(m.name)),
-    ...requested,
+  // A mon already committed to a scheduled move is gone by the time this trade
+  // lands — the backend rejects it, so say so here rather than on submit.
+  for (const [side, label, names, roster] of [
+    ['offering', 'Your team', offering, proposerRoster],
+    ['requesting', recipient.teamAbbrev, requesting, recipientRoster],
+  ] as const) {
+    for (const name of names) {
+      if (!roster.some(m => m.name === name)) {
+        issues.push({ side, message: `${label} already has ${name} committed to a scheduled move` });
+      }
+    }
+  }
+
+  const offered = proposerRoster.filter(m => offering.has(m.name));
+  const requested = recipientRoster.filter(m => requesting.has(m.name));
+
+  // Build post-trade rosters. Tera captaincy doesn't transfer, so an incoming
+  // mon sheds its markup (mirrors backend executeRosterSwap).
+  const shed = (m: Slot): Slot => ({ ...m, isTeraCaptain: false });
+  const postProposer: Slot[] = [
+    ...proposerRoster.filter(m => !offering.has(m.name)),
+    ...requested.map(shed),
   ];
-  const postRecipient: RosterPokemon[] = [
-    ...recipient.roster.filter(m => !requesting.has(m.name)),
-    ...offered,
+  const postRecipient: Slot[] = [
+    ...recipientRoster.filter(m => !requesting.has(m.name)),
+    ...offered.map(shed),
   ];
 
-  function check(side: 'offering' | 'requesting', label: string, roster: RosterPokemon[], max?: number, min?: number) {
+  function check(side: 'offering' | 'requesting', label: string, roster: Slot[], max?: number, min?: number) {
     // Roster band (max / min)
     if (max != null && roster.length > max) {
       issues.push({ side, message: `${label} would have ${roster.length} Pokemon (max ${max})` });
@@ -84,7 +137,7 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     }
 
     // Point cap
-    const total = roster.reduce((s, m) => s + (m.tier || 0), 0);
+    const total = roster.reduce((s, m) => s + slotCost(m), 0);
     if (total > pointCap) {
       issues.push({ side, message: `${label} would exceed point cap (${total} > ${pointCap})` });
     }
@@ -114,16 +167,16 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
   return issues;
 }
 
-/** Sum of tier costs for the named pokemon on a team's roster. */
-export function pointDelta(team: Player, names: Set<string>): number {
-  return team.roster
+/** Sum of effective (captain-marked-up) costs for the named pokemon on a roster. */
+export function pointDelta(team: Player, names: Set<string>, pending?: PendingByTeam): number {
+  return effectiveRoster(team, pending)
     .filter(m => names.has(m.name))
-    .reduce((s, m) => s + (m.tier || 0), 0);
+    .reduce((s, m) => s + slotCost(m), 0);
 }
 
-/** Total tier cost of a roster. */
-export function rosterTotal(team: Player): number {
-  return team.roster.reduce((s, m) => s + (m.tier || 0), 0);
+/** Total effective cost of a roster. */
+export function rosterTotal(team: Player, pending?: PendingByTeam): number {
+  return effectiveRoster(team, pending).reduce((s, m) => s + slotCost(m), 0);
 }
 
 export interface SidePoints {
@@ -147,13 +200,19 @@ export function tradePointSummary(
   offering: Set<string>,
   requesting: Set<string>,
   pointCap: number,
+  pending?: PendingByTeam,
 ): { proposer: SidePoints; recipient: SidePoints } {
-  const offeringPts = pointDelta(proposer, offering);
-  const requestingPts = pointDelta(recipient, requesting);
-  const proposerBefore = rosterTotal(proposer);
-  const recipientBefore = rosterTotal(recipient);
-  const proposerAfter = proposerBefore - offeringPts + requestingPts;
-  const recipientAfter = recipientBefore - requestingPts + offeringPts;
+  // What each side gives up carries its captain markup; what it receives lands
+  // as a non-captain, so it only costs base tier.
+  const base = (team: Player, names: Set<string>) => effectiveRoster(team, pending)
+    .filter(m => names.has(m.name))
+    .reduce((s, m) => s + (m.tier || 0), 0);
+  const offeringPts = pointDelta(proposer, offering, pending);
+  const requestingPts = pointDelta(recipient, requesting, pending);
+  const proposerBefore = rosterTotal(proposer, pending);
+  const recipientBefore = rosterTotal(recipient, pending);
+  const proposerAfter = proposerBefore - offeringPts + base(recipient, requesting);
+  const recipientAfter = recipientBefore - requestingPts + base(proposer, offering);
   return {
     proposer: {
       before: proposerBefore,

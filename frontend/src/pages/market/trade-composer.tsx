@@ -23,7 +23,7 @@ import { PokemonSprite } from '@/components/pokemon-sprite';
 import { ArrowRightLeft, Check, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isMegaForm } from '@/lib/draft-rules';
-import { validateTrade } from '@/lib/trade-validation';
+import { validateTrade, type PendingByTeam } from '@/lib/trade-validation';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { api } from '@/lib/api';
@@ -63,6 +63,19 @@ export function TradeComposer({
   const [requesting, setRequesting] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Approved-but-unapplied moves, so the meter matches the server's validator
+  // (a trade can't land before a scheduled FA/trade does). Best-effort: on
+  // failure we fall back to current rosters, exactly as before.
+  const [pending, setPending] = useState<PendingByTeam>({});
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    api.getPendingMoves(league.id)
+      .then(p => { if (live) setPending(p); })
+      .catch(() => { if (live) setPending({}); });
+    return () => { live = false; };
+  }, [open, league.id]);
 
   // (Re)initialise whenever the dialog opens.
   useEffect(() => {
@@ -108,7 +121,7 @@ export function TradeComposer({
   const issues = partnerTeam
     ? validateTrade({
         proposer: proposerTeam, recipient: partnerTeam, offering, requesting, pointCap,
-        maxRosterSize: effMax, minRosterSize: effMin,
+        maxRosterSize: effMax, minRosterSize: effMin, pending,
       })
     : [];
   const canSubmit =
@@ -230,6 +243,7 @@ export function TradeComposer({
               requesting={requesting}
               pointCap={pointCap}
               submitError={submitError}
+              pending={pending}
             />
           )}
         </div>

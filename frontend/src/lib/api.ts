@@ -1113,6 +1113,10 @@ export const api = {
 
   getTradeBlock: (leagueId: string) => fetchJson<ApiTradeBlockListing[]>(`/api/leagues/${leagueId}/trade-block`),
 
+  /** Projected rosters for teams with approved-but-unapplied moves (auth only). */
+  getPendingMoves: (leagueId: string) =>
+    fetchJson<import('@/lib/trade-validation').PendingByTeam>(`/api/leagues/${leagueId}/pending-moves`),
+
   getTierList: (format?: string) =>
     fetchJson<ApiTierListEntry[]>(format ? `/api/tier-list?format=${encodeURIComponent(format)}` : '/api/tier-list'),
 
