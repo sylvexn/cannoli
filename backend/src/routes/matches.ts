@@ -253,18 +253,22 @@ export const matchRoutes = new Elysia()
   // Consumed by the embed page on sim.cannoli.live, which is iframed by
   // the Cannoli replay viewer panel — no external link to PS required.
   //
-  // Public on purpose: replays are spectator content and the embed page
-  // (cross-origin) can't carry session cookies anyway. CORS allow-all so
-  // either sim.cannoli.live or cannoli.live can fetch directly if we ever
-  // skip the nginx proxy.
+  // Fully public on purpose: anyone with the link may watch, including guests.
+  // This endpoint deliberately does NOT apply the results-reveal gate. Watching
+  // a replay is an explicit opt-in to seeing the battle, so gating it only ever
+  // produced "Failed to load replay: HTTP 404" on matches the gallery had
+  // already offered. The gate still covers the things that spoil at a GLANCE —
+  // /replay-summary (MVP, sweep, scoreLine) and the schedule's scores — so an
+  // unpublished week still can't be read off a card without pressing play.
+  // CORS allow-all so either sim.cannoli.live or cannoli.live can fetch
+  // directly if we ever skip the nginx proxy.
 
-  .get('/api/matches/:matchId/replay.json', ({ params, set, user }) => {
+  .get('/api/matches/:matchId/replay.json', ({ params, set }) => {
     const match = db.select().from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
       .get();
-    // Results-reveal gate — the log is the whole battle, the strongest spoiler
-    // of the three. Indistinguishable from "no log stored".
-    if (!match || !match.replayLog || !isMatchRevealed(match, user)) {
+    // The only 404 left: there is genuinely no stored log to play.
+    if (!match || !match.replayLog) {
       set.status = 404;
       return { error: 'Replay log not available for this match' };
     }
@@ -290,12 +294,9 @@ export const matchRoutes = new Elysia()
     const p2 = p2Match?.[1] || awayTeam?.coachName || 'Away';
 
     set.headers['Access-Control-Allow-Origin'] = '*';
-    // This response now varies by viewer (staff bypass the reveal gate), so a
-    // shared cache must not hold a staff-visible log and replay it to anonymous
-    // callers. Only publicly cacheable once the week is revealed to everyone.
-    set.headers['Cache-Control'] = isMatchRevealed(match, null)
-      ? 'public, max-age=300'
-      : 'private, no-store';
+    // Identical for every viewer now that the reveal gate is gone, so it is
+    // unconditionally safe for a shared cache to hold and re-serve.
+    set.headers['Cache-Control'] = 'public, max-age=300';
     return {
       id: match.id,
       format,

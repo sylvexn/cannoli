@@ -165,7 +165,11 @@ export function ReplaysPage() {
         const teamMap = new Map(teams.map(t => [t.id, t]));
 
         return schedule.matches
-          .filter(m => (m.replayUrl && m.replayUrl !== '#') || m.hasReplay)
+          // `hasReplay` (a stored battle log) is the ONLY thing the in-site
+          // viewer can play. Accepting a bare replayUrl too would list matches
+          // whose /replay.json has nothing to serve — a guaranteed
+          // "Failed to load replay: HTTP 404" the moment someone clicks.
+          .filter(m => m.hasReplay)
           .map(m => ({
             match: m,
             league,

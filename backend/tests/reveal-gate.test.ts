@@ -2,18 +2,24 @@
  * Results-reveal gate on the per-match endpoints.
  *
  * The league-level gate (`leagues.resultsRevealedThrough`) hides unrevealed
- * weeks from the schedule/standings/stats endpoints. Three per-match endpoints
+ * weeks from the schedule/standings/stats endpoints. Two per-match endpoints
  * bypassed it entirely and served unrevealed results to ANONYMOUS callers:
  *
  *   - /api/matches/:id/replay-summary  → `scoreLine` straight off the match row
  *   - /api/matches/:id/pokemon         → per-mon K/D (winner is trivially derived)
- *   - /api/matches/:id/replay.json     → the entire battle log
  *
  * Contract verified here: a revealed week stays fully readable, an unrevealed
  * week is withheld from anonymous/non-staff viewers using the SAME response
  * shape as "no such match" (so the gate can't be probed), staff bypass the gate
  * (the stream cockpit reviews results before publishing), and a NULL gate means
  * everything is public.
+ *
+ * /api/matches/:id/replay.json is DELIBERATELY EXEMPT — replays are public to
+ * everyone including guests, so the gate never applies to the log. Gating it
+ * only produced "Failed to load replay: HTTP 404" on matches the gallery had
+ * already offered. Those two endpoints above still cover what spoils at a
+ * glance, so an unpublished week can't be read off a card without pressing
+ * play. The exemption is pinned by its own describe block at the bottom.
  */
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { Elysia } from 'elysia';
@@ -141,20 +147,17 @@ describe('results-reveal gate — per-match endpoints', () => {
   });
 
   test('unrevealed week is withheld from anonymous callers', async () => {
-    // This is the regression: all three of these leaked pre-fix.
+    // This is the regression: both of these leaked pre-fix.
     expect(await body(`/api/matches/${HIDDEN}/replay-summary`)).toBe('');
 
     const mons = await (await hit(`/api/matches/${HIDDEN}/pokemon`)).json();
     expect(mons).toEqual({ home: [], away: [] });
-
-    expect((await hit(`/api/matches/${HIDDEN}/replay.json`)).status).toBe(404);
   });
 
   test('unrevealed week is withheld from a signed-in non-staff user too', async () => {
     expect(await body(`/api/matches/${HIDDEN}/replay-summary`, userCookie)).toBe('');
     expect(await (await hit(`/api/matches/${HIDDEN}/pokemon`, userCookie)).json())
       .toEqual({ home: [], away: [] });
-    expect((await hit(`/api/matches/${HIDDEN}/replay.json`, userCookie)).status).toBe(404);
   });
 
   test('withheld response is shaped exactly like a nonexistent match (not probeable)', async () => {
@@ -163,8 +166,6 @@ describe('results-reveal gate — per-match endpoints', () => {
       .toBe(await body(`/api/matches/${missing}/replay-summary`));
     expect(await body(`/api/matches/${HIDDEN}/pokemon`))
       .toBe(await body(`/api/matches/${missing}/pokemon`));
-    expect((await hit(`/api/matches/${HIDDEN}/replay.json`)).status)
-      .toBe((await hit(`/api/matches/${missing}/replay.json`)).status);
   });
 
   test('staff bypass the gate — the stream cockpit needs pre-publish results', async () => {
@@ -173,18 +174,6 @@ describe('results-reveal gate — per-match endpoints', () => {
 
     const mons = await (await hit(`/api/matches/${HIDDEN}/pokemon`, staffCookie)).json();
     expect(mons.home.length).toBe(1);
-
-    expect((await hit(`/api/matches/${HIDDEN}/replay.json`, staffCookie)).status).toBe(200);
-  });
-
-  test('a staff-visible unrevealed replay is never publicly cacheable', async () => {
-    // Response varies by viewer, so a shared cache must not replay a staff log
-    // to anonymous callers.
-    const hidden = await hit(`/api/matches/${HIDDEN}/replay.json`, staffCookie);
-    expect(hidden.headers.get('cache-control')).toBe('private, no-store');
-
-    const shown = await hit(`/api/matches/${REVEALED}/replay.json`);
-    expect(shown.headers.get('cache-control')).toBe('public, max-age=300');
   });
 
   test('NULL gate (off) publishes every week anonymously', async () => {
@@ -192,7 +181,6 @@ describe('results-reveal gate — per-match endpoints', () => {
     try {
       const summary = await (await hit(`/api/matches/${HIDDEN}/replay-summary`)).json();
       expect(summary?.scoreLine).toBe('6-2');
-      expect((await hit(`/api/matches/${HIDDEN}/replay.json`)).status).toBe(200);
     } finally {
       setGate(5);
     }
@@ -207,6 +195,48 @@ describe('results-reveal gate — per-match endpoints', () => {
       expect(mons.home.length).toBe(1);
     } finally {
       setGate(5);
+    }
+  });
+});
+
+// Replays are public — the gate must never reach them
+//
+// A stored log plays for ANYONE with the link: guest, signed-in coach, staff,
+// revealed week or not. The only 404 left is "no log stored". This is the
+// guarantee that a listed replay can't fail to open, so keep it exact — if a
+// future gate needs to cover replay.json, that is a product decision, not a
+// refactor.
+
+describe('replay.json is ungated', () => {
+  test('an unrevealed week plays for guests, users and staff alike', async () => {
+    for (const who of [undefined, userCookie, staffCookie]) {
+      const r = await hit(`/api/matches/${HIDDEN}/replay.json`, who);
+      expect(r.status).toBe(200);
+      expect((await r.json()).log).toContain('|win|Home');
+    }
+  });
+
+  test('always publicly cacheable — the response never varies by viewer', async () => {
+    for (const id of [REVEALED, HIDDEN]) {
+      for (const who of [undefined, staffCookie]) {
+        expect((await hit(`/api/matches/${id}/replay.json`, who)).headers.get('cache-control'))
+          .toBe('public, max-age=300');
+      }
+    }
+  });
+
+  test('the only 404 is a match with no stored log', async () => {
+    expect((await hit(`/api/matches/${PFX}-nope/replay.json`)).status).toBe(404);
+
+    const noLog = `${PFX}-nolog`;
+    db.insert(schema.matches).values({
+      id: noLog, leagueId: LEAGUE, week: 6, homeTeamId: null, awayTeamId: null,
+      status: 'completed', phase: 'regular',
+    }).run();
+    try {
+      expect((await hit(`/api/matches/${noLog}/replay.json`)).status).toBe(404);
+    } finally {
+      db.delete(schema.matches).where(eq(schema.matches.id, noLog)).run();
     }
   });
 });

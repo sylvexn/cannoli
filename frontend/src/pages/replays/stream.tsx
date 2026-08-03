@@ -95,7 +95,8 @@ export function StreamPage() {
         const standingsRankById = new Map(teams.map((t, i) => [t.id, i + 1]));
         return matches
           .filter((m: ApiMatch) => m.week === week)
-          .filter((m: ApiMatch) => (m.replayUrl && m.replayUrl !== '#') || m.hasReplay)
+          // Stored log only — a bare replayUrl has nothing the player can load.
+          .filter((m: ApiMatch) => m.hasReplay)
           .filter((m: ApiMatch) => m.status === 'completed' || m.homeScore !== null)
           .sort((a: ApiMatch, b: ApiMatch) => a.id.localeCompare(b.id))
           .map<QueueEntry>(m => {
