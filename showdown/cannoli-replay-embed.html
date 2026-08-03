@@ -625,8 +625,14 @@
         return setTimeout(start, 100);
       }
 
+      // Send cookies. This fetch is same-origin (sim.cannoli.live), and the
+      // session cookie is scoped Domain=.cannoli.live, so it reaches the backend
+      // through nginx's /replay/data proxy. Without it the log endpoint always
+      // evaluated the results-reveal gate as anonymous — so STAFF could never
+      // play back an unpublished week's replay (the stream cockpit's whole job),
+      // getting "Failed to load replay: HTTP 404" instead.
       fetch('/replay/data/' + encodeURIComponent(matchId) + '.json', {
-        credentials: 'omit',
+        credentials: 'same-origin',
       }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
