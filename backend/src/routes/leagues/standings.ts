@@ -161,12 +161,15 @@ export const standingsRoutes = new Elysia()
 
   // Schedule
 
-  .get('/api/leagues/:leagueId/schedule', ({ params }) => {
+  .get('/api/leagues/:leagueId/schedule', ({ params, user }) => {
     // Results-reveal gate: when an admin has set resultsRevealedThrough on this
     // league, scores for later (unrevealed) weeks are withheld so the schedule
     // can't be used to spoil who won before standings catch up. Same gate the
     // standings/stats endpoints already honor (NULL = gate off = full scores).
     const maxWeek = revealedMaxWeek(params.leagueId);
+    // Staff review unpublished weeks (the stream cockpit reads this endpoint),
+    // so they keep seeing replay affordances the gate hides from everyone else.
+    const staff = isStaff(user);
 
     const matches = db.select().from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
@@ -178,6 +181,11 @@ export const standingsRoutes = new Elysia()
         // standings recent-results card and team schedule both gate their
         // W/L badge on homeScore/awayScore != null).
         const gated = maxWeek != null && m.week > maxWeek;
+        // The replay affordance has to honor the SAME gate as the log itself.
+        // /api/matches/:id/replay.json 404s an unrevealed week for non-staff, so
+        // advertising a replay here made the gallery list week-N battles that
+        // then failed with "Failed to load replay: HTTP 404" in the embed.
+        const showReplay = staff || !gated;
         return {
           id: m.id,
           week: m.week,
@@ -185,10 +193,10 @@ export const standingsRoutes = new Elysia()
           awayPlayer: m.awayTeamId,
           homeScore: gated ? null : m.homeScore,
           awayScore: gated ? null : m.awayScore,
-          replayUrl: m.replayUrl,
+          replayUrl: showReplay ? m.replayUrl : null,
           // True when a battle log is stored, even if there's no live PS room
           // URL (imported replays). The in-site viewer plays by match id.
-          hasReplay: m.replayLog != null,
+          hasReplay: showReplay && m.replayLog != null,
           status: m.status,
           phase: m.phase,
           playoffRound: m.playoffRound,
