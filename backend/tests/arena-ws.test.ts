@@ -28,8 +28,9 @@ import { Elysia } from 'elysia';
 import { eq } from 'drizzle-orm';
 import { db, schema, sqlite } from '../src/db';
 import { createSession } from '../src/lib/auth';
-import { arenaRoutes } from '../src/routes/arena';
+import { arenaRoutes, handleScrimBattleFailed } from '../src/routes/arena';
 import * as psBot from '../src/lib/ps-bot';
+import { toUserid } from '../src/lib/ps-login';
 
 // The Arena now gates the "both ready → status='ready' + create battle"
 // transition on bot connectivity (offline ⇒ match stays 'scheduled', flags
@@ -577,5 +578,35 @@ describe('pick battle week', () => {
 
     home.close();
     await sleep(50);
+  });
+});
+
+// 2b. Battle-create failure must NOT unready the coaches
+//
+// The PS plugin answers /cannoli-battle with `cannoli-battle-failed` when it
+// can't find a player online. That used to revert the match AND clear both
+// ready flags, so whoever readied second appeared to unready the pair — the
+// live "only one person could ready up" report. The flags must survive so the
+// match lands in the both-ready/'scheduled' state the Arena renders with a
+// Retry start button.
+
+describe('battle-create failure', () => {
+  test('keeps both ready flags, reverts status and psRoomId', () => {
+    resetMatch();
+    db.update(schema.matches)
+      .set({ status: 'ready', readyHome: true, readyAway: true, psRoomId: null, startedAt: new Date().toISOString() })
+      .where(eq(schema.matches.id, matchId)).run();
+
+    const homeUid = toUserid(`${tag}-home`);
+    const awayUid = toUserid(`${tag}-away`);
+    handleScrimBattleFailed(homeUid, awayUid, `Player not found or offline: ${awayUid}`);
+
+    const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
+    expect(m.status).toBe('scheduled');
+    expect(m.startedAt).toBeNull();
+    expect(m.psRoomId).toBeNull();
+    // The whole point: neither coach gets unreadied by the other's failure.
+    expect(m.readyHome).toBe(true);
+    expect(m.readyAway).toBe(true);
   });
 });

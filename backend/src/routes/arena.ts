@@ -155,21 +155,32 @@ function clearReadyTimer(matchId: string) {
 }
 
 /**
- * Revert a 'ready' official match back to 'scheduled': clear ready flags +
- * startedAt + psRoomId, tear down any orphaned PS invite room, and log the
- * event. Shared by the team-selection timeout and the battle-create-failure
- * path (both mean the same thing — "the invite never turned into a running
- * battle") so the two can't drift apart.
+ * Revert a 'ready' official match back to 'scheduled': clear startedAt +
+ * psRoomId, tear down any orphaned PS invite room, and log the event. Shared by
+ * the team-selection timeout and the battle-create-failure path (both mean the
+ * same thing — "the invite never turned into a running battle") so the two
+ * can't drift apart.
+ *
+ * `keepReadyFlags` is the difference between the two: a timeout means NEITHER
+ * coach picked a team, so both flags clear. A battle-create failure means PS
+ * couldn't find one coach online — clearing both flags there unreadied the
+ * coach who did nothing wrong, which is what "the other trying to ready up
+ * would unready both players" actually was.
  */
 function revertReadyMatch(
   m: { id: string; leagueId: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null },
-  opts: { logEvent: 'timeout' | null; activityType: string; activityDescription: string },
+  opts: { logEvent: 'timeout' | null; activityType: string; activityDescription: string; keepReadyFlags?: boolean },
 ) {
   // A readied match always has both teams resolved (not a NULL bracket slot).
   if (m.homeTeamId == null || m.awayTeamId == null) return;
 
   db.update(schema.matches)
-    .set({ status: 'scheduled', readyHome: false, readyAway: false, startedAt: null, psRoomId: null })
+    .set({
+      status: 'scheduled',
+      ...(opts.keepReadyFlags ? {} : { readyHome: false, readyAway: false }),
+      startedAt: null,
+      psRoomId: null,
+    })
     .where(eq(schema.matches.id, m.id))
     .run();
 
@@ -329,11 +340,18 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
   // 'ready' with no psRoomId until the 5-minute INVITE_TIMEOUT_MS revert. Revert
   // it immediately and surface the failure instead of leaving the coach staring
   // at the "sending team-select invite..." spinner for the full window.
+  //
+  // KEEP both ready flags: the failure is "PS couldn't find one of you online",
+  // not "someone unreadied". Holding the flags leaves the match in the
+  // both-ready/'scheduled' state the Arena already renders as "Both ready, but
+  // the match didn't start" + a Retry start button — so the moment the missing
+  // coach is actually logged in to Showdown, one click re-fires the invite.
   const officialMatch = findReadyMatchForFailedPair(p1, p2);
   if (officialMatch) {
     clearReadyTimer(officialMatch.id);
     revertReadyMatch(officialMatch, {
       logEvent: null,
+      keepReadyFlags: true,
       activityType: 'match_battle_create_failed',
       activityDescription: `Battle creation failed for ${officialMatch.id} (${reason}) — reverted to scheduled`,
     });
@@ -343,7 +361,7 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
     publishWs(`arena:match:${officialMatch.id}`, JSON.stringify({
       type: 'match_error',
       matchId: officialMatch.id,
-      message: `Couldn't start battle — try again (${reason})`,
+      message: `Couldn't start — ${reason}. Make sure both coaches are logged in to Showdown, then hit Retry start.`,
     }));
     broadcastMatchState(officialMatch.id);
     return;

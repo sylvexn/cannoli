@@ -3,6 +3,7 @@
  * Connects to /ws/arena, auto-reconnects on disconnect.
  */
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { toast } from 'sonner';
 
 // Types
 
@@ -260,6 +261,10 @@ export function useArenaWebSocket() {
 
           case 'match_error':
             console.warn('[Arena WS]', msg.message);
+            // Toast as well as store it: `lastMatchError` only renders inside the
+            // footer's Match panel, which is collapsed by default — the reason a
+            // failed battle-create looked like an unexplained mass unready.
+            if (msg.message) toast.error(msg.message);
             setState(s => ({ ...s, lastMatchError: msg.message ?? null }));
             break;
 
