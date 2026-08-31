@@ -11,9 +11,11 @@ import { cn } from '@/lib/utils';
  *
  * `resultsRevealedThrough = null` → gate OFF, all results visible. An integer
  * N hides results for weeks > N for EVERYONE (standings/records computed only
- * through week N server-side). The backend clamps to [0, currentWeek].
+ * through week N server-side). The backend clamps to [0, last scheduled week]
+ * — playoff weeks sit past currentWeek, which never advances out of the
+ * regular phase, so the cap has to follow matches rather than currentWeek.
  *
- * UI: an Off / On toggle pair; when On, a NumberInput bounded to [0, currentWeek]
+ * UI: an Off / On toggle pair; when On, a NumberInput bounded to [0, maxWeek]
  * sets the revealed-through line. Every change POSTs immediately and calls
  * `onChanged` so the app-wide league cache (and thus every <Spoiler> + the
  * CDN-cached /teams reads it gates) re-fetches.
@@ -21,11 +23,14 @@ import { cn } from '@/lib/utils';
 export function ResultsRevealControl({
   leagueId,
   currentWeek,
+  maxWeek,
   value,
   onChanged,
 }: {
   leagueId: string;
   currentWeek: number;
+  /** Highest revealable week (playoff weeks run past currentWeek). */
+  maxWeek?: number;
   /** Current gate value: null = off, integer = revealed-through week. */
   value: number | null;
   /** Called after a successful mutation so the parent can refresh leagues. */
@@ -112,7 +117,7 @@ export function ResultsRevealControl({
               value={value!}
               onChange={v => commit(v)}
               min={0}
-              max={currentWeek}
+              max={maxWeek ?? currentWeek}
               disabled={saving}
               className="w-20"
             />

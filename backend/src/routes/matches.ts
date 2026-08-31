@@ -11,6 +11,7 @@ import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
+import { extendWeekDatesForPlayoffs } from '../lib/deadline';
 
 export const matchRoutes = new Elysia()
 
@@ -926,7 +927,7 @@ export const matchRoutes = new Elysia()
     const archived = checkLeagueArchived(params.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { topN } = (body || {}) as { topN?: number };
+    const { topN, force, confirmName } = (body || {}) as { topN?: number; force?: boolean; confirmName?: string };
 
     const league = getLeague(params.leagueId);
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -941,7 +942,47 @@ export const matchRoutes = new Elysia()
 
     // Sort using shared standings hierarchy (wins → H2H → diff → kills → id)
     const teamRecords = computeStandings(params.leagueId, { phase: 'regular' });
+    if (seedCount > teamRecords.length) {
+      set.status = 400;
+      return {
+        error: `Bracket size ${seedCount} exceeds the league's ${teamRecords.length} teams — the extra seeds would create permanently-TBD matches.`,
+        code: 'bracket_too_large',
+      };
+    }
     const seeded = teamRecords.slice(0, seedCount);
+
+    // Safety lock: regenerating wipes every playoff match and rebuilds from
+    // scratch. Once results exist that destroys completed games (and orphans
+    // the pins that reference their match ids), so require the same
+    // force+confirmName handshake schedule/generate uses.
+    const completedPlayoffs = db.select({ count: sql<number>`COUNT(*)` })
+      .from(schema.matches)
+      .where(and(
+        eq(schema.matches.leagueId, params.leagueId),
+        eq(schema.matches.phase, 'playoffs'),
+        sql`home_score IS NOT NULL AND away_score IS NOT NULL`,
+      ))
+      .get()?.count ?? 0;
+    if (completedPlayoffs > 0) {
+      if (!force) {
+        set.status = 409;
+        return {
+          error: `${completedPlayoffs} playoff matches already have results — regenerating deletes them. Pass { force: true, confirmName } to override.`,
+          code: 'regeneration_locked',
+          completedPlayoffs,
+          leagueName: league.name,
+        };
+      }
+      if (typeof confirmName !== 'string' || confirmName.trim() !== league.name) {
+        set.status = 409;
+        return {
+          error: `confirmName must match the league name exactly ("${league.name}") to force regeneration.`,
+          code: 'regeneration_locked',
+          completedPlayoffs,
+          leagueName: league.name,
+        };
+      }
+    }
 
     return tx(() => {
     // Clear existing playoff matches
@@ -957,6 +998,20 @@ export const matchRoutes = new Elysia()
 
     // Bracket layout is shared with the simulator via buildPlayoffMatchups.
     const matchups = buildPlayoffMatchups(seedCount, maxWeek);
+
+    // Playoff weeks sit PAST the regular schedule, so weekDates had no entry for
+    // them, scheduleDeadline() returned null, and runAutoForfeit skipped every
+    // playoff match forever — the whole decidePlayoffForfeit path was dead in
+    // production. Continue the league's own weekly cadence onto the bracket
+    // weeks so playoff deadlines resolve exactly like regular-season ones.
+    const weekDates: Record<string, string> = league.weekDates ? JSON.parse(league.weekDates) : {};
+    const extended = extendWeekDatesForPlayoffs(weekDates, maxWeek, matchups.map(m => m.week));
+    if (extended !== weekDates) {
+      db.update(schema.leagues)
+        .set({ weekDates: JSON.stringify(extended) })
+        .where(eq(schema.leagues.id, params.leagueId))
+        .run();
+    }
 
     let matchNum = 0;
     for (const m of matchups) {
