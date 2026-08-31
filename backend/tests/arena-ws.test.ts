@@ -429,8 +429,15 @@ describe('scrim lobby churn', () => {
     send(b, { type: 'scrim_join', lobbyId });
     await waitFor(b, (m) => m.some((x) => x.type === 'scrim_state' && x.players.length === 2));
 
-    // b drops → a's lobby list should fall back to 1 player.
+    // b drops. Eviction is DEFERRED by UNREADY_GRACE_MS — a refresh or page
+    // navigation tears the WS down for a moment and must not cost b their slot.
     b.close();
+    await sleep(50);
+    const lobbyNow = lastOfType(a, 'lobby_list')?.lobbies
+      .find((l: any) => l.id === lobbyId);
+    expect(lobbyNow?.players.length).toBe(2);
+
+    // ...but once the grace window lapses with no reconnect, the slot is freed.
     const shrank = await waitFor(a, (m) =>
       m.filter((x) => x.type === 'lobby_list').slice(-1)
         .some((x) => {
@@ -440,6 +447,34 @@ describe('scrim lobby churn', () => {
     expect(shrank).toBe(true);
 
     a.close();
+    await sleep(50);
+  });
+
+  test('closing one of a user\'s two tabs does not drop them from the lobby', async () => {
+    // A user can hold several Arena sockets at once. Shutting an old tab must
+    // not evict them from a lobby they're still sitting in on the live tab.
+    const a = await connect(cookie(homeSession));
+    const b1 = await connect(cookie(awaySession));
+    const b2 = await connect(cookie(awaySession)); // same user, second tab
+    await waitFor(a, (m) => m.some((x) => x.type === 'identified'));
+    await waitFor(b1, (m) => m.some((x) => x.type === 'identified'));
+    await waitFor(b2, (m) => m.some((x) => x.type === 'identified'));
+
+    send(a, { type: 'scrim_create' });
+    await waitFor(a, (m) => m.some((x) => x.type === 'scrim_joined'));
+    const lobbyId = lastOfType(a, 'scrim_joined').lobbyId;
+    send(b1, { type: 'scrim_join', lobbyId });
+    await waitFor(b1, (m) => m.some((x) => x.type === 'scrim_state' && x.players.length === 2));
+
+    // Close only the second tab, then wait out the full grace window.
+    b2.close();
+    await sleep(600);
+
+    const stillTwo = lastOfType(a, 'lobby_list')?.lobbies
+      .find((l: any) => l.id === lobbyId);
+    expect(stillTwo?.players.length).toBe(2);
+
+    a.close(); b1.close();
     await sleep(50);
   });
 });

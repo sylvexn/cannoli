@@ -14,6 +14,11 @@
  * is NOT sufficient on its own: an order-dependent reset in another suite can
  * empty the table mid-run, so `pickByTier` re-seeds defensively too.
  */
+// Arena disconnect cleanup (unready + scrim-lobby eviction) is deferred by
+// UNREADY_GRACE_MS so a page refresh doesn't drop you. 8s is right in prod and
+// far too slow for tests — shrink it, but let CI override.
+process.env.UNREADY_GRACE_MS ||= '300';
+
 import { ensurePokemonReference } from './pokemon-reference-seed';
 
 ensurePokemonReference();
