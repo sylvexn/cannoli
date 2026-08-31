@@ -96,6 +96,9 @@ function ScrimLobbyRow({
   const isInLobby = lobby.players.includes(username ?? '');
   const myIdx = lobby.players.indexOf(username ?? '');
   const amReady = myIdx >= 0 && lobby.ready[myIdx];
+  // Battle creation failed while both were ready — keep the ready flags
+  // but re-open the button so either player can re-fire it.
+  const canRetry = amReady && !!lobby.error;
   // Both players readied — the server sent a team-select invite to the Showdown
   // panel above. The battle only starts once both pick a team (not instant).
   const awaitingTeamPick = lobby.status === 'ready';
@@ -133,14 +136,16 @@ function ScrimLobbyRow({
           <>
             <button
               onClick={() => onReady(lobby.id)}
-              disabled={amReady}
+              disabled={amReady && !canRetry}
               className={`px-2 py-0.5 text-xs rounded transition-colors ${
-                amReady
-                  ? 'bg-green-400/20 text-green-400 cursor-default'
-                  : 'bg-green-400/10 text-green-400 hover:bg-green-400/20'
+                canRetry
+                  ? 'bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20'
+                  : amReady
+                    ? 'bg-green-400/20 text-green-400 cursor-default'
+                    : 'bg-green-400/10 text-green-400 hover:bg-green-400/20'
               }`}
             >
-              {amReady ? 'Ready ✓' : 'Ready'}
+              {canRetry ? 'Retry' : amReady ? 'Ready ✓' : 'Ready'}
             </button>
             <button
               onClick={() => onLeave(lobby.id)}

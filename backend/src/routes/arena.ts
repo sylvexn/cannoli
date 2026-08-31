@@ -309,10 +309,13 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
       (lp1 === p2 && lp2 === p1);
     if (!matched) continue;
 
-    // Revert to waiting so both players can try again.
+    // Revert to waiting so a click can re-fire the battle — but KEEP both ready
+    // flags. The failure is "PS couldn't find one of you online", not "someone
+    // unreadied", and clearing them made an innocent player look like they'd
+    // been unreadied by their opponent. Both stay ready, the lobby shows the
+    // error, and one Ready click from either side retries (the button
+    // re-enables while lobby.error is set).
     lobby.status = 'waiting';
-    lobby.ready[0] = false;
-    lobby.ready[1] = false;
 
     console.log(`[arena] scrim ${lobbyId} battle creation failed (${reason}) — reverted to waiting`);
 
@@ -577,14 +580,14 @@ export const arenaRoutes = new Elysia()
         };
         arenaClients.set(wsKey(ws), client);
 
-        // Cancel any pending unready (player navigated, didn't drop)
-        if (team) {
-          const key = clientKey(client.userId, team.teamId);
-          const pending = pendingUnready.get(key);
-          if (pending) {
-            clearTimeout(pending);
-            pendingUnready.delete(key);
-          }
+        // Cancel any pending disconnect cleanup (player navigated, didn't drop).
+        // Keyed the same way close() keys it — teamless clients included, since
+        // they can hold a scrim-lobby slot with no team.
+        const key = clientKey(client.userId, team?.teamId ?? '');
+        const pending = pendingUnready.get(key);
+        if (pending) {
+          clearTimeout(pending);
+          pendingUnready.delete(key);
         }
 
         // Subscribe to all of their playable matches (any week) so ready-state
@@ -848,11 +851,11 @@ export const arenaRoutes = new Elysia()
             // Check if both ready
             if (lobby.players.length === 2 && lobby.ready[0] && lobby.ready[1]) {
               if (!isBotConnected()) {
-                // Bot offline — reset ready flags so players can try again;
-                // do NOT advance lobby.status so we never strand the lobby
-                // in 'ready' with no battle behind it.
-                lobby.ready[0] = false;
-                lobby.ready[1] = false;
+                // Bot offline — do NOT advance lobby.status, so we never strand
+                // the lobby in 'ready' with no battle behind it. Ready flags are
+                // kept (neither player did anything wrong); the surfaced error
+                // re-enables the Ready button so either can retry once the bot
+                // is back.
                 publishWs(`arena:scrim:${msg.lobbyId}`, JSON.stringify({
                   type: 'scrim_error',
                   lobbyId: msg.lobbyId,
@@ -931,22 +934,33 @@ export const arenaRoutes = new Elysia()
     close(ws) {
       removeSpectatorFromAll(ws);
       const client = arenaClients.get(wsKey(ws));
-      if (client?.teamId && client.leagueId) {
-        // Don't unready immediately — frontend page navigation tears down the
-        // WS for a few seconds. Hold the action; cancel it if they reconnect.
-        const teamId = client.teamId;
-        const leagueId = client.leagueId;
-        const userId = client.userId;
-        const key = clientKey(userId, teamId);
+      arenaClients.delete(wsKey(ws));
+      if (!client) return;
 
-        // Replace any existing pending timer (e.g. flapping connection)
-        const existing = pendingUnready.get(key);
-        if (existing) clearTimeout(existing);
+      // A user can hold several Arena sockets at once (two tabs, phone + desktop).
+      // Closing ONE of them didn't end their session, so nothing below should
+      // fire — otherwise shutting an old tab unreadies the match, or drops them
+      // out of a scrim lobby, while they're still sitting in the live one.
+      for (const other of arenaClients.values()) {
+        if (other.userId === client.userId) return;
+      }
 
-        const handle = setTimeout(() => {
-          pendingUnready.delete(key);
-          // The coach may have readied any week's match — clear their ready
-          // flag on every pre-battle fixture they're still marked ready on.
+      // Their last socket went away. Don't act immediately — a page navigation
+      // or refresh tears down the WS for a few seconds. Hold BOTH the unready
+      // and the scrim-lobby eviction; identify() cancels them on reconnect.
+      const { userId, teamId, leagueId, username } = client;
+      const key = clientKey(userId, teamId ?? '');
+
+      // Replace any existing pending timer (e.g. flapping connection)
+      const existing = pendingUnready.get(key);
+      if (existing) clearTimeout(existing);
+
+      const handle = setTimeout(() => {
+        pendingUnready.delete(key);
+
+        // The coach may have readied any week's match — clear their ready
+        // flag on every pre-battle fixture they're still marked ready on.
+        if (teamId && leagueId) {
           for (const match of getPlayableMatches(teamId, leagueId)) {
             if (match.status !== 'scheduled' && match.status !== 'ready') continue;
 
@@ -967,18 +981,14 @@ export const arenaRoutes = new Elysia()
 
             broadcastMatchState(match.id);
           }
-        }, UNREADY_GRACE_MS);
-        pendingUnready.set(key, handle);
-      }
+        }
 
-      // Scrim-lobby cleanup runs for EVERY disconnecting client, not just
-      // team owners — a teamless spectator who joined a scrim lobby would
-      // otherwise leak their slot (the cleanup used to live inside the
-      // `if (client?.teamId)` branch above).
-      if (client) {
+        // Scrim-lobby cleanup runs for EVERY disconnecting client, not just
+        // team owners — a teamless spectator who joined a scrim lobby would
+        // otherwise leak their slot.
         let scrimChanged = false;
         for (const [lobbyId, lobby] of scrimLobbies) {
-          const idx = lobby.players.indexOf(client.username);
+          const idx = lobby.players.indexOf(username);
           if (idx !== -1) {
             lobby.players.splice(idx, 1);
             lobby.ready.splice(idx, 1);
@@ -988,10 +998,10 @@ export const arenaRoutes = new Elysia()
             }
           }
         }
-        if (scrimChanged) broadcastScrimList(ws);
-      }
-
-      arenaClients.delete(wsKey(ws));
+        // No senderWs — the socket that triggered this is long closed.
+        if (scrimChanged) broadcastScrimList();
+      }, UNREADY_GRACE_MS);
+      pendingUnready.set(key, handle);
     },
   });
 
