@@ -108,6 +108,43 @@ export function scheduleDeadline(
 }
 
 /**
+ * Continue a league's weekly cadence onto its playoff weeks.
+ *
+ * Playoff matches sit at weeks past the regular schedule, so `weekDates` has no
+ * entry for them, `scheduleDeadline()` returns null, and auto-forfeit skips
+ * them forever. Bracket generation calls this to extend the map so playoff
+ * deadlines resolve by exactly the same rule as regular-season ones.
+ *
+ * The cadence is inferred from the last regular gap (same rule
+ * `scheduleDeadline` uses for a trailing week), defaulting to 7 days. Weeks
+ * already present are never overwritten — staff may have set them by hand.
+ * Returns a NEW map; returns the input unchanged if `maxWeek` has no date.
+ */
+export function extendWeekDatesForPlayoffs(
+  weekDates: Record<string, string>,
+  maxWeek: number,
+  playoffWeeks: number[],
+): Record<string, string> {
+  const lastStart = weekDates[String(maxWeek)];
+  if (!lastStart) return weekDates;
+
+  const prevStart = weekDates[String(maxWeek - 1)];
+  let span = 7;
+  if (prevStart) {
+    const days = (Date.parse(lastStart) - Date.parse(prevStart)) / 86400000;
+    if (Number.isFinite(days) && days > 0) span = Math.round(days);
+  }
+
+  const out = { ...weekDates };
+  for (const w of playoffWeeks) {
+    if (w > maxWeek && !out[String(w)]) {
+      out[String(w)] = shiftDateStr(lastStart, span * (w - maxWeek));
+    }
+  }
+  return out;
+}
+
+/**
  * The effective deadline a forfeit decision uses for a match. Schedule-first:
  * if the match's week has a scheduled date, that (end-of-day, league timezone)
  * is the deadline — so correcting the schedule moves it and a stale baked value

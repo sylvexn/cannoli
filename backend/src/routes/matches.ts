@@ -11,6 +11,7 @@ import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
+import { extendWeekDatesForPlayoffs } from '../lib/deadline';
 
 export const matchRoutes = new Elysia()
 
@@ -997,6 +998,20 @@ export const matchRoutes = new Elysia()
 
     // Bracket layout is shared with the simulator via buildPlayoffMatchups.
     const matchups = buildPlayoffMatchups(seedCount, maxWeek);
+
+    // Playoff weeks sit PAST the regular schedule, so weekDates had no entry for
+    // them, scheduleDeadline() returned null, and runAutoForfeit skipped every
+    // playoff match forever — the whole decidePlayoffForfeit path was dead in
+    // production. Continue the league's own weekly cadence onto the bracket
+    // weeks so playoff deadlines resolve exactly like regular-season ones.
+    const weekDates: Record<string, string> = league.weekDates ? JSON.parse(league.weekDates) : {};
+    const extended = extendWeekDatesForPlayoffs(weekDates, maxWeek, matchups.map(m => m.week));
+    if (extended !== weekDates) {
+      db.update(schema.leagues)
+        .set({ weekDates: JSON.stringify(extended) })
+        .where(eq(schema.leagues.id, params.leagueId))
+        .run();
+    }
 
     let matchNum = 0;
     for (const m of matchups) {
