@@ -90,6 +90,17 @@ export function recordMatchResult(
   if (homeScore === undefined || awayScore === undefined) {
     return { ok: false, status: 400, error: 'homeScore and awayScore required' };
   }
+  // A bracket has nowhere to put a tie. Downstream, advancement used to fall
+  // back to the home team and assignFinishPositions skips equal-score matches
+  // outright — so a tied Final left NOBODY marked champion. Refuse the score
+  // instead of corrupting the bracket.
+  if (match.phase === 'playoffs' && homeScore === awayScore) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Playoff matches cannot end in a tie — one team must win',
+    };
+  }
 
   // Validate pokemonData (teamId in {home,away}; pokemonName on roster).
   // Done before the tx so we don't churn the WAL on bad input.
@@ -198,16 +209,21 @@ export function recordMatchResult(
         awayTeamId: match.awayTeamId,
         homeScore,
         awayScore,
-      }) ?? match.homeTeamId!;
-      const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
-
-      advancePlayoffWinner({
-        matchId,
-        leagueId: match.leagueId,
-        playoffRound: match.playoffRound,
-        winnerId,
-        winnerSeed,
       });
+      // No winner → advance nobody. Every other advancement site already skips
+      // on null; this one defaulted to home, which quietly promoted the wrong
+      // team. The tie guard above makes this unreachable on the normal path.
+      if (winnerId) {
+        const winnerSeed = winnerId === match.homeTeamId ? match.homeSeed : match.awaySeed;
+
+        advancePlayoffWinner({
+          matchId,
+          leagueId: match.leagueId,
+          playoffRound: match.playoffRound,
+          winnerId,
+          winnerSeed,
+        });
+      }
     }
 
     return { ok: true, result: { status: newStatus, warnings: mergedWarnings } };

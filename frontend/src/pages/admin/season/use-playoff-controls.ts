@@ -68,7 +68,14 @@ export function usePlayoffControls(defaultLeagues: ApiLeague[], refreshLeagues?:
     }
     setPlayoffSubmitting(true);
     try {
-      const result = await api.generatePlayoffs(playoffTarget.id, { topN: playoffTarget.topN });
+      // The typed league name was collected and then dropped on the floor —
+      // the backend now refuses to wipe a bracket with results without it.
+      const result = await api.generatePlayoffs(playoffTarget.id, {
+        topN: playoffTarget.topN,
+        ...(playoffTarget.isRegen
+          ? { force: true, confirmName: playoffConfirmText.trim() }
+          : {}),
+      });
       toast.success(`Generated ${result.matchCount} bracket matches for ${playoffTarget.name}`);
       // Refresh local state so the button flips to "Regenerate"
       setPlayoffInfo(prev => ({

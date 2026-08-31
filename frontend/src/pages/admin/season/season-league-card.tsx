@@ -366,6 +366,9 @@ export function SeasonLeagueCard({
                 <ResultsRevealControl
                   leagueId={league.id}
                   currentWeek={state.currentWeek}
+                  // qf/sf/f live at totalWeeks+1..+3, past currentWeek — which
+                  // stops advancing once the regular season ends.
+                  maxWeek={Math.max(state.currentWeek, state.totalWeeks + (playoffInfo?.hasBracket ? 3 : 0))}
                   value={apiLeague?.resultsRevealedThrough ?? null}
                   onChanged={onRefreshLeagues}
                 />

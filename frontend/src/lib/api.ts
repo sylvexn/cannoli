@@ -1211,7 +1211,7 @@ export const api = {
   advancePhase: (leagueId: string, phase: string, opts?: { override?: boolean; confirm?: string }) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/phase`, { phase, ...opts }),
 
-  generatePlayoffs: (leagueId: string, opts?: { topN?: number }) =>
+  generatePlayoffs: (leagueId: string, opts?: { topN?: number; force?: boolean; confirmName?: string }) =>
     postJson<{
       success: boolean;
       matchCount: number;

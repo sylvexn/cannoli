@@ -343,6 +343,25 @@ export const leagueAdminRoutes = new Elysia()
       }
     }
 
+    // Entering offseason runs assignFinishPositions + archive pin minting, which
+    // stamp champion/runner-up off COMPLETED matches only. Doing that with the
+    // bracket still live labels teams who are actually still alive as
+    // "Regular Season" and can crown nobody. Mirrors the REGULAR_INCOMPLETE
+    // guard above. Counts 0 for leagues that never generated a bracket.
+    if (phase === 'offseason' && previousPhase !== 'offseason') {
+      const incompletePlayoffs = db.select({ count: sql<number>`COUNT(*)` })
+        .from(schema.matches)
+        .where(and(
+          eq(schema.matches.leagueId, params.leagueId),
+          eq(schema.matches.phase, 'playoffs'),
+          sql`(home_score IS NULL OR away_score IS NULL OR status = 'disputed')`,
+        )).get()?.count ?? 0;
+      if (incompletePlayoffs > 0 && !override) {
+        set.status = 400;
+        return { error: `${incompletePlayoffs} playoff matches still missing scores or disputed`, code: 'PLAYOFFS_INCOMPLETE' };
+      }
+    }
+
     let scheduleGenerated = false;
     let pinsAwarded = 0;
     tx(() => {
@@ -436,14 +455,27 @@ export const leagueAdminRoutes = new Elysia()
 
     const { revealedThrough } = (body ?? {}) as { revealedThrough?: unknown };
 
-    // Validate: either null (gate off) or an integer in [0, currentWeek].
+    // Upper bound is the last week that actually HAS matches, not currentWeek.
+    // currentWeek only ever advances during the regular phase (advance-week
+    // filters on phase='regular' and stops at totalWeeks), so playoff matches
+    // sit at weeks beyond it forever. Clamping to currentWeek made it
+    // impossible to reveal the bracket at all — the whole postseason stayed
+    // score-blanked on the public schedule until the gate was switched off
+    // entirely, which retroactively un-gated the regular season too.
+    const maxMatchWeek = db.select({ max: sql<number>`MAX(week)` })
+      .from(schema.matches)
+      .where(eq(schema.matches.leagueId, params.leagueId))
+      .get()?.max ?? 0;
+    const maxReveal = Math.max(league.currentWeek, maxMatchWeek);
+
+    // Validate: either null (gate off) or an integer in [0, maxReveal].
     let value: number | null;
     if (revealedThrough === null) {
       value = null;
     } else if (typeof revealedThrough === 'number' && Number.isInteger(revealedThrough)) {
-      if (revealedThrough < 0 || revealedThrough > league.currentWeek) {
+      if (revealedThrough < 0 || revealedThrough > maxReveal) {
         set.status = 400;
-        return { error: `revealedThrough must be between 0 and ${league.currentWeek} (the current week)`, code: 'reveal_out_of_range' };
+        return { error: `revealedThrough must be between 0 and ${maxReveal} (the last scheduled week)`, code: 'reveal_out_of_range' };
       }
       value = revealedThrough;
     } else {

@@ -443,6 +443,29 @@ describe('full season lifecycle (production code paths)', () => {
     expect(sfHomes).toEqual([seeded[0]!.id, seeded[1]!.id].sort());
   });
 
+  test('a playoff match cannot be recorded as a tie', () => {
+    // A bracket has nowhere to put a tie: advancement used to fall back to the
+    // home team, and assignFinishPositions skips equal-score matches outright,
+    // so a tied Final crowned nobody. The score must be refused up front.
+    const qf = db.select().from(schema.matches)
+      .where(and(
+        eq(schema.matches.leagueId, LEAGUE_ID),
+        eq(schema.matches.phase, 'playoffs'),
+        eq(schema.matches.playoffRound, 'qf'),
+      ))
+      .orderBy(schema.matches.id)
+      .get()!;
+
+    const tied = playMatch(qf.id, 3, 3);
+    expect(tied.ok).toBe(false);
+    expect((tied as { status: number }).status).toBe(400);
+
+    // ...and the match is untouched, so a real result can still be recorded.
+    const after = db.select().from(schema.matches).where(eq(schema.matches.id, qf.id)).get()!;
+    expect(after.status).not.toBe('completed');
+    expect(after.homeScore).toBeNull();
+  });
+
   test('playoffs play out round-by-round — recordMatchResult auto-advances the bracket', () => {
     // QF first: winners must propagate into the SF away (TBD) slots.
     for (const round of ['qf', 'sf', 'f'] as const) {

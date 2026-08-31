@@ -194,7 +194,10 @@ export const miscRoutes = new Elysia()
       // so a forced playoff result must fill the next round's TBD slot the
       // same way the normal result path does (lib/match-service.ts).
       if (match.phase === 'playoffs' && match.playoffRound) {
-        const winnerId = forceWinnerTeamId ?? newHomeTeamId;
+        // No winner (tie, or forfeitedBy 'both') → advance nobody. Defaulting
+        // to home silently promoted a team that didn't win; the admin can
+        // reassign the next-round slot explicitly instead.
+        const winnerId = forceWinnerTeamId;
         if (winnerId) {
           const winnerSeed = winnerId === newHomeTeamId ? match.homeSeed : match.awaySeed;
           advancePlayoffWinner({
