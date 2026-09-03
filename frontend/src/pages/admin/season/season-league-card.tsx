@@ -9,11 +9,14 @@ import {
 } from 'lucide-react';
 import type { ApiDraftState, ApiLeague } from '@/lib/api';
 import { PHASES, phaseConfig, getNextPhase, type EditableLeague, type Phase } from './phase-config';
+import { cn } from '@/lib/utils';
 import { ResultsRevealControl } from './results-reveal-control';
 
 interface PlayoffInfo {
   hasBracket: boolean;
   matchCount: number;
+  completedCount: number;
+  liveCount: number;
 }
 
 interface Props {
@@ -269,6 +272,7 @@ export function SeasonLeagueCard({
                 const bracketSize = (apiLeague as any)?.playoffTeamCount ?? 6;
                 const info = playoffInfo;
                 const hasBracket = !!info?.hasBracket;
+                const hasResults = (info?.completedCount ?? 0) > 0 || (info?.liveCount ?? 0) > 0;
                 return (
                   <div className="space-y-2 rounded-md border border-pink/20 bg-pink/5 p-3">
                     <div className="flex items-center justify-between">
@@ -303,10 +307,15 @@ export function SeasonLeagueCard({
                             size="sm"
                             variant="outline"
                             onClick={() => onOpenPlayoffsDialog(league, true)}
-                            className="text-loss border-loss/30 hover:bg-loss/10 h-7 text-xs"
+                            className={cn(
+                              'h-7 text-xs',
+                              hasResults
+                                ? 'text-loss border-loss/30 hover:bg-loss/10'
+                                : 'text-pink border-pink/30 hover:bg-pink/10',
+                            )}
                           >
-                            <RotateCw size={12} />
-                            Regenerate
+                            {hasResults ? <RotateCw size={12} /> : <Pencil size={12} />}
+                            {hasResults ? 'Regenerate' : 'Edit Seeding'}
                           </Button>
                         )}
                       </div>

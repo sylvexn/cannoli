@@ -190,7 +190,11 @@ export function AdminSeason() {
         setPlayoffOpen={playoff.setPlayoffOpen}
         playoffTarget={playoff.playoffTarget}
         setPlayoffTarget={playoff.setPlayoffTarget}
-        playoffPreview={playoff.playoffPreview}
+        playoffTeams={playoff.playoffTeams}
+        seedOrder={playoff.seedOrder}
+        setSeedOrder={playoff.setSeedOrder}
+        moveSeed={playoff.moveSeed}
+        resetSeeding={playoff.resetSeeding}
         playoffConfirmText={playoff.playoffConfirmText}
         setPlayoffConfirmText={playoff.setPlayoffConfirmText}
         playoffSubmitting={playoff.playoffSubmitting}
