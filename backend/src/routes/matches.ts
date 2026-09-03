@@ -927,7 +927,9 @@ export const matchRoutes = new Elysia()
     const archived = checkLeagueArchived(params.leagueId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { topN, force, confirmName } = (body || {}) as { topN?: number; force?: boolean; confirmName?: string };
+    const { topN, force, confirmName, seedOrder } = (body || {}) as {
+      topN?: number; force?: boolean; confirmName?: string; seedOrder?: string[];
+    };
 
     const league = getLeague(params.leagueId);
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -949,7 +951,23 @@ export const matchRoutes = new Elysia()
         code: 'bracket_too_large',
       };
     }
-    const seeded = teamRecords.slice(0, seedCount);
+    // Admins can override the standings-derived seeding (admin/season → Edit
+    // Seeding). Any league team may be seeded — that's how a dropped team gets
+    // swapped out for the next one up — but the list must be exactly the
+    // bracket size with no duplicates or the layout breaks.
+    let seeded = teamRecords.slice(0, seedCount);
+    if (seedOrder) {
+      const byId = new Map(teamRecords.map(t => [t.id, t]));
+      const picked = seedOrder.map(id => byId.get(id));
+      if (seedOrder.length !== seedCount || new Set(seedOrder).size !== seedCount || picked.some(t => !t)) {
+        set.status = 400;
+        return {
+          error: `seedOrder must list exactly ${seedCount} distinct teams from this league`,
+          code: 'invalid_seed_order',
+        };
+      }
+      seeded = picked as typeof seeded;
+    }
 
     // Safety lock: regenerating wipes every playoff match and rebuilds from
     // scratch. Once results exist that destroys completed games (and orphans
@@ -1047,8 +1065,8 @@ export const matchRoutes = new Elysia()
       category: 'match',
       actor: user.username,
       leagueId: params.leagueId,
-      description: `Generated ${seedCount}-team playoff bracket`,
-      metadata: JSON.stringify({ seedCount, seedings: seeded.map((s, i) => ({ seed: i + 1, teamId: s.id })) }),
+      description: `Generated ${seedCount}-team playoff bracket${seedOrder ? ' (manual seeding)' : ''}`,
+      metadata: JSON.stringify({ seedCount, manualSeeding: !!seedOrder, seedings: seeded.map((s, i) => ({ seed: i + 1, teamId: s.id })) }),
     }).run();
 
     return { success: true, matchCount: matchups.length, seedings: seeded.map((s, i) => ({ seed: i + 1, teamId: s.id })) };

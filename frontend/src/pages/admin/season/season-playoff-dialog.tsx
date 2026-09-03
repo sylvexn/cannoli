@@ -1,16 +1,22 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Trophy } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { TeamLogo } from '@/components/team-logo';
+import { Trophy, GripVertical, ChevronUp, ChevronDown, ListOrdered } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { ApiTeam } from '@/lib/api';
 
 interface PlayoffTarget {
   id: string;
   name: string;
   topN: number;
   isRegen: boolean;
+  requiresConfirm: boolean;
 }
 
 interface Props {
@@ -18,7 +24,11 @@ interface Props {
   setPlayoffOpen: (v: boolean) => void;
   playoffTarget: PlayoffTarget | null;
   setPlayoffTarget: (v: PlayoffTarget | null) => void;
-  playoffPreview: { teamId: string; rank: number }[];
+  playoffTeams: ApiTeam[];
+  seedOrder: string[];
+  setSeedOrder: (v: string[]) => void;
+  moveSeed: (idx: number, dir: -1 | 1) => void;
+  resetSeeding: () => void;
   playoffConfirmText: string;
   setPlayoffConfirmText: (v: string) => void;
   playoffSubmitting: boolean;
@@ -27,24 +37,41 @@ interface Props {
 
 export function SeasonPlayoffDialog({
   playoffOpen, setPlayoffOpen, playoffTarget, setPlayoffTarget,
-  playoffPreview, playoffConfirmText, setPlayoffConfirmText,
+  playoffTeams, seedOrder, setSeedOrder, moveSeed, resetSeeding,
+  playoffConfirmText, setPlayoffConfirmText,
   playoffSubmitting, onExecutePlayoffs,
 }: Props) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const teamMap = new Map(playoffTeams.map(t => [t.id, t]));
+  const topN = playoffTarget?.topN ?? 0;
+  const destructive = !!playoffTarget?.requiresConfirm;
+
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === idx) return;
+    const next = [...seedOrder];
+    const [removed] = next.splice(dragIdx, 1);
+    next.splice(idx, 0, removed);
+    setSeedOrder(next);
+    setDragIdx(idx);
+  }
+
   return (
     <Dialog open={playoffOpen} onOpenChange={(o) => { if (!o) { setPlayoffOpen(false); setPlayoffTarget(null); setPlayoffConfirmText(''); } }}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Trophy size={16} className="text-pink" />
-            {playoffTarget?.isRegen ? 'Regenerate Playoff Bracket' : 'Generate Playoff Bracket'}
+            {playoffTarget?.isRegen ? 'Edit Playoff Seeding' : 'Generate Playoff Bracket'}
           </DialogTitle>
           <DialogDescription>
             {playoffTarget && (
               <>
                 <strong>{playoffTarget.name}</strong> — top <strong>{playoffTarget.topN}</strong> teams.
-                {playoffTarget.isRegen && (
+                Drag or use the arrows to reorder; the bracket is rebuilt from the order above the cut line.
+                {destructive && (
                   <span className="block mt-1 text-loss text-[11px]">
-                    Regenerating will delete every existing playoff match for this league, including ones with results recorded.
+                    This bracket already has recorded results — rebuilding deletes every playoff match, results included.
                   </span>
                 )}
               </>
@@ -52,23 +79,81 @@ export function SeasonPlayoffDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <div className="text-xs text-text-secondary font-medium">Seeding preview</div>
-          {playoffPreview.length === 0 ? (
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-text-secondary font-medium">Seeding</div>
+            <Button variant="outline" size="sm" onClick={resetSeeding} className="h-6 text-[10px] px-2">
+              <ListOrdered size={10} />
+              Reset to standings
+            </Button>
+          </div>
+          {seedOrder.length === 0 ? (
             <div className="text-xs text-text-muted text-center py-4">Loading standings…</div>
           ) : (
-            <div className="space-y-1 max-h-[200px] overflow-y-auto rounded border border-border-subtle">
-              {playoffPreview.map(({ teamId, rank }) => (
-                <div key={teamId} className="flex items-center gap-2 px-2 py-1 text-xs">
-                  <span className="font-mono text-pink w-6 text-center">#{rank}</span>
-                  <span className="text-text-primary font-medium">{teamId}</span>
-                </div>
-              ))}
+            <div className="max-h-[40dvh] overflow-y-auto rounded border border-border-subtle p-1 space-y-0.5">
+              {seedOrder.map((teamId, idx) => {
+                const team = teamMap.get(teamId);
+                if (!team) return null;
+                const inBracket = idx < topN;
+                return (
+                  <div key={teamId}>
+                    {idx === topN && (
+                      <div className="flex items-center gap-2 py-1">
+                        <div className="h-px flex-1 bg-loss/40" />
+                        <span className="text-[9px] font-mono uppercase tracking-wider text-loss/70">Missed playoffs</span>
+                        <div className="h-px flex-1 bg-loss/40" />
+                      </div>
+                    )}
+                    <div
+                      draggable
+                      onDragStart={() => setDragIdx(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={() => setDragIdx(null)}
+                      className={cn(
+                        'flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors cursor-grab active:cursor-grabbing border',
+                        dragIdx === idx ? 'bg-pink/10 border-pink/30' : 'border-transparent hover:bg-surface-overlay/40',
+                        !inBracket && 'opacity-50',
+                      )}
+                    >
+                      <GripVertical size={12} className="text-text-muted/30 shrink-0" />
+                      <span className={cn(
+                        'text-xs font-mono font-bold tabular-nums w-6 text-center shrink-0',
+                        inBracket ? 'text-pink' : 'text-text-muted',
+                      )}>
+                        {inBracket ? `#${idx + 1}` : '—'}
+                      </span>
+                      <TeamLogo abbrev={team.teamAbbrev} color={team.teamColor} size="sm" logoPath={team.logoPath} />
+                      <span className="text-xs text-text-primary flex-1 min-w-0 truncate">{team.teamName}</span>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 border-border-subtle text-text-muted font-mono shrink-0">
+                        {team.record.wins}-{team.record.losses}
+                      </Badge>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <button
+                          onClick={() => moveSeed(idx, -1)}
+                          disabled={idx === 0}
+                          title="Move up"
+                          className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                        >
+                          <ChevronUp size={14} />
+                        </button>
+                        <button
+                          onClick={() => moveSeed(idx, 1)}
+                          disabled={idx === seedOrder.length - 1}
+                          title="Move down"
+                          className="h-7 w-7 flex items-center justify-center rounded text-text-muted hover:text-text-primary hover:bg-surface-overlay transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
-          {playoffTarget?.isRegen && (
+          {destructive && playoffTarget && (
             <>
               <div className="text-xs text-text-secondary pt-2">
-                Type the league name <span className="font-mono text-text-primary">{playoffTarget.name}</span> to confirm regeneration.
+                Type the league name <span className="font-mono text-text-primary">{playoffTarget.name}</span> to confirm.
               </div>
               <Input
                 value={playoffConfirmText}
@@ -85,19 +170,19 @@ export function SeasonPlayoffDialog({
           <Button
             disabled={
               playoffSubmitting ||
-              playoffPreview.length === 0 ||
-              (playoffTarget?.isRegen && playoffConfirmText.trim() !== playoffTarget?.name)
+              seedOrder.length < topN ||
+              (destructive && playoffConfirmText.trim() !== playoffTarget?.name)
             }
-            className={playoffTarget?.isRegen
+            className={destructive
               ? 'bg-loss text-surface-base hover:bg-loss/90'
               : 'bg-pink text-surface-base hover:bg-pink/90'}
             onClick={onExecutePlayoffs}
           >
             <Trophy size={12} />
             {playoffSubmitting
-              ? 'Generating…'
+              ? 'Saving…'
               : playoffTarget?.isRegen
-                ? 'Regenerate'
+                ? 'Save Seeding'
                 : 'Generate Bracket'}
           </Button>
         </DialogFooter>
