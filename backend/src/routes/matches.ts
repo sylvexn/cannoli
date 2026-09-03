@@ -973,21 +973,29 @@ export const matchRoutes = new Elysia()
     // scratch. Once results exist that destroys completed games (and orphans
     // the pins that reference their match ids), so require the same
     // force+confirmName handshake schedule/generate uses.
-    const completedPlayoffs = db.select({ count: sql<number>`COUNT(*)` })
-      .from(schema.matches)
+    const existing = db.select().from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, params.leagueId),
         eq(schema.matches.phase, 'playoffs'),
-        sql`home_score IS NOT NULL AND away_score IS NOT NULL`,
       ))
-      .get()?.count ?? 0;
-    if (completedPlayoffs > 0) {
+      .all();
+    const completedPlayoffs = existing.filter(m => m.homeScore != null && m.awayScore != null).length;
+    // A battle that's on the board right now is worse than a stored result: the
+    // rebuilt row REUSES the same match id, so the PS bot would post the live
+    // battle's outcome onto whatever pairing the new bracket put there. Same
+    // handshake as results, different reason.
+    const livePlayoffs = existing.filter(m => m.status === 'in_progress' || m.psRoomId != null).length;
+    if (completedPlayoffs > 0 || livePlayoffs > 0) {
+      const why = completedPlayoffs > 0
+        ? `${completedPlayoffs} playoff matches already have results — regenerating deletes them.`
+        : `${livePlayoffs} playoff matches are live on Showdown — regenerating orphans the battle.`;
       if (!force) {
         set.status = 409;
         return {
-          error: `${completedPlayoffs} playoff matches already have results — regenerating deletes them. Pass { force: true, confirmName } to override.`,
+          error: `${why} Pass { force: true, confirmName } to override.`,
           code: 'regeneration_locked',
           completedPlayoffs,
+          livePlayoffs,
           leagueName: league.name,
         };
       }
@@ -997,13 +1005,26 @@ export const matchRoutes = new Elysia()
           error: `confirmName must match the league name exactly ("${league.name}") to force regeneration.`,
           code: 'regeneration_locked',
           completedPlayoffs,
+          livePlayoffs,
           leagueName: league.name,
         };
       }
     }
 
     return tx(() => {
-    // Clear existing playoff matches
+    // Clear existing playoff matches. match_ready_log has a plain FK onto
+    // matches.id (no ON DELETE), so under PRAGMA foreign_keys=ON a single
+    // ready-up on any bracket match made this DELETE throw — and playoff
+    // matches ARE arena-playable, so that's the common case, not the edge.
+    // Dropping the log rows first also stops stale ready-ups from re-attaching
+    // to the rebuilt row, whose id is deterministic and therefore reused.
+    // (match_pokemon already cascades — migration 0025.)
+    const staleIds = existing.map(m => m.id);
+    if (staleIds.length > 0) {
+      db.delete(schema.matchReadyLog)
+        .where(inArray(schema.matchReadyLog.matchId, staleIds))
+        .run();
+    }
     db.delete(schema.matches)
       .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'playoffs')))
       .run();

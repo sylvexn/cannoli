@@ -71,7 +71,8 @@ export function SeasonPlayoffDialog({
                 Drag or use the arrows to reorder; the bracket is rebuilt from the order above the cut line.
                 {destructive && (
                   <span className="block mt-1 text-loss text-[11px]">
-                    This bracket already has recorded results — rebuilding deletes every playoff match, results included.
+                    This bracket has recorded results or a live battle — rebuilding deletes every playoff
+                    match, results included, and orphans anything being played right now.
                   </span>
                 )}
               </>
@@ -181,9 +182,12 @@ export function SeasonPlayoffDialog({
             <Trophy size={12} />
             {playoffSubmitting
               ? 'Saving…'
-              : playoffTarget?.isRegen
-                ? 'Save Seeding'
-                : 'Generate Bracket'}
+              : destructive
+                // Not just a save — this one deletes matches and results.
+                ? 'Rebuild Bracket'
+                : playoffTarget?.isRegen
+                  ? 'Save Seeding'
+                  : 'Generate Bracket'}
           </Button>
         </DialogFooter>
       </DialogContent>

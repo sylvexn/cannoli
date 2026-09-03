@@ -16,6 +16,7 @@ interface PlayoffInfo {
   hasBracket: boolean;
   matchCount: number;
   completedCount: number;
+  liveCount: number;
 }
 
 interface Props {
@@ -271,7 +272,7 @@ export function SeasonLeagueCard({
                 const bracketSize = (apiLeague as any)?.playoffTeamCount ?? 6;
                 const info = playoffInfo;
                 const hasBracket = !!info?.hasBracket;
-                const hasResults = (info?.completedCount ?? 0) > 0;
+                const hasResults = (info?.completedCount ?? 0) > 0 || (info?.liveCount ?? 0) > 0;
                 return (
                   <div className="space-y-2 rounded-md border border-pink/20 bg-pink/5 p-3">
                     <div className="flex items-center justify-between">
