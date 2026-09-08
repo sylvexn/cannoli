@@ -3,20 +3,25 @@ import { fixtureLabel, fixtureShortLabel, publishTargetWeek } from './constants'
 import { isReplayWeekEnded } from '@/pages/replays/replay-types';
 import type { ReplayEntry } from '@/pages/replays/replay-types';
 
-const week = (week: number, status: string) => ({ week, status });
+const reg = (week: number, status: string) => ({ week, status, phase: 'regular' });
+const po = (week: number, status: string) => ({ week, status, phase: 'playoffs' });
 
 describe('publishTargetWeek', () => {
   it('stays on the live week when nothing past it has been played', () => {
-    expect(publishTargetWeek([week(11, 'completed'), week(12, 'scheduled')], 11)).toBe(11);
+    expect(publishTargetWeek([reg(11, 'completed'), po(12, 'scheduled')], 11)).toBe(11);
   });
 
   it('reaches playoff weeks, which sit past a frozen currentWeek', () => {
     // S11 shape: regular season done at week 11, quarterfinals played at 12.
-    expect(publishTargetWeek([week(11, 'completed'), week(12, 'completed'), week(13, 'scheduled')], 11)).toBe(12);
+    expect(publishTargetWeek([reg(11, 'completed'), po(12, 'completed'), po(13, 'scheduled')], 11)).toBe(12);
   });
 
-  it('counts a disputed match as played', () => {
-    expect(publishTargetWeek([week(12, 'disputed')], 11)).toBe(12);
+  it('counts a disputed playoff match as played', () => {
+    expect(publishTargetWeek([po(12, 'disputed')], 11)).toBe(12);
+  });
+
+  it('ignores a regular-season fixture played ahead of the live week', () => {
+    expect(publishTargetWeek([reg(6, 'completed')], 5)).toBe(5);
   });
 
   it('never goes below the live week', () => {

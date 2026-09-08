@@ -76,18 +76,23 @@ export function fixtureLabel(m: { phase?: string | null; playoffRound?: string |
 }
 /**
  * Highest week whose results are ready to publish through the results-reveal
- * gate: the last week that actually has a played match, floored at the live
- * week. Playoff fixtures sit at weeks PAST the regular schedule and currentWeek
- * stops advancing once the regular season ends, so a "publish through
+ * gate: the live week, extended to the last PLAYED PLAYOFF week.
+ *
+ * Playoff fixtures sit at weeks PAST the regular schedule and currentWeek stops
+ * advancing once the regular season ends, so a plain "publish through
  * currentWeek" target could never reach the bracket — the postseason stayed
  * score-blanked for everyone until the gate was switched off entirely.
+ * Regular-season weeks deliberately do NOT extend the target: coaches can play
+ * a fixture early, and a single early game shouldn't publish its whole week.
  */
 export function publishTargetWeek(
-  matches: { week: number; status?: string }[],
+  matches: { week: number; status?: string; phase?: string | null }[],
   currentWeek: number,
 ): number {
   return matches.reduce(
-    (mx, m) => (m.status === 'completed' || m.status === 'disputed' ? Math.max(mx, m.week) : mx),
+    (mx, m) => (m.phase === 'playoffs' && (m.status === 'completed' || m.status === 'disputed')
+      ? Math.max(mx, m.week)
+      : mx),
     currentWeek,
   );
 }
