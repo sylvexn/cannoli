@@ -17,6 +17,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Swords, ChevronRight, Zap } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { fixtureShortLabel } from '@/lib/constants';
 import type { ArenaMatch } from '@/pages/showdown/use-arena-websocket';
 
 export function YourMatchesCard() {
@@ -104,7 +105,9 @@ function MatchRow({ match }: { match: ArenaMatch }) {
     >
       <div className="flex items-center gap-2 text-xs">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
-        <span className="font-mono text-text-secondary shrink-0">W{match.week}</span>
+        <span className={`font-mono shrink-0 ${match.phase === 'playoffs' ? 'text-draw font-bold' : 'text-text-secondary'}`}>
+          {fixtureShortLabel(match)}
+        </span>
         {match.isCurrentWeek && (
           <span className="text-[9px] font-mono uppercase text-orange-400/80 shrink-0">now</span>
         )}

@@ -87,6 +87,7 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         awayScore: m.awayScore ?? undefined,
         replayUrl: m.replayUrl ?? undefined,
         hasReplay: m.hasReplay ?? undefined,
+        status: m.status,
         phase: m.phase as 'regular' | 'playoffs',
         playoffRound: m.playoffRound,
         homeSeed: m.homeSeed,

@@ -108,6 +108,9 @@ export interface Match {
   /** A battle log is stored — playable in the in-site viewer even when
    *  replayUrl is null (imported replays). */
   hasReplay?: boolean;
+  /** Match lifecycle. Survives the results-reveal gate (which only nulls the
+   *  scores), so it's the reliable "this one has been played" signal. */
+  status?: 'scheduled' | 'ready' | 'in_progress' | 'completed' | 'disputed';
   phase?: 'regular' | 'playoffs';
   playoffRound?: string | null;
   homeSeed?: number | null;
