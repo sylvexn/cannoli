@@ -5,7 +5,7 @@ import type { ApiReplaySummary } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { Spoiler } from '@/components/spoiler';
-import { leagueGem } from '@/lib/constants';
+import { fixtureLabel, leagueGem } from '@/lib/constants';
 import { buildGradientCss, gemPaletteFor } from '@/lib/shader-gradient';
 import { ShaderField } from '@/components/shader-field-lazy';
 import type { ReplayEntry } from './replay-types';
@@ -131,12 +131,10 @@ export function ReplayHeroCard({
             >
               {league.name.replace(' League', '')}
             </span>
-            <span className="text-text-muted">Week {match.week}</span>
-            {match.phase && match.phase !== 'regular' && (
-              <>
-                <span className="text-border-default">·</span>
-                <span className="text-text-secondary">{match.phase}</span>
-              </>
+            {match.phase === 'playoffs' ? (
+              <span className="px-1.5 py-0.5 rounded font-bold bg-draw/20 text-draw">{fixtureLabel(match)}</span>
+            ) : (
+              <span className="text-text-muted">Week {match.week}</span>
             )}
           </div>
 

@@ -18,6 +18,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
+import { fixtureShortLabel } from '@/lib/constants';
 import { useState, useEffect, useMemo } from 'react';
 import { NeonLogo } from './neon-logo';
 import { CommandPalette } from './command-palette';
@@ -114,7 +115,7 @@ export function AppShell() {
   }, [user, leagues]);
 
   // Live match polling
-  const [liveMatches, setLiveMatches] = useState<{ id: string; leagueId: string; homePlayer: string; awayPlayer: string; week: number }[]>([]);
+  const [liveMatches, setLiveMatches] = useState<{ id: string; leagueId: string; homePlayer: string; awayPlayer: string; week: number; phase: string; playoffRound: string | null }[]>([]);
 
   useEffect(() => {
     async function checkLive() {
@@ -124,7 +125,7 @@ export function AppShell() {
           const schedule = await api.getSchedule(league.id);
           const live = schedule.matches.filter(m => m.status === 'in_progress' && (m.phase === 'regular' || m.phase === 'playoffs'));
           for (const m of live) {
-            allMatches.push({ id: m.id, leagueId: league.id, homePlayer: m.homePlayer, awayPlayer: m.awayPlayer, week: m.week });
+            allMatches.push({ id: m.id, leagueId: league.id, homePlayer: m.homePlayer, awayPlayer: m.awayPlayer, week: m.week, phase: m.phase, playoffRound: m.playoffRound });
           }
         }
         setLiveMatches(allMatches);
@@ -364,7 +365,7 @@ export function AppShell() {
                           className="flex items-center gap-2 text-xs hover:text-neon transition-colors w-full"
                         >
                           <span className="font-bold" style={{ color: league?.color }}>{league?.name.replace(' League', '')}</span>
-                          <span className="text-text-muted">W{m.week}</span>
+                          <span className="text-text-muted">{fixtureShortLabel(m)}</span>
                           <span className="text-text-primary">{m.homePlayer} vs {m.awayPlayer}</span>
                         </button>
                       );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Radio } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
@@ -18,10 +18,13 @@ import type { SeasonOption } from './replays/replay-filters';
 import { ReplayCard } from './replays/replay-card';
 import { ReplayHeroCard } from './replays/replay-hero-card';
 
-/** Sensible default time filter when a season is selected: archived seasons
- *  are browsed whole ("All-time"); the active season opens on "This Week". */
-function defaultTimeForSeason(archived: boolean | undefined): TimeFilter {
-  return archived ? 'all' : 'this-week';
+/** Sensible default time filter when a season is selected: a season whose live
+ *  bracket has already produced replays opens on them (no week bucket contains
+ *  playoff fixtures), archived seasons are browsed whole ("All-time"), an
+ *  active season opens on "This Week". */
+function defaultTimeForSeason(season: SeasonOption | undefined, hasPlayoffReplays: boolean): TimeFilter {
+  if (season?.inPlayoffs && hasPlayoffReplays) return 'playoffs';
+  return season?.archived ? 'all' : 'this-week';
 }
 
 export function ReplaysPage() {
@@ -53,15 +56,19 @@ export function ReplaysPage() {
 
   // Distinct seasons (desc) for the season-axis chips.
   const seasons = useMemo<SeasonOption[]>(() => {
-    const m = new Map<number, boolean>();
+    const m = new Map<number, SeasonOption>();
     for (const l of leagues) {
       const n = l.season?.seasonNumber;
       if (n == null || n === 0) continue;
-      m.set(n, !!l.season?.archived);
+      const prev = m.get(n);
+      m.set(n, {
+        seasonNumber: n,
+        archived: !!l.season?.archived,
+        // Any league of the season still running its bracket flags the season.
+        inPlayoffs: !!prev?.inPlayoffs || l.season?.phase === 'playoffs',
+      });
     }
-    return [...m.entries()]
-      .map(([seasonNumber, archived]) => ({ seasonNumber, archived }))
-      .sort((a, b) => b.seasonNumber - a.seasonNumber);
+    return [...m.values()].sort((a, b) => b.seasonNumber - a.seasonNumber);
   }, [leagues]);
 
   // Stream target = the latest week of the ACTIVE season that actually has
@@ -113,6 +120,13 @@ export function ReplaysPage() {
     [leagues, seasonFilter],
   );
 
+  /** Whether the current season selection has any playoff replay at all —
+   *  drives the (otherwise dead) Playoffs chip. */
+  const hasPlayoffs = useMemo(
+    () => seasonEntries.some(e => e.match.phase === 'playoffs'),
+    [seasonEntries],
+  );
+
   // The week number "This Week" / "Last Week" pivot on. Anchored to the
   // SELECTED SEASON's real current week (a week NUMBER straight off the league
   // schedule) rather than "the highest week that happens to have a replay" —
@@ -129,25 +143,36 @@ export function ReplaysPage() {
     return seasonEntries.reduce((max, e) => Math.max(max, e.match.week), 0);
   }, [leagues, seasonFilter, seasonEntries]);
 
+  /** Does this season have any playoff replay to show? Guards the playoff
+   *  default — a bracket that hasn't been played yet would land on an empty view. */
+  const hasPlayoffReplays = useCallback(
+    (seasonNumber: number) => entries.some(
+      e => e.league.season?.seasonNumber === seasonNumber && e.match.phase === 'playoffs',
+    ),
+    [entries],
+  );
+
   // Open the season with the most recent replays by default (newest season
   // that actually has any — so an empty week-1 S11 falls back to S10).
   useEffect(() => {
     if (seasonInitialized || entries.length === 0) return;
     const maxSeason = entries.reduce((mx, e) => Math.max(mx, e.league.season?.seasonNumber ?? 0), 0);
     if (maxSeason > 0) {
-      const archived = seasons.find(s => s.seasonNumber === maxSeason)?.archived;
       setSeasonFilter(maxSeason);
-      setTimeFilter(defaultTimeForSeason(archived));
+      setTimeFilter(defaultTimeForSeason(
+        seasons.find(s => s.seasonNumber === maxSeason),
+        hasPlayoffReplays(maxSeason),
+      ));
       setSeasonInitialized(true);
     }
-  }, [entries, seasons, seasonInitialized]);
+  }, [entries, seasons, seasonInitialized, hasPlayoffReplays]);
 
   function handleSeasonChange(s: number | 'all') {
     setSeasonFilter(s);
     setLeagueFilter(new Set());
     setSeasonInitialized(true);
     if (s === 'all') setTimeFilter('all');
-    else setTimeFilter(defaultTimeForSeason(seasons.find(x => x.seasonNumber === s)?.archived));
+    else setTimeFilter(defaultTimeForSeason(seasons.find(x => x.seasonNumber === s), hasPlayoffReplays(s)));
   }
 
   // Fetch all schedules + teams across leagues
@@ -242,6 +267,7 @@ export function ReplaysPage() {
       result = result.filter(e => {
         if (timeFilter === 'this-week') return e.match.week === referenceWeek;
         if (timeFilter === 'last-week') return e.match.week === Math.max(0, referenceWeek - 1);
+        if (timeFilter === 'playoffs') return e.match.phase === 'playoffs';
         if (timeFilter === 'my-matches') {
           if (!user) return false;
           const myUserId = parseInt(user.id);
@@ -374,6 +400,7 @@ export function ReplaysPage() {
           leagueFilter={leagueFilter}
           onToggleLeagueFilter={toggleLeagueFilter}
           hasUser={!!user}
+          hasPlayoffs={hasPlayoffs}
           seasons={seasons}
           seasonFilter={seasonFilter}
           onSeasonChange={handleSeasonChange}

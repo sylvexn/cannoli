@@ -12,6 +12,7 @@ import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { api } from '@/lib/api';
 import type { ApiMatchPokemon, ApiReplaySummary } from '@/lib/api';
 import { spriteTitle } from '@/pages/replays/brought-preview';
+import { PLAYOFF_ROUND_SHORT } from '@/lib/constants';
 
 export type ScheduleRow =
   | { kind: 'match'; week: number; match: Match }
@@ -102,7 +103,13 @@ export function ScheduleTab({ player, scheduleRows }: ScheduleTabProps) {
 
         return (
           <div key={match.id} className={`flex items-center gap-2 px-2 rounded transition-colors flex-1 min-h-[28px] ${isCurrent ? 'bg-neon/5' : 'hover:bg-surface-overlay/50'}`}>
-            <span className="w-6 text-[10px] font-mono tabular-nums text-text-muted shrink-0 text-right">{match.week}</span>
+            {/* Playoff fixtures sit at weeks past the regular schedule — show
+                the round (QF/SF/F) instead of a bare, meaningless week number. */}
+            <span className={`w-6 text-[10px] font-mono tabular-nums shrink-0 text-right ${match.phase === 'playoffs' ? 'text-draw font-bold' : 'text-text-muted'}`}>
+              {match.phase === 'playoffs'
+                ? (PLAYOFF_ROUND_SHORT[match.playoffRound ?? ''] ?? 'PO')
+                : match.week}
+            </span>
             {hasResult ? (
               <span className={`w-4 text-center text-[10px] font-bold ${won ? 'text-win' : lost ? 'text-loss' : 'text-draw'}`}>
                 {won ? 'W' : lost ? 'L' : 'D'}

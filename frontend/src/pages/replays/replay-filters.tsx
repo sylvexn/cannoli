@@ -4,7 +4,12 @@ import type { League } from '@/lib/types';
 import type { TimeFilter } from './replay-types';
 import { TIME_FILTERS } from './replay-types';
 
-export type SeasonOption = { seasonNumber: number; archived: boolean };
+export type SeasonOption = {
+  seasonNumber: number;
+  archived: boolean;
+  /** Some league of this season is currently in its playoff phase. */
+  inPlayoffs: boolean;
+};
 
 interface ReplayFiltersProps {
   timeFilter: TimeFilter;
@@ -17,6 +22,9 @@ interface ReplayFiltersProps {
   leagueFilter: Set<string>;
   onToggleLeagueFilter: (id: string) => void;
   hasUser: boolean;
+  /** The current season selection has at least one playoff replay — the
+   *  Playoffs chip is disabled (like My Matches when logged out) otherwise. */
+  hasPlayoffs: boolean;
   /** Available seasons (desc). The season row is hidden when there's only one. */
   seasons: SeasonOption[];
   seasonFilter: number | 'all';
@@ -36,6 +44,7 @@ export function ReplayFilters({
   leagueFilter,
   onToggleLeagueFilter,
   hasUser,
+  hasPlayoffs,
   seasons,
   seasonFilter,
   onSeasonChange,
@@ -62,7 +71,7 @@ export function ReplayFilters({
           <button
             key={f.id}
             onClick={() => onTimeFilterChange(f.id)}
-            disabled={f.id === 'my-matches' && !hasUser}
+            disabled={(f.id === 'my-matches' && !hasUser) || (f.id === 'playoffs' && !hasPlayoffs)}
             className={cn(
               'text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
               timeFilter === f.id

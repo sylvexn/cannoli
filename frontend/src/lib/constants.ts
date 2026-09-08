@@ -74,6 +74,24 @@ export function fixtureLabel(m: { phase?: string | null; playoffRound?: string |
   if (m.phase === 'playoffs' && m.playoffRound) return PLAYOFF_ROUND_LABEL[m.playoffRound] ?? 'Playoffs';
   return `Week ${m.week}`;
 }
+/**
+ * Highest week whose results are ready to publish through the results-reveal
+ * gate: the last week that actually has a played match, floored at the live
+ * week. Playoff fixtures sit at weeks PAST the regular schedule and currentWeek
+ * stops advancing once the regular season ends, so a "publish through
+ * currentWeek" target could never reach the bracket — the postseason stayed
+ * score-blanked for everyone until the gate was switched off entirely.
+ */
+export function publishTargetWeek(
+  matches: { week: number; status?: string }[],
+  currentWeek: number,
+): number {
+  return matches.reduce(
+    (mx, m) => (m.status === 'completed' || m.status === 'disputed' ? Math.max(mx, m.week) : mx),
+    currentWeek,
+  );
+}
+
 /** Compact pill label — "QF"/"SF"/"F" in playoffs, otherwise "W{n}". */
 export function fixtureShortLabel(m: { phase?: string | null; playoffRound?: string | null; week: number }): string {
   if (m.phase === 'playoffs' && m.playoffRound) return PLAYOFF_ROUND_SHORT[m.playoffRound] ?? 'PO';

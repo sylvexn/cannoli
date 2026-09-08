@@ -4,6 +4,7 @@ import type { ApiReplaySummary } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { cn } from '@/lib/utils';
 import { Spoiler } from '@/components/spoiler';
+import { fixtureLabel } from '@/lib/constants';
 import type { ReplayEntry } from './replay-types';
 import { BroughtPreview } from './brought-preview';
 
@@ -120,9 +121,13 @@ export function ReplayCard({
           >
             {league.name.replace(' League', '')}
           </span>
-          <span className="text-text-muted">W{match.week}</span>
-          <span className="text-border-default">·</span>
-          <span className="text-text-muted truncate">{match.phase ?? 'regular'}</span>
+          {/* Playoff fixtures live at weeks past the regular schedule, so the
+              bare week number reads as a nonsense "W12" — label the round. */}
+          {match.phase === 'playoffs' ? (
+            <span className="px-1.5 py-0.5 rounded font-bold bg-draw/15 text-draw">{fixtureLabel(match)}</span>
+          ) : (
+            <span className="text-text-muted">W{match.week}</span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-sm font-medium">

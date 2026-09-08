@@ -8,11 +8,14 @@ export interface ReplayEntry {
   awayTeam: ApiTeam | undefined;
 }
 
-export type TimeFilter = 'this-week' | 'last-week' | 'my-matches' | 'all';
+export type TimeFilter = 'this-week' | 'last-week' | 'playoffs' | 'my-matches' | 'all';
 
 export const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
   { id: 'this-week', label: 'This Week' },
   { id: 'last-week', label: 'Last Week' },
+  // Playoff fixtures live at weeks past the regular schedule, so no week-based
+  // bucket ever catches them — they need their own chip.
+  { id: 'playoffs', label: 'Playoffs' },
   { id: 'my-matches', label: 'My Matches' },
   { id: 'all', label: 'All-Time' },
 ];
@@ -31,6 +34,11 @@ export function isReplayWeekEnded(entry: ReplayEntry) {
   const season = entry.league.season;
   if (!season) return true;
   if (season.archived) return true;
+  // Playoff fixtures sit at weeks PAST the regular schedule and currentWeek
+  // stops advancing once the regular season ends, so `week < currentWeek` would
+  // hide their badges forever. A visible score is the real "this one's in the
+  // books" signal — the results-reveal gate nulls the ones still withheld.
+  if (entry.match.phase === 'playoffs') return entry.match.homeScore != null;
   return entry.match.week < season.currentWeek;
 }
 
