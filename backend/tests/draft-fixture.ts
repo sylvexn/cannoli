@@ -50,6 +50,14 @@ export function buildDraftFixture(opts?: {
   timerExpiredForTeam?: string | null;
   teraCaptainSlots?: number;
 }): DraftFixture {
+  // The shared reference table can be empty when another suite in this
+  // `bun test tests/` run resets it (or is still seeding it in a parallel
+  // worker). pickByTier already self-heals; do it here too so engine paths that
+  // read the pool WITHOUT going through pickByTier — auto-pick, which scans for
+  // the highest affordable mon — don't fail with "No valid auto-pick available"
+  // purely because of test file order.
+  ensurePokemonReference();
+
   const id = ++counter;
   const tag = `dtf-${id}-${Date.now()}`;
   const numTeams = opts?.teams ?? 4;
