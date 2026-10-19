@@ -19,6 +19,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings } from '../lib/standings';
+import { isStaff } from '../lib/auth';
 
 export const archiveDeepRoutes = new Elysia()
 
@@ -353,11 +354,16 @@ export const archiveDeepRoutes = new Elysia()
   })
 
   // Season awards (every pin awarded with this seasonId)
-  .get('/api/archive/seasons/:seasonId/awards', ({ params, set }) => {
+  .get('/api/archive/seasons/:seasonId/awards', ({ params, set, user }) => {
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
     if (!season) { set.status = 404; return { error: 'Season not found' }; }
+    const staff = isStaff(user);
+    // Live-season awards would defeat the pin reveal gate; non-staff only see archived history.
+    if (!season.archived && !staff) {
+      return { seasonId, seasonNumber: season.seasonNumber, archived: false, pins: [] };
+    }
 
     const rows = db.select({
       pinId: schema.pins.id,
@@ -374,26 +380,30 @@ export const archiveDeepRoutes = new Elysia()
       metadata: schema.pins.metadata,
       awardedAt: schema.pins.awardedAt,
       awardedBy: schema.pins.awardedBy,
+      source: schema.pins.source,
     })
       .from(schema.pins)
       .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
       .innerJoin(schema.users, eq(schema.users.id, schema.pins.userId))
-      .where(eq(schema.pins.seasonId, seasonId))
+      .where(staff
+        ? eq(schema.pins.seasonId, seasonId)
+        : and(eq(schema.pins.seasonId, seasonId), eq(schema.users.active, true)))
       .all();
 
     return {
       seasonId,
       seasonNumber: season.seasonNumber,
       archived: !!season.archived,
-      pins: rows.map(r => ({
+      pins: rows.map(({ awardedBy, source, ...r }) => ({
         ...r,
+        ...(staff ? { awardedBy, source } : {}),
         metadata: r.metadata ? JSON.parse(r.metadata) : null,
       })),
     };
   })
 
   // All-time aggregates
-  .get('/api/archive/all-time', () => {
+  .get('/api/archive/all-time', ({ user }) => {
     // Champions per (season, league) — finals winner. Single query, then
     // fold in-memory.
     const finalsRows = db.select({
@@ -403,6 +413,7 @@ export const archiveDeepRoutes = new Elysia()
       leagueColor: schema.leagues.color,
       seasonId: schema.leagues.seasonId,
       seasonNumber: schema.seasons.seasonNumber,
+      archived: schema.seasons.archived,
       homeTeamId: schema.matches.homeTeamId,
       awayTeamId: schema.matches.awayTeamId,
       homeScore: schema.matches.homeScore,
@@ -417,6 +428,7 @@ export const archiveDeepRoutes = new Elysia()
     const winnerTeamIds = new Set<string>();
     const championsRaw = finalsRows
       .filter(r => r.homeScore != null && r.awayScore != null && r.homeScore !== r.awayScore)
+      .filter(r => r.archived || isStaff(user))
       .map(r => {
         const winnerId = (r.homeScore as number) > (r.awayScore as number) ? r.homeTeamId : r.awayTeamId;
         if (winnerId != null) winnerTeamIds.add(winnerId);

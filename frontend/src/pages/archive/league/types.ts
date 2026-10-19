@@ -133,5 +133,5 @@ export interface SeasonAward {
   defIsAuto: boolean;
   metadata: any;
   awardedAt: string | null;
-  awardedBy: number | null;
+  awardedBy?: number | null;
 }
