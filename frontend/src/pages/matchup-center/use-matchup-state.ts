@@ -4,8 +4,9 @@ import type { RosterPokemon } from '@/lib/types';
 export interface TeamSource {
   /** 'builder' = live-synced from the Showdown teambuilder (matchup plugin only;
    *  the site never produces it — type-space only from the site's perspective). */
-  type: 'league' | 'custom' | 'builder';
+  type: 'league' | 'custom' | 'builder' | 'draft-center';
   leagueId?: string;
+  /** league team id, or the Draft Center team id when type is 'draft-center'. */
   teamId?: string;
   label?: string;
 }

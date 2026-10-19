@@ -498,6 +498,13 @@
       "when": 1784200000000,
       "tag": "0070_pins_team_holder",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1784200000001,
+      "tag": "0071_draft_center",
+      "breakpoints": true
     }
   ]
 }

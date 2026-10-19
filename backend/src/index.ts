@@ -24,6 +24,7 @@ import { psLoginRoutes } from './routes/ps-login';
 import { psInternalRoutes } from './routes/ps-internal';
 import { pinRoutes } from './routes/pins';
 import { pinAwardRoutes } from './routes/pins-awards';
+import { draftCenterRoutes } from './routes/draft-center';
 import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
@@ -240,6 +241,7 @@ const app = new Elysia()
   // is matched before the more general /api/users/:username profile route.
   .use(pinRoutes)
   .use(pinAwardRoutes)
+  .use(draftCenterRoutes)
   .use(onlineRoutes)
   .use(userRoutes)
   .use(leagueRoutes)

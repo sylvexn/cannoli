@@ -1036,3 +1036,22 @@ export const usageDailyTotals = sqliteTable('usage_daily_totals', {
   uniqueUsers: integer('unique_users').notNull().default(0),
   uniqueAnons: integer('unique_anons').notNull().default(0),
 });
+
+// Draft Center (per-user planner teams)
+// Flat list of a user's mock-up teams. `roster` is a JSON array of picks (see
+// lib/draft-center/types.ts); `leagueId` picks the ruleset it is checked
+// against (rulesets are derived from leagues). `shareToken` non-null = readable
+// read-only at an unguessable public link; clearing it revokes the link.
+export const draftCenterTeams = sqliteTable('draft_center_teams', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  leagueId: text('league_id'),
+  roster: text('roster').notNull().default('[]'),
+  shareToken: text('share_token'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+}, (t) => ({
+  userIdx: index('draft_center_teams_user_idx').on(t.userId),
+  shareUq: uniqueIndex('draft_center_teams_share_uq').on(t.shareToken),
+}));

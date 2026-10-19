@@ -5,6 +5,7 @@
 
 import type { ApiError } from './errors';
 import type { RulesContent, LeagueRulesResponse } from './rules-types';
+import type { DcTeamDto, DcTeamInput, DcSharedTeam } from './draft-center/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -1051,16 +1052,32 @@ export const api = {
     id: string;
     name: string;
     color: string;
+    champion?: string | null;
     teams: {
       id: string;
       coachName: string;
       teamName: string;
       teamAbbrev: string;
       teamColor: string;
+      finishPosition?: number | null;
+      finishLabel?: string | null;
+      record?: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+      roster?: { name: string; tier: number; types: string[]; isTeraCaptain: boolean }[];
     }[];
   }[]>(`/api/seasons/${seasonId}/leagues`),
 
   getTeams: (leagueId: string) => fetchJson<ApiTeam[]>(`/api/leagues/${leagueId}/teams`),
+
+  // Draft Center (per-user planner teams). DcTeamDto lives in lib/draft-center/types.
+  dcListTeams: () => fetchJson<DcTeamDto[]>('/api/draft-center/teams'),
+  dcCreateTeam: (body: DcTeamInput) => postJson<DcTeamDto>('/api/draft-center/teams', body),
+  dcUpdateTeam: (id: string, body: Partial<DcTeamInput>) => putJson<DcTeamDto>(`/api/draft-center/teams/${id}`, body),
+  dcDeleteTeam: (id: string) => deleteJson<{ success: boolean }>(`/api/draft-center/teams/${id}`),
+  dcDuplicateTeam: (id: string) => postJson<DcTeamDto>(`/api/draft-center/teams/${id}/duplicate`),
+  dcShareTeam: (id: string, enabled: boolean) => postJson<DcTeamDto>(`/api/draft-center/teams/${id}/share`, { enabled }),
+  dcImportTeams: (teams: DcTeamInput[]) =>
+    postJson<{ imported: number; skipped: number; teams: DcTeamDto[] }>('/api/draft-center/import', { teams }),
+  dcGetShared: (token: string) => fetchJson<DcSharedTeam>(`/api/draft-center/shared/${encodeURIComponent(token)}`),
 
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
