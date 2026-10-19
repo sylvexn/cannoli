@@ -17,6 +17,10 @@ import { useAppData } from '@/lib/app-data-context';
 import { api, type ApiTeam } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 import { rosterFromApi } from '@/lib/roster-from-api';
+import { useDraftCenterTeams } from '@/lib/draft-center/store';
+import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
+import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { teamToRoster } from '@/lib/draft-center/roster';
 import type { League } from '@/lib/types';
 import {
   LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
@@ -84,7 +88,7 @@ export function MatchupCenterPage() {
       }
       // Fallback: find user's own team in any league, prioritising the
       // most-active league (drafting > regular > playoffs > predraft > offseason).
-      if (!teamAResolved && user) {
+      if (!teamAResolved && user && !searchParams.get('dc')) {
         const sortedLeagues = [...leagues].sort((a, b) => phaseRank(b) - phaseRank(a));
         for (const league of sortedLeagues) {
           const teams = await api.getTeams(league.id).catch(() => []);
@@ -102,7 +106,7 @@ export function MatchupCenterPage() {
         }
       }
 
-      if (!teamAResolved) {
+      if (!teamAResolved && !searchParams.get('dc')) {
         setNoManagedTeam(true);
       }
 
@@ -123,6 +127,24 @@ export function MatchupCenterPage() {
       }
     })();
   }, [leagues, searchParams, user, dispatch]);
+
+  // Deep link from the Draft Center editor: ?dc=<team id> loads that team as side A.
+  const paramDc = searchParams.get('dc');
+  const { teams: dcTeams, loading: dcLoading } = useDraftCenterTeams();
+  const { leagues: allLeagues, loading: allLeaguesLoading } = useAllLeagues();
+  const dcLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!paramDc || dcLoadedRef.current || dcLoading || allLeaguesLoading) return;
+    dcLoadedRef.current = true;
+    const dc = dcTeams.find(t => t.id === paramDc);
+    if (!dc) return;
+    dispatch({
+      type: 'SET_TEAM_A',
+      roster: teamToRoster(dc.roster, resolveRuleset(dc.leagueId, allLeagues)),
+      source: { type: 'draft-center', teamId: dc.id, label: `${dc.name} (Draft Center)` },
+    });
+    setNoManagedTeam(false);
+  }, [paramDc, dcTeams, dcLoading, allLeagues, allLeaguesLoading, dispatch]);
 
   /** Refresh the opponent gem-grid context whenever the user manually changes
    *  team A via the picker. We re-fetch the league's teams from the matching

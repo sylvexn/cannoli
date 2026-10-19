@@ -48,6 +48,12 @@ const int = (v: unknown, lo: number, hi: number, fallback: number): number => {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 };
 
+function dropTrailingBlanks(a: string[]): string[] {
+  const out = [...a];
+  while (out.length && !out[out.length - 1]) out.pop();
+  return out;
+}
+
 function spread(raw: unknown, hi: number, fallback: number): StatSpread {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out = {} as StatSpread;
@@ -73,8 +79,9 @@ export function sanitizeRoster(raw: unknown): DcMon[] {
     if (r.set && typeof r.set === 'object') {
       const s = r.set as Record<string, unknown>;
       mon.set = {
+        // Slots keep their position (blanks included); only trailing blanks are dropped.
         moves: Array.isArray(s.moves)
-          ? s.moves.map(x => str(x, 40)).filter(Boolean).slice(0, 4)
+          ? dropTrailingBlanks(s.moves.slice(0, 4).map(x => str(x, 40)))
           : [],
         item: str(s.item, 40),
         ability: str(s.ability, 40),

@@ -82,6 +82,7 @@ describe('draft-center sanitize', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.teraTypes).toEqual(['dark', 'poison', 'ghost']);
     expect(out[0]!.set!.moves).toHaveLength(4);
+    expect(sanitizeRoster([{ name: 'Muk', set: { moves: ['', 'Toxic', '', ''] } }])[0]!.set!.moves).toEqual(['', 'Toxic']);
     expect(out[0]!.set!.evs.spe).toBe(252);
     expect(out[0]!.set!.ivs.atk).toBe(0);
     expect(out[0]!.set!.ivs.spe).toBe(31);

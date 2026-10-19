@@ -211,6 +211,12 @@ export function tierName(tier: number): string {
   return 'Budget';
 }
 
+/** Display labels for the per-league cost formats. */
+export const COST_FORMAT_LABELS: Record<string, string> = {
+  natdex: 'NatDex',
+  natdexplus: 'NatDex+',
+};
+
 /** Phase display config — shared across overview, app-shell, admin */
 export const PHASE_COLORS: Record<string, string> = {
   draft: 'text-draw bg-draw/10',

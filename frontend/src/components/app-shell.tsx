@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Swords, Gamepad2,
+  Swords, Gamepad2, ClipboardList,
   Archive, Film, ScrollText, ListTree, Home, Gauge, Award,
   PanelLeftClose, PanelLeftOpen, Menu, X,
 } from 'lucide-react';
@@ -36,7 +36,7 @@ import { AnnouncementBanners } from './announcement-banners';
 // Routes that need full-width layout (no max-w constraint). The trailing
 // slash on '/replay/' targets the full-bleed replay watch page (/replay/:id)
 // while leaving the scrollable '/replays' gallery on the normal layout.
-const WIDE_ROUTES = ['/draft', '/matchup', '/showdown', '/replay/'];
+const WIDE_ROUTES = ['/draft', '/matchup', '/draft-center', '/showdown', '/replay/'];
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -394,6 +394,7 @@ export function AppShell() {
 
           <div className="h-px bg-border-subtle mx-2 my-1" />
 
+          <SidebarNavItem to="/draft-center" icon={ClipboardList} label="Draft Center" activeClass="bg-emerald-400/10 text-emerald-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/matchup" icon={Swords} label="Matchup Center" collapsed={collapsedRail} />
           <SidebarNavItem to="/showdown" icon={Gamepad2} label="Showdown" activeClass="bg-orange-400/10 text-orange-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/replays" icon={Film} label="Replays" collapsed={collapsedRail} />

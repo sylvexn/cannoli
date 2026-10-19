@@ -53,6 +53,11 @@ import { NotFoundPage } from '@/pages/not-found';
 // Lazy-loaded heavy routes
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
 const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
+const DraftCenterLayout = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterLayout })));
+const DraftCenterHome = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterHome })));
+const DraftCenterEditor = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.TeamEditorPage })));
+const DraftCenterPast = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.PastTeamPage })));
+const DraftCenterShared = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.SharedTeamPage })));
 const MatchupCenterPage = lazyWithReload(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazyWithReload(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
 const SpeedTiersPage = lazyWithReload(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
@@ -124,6 +129,12 @@ export default function App() {
               <Route path="coach/:username" element={<CoachProfilePage />} />
               <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
               <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
+              <Route path="draft-center" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterLayout /></Suspense>}>
+                <Route index element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterHome /></Suspense>} />
+                <Route path="team/:id" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterEditor /></Suspense>} />
+                <Route path="past/:leagueId/:teamId" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterPast /></Suspense>} />
+                <Route path="s/:token" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterShared /></Suspense>} />
+              </Route>
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="replay/:matchId" element={<ReplayWatchPage />} />
               <Route path="archive" element={<ArchiveLayout />}>
