@@ -100,7 +100,9 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
       >
         <SelectValue
           placeholder={side === 'a' ? 'Select your team...' : 'Select opponent...'}
-        />
+        >
+          {source?.type === 'draft-center' ? source.label : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent align="start">
         <SelectItem value="__custom__">Custom Team...</SelectItem>

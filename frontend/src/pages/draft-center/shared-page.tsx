@@ -35,7 +35,7 @@ export function SharedTeamPage() {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
         <p className="text-sm text-text-secondary">This link isn't valid - the team may have been deleted or sharing was turned off.</p>
-        <Button variant="outline" render={<Link to="/draft-center" />}>Open Draft Center</Button>
+        <Button variant="outline" nativeButton={false} render={<Link to="/draft-center" />}>Open Draft Center</Button>
       </div>
     );
   }

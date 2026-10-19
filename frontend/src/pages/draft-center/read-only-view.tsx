@@ -23,7 +23,7 @@ export function ReadOnlyView({ title, meta, actions, roster, ruleset, backTo }: 
   return (
     <div className="flex flex-col gap-3 min-w-0">
       <div className="flex items-start gap-2 flex-wrap">
-        {backTo && <Button variant="ghost" size="icon-sm" render={<Link to={backTo} />} aria-label="Back"><ArrowLeft size={15} /></Button>}
+        {backTo && <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link to={backTo} />} aria-label="Back"><ArrowLeft size={15} /></Button>}
         <div className="min-w-0 flex-1 basis-60">
           <h2 className="font-mono font-bold text-lg truncate">{title}</h2>
           {meta && <div className="text-xs text-text-secondary flex flex-wrap items-center gap-x-3 gap-y-0.5">{meta}</div>}

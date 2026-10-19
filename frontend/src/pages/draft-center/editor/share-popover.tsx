@@ -59,7 +59,7 @@ export function SharePopover({ team, onSetShared }: { team: DcTeam; onSetShared:
                   <Button size="icon-sm" variant="outline" onClick={copy} aria-label="Copy link">
                     {copied ? <Check size={13} /> : <Copy size={13} />}
                   </Button>
-                  <Button size="icon-sm" variant="outline" render={<Link to={sharePath(team.shareToken!)} target="_blank" />} aria-label="Open link">
+                  <Button size="icon-sm" variant="outline" nativeButton={false} render={<Link to={sharePath(team.shareToken!)} target="_blank" />} aria-label="Open link">
                     <ExternalLink size={13} />
                   </Button>
                 </div>

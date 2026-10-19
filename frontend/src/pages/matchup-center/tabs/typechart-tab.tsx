@@ -139,8 +139,8 @@ export type TypeGridRow = {
   matchups: { type: PokemonType; multiplier: number }[];
   /** Distinct React key when one Pokemon appears on several rows (tera forms). */
   rowKey?: string;
-  /** Small tag after the name (e.g. "Tera Fire"). */
-  badge?: string;
+  /** Replaces the name text in the row label (the name stays in the link title). */
+  label?: string;
 };
 
 export function TypeGrid({
@@ -209,8 +209,7 @@ export function TypeGrid({
                   className="flex items-center gap-1.5 hover:text-text-primary"
                 >
                   <PokemonSprite name={p.name} size="xs" shiny={p.isShiny} className="shrink-0" />
-                  <span className="text-[10px] font-mono truncate">{p.name}</span>
-                  {p.badge && <span className="text-[8px] font-mono uppercase text-pink-400 shrink-0">{p.badge}</span>}
+                  <span className={cn('text-[10px] font-mono truncate', p.label && 'capitalize text-pink-400')}>{p.label ?? p.name}</span>
                 </Link>
               </td>
               {POKEMON_TYPES.map(type => {

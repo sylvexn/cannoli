@@ -58,7 +58,7 @@ export function PastTeamPage() {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
         <p className="text-sm text-text-secondary">Team not found.</p>
-        <Button variant="outline" render={<Link to="/draft-center" />}>Back to Draft Center</Button>
+        <Button variant="outline" nativeButton={false} render={<Link to="/draft-center" />}>Back to Draft Center</Button>
       </div>
     );
   }

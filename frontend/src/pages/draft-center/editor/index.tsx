@@ -37,7 +37,7 @@ export function TeamEditorPage() {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
         <p className="text-sm text-text-secondary">That team doesn't exist (or belongs to another account).</p>
-        <Button render={<Link to="/draft-center" />} variant="outline">Back to Draft Center</Button>
+        <Button nativeButton={false} render={<Link to="/draft-center" />} variant="outline">Back to Draft Center</Button>
       </div>
     );
   }
@@ -64,7 +64,7 @@ export function TeamEditorPage() {
   return (
     <div className="flex flex-col gap-3 min-w-0">
       <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="ghost" size="icon-sm" render={<Link to="/draft-center" />} aria-label="Back to teams"><ArrowLeft size={15} /></Button>
+        <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link to="/draft-center" />} aria-label="Back to teams"><ArrowLeft size={15} /></Button>
         <Input
           value={team.name}
           onChange={e => store.updateTeam(team.id, { name: e.target.value })}
@@ -83,7 +83,7 @@ export function TeamEditorPage() {
           {store.saveError ? <span className="text-loss" title={store.saveError}>Save failed</span> : store.saving ? 'Saving...' : 'Saved'}
         </span>
         <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-          <Button variant="outline" size="sm" render={<Link to={`/matchup?dc=${team.id}`} />}><Swords size={13} /> Matchup</Button>
+          <Button variant="outline" size="sm" nativeButton={false} render={<Link to={`/matchup?dc=${team.id}`} />}><Swords size={13} /> Matchup</Button>
           <SharePopover team={team} onSetShared={enabled => store.setShared(team.id, enabled)} />
           <Button variant="outline" size="sm" onClick={duplicate}><Copy size={13} /> Duplicate</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)} className="text-loss hover:text-loss"><Trash2 size={13} /></Button>

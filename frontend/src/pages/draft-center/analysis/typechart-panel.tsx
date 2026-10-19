@@ -31,7 +31,7 @@ export function TypeChartPanel({ roster, ruleset }: { roster: DcMon[]; ruleset: 
     return m.teraTypes.map(t => ({
       name: m.name,
       rowKey: `${m.name}:tera:${t}`,
-      badge: `Tera ${TYPE_LABELS[t]}`,
+      label: `Tera ${t}`,
       matchups: getDefensiveMatchups([t], r.abilities[0]),
     }));
   }), [roster, ruleset.costFormat]);

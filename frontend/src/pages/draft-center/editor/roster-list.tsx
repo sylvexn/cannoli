@@ -98,7 +98,7 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
           )}
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
-          <TypeChip types={data?.types ?? []} size="xs" noTooltip />
+          <span className="shrink-0"><TypeChip types={data?.types ?? []} size="xs" noTooltip /></span>
           {setSummary && <span className="truncate text-[10px] text-text-muted font-mono min-w-0">{setSummary}</span>}
         </div>
       </div>
