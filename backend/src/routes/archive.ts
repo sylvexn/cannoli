@@ -17,6 +17,7 @@
  */
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
+import { isStaff } from '../lib/auth';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings } from '../lib/standings';
 
@@ -353,7 +354,7 @@ export const archiveDeepRoutes = new Elysia()
   })
 
   // Season awards (every pin awarded with this seasonId)
-  .get('/api/archive/seasons/:seasonId/awards', ({ params, set }) => {
+  .get('/api/archive/seasons/:seasonId/awards', ({ params, set, user }) => {
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, seasonId)).get();
@@ -362,7 +363,9 @@ export const archiveDeepRoutes = new Elysia()
     const rows = db.select({
       pinId: schema.pins.id,
       pinDefId: schema.pins.pinDefId,
-      userId: schema.pins.userId,
+      teamId: schema.pins.teamId,
+      leagueId: schema.pins.leagueId,
+      userId: schema.users.id,
       username: schema.users.username,
       displayName: schema.users.displayName,
       defName: schema.pinDefinitions.name,
@@ -377,8 +380,13 @@ export const archiveDeepRoutes = new Elysia()
     })
       .from(schema.pins)
       .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
-      .innerJoin(schema.users, eq(schema.users.id, schema.pins.userId))
-      .where(eq(schema.pins.seasonId, seasonId))
+      .leftJoin(schema.teams, eq(schema.teams.id, schema.pins.teamId))
+      .leftJoin(schema.users, eq(schema.users.id, sql`COALESCE(${schema.teams.userId}, ${schema.pins.userId})`))
+      .where(and(
+        eq(schema.pins.seasonId, seasonId),
+        // Unpublished drafts are staff-only.
+        isStaff(user) ? undefined : eq(schema.pins.published, true),
+      ))
       .all();
 
     return {

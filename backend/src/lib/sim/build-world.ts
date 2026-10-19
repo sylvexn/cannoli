@@ -39,8 +39,6 @@ import {
   seedMoveCategories,
 } from '../../../scripts/seed-helpers';
 import { importPokemonOnly, assignFinishPositions } from '../../../scripts/import-xlsx';
-import { runAutoAwards } from '../pins/auto-award';
-import { mintArchivePins } from '../pins/archive-mint';
 import { seedLeagueTrades } from './seed-trades';
 
 // Tunables
@@ -389,10 +387,6 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
       // Stamp finish positions from the played-out bracket so standings +
       // profile badges render. generatePlayoffBracket set teams.rank.
       assignFinishPositions(sqlite, [leagueId]);
-
-      // Mint season-end + archive pins (champion / sweeper / high-score / …).
-      runAutoAwards(leagueId, { trigger: 'season-end' });
-      mintArchivePins(leagueId);
 
       // Historical trade activity — a finished season has only accepted
       // (completed) trades + trade-block listings, no open proposals.

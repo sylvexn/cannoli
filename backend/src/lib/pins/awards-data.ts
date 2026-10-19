@@ -1,9 +1,7 @@
 /**
  * Authoritative manual award lists for the seasons whose Discord-announced
- * winners we have on file. The auto-award job + archive-mint between them
- * cover champion / cannoli (best record) / cynthia (streak) / garchomp (KOs)
- * and the four archive pins; everything else (the Elite-4 / Mix / Player
- * categories) is hand-chosen and lives here.
+ * winners we have on file (historical fixtures; nothing is auto-minted any
+ * more — new awards come from the admin Awards Sheet).
  *
  * Two reference flavours per row:
  *   - `username` form    → user lookup is direct, the pin is filed against
@@ -204,22 +202,14 @@ export interface ManualMintSummary {
  *     { leagueId? } (leagueId is also written to the real `league_id` column).
  *   - `pokemon` form: find the team in `leagueId` whose roster contains the
  *     given pokemon name (exact-match — DB stores Mega prefix and form
- *     suffix literally), then file pin against the team's owner. Skipped
- *     with a warning when the team has no userId (orphan import).
+ *     suffix literally), then file pin against the team's owner. An unlinked
+ *     team still holds the award (team_id is the holder).
  *
- * Every row here mints with `source = 'manual'` — these lists are
- * human-curated, so the auto minters (auto-award.ts / archive-mint.ts) will
- * never delete them or mint a competing row over them.
+ * Every row here mints with `source = 'manual'`, published.
  *
  * Idempotent: INSERT OR IGNORE against the `pins_identity_idx` unique index
  * on (user_id, pin_def_id, season_id, league_id). Re-running on a seeded DB
  * is a no-op for existing rows.
- *
- * Before minting, this clears the auto-award rows for the slugs that overlap
- * (cannoli, cynthia, garchomp) for the relevant season — the manual list is
- * the source of truth, so we want the auto job's guesses out of the way.
- * Scoped by season_id + league_id + source = 'auto' so admin-minted (manual)
- * pins always survive.
  */
 export function mintManualPins(
   sqlite: Database,
@@ -249,50 +239,20 @@ export function mintManualPins(
       ORDER BY (CASE WHEN t.user_id IS NULL THEN 1 ELSE 0 END), r.id
       LIMIT 1`,
   );
+  const findUserTeam = sqlite.prepare(
+    `SELECT id FROM teams WHERE user_id = ? AND league_id = ? LIMIT 1`,
+  );
   const ensureDef = sqlite.prepare(
     `SELECT id FROM pin_definitions WHERE id = ?`,
   );
   const insertPin = sqlite.prepare(
-    `INSERT OR IGNORE INTO pins (user_id, pin_def_id, season_id, league_id, awarded_by, source, metadata)
-     VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
-  );
-
-  // Collect the distinct leagues referenced by overlap-slug awards. We'll do
-  // a league-scoped clear (by the real league_id column, not metadata) so a
-  // bulk-mint for one league can't delete sibling leagues' auto-pins that
-  // share the same season_id.
-  const overlap = new Set(['cannoli', 'cynthia', 'garchomp']);
-  const overlapLeagues = new Set<string>(
-    awards
-      .filter(a => overlap.has(a.pin) && a.leagueId)
-      .map(a => a.leagueId as string),
-  );
-
-  // Keyed on `source = 'auto'` (never `awarded_by`, which is provenance
-  // only) and the real `league_id` column. The old scoping — `awarded_by IS
-  // NULL AND json_extract(metadata,'$.teamId') IN (...)` — silently matched
-  // nothing for every username-form award, whose metadata only ever carried
-  // `leagueId`, not `teamId`.
-  const clearOverlapByLeague = sqlite.prepare(
-    `DELETE FROM pins
-      WHERE pin_def_id IN ('cannoli', 'cynthia', 'garchomp')
-        AND season_id = ?
-        AND source = 'auto'
-        AND league_id = ?`,
+    `INSERT OR IGNORE INTO pins (user_id, team_id, pin_def_id, season_id, league_id, awarded_by, source, published, metadata)
+     VALUES (?, ?, ?, ?, ?, ?, 'manual', 1, ?)`,
   );
 
   // Wrap the clear + all inserts in a single transaction so a crash between
   // them cannot leave the season's pins in a half-deleted state.
   sqlite.transaction(() => {
-    // Clear overlapping auto-pins per league so the manual list takes over.
-    // Only touches source='auto' rows — matches the pattern used by
-    // runAutoAwards and mintArchivePins — avoids stomping on sibling-league
-    // auto-pins for coaches in multiple leagues, and never touches a
-    // human-authoritative manual pin.
-    for (const leagueId of overlapLeagues) {
-      clearOverlapByLeague.run(seasonId, leagueId);
-    }
-
     for (const a of awards) {
       const def = ensureDef.get(a.pin) as { id: string } | undefined;
       if (!def) {
@@ -301,6 +261,7 @@ export function mintManualPins(
       }
 
       let userId: number | null = null;
+      let teamId: string | null = null;
       const metadata: Record<string, unknown> = {};
       if (a.leagueId) metadata.leagueId = a.leagueId;
 
@@ -311,6 +272,10 @@ export function mintManualPins(
           continue;
         }
         userId = u.id;
+        if (a.leagueId) {
+          teamId = (findUserTeam.get(u.id, a.leagueId) as { id: string } | undefined)?.id ?? null;
+          if (teamId) metadata.teamId = teamId;
+        }
       } else if ('pokemon' in a && a.pokemon) {
         if (!a.leagueId) {
           summary.unresolved.push({ award: a, reason: `pokemon-form award missing leagueId` });
@@ -323,11 +288,9 @@ export function mintManualPins(
           summary.unresolved.push({ award: a, reason: `pokemon '${a.pokemon}' not on any roster in '${a.leagueId}'` });
           continue;
         }
-        if (!row.user_id) {
-          summary.unresolved.push({ award: a, reason: `team '${row.team_name}' (${row.team_id}) has no userId — orphan` });
-          continue;
-        }
+        // Team is the holder: an unlinked team still holds the award.
         userId = row.user_id;
+        teamId = row.team_id;
         metadata.pokemon = a.pokemon;
         metadata.teamId = row.team_id;
         if (a.nickname) metadata.nickname = a.nickname;
@@ -338,6 +301,7 @@ export function mintManualPins(
 
       const res = insertPin.run(
         userId,
+        teamId,
         a.pin,
         seasonId,
         a.leagueId ?? null,

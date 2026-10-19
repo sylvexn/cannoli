@@ -8,6 +8,11 @@
 import { matchWinner } from '../standings';
 import { breakTieByRank } from './tiebreak';
 
+/** `keepTies`: return every candidate still tied after the pin-specific
+ *  criteria instead of collapsing to one via the rank/id fallback — the suggest
+ *  engine flags ties for the admin to resolve. */
+export interface PickOpts { keepTies?: boolean }
+
 export interface GarchompRow {
   teamId: string; pokemon: string; kills: number; deaths: number;
   /** The team's final standings rank (teams.rank), for the general tiebreak
@@ -25,7 +30,7 @@ export interface GarchompWinner { teamId: string; pokemon: string; kills: number
  * Ties on kills narrow by fewest deaths on that Pokemon, then the general
  * rank/id fallback (breakTieByRank) — always at most one winner.
  */
-export function pickGarchompWinners(rows: GarchompRow[]): GarchompWinner[] {
+export function pickGarchompWinners(rows: GarchompRow[], opts?: PickOpts): GarchompWinner[] {
   if (rows.length === 0) return [];
   const merged = new Map<string, GarchompRow>();
   for (const r of rows) {
@@ -33,7 +38,7 @@ export function pickGarchompWinners(rows: GarchompRow[]): GarchompWinner[] {
     const prev = merged.get(key);
     if (prev) { prev.kills += (r.kills ?? 0); prev.deaths += (r.deaths ?? 0); }
     else merged.set(key, {
-      teamId: r.teamId, pokemon: (r.pokemon ?? '').toLowerCase(),
+      teamId: r.teamId, pokemon: r.pokemon ?? '',
       kills: r.kills ?? 0, deaths: r.deaths ?? 0, teamRank: r.teamRank,
     });
   }
@@ -43,8 +48,8 @@ export function pickGarchompWinners(rows: GarchompRow[]): GarchompWinner[] {
   const killTied = all.filter(r => r.kills === topKills);
   const minDeaths = Math.min(...killTied.map(r => r.deaths));
   const deathTied = killTied.filter(r => r.deaths === minDeaths);
-  const winner = breakTieByRank(deathTied, r => r.teamRank, r => r.teamId);
-  return [{ teamId: winner.teamId, pokemon: winner.pokemon, kills: winner.kills }];
+  const out = opts?.keepTies ? deathTied : [breakTieByRank(deathTied, r => r.teamRank, r => r.teamId)];
+  return out.map(w => ({ teamId: w.teamId, pokemon: w.pokemon, kills: w.kills }));
 }
 
 export interface CannoliRecord {
@@ -66,14 +71,14 @@ export interface CannoliRecord {
  * standings ordering (`standingsRank`, from computeStandings()) picks the
  * single winner. Always at most one winner.
  */
-export function pickCannoliWinners(records: CannoliRecord[]): CannoliRecord[] {
+export function pickCannoliWinners(records: CannoliRecord[], opts?: PickOpts): CannoliRecord[] {
   const playing = records.filter(r => r.played > 0);
   if (playing.length === 0) return [];
   const topWins = playing.reduce((a, r) => Math.max(a, r.wins), 0);
   const winners = playing.filter(r => r.wins === topWins);
   const topDiff = winners.reduce((a, r) => Math.max(a, r.diff), Number.NEGATIVE_INFINITY);
   const tied = winners.filter(r => r.diff === topDiff);
-  if (tied.length <= 1) return tied;
+  if (tied.length <= 1 || opts?.keepTies) return tied;
   return [tied.reduce((a, b) => (a.standingsRank <= b.standingsRank ? a : b))];
 }
 
@@ -87,12 +92,12 @@ export interface CynthiaStreak {
  * (provided it's >= `min`, default 2), narrowed to one via the general
  * rank/id fallback (breakTieByRank) when multiple teams tie.
  */
-export function pickCynthiaWinners(streaks: CynthiaStreak[], min = 2): CynthiaStreak[] {
+export function pickCynthiaWinners(streaks: CynthiaStreak[], min = 2, opts?: PickOpts): CynthiaStreak[] {
   if (streaks.length === 0) return [];
   const top = streaks.reduce((a, s) => Math.max(a, s.best), 0);
   if (top < min) return [];
   const tied = streaks.filter(s => s.best === top);
-  return [breakTieByRank(tied, s => s.teamRank, s => s.teamId)];
+  return opts?.keepTies ? tied : [breakTieByRank(tied, s => s.teamRank, s => s.teamId)];
 }
 
 export interface StreakMatch {
