@@ -113,11 +113,11 @@ export function ArchiveTeamPage() {
       .then(r => r.json())
       .then((d: TeamSeason) => {
         setData(d);
-        if (d?.league?.seasonId && d.team.userId) {
+        if (d?.league?.seasonId) {
           fetch(`/api/archive/seasons/${d.league.seasonId}/awards`)
             .then(r => r.json())
             .then((aw: { pins: any[] }) => {
-              const mine = aw.pins.filter(p => p.userId === d.team.userId && p.metadata?.teamId === d.team.id);
+              const mine = aw.pins.filter(p => (p.teamId ?? p.metadata?.teamId) === d.team.id);
               setAwards(mine);
             })
             .catch(() => {});

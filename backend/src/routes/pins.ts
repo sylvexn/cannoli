@@ -52,77 +52,28 @@ export const pinRoutes = new Elysia()
     const user = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
     if (!user || !user.active) { set.status = 404; return { error: 'User not found' }; }
 
-    // The holder is the TEAM; a pin shows on the coach who owns that team now
-    // (legacy team-less rows fall back to pins.user_id). Newest first.
-    const isStaffViewer = isStaff(viewer);
-    const rows = db.select({
-      id: schema.pins.id,
-      pinDefId: schema.pins.pinDefId,
-      teamId: schema.pins.teamId,
-      seasonId: schema.pins.seasonId,
-      seasonNumber: schema.seasons.seasonNumber,
-      leagueId: schema.pins.leagueId,
-      published: schema.pins.published,
-      source: schema.pins.source,
-      awardedAt: schema.pins.awardedAt,
-      awardedBy: schema.pins.awardedBy,
-      metadata: schema.pins.metadata,
-      defName: schema.pinDefinitions.name,
-      defDescription: schema.pinDefinitions.description,
-      defIconName: schema.pinDefinitions.iconName,
-      defColor: schema.pinDefinitions.color,
-      defCategory: schema.pinDefinitions.category,
-      defIsAuto: schema.pinDefinitions.isAuto,
-      defScope: schema.pinDefinitions.scope,
-      defFields: schema.pinDefinitions.metadataFields,
-    })
-      .from(schema.pins)
-      .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
-      .leftJoin(schema.teams, eq(schema.teams.id, schema.pins.teamId))
-      .leftJoin(schema.seasons, eq(schema.seasons.id, schema.pins.seasonId))
-      .where(and(
-        sql`COALESCE(${schema.teams.userId}, ${schema.pins.userId}) = ${user.id}`,
-        // Drafts are staff-only until the season is published.
-        isStaffViewer ? undefined : eq(schema.pins.published, true),
-      ))
-      .orderBy(desc(schema.pins.awardedAt))
-      .all();
-
     // A pin IS a result. "Flawless" naming the winning team gives away an
     // unrevealed week just as surely as the scoreline does, so stripping
     // spoiler fields is not enough — the whole pin stays hidden until its
     // match is revealed. Staff bypass the gate, and so does the owner, who
     // played the match and already knows how it went.
     const isOwner = viewer?.id != null && parseInt(String(viewer.id)) === user.id;
-    const bypassGate = isOwner || isStaff(viewer);
+    // The holder is the TEAM; a pin shows on the coach who owns that team now
+    // (legacy team-less rows fall back to pins.user_id).
+    return publicPins(
+      sql`COALESCE(${schema.teams.userId}, ${schema.pins.userId}) = ${user.id}`,
+      viewer, isOwner,
+    );
+  })
 
-    return rows
-      .map(r => ({ ...r, meta: r.metadata ? safeJson(r.metadata) as Record<string, unknown> | null : null }))
-      .filter(r => bypassGate || !referencesUnrevealedMatch(r.meta, viewer))
-      .map(r => ({
-        id: r.id,
-        pinDefId: r.pinDefId,
-        teamId: r.teamId,
-        seasonId: r.seasonId,
-        seasonNumber: r.seasonNumber,
-        leagueId: r.leagueId,
-        published: r.published,
-        source: r.source,
-        awardedAt: r.awardedAt,
-        awardedBy: r.awardedBy,
-        metadata: bypassGate ? r.meta : redactUnrevealedMetadata(r.meta, viewer),
-        definition: {
-          id: r.pinDefId,
-          name: r.defName,
-          description: r.defDescription,
-          iconName: r.defIconName,
-          color: r.defColor,
-          category: r.defCategory,
-          isAuto: r.defIsAuto,
-          scope: r.defScope,
-          metadataFields: serializeDef({ metadataFields: r.defFields }).metadataFields,
-        },
-      }));
+  // GET /api/teams/:teamId/pins (public) — a team's published pins. Works for
+  // unlinked teams too, which the per-user endpoint cannot serve.
+  .get('/api/teams/:teamId/pins', ({ params, user: viewer, set }) => {
+    const team = db.select({ userId: schema.teams.userId }).from(schema.teams)
+      .where(eq(schema.teams.id, params.teamId)).get();
+    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    const isOwner = viewer?.id != null && team.userId != null && parseInt(String(viewer.id)) === team.userId;
+    return publicPins(eq(schema.pins.teamId, params.teamId), viewer, isOwner);
   })
 
   // GET /api/pin-definitions (public badge catalog — no auth)
@@ -409,6 +360,74 @@ export const pinRoutes = new Elysia()
 
     return { success: true, ...summary };
   });
+
+/** Pins matching `where`, newest first, shaped for the public API: drafts are
+ *  staff-only and pins pointing at an unrevealed match are hidden for
+ *  everyone but staff and `ownerBypass` (the coach who played it). */
+function publicPins(
+  where: ReturnType<typeof sql>,
+  viewer: { id?: string | number; role: string } | null | undefined,
+  ownerBypass: boolean,
+) {
+  const staffViewer = isStaff(viewer);
+  const rows = db.select({
+    id: schema.pins.id,
+    pinDefId: schema.pins.pinDefId,
+    teamId: schema.pins.teamId,
+    seasonId: schema.pins.seasonId,
+    seasonNumber: schema.seasons.seasonNumber,
+    leagueId: schema.pins.leagueId,
+    published: schema.pins.published,
+    source: schema.pins.source,
+    awardedAt: schema.pins.awardedAt,
+    awardedBy: schema.pins.awardedBy,
+    metadata: schema.pins.metadata,
+    defName: schema.pinDefinitions.name,
+    defDescription: schema.pinDefinitions.description,
+    defIconName: schema.pinDefinitions.iconName,
+    defColor: schema.pinDefinitions.color,
+    defCategory: schema.pinDefinitions.category,
+    defIsAuto: schema.pinDefinitions.isAuto,
+    defScope: schema.pinDefinitions.scope,
+    defFields: schema.pinDefinitions.metadataFields,
+  })
+    .from(schema.pins)
+    .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
+    .leftJoin(schema.teams, eq(schema.teams.id, schema.pins.teamId))
+    .leftJoin(schema.seasons, eq(schema.seasons.id, schema.pins.seasonId))
+    .where(and(where, staffViewer ? undefined : eq(schema.pins.published, true)))
+    .orderBy(desc(schema.pins.awardedAt))
+    .all();
+
+  const bypassGate = ownerBypass || staffViewer;
+  return rows
+    .map(r => ({ ...r, meta: r.metadata ? safeJson(r.metadata) as Record<string, unknown> | null : null }))
+    .filter(r => bypassGate || !referencesUnrevealedMatch(r.meta, viewer))
+    .map(r => ({
+      id: r.id,
+      pinDefId: r.pinDefId,
+      teamId: r.teamId,
+      seasonId: r.seasonId,
+      seasonNumber: r.seasonNumber,
+      leagueId: r.leagueId,
+      published: r.published,
+      source: r.source,
+      awardedAt: r.awardedAt,
+      awardedBy: r.awardedBy,
+      metadata: bypassGate ? r.meta : redactUnrevealedMetadata(r.meta, viewer),
+      definition: {
+        id: r.pinDefId,
+        name: r.defName,
+        description: r.defDescription,
+        iconName: r.defIconName,
+        color: r.defColor,
+        category: r.defCategory,
+        isAuto: r.defIsAuto,
+        scope: r.defScope,
+        metadataFields: serializeDef({ metadataFields: r.defFields }).metadataFields,
+      },
+    }));
+}
 
 function safeJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return null; }

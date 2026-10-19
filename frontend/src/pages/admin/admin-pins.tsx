@@ -4,9 +4,8 @@
  * available so the rest of the admin can spawn it without dragging in the
  * full pins folder.
  *
- * Old structure (Definitions sub-tab + Award sub-tab) is gone. Per-card
- * inline edit replaces the Definitions tab; the per-pin metadata-aware
- * dialog replaces the Award tab.
+ * Awarding happens in the Awards Sheet (./pins/awards-sheet); per-card inline
+ * edit covers the definition itself.
  */
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -17,11 +16,12 @@ import {
   DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { api } from '@/lib/api';
-import type { ApiPinDefinition, PinCategory } from '@/lib/api';
+import type { ApiPinDefinition, PinCategory, PinMetadataFieldName, PinScope } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Pin } from '@/components/pin';
 import { PinIconPicker, RECENT_LUCIDE_NAMES } from './pins/pin-icon-picker';
+import { ScopeFieldsEditor } from './pins/scope-fields-editor';
 
 export { PinsTab } from './pins';
 
@@ -50,6 +50,8 @@ export function NewDefinitionDialog({
   const [iconName, setIconName] = useState(RECENT_LUCIDE_NAMES[0]);
   const [color, setColor] = useState('#fbbf24');
   const [category, setCategory] = useState<PinCategory>('custom');
+  const [scope, setScope] = useState<PinScope>('league');
+  const [fields, setFields] = useState<PinMetadataFieldName[]>([]);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -66,11 +68,13 @@ export function NewDefinitionDialog({
     if (!canSave) return;
     setSaving(true);
     try {
-      await api.createPinDefinition({ id, name: name.trim(), description: cleanDesc, iconName, color, category });
+      await api.createPinDefinition({
+        id, name: name.trim(), description: cleanDesc, iconName, color, category, scope, metadataFields: fields,
+      });
       toast.success(`Created pin '${id}'`);
       onSaved({
         id, name: name.trim(), description: cleanDesc, iconName, color, category,
-        isAuto: false,
+        isAuto: false, scope, metadataFields: fields,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Save failed';
@@ -86,7 +90,7 @@ export function NewDefinitionDialog({
         <DialogHeader>
           <DialogTitle>New pin definition</DialogTitle>
           <DialogDescription>
-            Auto pins are seeded by code. Custom pins live here forever — give the slug some thought.
+            Awards are curated by hand in the Awards Sheet. The slug is permanent - give it some thought.
           </DialogDescription>
         </DialogHeader>
 
@@ -151,6 +155,8 @@ export function NewDefinitionDialog({
               </select>
             </label>
           </div>
+
+          <ScopeFieldsEditor scope={scope} fields={fields} onScope={setScope} onFields={setFields} />
 
           <div className="text-[11px] text-text-muted flex items-center gap-2">
             <span>Icon:</span>

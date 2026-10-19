@@ -164,8 +164,10 @@ describe('bulk save + publish', () => {
     const userPins = () => call('GET', `/api/users/${tag}-coach/pins`);
     const archive = () => call('GET', `/api/archive/seasons/${seasonId}/awards`);
 
+    const teamPins = () => call('GET', `/api/teams/${T('C')}/pins`);
     asUser.current = null;
     expect((await userPins()).json).toHaveLength(0);
+    expect((await teamPins()).json).toHaveLength(0);
     expect((await archive()).json.pins).toHaveLength(0);
 
     asUser.current = STAFF;
@@ -175,6 +177,7 @@ describe('bulk save + publish', () => {
     expect((await call('POST', '/api/admin/pins/publish', { seasonId })).json).toMatchObject({ count: 4 });
 
     asUser.current = null;
+    expect((await teamPins()).json).toHaveLength(1); // unlinked team, no coach profile needed
     const pub = await userPins();
     expect(pub.json).toHaveLength(3);
     expect(pub.json[0].seasonNumber).toBeGreaterThan(0);
