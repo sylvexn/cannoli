@@ -76,8 +76,8 @@ function forceResult(matchId: string, body: unknown): Promise<Response> {
   }));
 }
 
-describe('force-result — awards pins and advances the playoff bracket', () => {
-  test('a forced QF result mints Flawless and fills the SF slot', async () => {
+describe('force-result — advances the playoff bracket', () => {
+  test('a forced QF result advances the bracket and mints no pin', async () => {
     sqlite.exec('BEGIN');
     try {
       const PFX = `${tag}-a-`;
@@ -141,81 +141,9 @@ describe('force-result — awards pins and advances the playoff bracket', () => 
       const sfAfter = db.select().from(schema.matches).where(eq(schema.matches.id, sfMatchId)).get()!;
       expect(sfAfter.awayTeamId).toBe(teamA);
 
-      // Flawless minted for team A's owner (0 deaths on a win).
-      const pin = db.select().from(schema.pins)
-        .where(eq(schema.pins.userId, coachUserId))
-        .all()
-        .find(p => p.pinDefId === 'flawless' && p.seasonId === season.id);
-      expect(pin).toBeDefined();
-      expect(pin!.awardedBy).toBeNull();
-    } finally {
-      sqlite.exec('ROLLBACK');
-    }
-  });
-});
-
-describe('force-result — an award-helper throw does not roll back the match write', () => {
-  test('a real FK-constraint failure inside runAutoAwards is swallowed; the match still commits', async () => {
-    sqlite.exec('BEGIN');
-    try {
-      const PFX = `${tag}-b-`;
-      const season = db.insert(schema.seasons).values({
-        seasonNumber: 9902, pointCap: 110, teraCaptainSlots: 2, archived: false,
-      }).returning().get();
-      const leagueId = `${PFX}lg`;
-      // teamA's userId points at no real user row. teams.userId carries no FK
-      // constraint (comment in schema.ts: "null until auth system is built"),
-      // but pins.userId DOES reference users.id — so awardFlawless's INSERT
-      // OR IGNORE genuinely throws SQLITE_CONSTRAINT_FOREIGNKEY (verified:
-      // OR IGNORE suppresses UNIQUE/CHECK conflicts, never FK violations).
-      const teamA = `${PFX}A`;
-      const teamB = `${PFX}B`;
-      const GHOST_USER_ID = -1;
-
-      db.insert(schema.leagues).values({
-        id: leagueId, name: 'Force Result Throw Test', color: '#654321',
-        seasonId: season.id, phase: 'regular', currentWeek: 5,
-        draftOrder: JSON.stringify([teamA, teamB]),
-      }).run();
-
-      db.insert(schema.teams).values([
-        { id: teamA, leagueId, userId: GHOST_USER_ID, coachName: 'Ghost', teamName: 'Ghost', teamAbbrev: 'GHO', teamColor: '#111111' },
-        { id: teamB, leagueId, userId: null, coachName: 'Bravo', teamName: 'Bravo', teamAbbrev: 'BRV', teamColor: '#222222' },
-      ]).run();
-
-      const matchId = `${PFX}m1`;
-      db.insert(schema.matches).values({
-        id: matchId, leagueId, week: 5,
-        homeTeamId: teamA, awayTeamId: teamB,
-        status: 'scheduled', phase: 'regular',
-      }).run();
-
-      const res = await forceResult(matchId, {
-        homeScore: 6, awayScore: 0,
-        pokemonData: [
-          { teamId: teamA, pokemonName: 'Dragapult', kills: 6, deaths: 0 },
-          { teamId: teamB, pokemonName: 'Pikachu', kills: 0, deaths: 6 },
-        ],
-      });
-
-      // The request must NOT 500 — the throw inside runAutoAwards is caught
-      // and logged, not propagated.
-      expect(res.status).toBe(200);
-      const resBody = await res.json() as { success: boolean };
-      expect(resBody.success).toBe(true);
-
-      // And the match write itself must have landed despite the awards
-      // helper blowing up afterward — this is the no-rollback proof.
-      const after = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get()!;
-      expect(after.status).toBe('completed');
-      expect(after.homeScore).toBe(6);
-      expect(after.awayScore).toBe(0);
-      expect(after.winnerTeamId).toBe(teamA);
-
-      // No pin exists for the ghost user (the insert that would have created
-      // it is exactly what threw).
-      const ghostPins = db.select().from(schema.pins).where(eq(schema.pins.userId, GHOST_USER_ID)).all();
-      expect(ghostPins).toHaveLength(0);
+      // Awards are admin-curated: recording a result never writes a pin.
+      const pins = db.select().from(schema.pins).where(eq(schema.pins.seasonId, season.id)).all();
+      expect(pins).toHaveLength(0);
     } finally {
       sqlite.exec('ROLLBACK');
     }

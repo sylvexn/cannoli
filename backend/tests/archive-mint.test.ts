@@ -9,7 +9,7 @@ import {
   type HighScoreRow,
   type StealRow,
   type SweeperMatchRow,
-} from '../src/lib/pins/archive-mint';
+} from '../src/lib/pins/archive-mint-pickers';
 
 // Champion
 
