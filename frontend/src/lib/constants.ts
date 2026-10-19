@@ -261,3 +261,21 @@ export const ANNOUNCEMENT_CATEGORY_META: Record<AnnouncementCategory, Announceme
 };
 
 export const ANNOUNCEMENT_CATEGORIES: AnnouncementCategory[] = ['info', 'feature', 'event', 'maintenance'];
+
+// Pins / awards
+
+/** How many holders a pin's award slot has. Edited per definition in admin. */
+export const PIN_SCOPE_META: Record<'league' | 'season' | 'team' | 'match', { label: string; hint: string }> = {
+  league: { label: 'League', hint: 'One winner (or co-winners) per league' },
+  season: { label: 'Season', hint: 'One winner across every league in the season' },
+  team: { label: 'Team', hint: 'One per team, e.g. a team MVP' },
+  match: { label: 'Match', hint: 'One per qualifying match; a team can hold several' },
+};
+
+/** Inputs a pin definition can ask for when it is awarded. */
+export const PIN_FIELD_META: Record<'pokemon' | 'nickname' | 'match' | 'note', { label: string; hint: string }> = {
+  pokemon: { label: 'Pokemon', hint: 'Picked from the team roster' },
+  nickname: { label: 'Nickname', hint: 'Free text, required' },
+  match: { label: 'Match', hint: 'The match that earned it' },
+  note: { label: 'Note', hint: 'Optional free text' },
+};

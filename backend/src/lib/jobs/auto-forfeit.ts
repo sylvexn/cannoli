@@ -27,7 +27,6 @@ import { tx } from '../tx';
 import { getArenaBroadcaster } from '../../routes/arena';
 import { advancePlayoffWinner, decidePlayoffForfeit } from '../playoff-advance';
 import { effectiveMatchDeadline } from '../deadline';
-import { runAutoAwards } from '../pins/auto-award';
 
 // Deadline derivation now lives in ../deadline (schedule-first: the league's
 // live weekDates drive the cutoff, so a stale date baked onto a match row can't
@@ -80,7 +79,6 @@ export function runAutoForfeit() {
     // Set inside the tx below when a playoff forfeit decides a winner — a
     // forfeit-driven upset can earn Kingslayer same as any other result, but
     // the award call itself runs AFTER the tx commits (see comment below).
-    let awardMatchId: string | null = null;
 
     tx(() => {
       // Re-read the match inside the tx to guard against a concurrent result
@@ -212,21 +210,7 @@ export function runAutoForfeit() {
         }),
       }).run();
 
-      awardMatchId = match.id;
     });
-
-    // Auto-award per-match pins (Kingslayer, Flawless) for a playoff forfeit
-    // decision — AFTER the tx above commits, not inside it. A forfeit-driven
-    // upset can earn Kingslayer same as any recorded result; without this a
-    // forfeit could never mint it. Best-effort — a throw here must never
-    // unwind the match write.
-    if (awardMatchId) {
-      try {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId: awardMatchId });
-      } catch (err) {
-        console.error(`[auto-forfeit] runAutoAwards failed for ${awardMatchId}:`, err);
-      }
-    }
 
     if (broadcaster) {
       const wsStatus = policy === 'admin_review' ? 'disputed' : 'completed';

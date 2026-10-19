@@ -4,8 +4,6 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
-import { runAutoAwards } from '../../lib/pins/auto-award';
-import { mintArchivePins } from '../../lib/pins/archive-mint';
 import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
@@ -363,7 +361,6 @@ export const leagueAdminRoutes = new Elysia()
     }
 
     let scheduleGenerated = false;
-    let pinsAwarded = 0;
     tx(() => {
       const leagueUpdates: Record<string, unknown> = { phase };
       if (phase === 'regular' && previousPhase !== 'regular') {
@@ -377,28 +374,14 @@ export const leagueAdminRoutes = new Elysia()
         scheduleGenerated = result.success;
       }
 
-      // Season finalization → run auto-award pass (idempotent).
+      // Season finalization → stamp finish positions.
       // We treat any *transition into* offseason as the trigger, even from
       // playoffs→offseason that's the normal path or regular→offseason for
       // leagues that skip playoffs. Re-runs from another phase change won't
       // dupe.
       if (phase === 'offseason' && previousPhase !== 'offseason') {
-        // Match the finalize-season CLI ordering (scripts/finalize-season.ts):
-        // stamp finish positions FIRST (champion/runner-up/SF/QF/regular), then
-        // mint the archive pins (champion / high-score / steal-of-the-draft /
-        // sweeper) which depend on those positions, and only then run the
-        // generic season-end auto-awards. Previously the UI route ran ONLY
-        // runAutoAwards, leaving NULL finish positions + missing champion
-        // pins when an admin advanced via the panel instead of the CLI.
+        // Finish positions only: awards are admin-curated (Awards Sheet), never minted here.
         assignFinishPositions(sqlite, [params.leagueId]);
-        const archive = mintArchivePins(params.leagueId, {
-          awardedBy: user.id ? parseInt(user.id) : null,
-        });
-        const summary = runAutoAwards(params.leagueId, {
-          trigger: 'season-end',
-          awardedBy: user.id ? parseInt(user.id) : null,
-        });
-        pinsAwarded = summary.awarded.length + archive.awarded.length;
       }
 
       const isBackward = toRank < fromRank;
@@ -410,11 +393,11 @@ export const leagueAdminRoutes = new Elysia()
         description: isBackward
           ? `REVERTED phase: ${previousPhase} → ${phase} (override)`
           : `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
-        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated, pinsAwarded }),
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated }),
       }).run();
     });
 
-    return { success: true, scheduleGenerated, pinsAwarded };
+    return { success: true, scheduleGenerated };
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, query, user, set }) => {

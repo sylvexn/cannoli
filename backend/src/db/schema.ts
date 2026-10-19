@@ -713,49 +713,48 @@ export const pinDefinitions = sqliteTable('pin_definitions', {
   }).notNull().default('custom'),
   /** True for seeded pins handed out by the auto-award job. */
   isAuto: integer('is_auto', { mode: 'boolean' }).notNull().default(false),
+  /** How many holders an award slot has: 'league' = one per league-season,
+   *  'season' = one across the whole season, 'team' = one per team per
+   *  league-season (e.g. MVP), 'match' = one per qualifying match. */
+  scope: text('scope', { enum: ['league', 'season', 'team', 'match'] }).notNull().default('league'),
+  /** JSON array of the inputs an award collects: 'pokemon' | 'nickname' | 'match' | 'note'. */
+  metadataFields: text('metadata_fields').notNull().default('[]'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
-// Pins (awarded instances — many users × many definitions)
+// Pins (awarded instances — a team holds a definition for a season/league)
 //
-// Identity is (user_id, pin_def_id, season_id, league_id). A single UNIQUE
-// index `pins_identity_idx` enforces it, wrapping the two nullable columns in
-// COALESCE (season → -1, league → '') because SQLite treats every NULL as
-// DISTINCT in a unique index and would otherwise let duplicates through.
-// That one expression index replaces the old composite + partial-lifetime pair
-// (migrations 0019/0041); see migration 0069.
+// Admin-curated: nothing writes pins automatically. The suggest engine
+// (lib/pins/suggest.ts) proposes winners; staff save them as unpublished
+// drafts via the Awards Sheet and then publish the season. Public reads only
+// ever see `published = 1` rows.
 //
-// Scope combinations, all deduped correctly by that index:
-//   season + league  → the normal case ("Champion of Ruby, S11")
-//   season, no league → season-wide award across every league (`ash`, `red`)
-//   neither           → lifetime achievement
+// Identity is team + def + season + league + match, enforced by the single
+// UNIQUE expression index `pins_identity_idx` (nullable columns wrapped in
+// COALESCE because SQLite treats every NULL as DISTINCT). Legacy rows with no
+// team fall back to the user id. See migration 0070.
 //
-// `source` carries recompute semantics and is the ONLY thing the season-end
-// minters key their cleanup on:
-//   'auto'   — owned by the minters; safe to delete and re-derive on a re-run.
-//   'manual' — human-authoritative (hand-awarded OR an admin override of an
-//              auto pick). Minters must never delete it, and must not mint a
-//              competing row for the same (pin_def_id, season_id, league_id).
-// `awarded_by` is pure provenance — who did it, NULL for the job. Do NOT use it
-// to decide what is recomputable; that conflation is what migration 0069 undid.
-//
-// `metadata` is free-form JSON (e.g. `{ pokemon: 'Cinderace' }` for a pin like
-// "Steal of the Draft") — admin authoring may attach context per-award.
-
 export const pins = sqliteTable('pins', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** Legacy / derived holder. The holder is the TEAM (`team_id`); the user is
+   *  derived at read time via teams.user_id. Nullable: unlinked teams hold awards. */
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  teamId: text('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   pinDefId: text('pin_def_id').notNull().references(() => pinDefinitions.id, { onDelete: 'cascade' }),
   /** Season scope. NULL = lifetime / not season-specific. */
   seasonId: integer('season_id').references(() => seasons.id),
   /** League scope. NULL = season-wide (or lifetime) rather than per-league. */
-  leagueId: text('league_id').references(() => leagues.id),
+  leagueId: text('league_id').references(() => leagues.id, { onDelete: 'cascade' }),
+  /** Per-match awards (kingslayer / flawless): the match that earned it. */
+  matchId: text('match_id'),
   awardedAt: text('awarded_at').default(sql`(datetime('now'))`),
-  /** Who awarded it — admin user id, or NULL for the auto job. Provenance only. */
+  /** Who awarded it — admin user id. Provenance only. */
   awardedBy: integer('awarded_by').references(() => users.id),
-  /** 'auto' = minter-owned and recomputable; 'manual' = human-authoritative. */
+  /** Legacy provenance: rows minted by the old auto engine are 'auto'. */
   source: text('source', { enum: ['auto', 'manual'] }).notNull().default('auto'),
-  /** JSON blob — e.g. `{ pokemon: 'Cinderace', context: 'steal' }` */
+  /** 0 = staff-only draft, 1 = public. Flipped by "Publish season awards". */
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  /** JSON blob — e.g. `{ pokemon: 'Cinderace', teamId, leagueId }` */
   metadata: text('metadata'),
 });
 

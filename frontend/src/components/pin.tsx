@@ -3,6 +3,7 @@ import * as LucideIcons from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { formatPinMetadata } from '@/lib/pin-metadata-schema';
+import type { PinMetadataFieldName } from '@/lib/api';
 
 /**
  * Definition shape returned by /api/admin/pin-definitions and embedded in
@@ -16,6 +17,8 @@ export interface PinDefinitionLike {
   iconName: string;
   color: string;
   category?: string | null;
+  /** Declared award inputs - drives the tooltip detail line. */
+  metadataFields?: readonly PinMetadataFieldName[] | null;
 }
 
 export type PinSize = 'xs' | 'sm' | 'lg';
@@ -24,14 +27,13 @@ interface PinProps {
   def: PinDefinitionLike;
   /** xs (12px inline icon), sm (24px circular), lg (48px trophy w/ glint). */
   size?: PinSize;
-  /** Season the pin was earned in — rendered as "Earned S{n}" in the detail
-   *  card when present. Pin contexts no longer surface relative-time strings. */
-  seasonId?: number | null;
+  /** Human season NUMBER (not the seasons.id FK) - rendered as "Earned S{n}". */
+  seasonNumber?: number | null;
   /** League the pin is filed against (pins.leagueId, not metadata) — needed
    *  to turn team references inside the metadata detail into real links. */
   leagueId?: string | null;
   /** Award metadata blob (pokemon/nickname/teamId/kills/etc.) — rendered per
-   *  the per-pin schema in `lib/pin-metadata-schema.tsx`. */
+   *  the definition's declared fields (`lib/pin-metadata-schema.tsx`). */
   metadata?: Record<string, unknown> | null;
   className?: string;
   /** Hide the detail card wrapper (e.g., when the parent already provides one). */
@@ -49,7 +51,7 @@ function resolveIcon(name: string): LucideIconComponent {
 }
 
 export const Pin = memo(function Pin({
-  def, size = 'sm', seasonId, leagueId, metadata, className, noTooltip,
+  def, size = 'sm', seasonNumber, leagueId, metadata, className, noTooltip,
 }: PinProps) {
   const Icon = resolveIcon(def.iconName);
   const color = def.color || '#fbbf24';
@@ -128,21 +130,21 @@ export const Pin = memo(function Pin({
         sideOffset={6}
         className="w-auto max-w-[240px] gap-0.5 p-2.5"
       >
-        <PinDetailBody def={def} seasonId={seasonId} leagueId={leagueId} metadata={metadata} />
+        <PinDetailBody def={def} seasonNumber={seasonNumber} leagueId={leagueId} metadata={metadata} />
       </PopoverContent>
     </Popover>
   );
 });
 
 function PinDetailBody({
-  def, seasonId, leagueId, metadata,
+  def, seasonNumber, leagueId, metadata,
 }: {
   def: PinDefinitionLike;
-  seasonId?: number | null;
+  seasonNumber?: number | null;
   leagueId?: string | null;
   metadata?: Record<string, unknown> | null;
 }) {
-  const detail = formatPinMetadata(def.id, metadata ?? null, leagueId);
+  const detail = formatPinMetadata(def, metadata ?? null, leagueId);
   return (
     <div className="flex flex-col gap-0.5">
       <div className="font-mono text-[11px] font-bold uppercase tracking-wide" style={{ color: def.color }}>
@@ -154,8 +156,8 @@ function PinDetailBody({
       {detail != null && (
         <div className="text-[11px] leading-snug text-text-secondary italic">{detail}</div>
       )}
-      {seasonId != null && (
-        <div className="text-[10px] text-text-muted mt-0.5">Earned S{seasonId}</div>
+      {seasonNumber != null && (
+        <div className="text-[10px] text-text-muted mt-0.5">Earned S{seasonNumber}</div>
       )}
     </div>
   );

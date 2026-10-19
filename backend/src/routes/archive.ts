@@ -17,9 +17,9 @@
  */
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
+import { isStaff } from '../lib/auth';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings } from '../lib/standings';
-import { isStaff } from '../lib/auth';
 
 export const archiveDeepRoutes = new Elysia()
 
@@ -368,7 +368,9 @@ export const archiveDeepRoutes = new Elysia()
     const rows = db.select({
       pinId: schema.pins.id,
       pinDefId: schema.pins.pinDefId,
-      userId: schema.pins.userId,
+      teamId: schema.pins.teamId,
+      leagueId: schema.pins.leagueId,
+      userId: schema.users.id,
       username: schema.users.username,
       displayName: schema.users.displayName,
       defName: schema.pinDefinitions.name,
@@ -384,10 +386,14 @@ export const archiveDeepRoutes = new Elysia()
     })
       .from(schema.pins)
       .innerJoin(schema.pinDefinitions, eq(schema.pinDefinitions.id, schema.pins.pinDefId))
-      .innerJoin(schema.users, eq(schema.users.id, schema.pins.userId))
-      .where(staff
-        ? eq(schema.pins.seasonId, seasonId)
-        : and(eq(schema.pins.seasonId, seasonId), eq(schema.users.active, true)))
+      .leftJoin(schema.teams, eq(schema.teams.id, schema.pins.teamId))
+      .leftJoin(schema.users, eq(schema.users.id, sql`COALESCE(${schema.teams.userId}, ${schema.pins.userId})`))
+      .where(and(
+        eq(schema.pins.seasonId, seasonId),
+        // Drafts and inactive holders are staff-only; unlinked teams (no user) stay visible.
+        staff ? undefined : eq(schema.pins.published, true),
+        staff ? undefined : sql`(${schema.users.id} IS NULL OR ${schema.users.active} = 1)`,
+      ))
       .all();
 
     return {

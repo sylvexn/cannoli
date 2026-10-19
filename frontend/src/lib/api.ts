@@ -849,15 +849,28 @@ export interface ApiPinDefinition {
   color: string;
   category: PinCategory;
   isAuto: boolean;
+  /** Award slot: one winner-set per league, per season, per team, or per match. */
+  scope: PinScope;
+  /** Inputs an award of this pin collects (declared on the definition). */
+  metadataFields: PinMetadataFieldName[];
   createdAt?: string | null;
 }
+
+export type PinScope = 'league' | 'season' | 'team' | 'match';
+export type PinMetadataFieldName = 'pokemon' | 'nickname' | 'match' | 'note';
 
 export type PinSource = 'auto' | 'manual';
 
 export interface ApiPin {
   id: number;
   pinDefId: string;
+  /** The team that holds the award (the coach is derived from its owner). */
+  teamId: string | null;
   seasonId: number | null;
+  /** Human season number ("S11" -> 11) — seasonId is an internal FK. */
+  seasonNumber: number | null;
+  /** False = staff-only draft. */
+  published: boolean;
   /** League the pin is filed against — null for all-leagues coach awards
    *  (Ash, Red). Drives the clickable team links in the pin tooltip. */
   leagueId: string | null;
@@ -868,21 +881,41 @@ export interface ApiPin {
   definition: ApiPinDefinition;
 }
 
-export interface ApiPinRecent {
+/** A pin row in the Awards Sheet (drafts included). */
+export interface ApiSeasonPin {
   id: number;
-  userId: number;
-  username: string;
   pinDefId: string;
-  defName: string;
-  defIconName: string;
-  defColor: string;
-  seasonId: number | null;
+  teamId: string | null;
   leagueId: string | null;
-  awardedAt: string | null;
-  awardedBy: number | null;
+  matchId: string | null;
+  published: boolean;
   source: PinSource;
+  awardedAt: string | null;
+  username: string | null;
   metadata: Record<string, unknown> | null;
 }
+
+export interface ApiPinSuggestion {
+  pinDefId: string;
+  leagueId: string;
+  teamId: string;
+  pokemon?: string;
+  matchId?: string;
+  metadata: Record<string, unknown>;
+  reason: string;
+  tie: boolean;
+}
+
+export interface ApiPinUnresolved {
+  pinDefId: string;
+  leagueId: string;
+  reason: string;
+  detail: string;
+}
+
+export type ApiBulkPinChange =
+  | { op: 'award'; teamId: string; pokemon?: string; nickname?: string; note?: string; matchId?: string; stats?: Record<string, unknown> }
+  | { op: 'revoke'; pinId: number };
 
 export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
 
@@ -1223,9 +1256,8 @@ export const api = {
 
   /**
    * The full archive ceremony: flips the archived flag, sets every league
-   * in the season to phase=offseason, and runs both runAutoAwards
-   * (existing pins) and mintArchivePins (champion / high-score / steal /
-   * sweeper). Idempotent — safe to re-run after a stat correction.
+   * in the season to phase=offseason. Awards are curated separately in the
+   * Awards Sheet. Idempotent.
    */
   archiveSeasonCeremony: (seasonId: number) =>
     postJson<{
@@ -1233,8 +1265,6 @@ export const api = {
       seasonId: number;
       seasonNumber: number;
       leagues: number;
-      existingAwards: { leagueId: string; awarded: number; skipped: number }[];
-      newAwards: { leagueId: string; awarded: { pinDefId: string; userId: number }[]; skipped: number }[];
     }>(`/api/admin/seasons/${seasonId}/archive`),
 
   advanceWeek: (leagueId: string) =>
@@ -1830,6 +1860,10 @@ export const api = {
   getUserPins: (username: string) =>
     fetchJson<ApiPin[]>(`/api/users/${encodeURIComponent(username)}/pins`),
 
+  /** A team's published pins - works for teams with no linked coach. */
+  getTeamPins: (teamId: string) =>
+    fetchJson<ApiPin[]>(`/api/teams/${encodeURIComponent(teamId)}/pins`),
+
   /** Public badge catalog — every pin definition, no auth required. Powers
    *  the /badges page. Distinct from getPinDefinitions (staff-only, same
    *  shape) so the catalog works for signed-out visitors. */
@@ -1844,6 +1878,8 @@ export const api = {
     iconName: string;
     color: string;
     category: PinCategory;
+    scope?: PinScope;
+    metadataFields?: PinMetadataFieldName[];
   }) => postJson<{ success: boolean; id: string }>('/api/admin/pin-definitions', data),
 
   updatePinDefinition: (id: string, data: {
@@ -1852,21 +1888,30 @@ export const api = {
     iconName?: string;
     color?: string;
     category?: PinCategory;
+    scope?: PinScope;
+    metadataFields?: PinMetadataFieldName[];
   }) => mutateJson<{ success: boolean }>('PATCH', `/api/admin/pin-definitions/${encodeURIComponent(id)}`, data),
-
-  awardPin: (data: { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null }) =>
-    postJson<{ success: boolean; id: number | null }>('/api/admin/pins/award', data),
 
   revokePin: (id: number) =>
     deleteJson<{ success: boolean }>(`/api/admin/pins/${id}`),
 
-  /** `seasonId` filters server-side so an older season's pins aren't lost
-   *  once the table exceeds `limit` (the Edit affordance on auto pins keys
-   *  off this list, so silently dropping older rows hid a working button). */
-  getRecentPins: (limit = 50, seasonId?: number | null) =>
-    fetchJson<ApiPinRecent[]>(
-      `/api/admin/pins/recent?limit=${limit}${seasonId != null ? `&seasonId=${seasonId}` : ''}`,
-    ),
+  /** Awards Sheet reads: every pin in a season (drafts included) and the
+   *  engine's suggestions (a pure read - nothing is written). */
+  getSeasonPins: (seasonId: number) =>
+    fetchJson<{ seasonId: number; pins: ApiSeasonPin[] }>(`/api/admin/pins/season/${seasonId}`),
+  getPinSuggestions: (seasonId: number) =>
+    fetchJson<{ suggestions: ApiPinSuggestion[]; unresolved: ApiPinUnresolved[] }>(
+      `/api/admin/pins/suggest?seasonId=${seasonId}`),
+
+  /** Transactional save for ONE pin definition. 422 carries per-row errors. */
+  bulkSavePins: (data: { seasonId: number; pinDefId: string; changes: ApiBulkPinChange[] }, force = false) =>
+    postJson<{ success: boolean; created: number; updated: number; revoked: number }>(
+      `/api/admin/pins/bulk${force ? '?force=1' : ''}`, data),
+
+  /** Publish (or unpublish) a season's awards. Sends no notifications. */
+  publishPins: (data: { seasonId: number; leagueId?: string | null; published?: boolean }, force = false) =>
+    postJson<{ success: boolean; published: boolean; count: number }>(
+      `/api/admin/pins/publish${force ? '?force=1' : ''}`, data),
 
   // Bulk-mint wizard: preview then confirm.
   getManualAwards: (season: number) =>
@@ -1882,23 +1927,6 @@ export const api = {
       unresolved: { award: ApiManualAward; reason: string }[];
     }>('/api/admin/pins/mint-season', { season }),
 
-  /** Re-run the season-end auto-award job for every league in a season.
-   *  Used by the Pins admin Mint button (only enabled in offseason / past finals). */
-  runSeasonAutoAwards: (season: number) =>
-    postJson<{
-      success: boolean;
-      season: number;
-      totalAwarded: number;
-      totalSkipped: number;
-      perLeague: { leagueId: string; awarded: number; skipped: number }[];
-      /** Awards the job couldn't resolve to a recipient — e.g. an orphaned
-       *  team ('team-has-no-user'), a manual pin already occupying the slot
-       *  ('manual-pin-present'), or no matches/kills clearing the floor
-       *  ('no-eligible-matches', 'no-pokemon-met-kill-floor'). Surfaced in
-       *  the admin UI instead of being dropped silently — this is how S9
-       *  Ruby's championship went missing with no trace. */
-      unresolved: { pinDefId: string; reason: string; teamId?: string | null; leagueId?: string | null }[];
-    }>('/api/admin/pins/run-auto', { season }),
 
   /** Re-point an existing pin to a different user (used to override an
    *  auto-awarded pin without revoke + re-award). */

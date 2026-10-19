@@ -5,7 +5,6 @@ import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot, importBattleForMatch, importBattleFromReplay } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
 import { backfillPinAuditLog } from '../../lib/pins/backfill-audit';
-import { runAutoAwards } from '../../lib/pins/auto-award';
 import { advancePlayoffWinner } from '../../lib/playoff-advance';
 import { checkMatchArchived } from '../../lib/archive-guard';
 import { requireStaff, requireDev } from '../../lib/auth-guards';
@@ -210,17 +209,6 @@ export const miscRoutes = new Elysia()
         }
       }
     });
-
-    // Auto-award per-match pins (Kingslayer, Flawless) — AFTER the match write
-    // commits, not inside its transaction. This is the messiest, most
-    // Kingslayer-relevant path (forfeits/disputes), so it must never silently
-    // skip pins. A throw here must never unwind the match write above —
-    // best-effort, logged and swallowed.
-    try {
-      runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
-    } catch (err) {
-      console.error(`[force-result] runAutoAwards failed for ${params.matchId}:`, err);
-    }
 
     return { success: true };
   })

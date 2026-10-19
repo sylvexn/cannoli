@@ -1,12 +1,7 @@
 /**
- * Per-pin card for the redesigned single-tab pins admin. Shows the icon,
- * name, description, season-scoped award count, an Award button, and a
- * subtle inline-edit popover for tweaking description / icon / color
- * without leaving the page.
- *
- * Award flow opens a dialog driven by the metadata schema in
- * `lib/pin-metadata-schema.ts`. Edit popover hits the same PATCH endpoint
- * the old DefinitionDialog used.
+ * Per-pin definition card: icon, name, description, scope, how many awards the
+ * active season has, and an inline edit popover (description / icon / colour /
+ * scope / award inputs). Awarding itself happens in the Awards Sheet.
  */
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -16,45 +11,29 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { Pin } from '@/components/pin';
-import { Pencil, Sparkles, UserCog } from 'lucide-react';
+import { Pencil, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { api, type ApiPinDefinition, type ApiPinRecent } from '@/lib/api';
+import { api, type ApiPinDefinition, type PinMetadataFieldName, type PinScope } from '@/lib/api';
+import { PIN_SCOPE_META } from '@/lib/constants';
 import { PinIconPicker } from './pin-icon-picker';
+import { ScopeFieldsEditor } from './scope-fields-editor';
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 interface DefinitionCardProps {
   def: ApiPinDefinition;
-  /** Pre-computed award count for the active season (rendered as
-   *  "X awarded this season"). Pass 0 when the season has no pins yet. */
+  /** Awards (drafts included) this definition has in the active season. */
   seasonAwardCount: number;
   seasonLabel: string | null;
-  /** Pins for this def in the active season (used to switch between
-   *  Award and Edit affordances). */
-  existingAwards?: ApiPinRecent[];
-  onAward: () => void;
-  /** Open the edit-recipient dialog for an existing pin (used for auto pins
-   *  whose recipient was wrongly resolved by the stat job). */
-  onEdit?: (pin: ApiPinRecent) => void;
+  onOpenSheet: () => void;
   onEdited: () => void;
 }
 
 export function DefinitionCard({
-  def, seasonAwardCount, seasonLabel, existingAwards = [], onAward, onEdit, onEdited,
+  def, seasonAwardCount, seasonLabel, onOpenSheet, onEdited,
 }: DefinitionCardProps) {
   const [editOpen, setEditOpen] = useState(false);
-
-  // Action button rules per plan:
-  //   - manual pin (isAuto = false), unawarded for season → Award
-  //   - auto pin (isAuto = true), already awarded for season → Edit
-  //   - auto pin, not yet awarded → no button (waits for the auto job)
-  //   - manual pin, already awarded → still allow Award (multi-recipient
-  //     awards like garchomp ties happen)
-  const isManual = !def.isAuto;
-  const hasExisting = existingAwards.length > 0;
-  const showAward = isManual;
-  const showEdit = !isManual && hasExisting && onEdit != null;
 
   return (
     <div className="rounded-md border border-border-default bg-surface-raised/50 p-3 flex flex-col gap-2">
@@ -63,11 +42,12 @@ export function DefinitionCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1.5">
             <div className="text-[13px] font-medium truncate" style={{ color: def.color }}>{def.name}</div>
-            {def.isAuto && (
-              <span className="text-[8px] font-mono uppercase tracking-wider text-text-muted/70 bg-surface-overlay/40 px-1 rounded">
-                auto
-              </span>
-            )}
+            <span
+              className="text-[8px] font-mono uppercase tracking-wider text-text-muted/70 bg-surface-overlay/40 px-1 rounded"
+              title={PIN_SCOPE_META[def.scope].hint}
+            >
+              {def.scope}
+            </span>
           </div>
           <div className="text-[10px] font-mono text-text-muted/70 uppercase tracking-wide truncate">
             {def.category} · {def.id}
@@ -81,7 +61,7 @@ export function DefinitionCard({
           >
             <Pencil size={11} />
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-72">
+          <PopoverContent align="end" className="w-full max-w-[288px]">
             <EditPopoverBody
               def={def}
               onClose={() => setEditOpen(false)}
@@ -100,27 +80,10 @@ export function DefinitionCard({
           <span className="font-mono font-bold">{seasonAwardCount}</span>
           {' '}awarded {seasonLabel ? `in ${seasonLabel}` : 'all-time'}
         </div>
-        <div className="flex items-center gap-1">
-          {showEdit && existingAwards.map(p => (
-            <Button
-              key={p.id}
-              size="sm"
-              variant="outline"
-              className="h-7 text-[11px]"
-              onClick={() => onEdit?.(p)}
-              title={`Re-point '${def.name}' (currently ${p.username})`}
-            >
-              <UserCog size={11} />
-              Edit
-            </Button>
-          ))}
-          {showAward && (
-            <Button size="sm" className="h-7 text-[11px]" onClick={onAward}>
-              <Sparkles size={11} />
-              Award
-            </Button>
-          )}
-        </div>
+        <Button size="sm" className="h-7 text-[11px]" onClick={onOpenSheet}>
+          <Sparkles size={11} />
+          Award
+        </Button>
       </div>
     </div>
   );
@@ -136,6 +99,8 @@ function EditPopoverBody({
   const [description, setDescription] = useState(def.description ?? '');
   const [iconName, setIconName] = useState(def.iconName);
   const [color, setColor] = useState(def.color);
+  const [scope, setScope] = useState<PinScope>(def.scope);
+  const [fields, setFields] = useState<PinMetadataFieldName[]>(def.metadataFields ?? []);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -152,6 +117,8 @@ function EditPopoverBody({
         description: cleanDesc,
         iconName,
         color,
+        scope,
+        metadataFields: fields,
       });
       toast.success(`Updated '${def.id}'`);
       onSaved();
@@ -197,6 +164,8 @@ function EditPopoverBody({
           className={cn('h-8 text-xs font-mono', !colorValid ? 'border-loss' : undefined)}
         />
       </div>
+
+      <ScopeFieldsEditor scope={scope} fields={fields} onScope={setScope} onFields={setFields} />
 
       <div className="flex items-center justify-between">
         <button

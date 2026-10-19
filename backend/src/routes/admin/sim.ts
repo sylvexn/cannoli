@@ -36,8 +36,6 @@ import { simulateMatch } from '../../lib/sim/simulate-match';
 import { recordMatchResult } from '../../lib/match-service';
 import { buildSimWorld, DEFAULT_SIM_SEED } from '../../lib/sim/build-world';
 import { applyDueTransactions } from '../../lib/scheduled-transactions';
-import { runAutoAwards } from '../../lib/pins/auto-award';
-import { mintArchivePins } from '../../lib/pins/archive-mint';
 import { assignFinishPositions } from '../../../scripts/import-xlsx';
 
 const MIGRATIONS_DIR = resolve(import.meta.dir, '../../../drizzle');
@@ -98,19 +96,15 @@ function voidMatch(matchId: string): void {
       readyAway: false,
     }).where(eq(schema.matches.id, matchId)).run();
     db.run(sql`
-      DELETE FROM pins
-      WHERE awarded_by IS NULL
-        AND pin_def_id IN ('kingslayer', 'flawless')
-        AND json_extract(metadata, '$.matchId') = ${matchId}
+      DELETE FROM pins WHERE match_id = ${matchId}
     `);
   });
 }
 
 /**
  * Season finalization — mirrors routes/admin/leagues.ts's phase→offseason
- * block: finish positions FIRST (champion/runner-up/SF/QF/regular), then the
- * archive pins that depend on them, and only then the generic season-end
- * auto-awards. Called AFTER the league is already sitting in `offseason` (not
+ * block: stamp finish positions (champion/runner-up/SF/QF/regular). Awards are
+ * admin-curated and never minted here. Called AFTER the league is already sitting in `offseason` (not
  * inside a write transaction) — a throw here must never unwind the match
  * results that already committed, and every step is idempotent so a retry
  * after a partial failure is safe.
@@ -118,9 +112,7 @@ function voidMatch(matchId: string): void {
 function finalizeSeason(leagueId: string, awardedBy: number | null): number {
   try {
     assignFinishPositions(sqlite, [leagueId]);
-    const archive = mintArchivePins(leagueId, { awardedBy });
-    const summary = runAutoAwards(leagueId, { trigger: 'season-end', awardedBy });
-    return summary.awarded.length + archive.awarded.length;
+    return 0;
   } catch (err) {
     console.error(`[sim] season-end finalize failed for ${leagueId}:`, err);
     return 0;

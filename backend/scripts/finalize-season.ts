@@ -16,12 +16,9 @@
  *      regular-season labels stamp onto teams.finish_position/label.
  *   3. Advance leagues.phase = 'offseason' (only if not already there).
  *   4. Mark seasons.archived = 1.
- *   5. Run runAutoAwards(season-end) — mints garchomp / cannoli / cynthia.
- *   6. Run mintArchivePins — mints champion / high-score / steal-of-the-draft
- *      / sweeper.
  *
- * Idempotent: re-running on an already-finalized season simply re-runs steps
- * 5/6 (which are themselves INSERT OR IGNORE + scoped DELETE). Safe.
+ * Awards are NOT minted — they are admin-curated in the Awards Sheet.
+ * Idempotent: re-running on an already-finalized season is safe.
  *
  * NOT included: the manual award pins (baxcalibur / kingambit / ash /
  * best-draft / dragapult / charizard / florges / rotom / pikachu / red).
@@ -139,8 +136,6 @@ async function main() {
       }
     }
     if (!season.archived) console.log(`  mark season ${season.season_number} archived`);
-    console.log(`  run runAutoAwards(season-end) for ${leagues.length} league(s)`);
-    console.log(`  run mintArchivePins for ${leagues.length} league(s)`);
     sqlite.close();
     return;
   }
@@ -181,29 +176,8 @@ async function main() {
   });
   tx();
 
-  // 5+6. Pin awards (not inside the SQL transaction — runAutoAwards/mintArchivePins
-  // open their own writes via the Drizzle layer, and nesting transactions is
-  // unsafe in bun:sqlite when both layers reach for BEGIN.)
+  // Awards are admin-curated (Admin > Pins > Awards Sheet); nothing is minted here.
   sqlite.close();
-
-  const { runAutoAwards } = await import('../src/lib/pins/auto-award');
-  const { mintArchivePins } = await import('../src/lib/pins/archive-mint');
-
-  console.log('\nAwarding pins:');
-  for (const l of leagues) {
-    const auto = runAutoAwards(l.id, { trigger: 'season-end' });
-    const archive = mintArchivePins(l.id);
-    console.log(
-      `  ${l.id}: auto +${auto.awarded.length}/-${auto.skipped}, ` +
-      `archive +${archive.awarded.length}/-${archive.skipped}`,
-    );
-    for (const a of auto.awarded) {
-      console.log(`    [auto] ${a.pinDefId} → user#${a.userId}`);
-    }
-    for (const a of archive.awarded) {
-      console.log(`    [archive] ${a.pinDefId} → user#${a.userId}`);
-    }
-  }
 
   console.log('\nDone.');
 }

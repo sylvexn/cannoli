@@ -6,7 +6,6 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { advancePlayoffWinner, buildPlayoffMatchups } from '../lib/playoff-advance';
 import { computeStandings, matchWinner } from '../lib/standings';
-import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
@@ -526,16 +525,6 @@ export const matchRoutes = new Elysia()
       return { success: true };
     });
 
-    // Auto-award per-match pins — AFTER the match write commits, not inside
-    // its transaction. A throw here must never unwind the status flip above.
-    if (flippedToCompleted) {
-      try {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
-      } catch (err) {
-        console.error(`[dismiss-warnings] runAutoAwards failed for ${params.matchId}:`, err);
-      }
-    }
-
     return outcome;
   })
 
@@ -651,15 +640,8 @@ export const matchRoutes = new Elysia()
         }
       }
 
-      // Clear per-match auto-pins (kingslayer, flawless). Re-record will
-      // re-mint via runAutoAwards. Scoped by metadata.matchId (set by both
-      // awarders) and awarded_by IS NULL (only auto pins).
-      db.run(sql`
-        DELETE FROM pins
-        WHERE awarded_by IS NULL
-          AND pin_def_id IN ('kingslayer', 'flawless')
-          AND json_extract(metadata, '$.matchId') = ${params.matchId}
-      `);
+      // Drop per-match pins (kingslayer, flawless) earned by the voided result.
+      db.run(sql`DELETE FROM pins WHERE match_id = ${params.matchId}`);
 
       db.insert(schema.activityLog).values({
         type: 'match_voided',

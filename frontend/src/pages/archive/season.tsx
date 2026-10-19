@@ -89,8 +89,10 @@ interface ArchiveLeague {
 interface SeasonAward {
   pinId: number;
   pinDefId: string;
-  userId: number;
-  username: string;
+  teamId: string | null;
+  leagueId: string | null;
+  userId: number | null;
+  username: string | null;
   displayName: string | null;
   defName: string;
   defIconName: string;
@@ -184,7 +186,7 @@ export function ArchiveSeasonPage() {
  *  Falls back to false (not displayed in this league's section) so awards
  *  with no teamId — career-scoped pins — don't get fanned out 3x. */
 function leagueOwnsAward(award: SeasonAward, league: ArchiveLeague): boolean {
-  const teamId = award.metadata?.teamId;
+  const teamId = award.teamId ?? award.metadata?.teamId;
   if (typeof teamId !== 'string') return false;
   return league.teams.some(t => t.id === teamId);
 }
@@ -344,7 +346,7 @@ function LeagueArchiveCard({
         )}
 
         {awards.length > 0 && (
-          <AwardsStrip awards={awards} />
+          <AwardsStrip awards={awards} seasonId={seasonId} />
         )}
 
         {league.teams.length > 6 && (
@@ -431,7 +433,7 @@ function LeagueArchiveCard({
 
 /** Inline awards display — one chip per pin, lucide-icon tinted by the
  *  pin def's color. Click links to the recipient's coach profile. */
-function AwardsStrip({ awards }: { awards: SeasonAward[] }) {
+function AwardsStrip({ awards, seasonId }: { awards: SeasonAward[]; seasonId: number }) {
   // Lazy-resolve lucide icon at render time. Falls back to Award if the
   // def references something we don't ship.
   return (
@@ -441,13 +443,15 @@ function AwardsStrip({ awards }: { awards: SeasonAward[] }) {
         Awards
       </div>
       <div className="flex gap-2 flex-wrap">
-        {awards.map(a => (
+        {awards.map(a => {
+          const who = a.displayName ?? a.username ?? a.teamId?.split('-').pop()?.toUpperCase() ?? '';
+          return (
           <Link
             key={a.pinId}
-            to={`/coach/${a.username}`}
+            to={a.username ? `/coach/${a.username}` : `/archive/${seasonId}/${a.leagueId}/${a.teamId}`}
             className="flex items-center gap-1.5 px-2 py-1 rounded border bg-surface-overlay/40 hover:bg-surface-overlay transition-colors"
             style={{ borderColor: `${a.defColor}33` }}
-            title={`${a.defName} — ${a.displayName ?? a.username}`}
+            title={`${a.defName} — ${who}`}
           >
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -455,9 +459,10 @@ function AwardsStrip({ awards }: { awards: SeasonAward[] }) {
             />
             <span className="text-[11px] font-medium text-text-primary">{a.defName}</span>
             <span className="text-[10px] text-text-muted">·</span>
-            <span className="text-[10px] text-text-muted">{a.displayName ?? a.username}</span>
+            <span className="text-[10px] text-text-muted">{who}</span>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

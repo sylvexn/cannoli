@@ -1,14 +1,8 @@
 /**
- * Team trophy case — most pins are earned by a TEAM (metadata.teamId /
- * pins.leagueId), but historically only ever rendered on the coach's
- * profile. This surfaces that team's pins for the CURRENT season right on
- * the team page.
- *
- * There's no dedicated "team pins" endpoint — we reuse the public
- * `getUserPins(username)` fetch (same one coach-profile/coach-link already
- * use) and filter client-side to this league + season. Renders nothing when
- * the team has no coach assigned or no pins yet, to avoid an empty-state
- * card on every mundane team page (the coach profile already has one).
+ * Team trophy case - a team's published pins for the CURRENT season, read
+ * from the team itself (`getTeamPins`), so unlinked teams show their awards
+ * too. Renders nothing when there are none, to avoid an empty card on every
+ * mundane team page.
  */
 import { useEffect, useState } from 'react';
 import { Trophy } from 'lucide-react';
@@ -26,24 +20,19 @@ interface PinsTrophyCaseProps {
 
 export function PinsTrophyCase({ player, leagueId, seasonId }: PinsTrophyCaseProps) {
   const [pins, setPins] = useState<ApiPin[]>([]);
-  const username = player.owner?.username ?? null;
 
   useEffect(() => {
-    if (!username) { setPins([]); return; }
     let cancelled = false;
-    api.getUserPins(username).then(all => {
+    api.getTeamPins(player.id).then(all => {
       if (!cancelled) setPins(all);
     }).catch(() => { if (!cancelled) setPins([]); });
     return () => { cancelled = true; };
-  }, [username]);
+  }, [player.id]);
 
   const seasonNum = Number(seasonId);
   const teamPins = pins.filter(p => {
     if (p.seasonId !== seasonNum) return false;
-    if (p.leagueId) return p.leagueId === leagueId;
-    // Legacy rows without a backfilled leagueId — fall back to the
-    // team-headlined metadata shape (garchomp/champion/etc. all carry teamId).
-    return p.metadata?.teamId === player.id;
+    return p.leagueId == null || p.leagueId === leagueId;
   });
 
   if (teamPins.length === 0) return null;
@@ -63,7 +52,7 @@ export function PinsTrophyCase({ player, leagueId, seasonId }: PinsTrophyCasePro
             key={pin.id}
             def={pin.definition}
             size="lg"
-            seasonId={pin.seasonId}
+            seasonNumber={pin.seasonNumber}
             leagueId={pin.leagueId}
             metadata={pin.metadata}
           />

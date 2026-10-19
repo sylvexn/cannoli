@@ -20,7 +20,7 @@ export function AwardsTab({ data }: { data: FullLeagueData }) {
       .then((d: { pins: SeasonAward[] }) => {
         const teamIds = new Set(data.teams.map(t => t.id));
         const filtered = d.pins.filter(p => {
-          const tid = p.metadata?.teamId;
+          const tid = p.teamId ?? p.metadata?.teamId;
           return typeof tid === 'string' && teamIds.has(tid);
         });
         setAwards(filtered);
@@ -33,7 +33,7 @@ export function AwardsTab({ data }: { data: FullLeagueData }) {
   if (!awards || awards.length === 0) {
     return (
       <div className="text-text-muted text-sm py-12 text-center italic">
-        No awards minted yet. Use the admin Season Wizard to archive this season and mint pins.
+        No awards published yet.
       </div>
     );
   }
@@ -91,7 +91,8 @@ function AwardCard({
 
         <div className="space-y-1 pt-1 border-t border-border-subtle">
           {pins.map(p => {
-            const team = p.metadata?.teamId ? teamById.get(p.metadata.teamId) : null;
+            const tid = p.teamId ?? p.metadata?.teamId;
+            const team = tid ? teamById.get(tid) : null;
             // Build a one-line metadata caption from common fields.
             const metaCaption = formatMetaCaption(p.metadata);
             return (
@@ -102,12 +103,16 @@ function AwardCard({
                     style={{ backgroundColor: team.teamColor }}
                   />
                 )}
-                <Link
-                  to={`/coach/${p.username}`}
-                  className="font-medium text-text-primary hover:text-neon hover:underline truncate"
-                >
-                  {p.displayName ?? p.username}
-                </Link>
+                {p.username ? (
+                  <Link
+                    to={`/coach/${p.username}`}
+                    className="font-medium text-text-primary hover:text-neon hover:underline truncate"
+                  >
+                    {p.displayName ?? p.username}
+                  </Link>
+                ) : (
+                  <span className="font-medium text-text-primary truncate">{team?.teamName ?? tid}</span>
+                )}
                 {team && (
                   <span className="text-text-muted text-[10px] truncate">· {team.teamAbbrev}</span>
                 )}

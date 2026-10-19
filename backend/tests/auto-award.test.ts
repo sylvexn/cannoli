@@ -8,7 +8,7 @@ import {
   type CannoliRecord,
   type CynthiaStreak,
   type StreakMatch,
-} from '../src/lib/pins/auto-award';
+} from '../src/lib/pins/auto-award-pickers';
 
 // Garchomp
 
@@ -71,7 +71,7 @@ describe('pickGarchompWinners', () => {
     expect(out).toHaveLength(1);
     expect(out[0].teamId).toBe('a');
     expect(out[0].kills).toBe(15);
-    expect(out[0].pokemon).toBe('garchomp');
+    expect(out[0].pokemon.toLowerCase()).toBe('garchomp');
   });
 
   test('zero kills total → no winners', () => {

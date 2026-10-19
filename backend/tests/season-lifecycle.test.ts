@@ -42,8 +42,6 @@ import { generateLeagueSchedule } from '../src/lib/schedule-generator';
 import { recordMatchResult } from '../src/lib/match-service';
 import { computeStandings } from '../src/lib/standings';
 import { assignFinishPositions } from '../scripts/import-xlsx';
-import { runAutoAwards } from '../src/lib/pins/auto-award';
-import { mintArchivePins } from '../src/lib/pins/archive-mint';
 import {
   checkSeasonArchived,
   checkLeagueArchived,
@@ -130,8 +128,6 @@ function advancePhase(
   // then runs the generic season-end auto-awards, in that order.
   if (phase === 'offseason' && previousPhase !== 'offseason') {
     assignFinishPositions(sqlite, [leagueId]);
-    mintArchivePins(leagueId);
-    runAutoAwards(leagueId, { trigger: 'season-end' });
   }
   return { success: true, scheduleGenerated };
 }

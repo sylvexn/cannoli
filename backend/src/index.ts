@@ -23,6 +23,7 @@ import { arenaRoutes } from './routes/arena';
 import { psLoginRoutes } from './routes/ps-login';
 import { psInternalRoutes } from './routes/ps-internal';
 import { pinRoutes } from './routes/pins';
+import { pinAwardRoutes } from './routes/pins-awards';
 import { archiveDeepRoutes } from './routes/archive';
 import { startBot } from './lib/ps-bot';
 import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
@@ -238,6 +239,7 @@ const app = new Elysia()
   // Pin routes must register before userRoutes so /api/users/:username/pins
   // is matched before the more general /api/users/:username profile route.
   .use(pinRoutes)
+  .use(pinAwardRoutes)
   .use(onlineRoutes)
   .use(userRoutes)
   .use(leagueRoutes)
