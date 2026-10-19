@@ -181,7 +181,11 @@ describe('bulk save + publish', () => {
     const pub = await userPins();
     expect(pub.json).toHaveLength(3);
     expect(pub.json[0].seasonNumber).toBeGreaterThan(0);
+    // Anonymous archive reads only cover archived seasons.
+    expect((await archive()).json.pins).toHaveLength(0);
+    db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
     const arch = (await archive()).json.pins;
+    db.update(schema.seasons).set({ archived: false }).where(eq(schema.seasons.id, seasonId)).run();
     expect(arch).toHaveLength(4);
     expect(arch.find((p: any) => p.teamId === T('C')).username).toBeNull();
   });
