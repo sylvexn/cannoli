@@ -176,6 +176,11 @@ describe('draft-center routes', () => {
     const moved = await (await hit('PUT', `/api/draft-center/teams/${a.id}`, ownerCookie, { rulesetId: null })).json() as any;
     expect(moved.rulesetId).toBeNull();
     expect(moved.validation.budget).toBe(110); // default
+    // Picking "Default" on a league-keyed team must not snap back to the league ruleset.
+    const toDefault = await (await hit('PUT', `/api/draft-center/teams/${lgTeam.id}`, ownerCookie, { rulesetId: null, leagueId: null })).json() as any;
+    expect(toDefault.leagueId).toBeNull();
+    expect(toDefault.rulesetId).toBeNull();
+    expect(toDefault.validation.budget).toBe(110);
     for (const t of [a, bad, lgTeam]) await hit('DELETE', `/api/draft-center/teams/${t.id}`, ownerCookie);
   });
 
