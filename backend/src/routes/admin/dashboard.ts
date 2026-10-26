@@ -19,6 +19,9 @@ function jsonLen(s: unknown): number {
 }
 
 // `where` is a trusted literal (never user input); columns are qualified with q.
+const teamName = (id: unknown) =>
+  sqlite.query<{ team_name: string }, [string]>(`SELECT team_name FROM teams WHERE id = ?`).get(String(id))?.team_name ?? String(id);
+
 function queue(table: 'trades' | 'fa_requests', where: string, at: string, describe: (r: Row) => string) {
   const count = sqlite.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM ${table} q WHERE ${where}`).get()?.n ?? 0;
   const rows = sqlite.query<Row, []>(
@@ -36,11 +39,11 @@ export const dashboardRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
   .get('/api/admin/dashboard', ({ user }) => {
     const trades = queue('trades', `q.status = 'awaiting_admin'`, 'proposed_at',
-      r => `${r.proposer_id} / ${r.recipient_id}: ${jsonLen(r.offering)} for ${jsonLen(r.requesting)}`);
+      r => `${teamName(r.proposer_id)} / ${teamName(r.recipient_id)}: ${jsonLen(r.offering)} for ${jsonLen(r.requesting)}`);
     const fa = queue('fa_requests', `q.status = 'pending' AND q.request_type = 'pickup'`, 'requested_at',
-      r => `${r.team_id}: +${jsonLen(r.pickups)} / -${jsonLen(r.drops)}`);
+      r => `${teamName(r.team_id)}: +${jsonLen(r.pickups)} / -${jsonLen(r.drops)}`);
     const tera = queue('fa_requests', `q.status = 'pending' AND q.request_type = 'tera_change'`, 'requested_at',
-      r => `${r.team_id}: ${jsonLen(r.tera_changes)} tera change(s)`);
+      r => `${teamName(r.team_id)}: ${jsonLen(r.tera_changes)} tera change(s)`);
 
     let alerts: null | { errors: number; bot: 'green' | 'yellow' | 'red' } = null;
     if (user && isDev(user)) {

@@ -30,7 +30,9 @@ export const feedbackRoutes = new Elysia()
     const category = (form.get('category') as string | null)?.trim() ?? '';
     const title = (form.get('title') as string | null)?.trim() ?? '';
     const description = (form.get('description') as string | null)?.trim() ?? '';
-    const page = (form.get('page') as string | null)?.trim() || null;
+    // Same-site paths only; anything else (absolute URLs, //host, javascript:) is dropped.
+    const rawPage = (form.get('page') as string | null)?.trim() ?? '';
+    const page = rawPage.startsWith('/') && !rawPage.startsWith('//') && !rawPage.startsWith('/\\') ? rawPage : null;
     const errorRef = (form.get('errorRef') as string | null)?.trim() || null;
 
     if (!VALID_CATEGORIES.includes(category as FeedbackCategory)) {
