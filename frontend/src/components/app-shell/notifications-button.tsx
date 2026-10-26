@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bell, Sparkles, Wrench, Bug, CheckCircle2, Megaphone, Swords,
+  Bell, CheckCircle2, Megaphone, Swords, ArrowLeftRight, Shield, CheckCheck, type LucideIcon,
 } from 'lucide-react';
 import {
   Popover,
@@ -12,40 +12,40 @@ import {
   api,
   type NotificationItem,
   type NotificationSource,
+  type NotificationGroup,
   type AnnouncementCategory,
 } from '@/lib/api';
-import type { ChangelogCategory } from '@/lib/api';
 import { ANNOUNCEMENT_CATEGORY_META } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
-import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-// Source + category icon/accent maps
+// Tabs + icon/accent maps
 
-const CHANGELOG_META: Record<ChangelogCategory, { label: string; color: string; Icon: typeof Sparkles }> = {
-  feature:     { label: 'New',      color: 'var(--color-neon, #34d399)',      Icon: Sparkles },
-  improvement: { label: 'Improved', color: 'var(--color-cyan-300, #67e8f9)',  Icon: Wrench },
-  fix:         { label: 'Fixed',    color: 'var(--color-amber-400, #fbbf24)', Icon: Bug },
+type Tab = 'all' | NotificationGroup;
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'trades', label: 'Trades & FA' },
+  { id: 'matches', label: 'Matches' },
+  { id: 'admin', label: 'Admin' },
+  { id: 'feedback', label: 'Feedback' },
+];
+
+const GROUP_META: Record<NotificationGroup, { label: string; color: string; Icon: LucideIcon }> = {
+  trades:   { label: 'Trades & FA', color: 'var(--color-purple-400, #c084fc)', Icon: ArrowLeftRight },
+  matches:  { label: 'Match',       color: 'var(--color-amber-400, #fbbf24)',  Icon: Swords },
+  admin:    { label: 'Admin',       color: 'var(--color-cyan-300, #67e8f9)',   Icon: Shield },
+  feedback: { label: 'Feedback',    color: 'var(--color-neon, #34d399)',       Icon: CheckCircle2 },
 };
 
-const SOURCE_DEFAULTS: Record<NotificationSource, { color: string; Icon: typeof Bell }> = {
-  changelog:    { color: 'var(--color-neon, #34d399)',       Icon: Sparkles },
-  feedback:     { color: 'var(--color-neon, #34d399)',       Icon: CheckCircle2 },
-  announcement: { color: 'var(--color-cyan-300, #67e8f9)',   Icon: Megaphone },
-  match:        { color: 'var(--color-amber-400, #fbbf24)',  Icon: Swords },
-};
-
-/** Resolve the icon + accent for a single notification item. */
-function getItemMeta(item: NotificationItem) {
-  if (item.source === 'changelog' && item.category) {
-    return CHANGELOG_META[item.category as ChangelogCategory] ?? CHANGELOG_META.improvement;
+/** Resolve the icon + accent + pill label for a notification. */
+function getItemMeta(source: NotificationSource, category: string | null, group?: NotificationGroup) {
+  if (source === 'announcement') {
+    const ann = category ? ANNOUNCEMENT_CATEGORY_META[category as AnnouncementCategory] : undefined;
+    return { label: 'announcement', color: ann?.color ?? 'var(--color-cyan-300, #67e8f9)', Icon: ann?.Icon ?? Megaphone };
   }
-  if (item.source === 'announcement' && item.category) {
-    const ann = ANNOUNCEMENT_CATEGORY_META[item.category as AnnouncementCategory];
-    if (ann) return { color: ann.color, Icon: ann.Icon };
-  }
-  return SOURCE_DEFAULTS[item.source];
+  return GROUP_META[group ?? (source === 'match' ? 'matches' : 'feedback')];
 }
 
 // Notification row
@@ -56,6 +56,7 @@ export function NotificationRowView({
   title,
   body,
   category,
+  group,
   createdAt,
   read = true,
   expanded = false,
@@ -64,13 +65,12 @@ export function NotificationRowView({
   title: string;
   body: string | null;
   category: string | null;
+  group?: NotificationGroup;
   createdAt: string;
   read?: boolean;
   expanded?: boolean;
 }) {
-  // Build a minimal fake item to reuse the same meta resolver.
-  const fakeItem = { source, category } as NotificationItem;
-  const meta = getItemMeta(fakeItem);
+  const meta = getItemMeta(source, category, group);
   const { Icon } = meta;
 
   return (
@@ -81,9 +81,7 @@ export function NotificationRowView({
           style={{ color: meta.color, backgroundColor: `${meta.color}1f` }}
         >
           <Icon size={9} />
-          {source === 'changelog'
-            ? ((meta as (typeof CHANGELOG_META)[ChangelogCategory]).label ?? source)
-            : source}
+          {meta.label}
         </span>
         {!read && (
           <span className="h-1.5 w-1.5 rounded-full bg-neon shrink-0" title="Unread" />
@@ -95,8 +93,8 @@ export function NotificationRowView({
 
       <div className="mt-1 text-sm font-medium text-text-primary">{title}</div>
 
-      {/* Body: always show for changelog; toggle for announcements; collapse for others */}
-      {body && (source === 'changelog' || source === 'feedback' || expanded) && (
+      {/* Body: always shown, except announcements which toggle open */}
+      {body && (source !== 'announcement' || expanded) && (
         <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-text-muted">
           {body}
         </div>
@@ -118,27 +116,23 @@ interface NotificationRowProps {
 }
 
 function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }: NotificationRowProps) {
-  // Announcements expand inline; match/changelog/feedback navigate or do nothing.
-  const isClickable = item.source !== 'announcement';
-  const hasLink = Boolean(item.link);
+  const isAnnouncement = item.source === 'announcement';
+  const interactive = isAnnouncement || Boolean(item.link) || !isRead;
 
   function handleClick() {
-    if (item.source === 'announcement') {
-      onToggleExpand();
-    } else if (hasLink) {
-      onNavigate(item);
-    }
+    if (isAnnouncement) onToggleExpand();
+    else onNavigate(item);
   }
 
   return (
     <div
-      role={isClickable && hasLink ? 'button' : item.source === 'announcement' ? 'button' : 'listitem'}
-      tabIndex={(isClickable && hasLink) || item.source === 'announcement' ? 0 : -1}
+      role={interactive ? 'button' : 'listitem'}
+      tabIndex={interactive ? 0 : -1}
       onClick={handleClick}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
       className={cn(
         'px-3 py-2.5 transition-colors outline-none',
-        (isClickable && hasLink) || item.source === 'announcement'
+        interactive
           ? 'cursor-pointer hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/40'
           : 'hover:bg-surface-overlay/50',
       )}
@@ -148,6 +142,7 @@ function NotificationRow({ item, isRead, onNavigate, expanded, onToggleExpand }:
         title={item.title}
         body={item.body}
         category={item.category}
+        group={item.group}
         createdAt={item.createdAt}
         read={isRead}
         expanded={expanded}
@@ -168,87 +163,43 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
   const navigate = useNavigate();
 
   const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>('all');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  // Guest fallback — mirrors changelog-button: localStorage stamp drives read state
-  // for changelog items when there's no auth session.
-  const [guestSeen, setGuestSeen] = useLocalStorageState<string | null>('cannoli:changelogSeenAt', null);
-
-  // Fetch on mount and on auth change.
-  useEffect(() => {
-    let cancelled = false;
-
-    if (user) {
-      api.getNotifications()
-        .then(res => {
-          if (cancelled) return;
-          setItems(res.items);
-          setUnreadCount(res.unreadCount);
-        })
-        .catch(() => { /* non-critical */ });
-    } else {
-      // Guest: only changelog items, read state from localStorage.
-      api.getChangelog()
-        .then(res => {
-          if (cancelled) return;
-          const changelogItems: NotificationItem[] = res.entries.map(e => ({
-            id: `changelog:${e.id}`,
-            source: 'changelog' as const,
-            title: e.title,
-            body: e.body ?? null,
-            link: null,
-            category: e.category,
-            createdAt: e.date,
-            read: guestSeen ? e.date <= guestSeen : false,
-          }));
-          setItems(changelogItems);
-          const unread = changelogItems.filter(i => !i.read).length;
-          setUnreadCount(unread);
-        })
-        .catch(() => {});
-    }
-
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
-
-  // Recompute the guest unread count whenever guestSeen changes.
-  useEffect(() => {
-    if (user) return;
-    setUnreadCount(items.filter(i => !guestSeen || i.createdAt > guestSeen).length);
-  }, [guestSeen, items, user]);
-
-  // Derive locally-read items (optimistic zero on open).
+  // Optimistic read marks until the next refetch replaces server state.
   const [localRead, setLocalRead] = useState<Set<string>>(new Set());
 
-  const effectiveUnread = useMemo(
-    () => Math.max(0, unreadCount - localRead.size),
-    [unreadCount, localRead],
+  const load = useCallback(() => {
+    api.getNotifications()
+      .then(res => { setItems(res.items); setLocalRead(new Set()); })
+      .catch(() => { /* non-critical */ });
+  }, []);
+
+  // Fetch on mount / auth change, and again whenever the pane opens.
+  useEffect(() => {
+    if (user) load(); else setItems([]);
+  }, [user?.id, load]);
+  useEffect(() => { if (open && user) load(); }, [open, user, load]);
+
+  const isRead = useCallback((i: NotificationItem) => i.read || localRead.has(i.id), [localRead]);
+  const unreadIn = useCallback(
+    (t: Tab) => items.filter(i => !isRead(i) && (t === 'all' || i.group === t)).length,
+    [items, isRead],
   );
+  const unread = unreadIn('all');
+  const visible = useMemo(() => tab === 'all' ? items : items.filter(i => i.group === tab), [items, tab]);
 
-  const markAllSeen = useCallback(() => {
-    setLocalRead(new Set(items.filter(i => !i.read).map(i => i.id)));
-
-    if (user) {
-      api.markNotificationsSeen().catch(() => {});
-    } else {
-      // Guest: stamp to the newest entry date (same logic as changelog-button).
-      const seenAt = items.reduce(
-        (max, e) => (e.createdAt > max ? e.createdAt : max),
-        new Date().toISOString(),
-      );
-      setGuestSeen(seenAt);
-    }
-  }, [items, user, setGuestSeen]);
-
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (next && effectiveUnread > 0) markAllSeen();
-  }, [effectiveUnread, markAllSeen]);
+  const markAllRead = useCallback(() => {
+    const scope = items.filter(i => !isRead(i) && (tab === 'all' || i.group === tab));
+    setLocalRead(prev => new Set([...prev, ...scope.map(i => i.id)]));
+    api.markNotificationsSeen(tab === 'all' ? undefined : tab).then(load).catch(() => {});
+  }, [items, isRead, tab, load]);
 
   const handleNavigate = useCallback((item: NotificationItem) => {
+    if (item.id.startsWith('notif:') && !isRead(item)) {
+      setLocalRead(prev => new Set(prev).add(item.id));
+      api.markNotificationsRead([item.id]).catch(() => {});
+    }
     if (!item.link) return;
     setOpen(false);
     if (item.link.startsWith('http://') || item.link.startsWith('https://')) {
@@ -256,7 +207,7 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
     } else {
       navigate(item.link);
     }
-  }, [navigate]);
+  }, [navigate, isRead]);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpandedIds(prev => {
@@ -266,34 +217,63 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
     });
   }, []);
 
-  if (items.length === 0) return null;
+  // Personal feed: nothing to show to guests.
+  if (!user) return null;
 
-  const badge = effectiveUnread > 0 ? (
+  const badge = unread > 0 ? (
     <>
       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon opacity-75" />
       <span className="relative inline-flex rounded-full h-2 w-2 bg-neon" />
     </>
   ) : null;
 
+  const count = (n: number) => n > 0 && (
+    <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-neon/20 text-neon text-[9px] font-bold tabular-nums">
+      {n}
+    </span>
+  );
+
   const panel = (
-    <PopoverContent side="top" align="start" sideOffset={8} className="w-80 p-0 gap-0">
+    <PopoverContent side="top" align="start" sideOffset={8} className="w-full max-w-[22rem] p-0 gap-0">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default">
-        <Bell size={13} className="text-text-muted" />
+        <Bell size={13} className="text-text-muted shrink-0" />
         <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
           Notifications
         </span>
-        {effectiveUnread > 0 && (
-          <span className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-neon/20 text-neon text-[9px] font-bold tabular-nums">
-            {effectiveUnread}
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={markAllRead}
+          disabled={unreadIn(tab) === 0}
+          className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10px] font-medium text-text-muted hover:bg-surface-overlay hover:text-text-primary disabled:opacity-40 disabled:pointer-events-none transition-colors"
+        >
+          <CheckCheck size={12} />
+          Mark all read
+        </button>
+      </div>
+      <div className="flex gap-0.5 overflow-x-auto border-b border-border-default px-1.5 py-1">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors',
+              tab === t.id ? 'bg-neon/10 text-neon' : 'text-text-muted hover:bg-surface-overlay hover:text-text-secondary',
+            )}
+          >
+            {t.label}
+            {count(unreadIn(t.id))}
+          </button>
+        ))}
       </div>
       <div className="max-h-[60dvh] overflow-y-auto py-1 divide-y divide-border-default/40">
-        {items.map(item => (
+        {visible.length === 0 ? (
+          <div className="px-3 py-6 text-center text-xs text-text-muted">Nothing here.</div>
+        ) : visible.map(item => (
           <NotificationRow
             key={item.id}
             item={item}
-            isRead={item.read || localRead.has(item.id)}
+            isRead={isRead(item)}
             onNavigate={handleNavigate}
             expanded={expandedIds.has(item.id)}
             onToggleExpand={() => toggleExpanded(item.id)}
@@ -306,14 +286,14 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
   // Collapsed rail (icon-only)
   if (collapsed) {
     return (
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           title="Notifications"
           className="relative flex items-center justify-center h-9 w-9 rounded-md text-text-muted hover:bg-surface-overlay hover:text-text-secondary transition-colors outline-none"
         >
           <span className="relative inline-flex">
             <Bell size={16} />
-            {effectiveUnread > 0 && (
+            {unread > 0 && (
               <span className="absolute -top-1 -right-1 flex h-2 w-2">
                 {badge}
               </span>
@@ -327,22 +307,18 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
 
   // Expanded sidebar row
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:bg-surface-overlay hover:text-text-primary transition-colors outline-none">
         <span className="relative inline-flex">
           <Bell size={14} />
-          {effectiveUnread > 0 && (
+          {unread > 0 && (
             <span className="absolute -top-1 -right-1 flex h-2 w-2">
               {badge}
             </span>
           )}
         </span>
         <span>Notifications</span>
-        {effectiveUnread > 0 && (
-          <span className="ml-auto inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-neon/20 text-neon text-[9px] font-bold tabular-nums">
-            {effectiveUnread}
-          </span>
-        )}
+        <span className="ml-auto">{count(unread)}</span>
       </PopoverTrigger>
       {panel}
     </Popover>
