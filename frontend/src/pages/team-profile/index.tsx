@@ -35,7 +35,7 @@ import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // Main Page
 export function TeamProfilePage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, leagueId } = useParams<{ id: string; leagueId: string }>();
   const { players, standings, loading } = useLeagueData();
 
   if (loading) {
@@ -51,7 +51,7 @@ export function TeamProfilePage() {
         title="Team not found."
         subtitle="Maybe it desynced. Or never existed."
         action={
-          <Link to="/" className="text-neon hover:underline text-sm">
+          <Link to={`/league/${leagueId}`} className="text-neon hover:underline text-sm">
             Back to standings
           </Link>
         }
@@ -351,7 +351,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   return (
     <div className="space-y-4">
       {/* Back nav */}
-      <Link to="/" className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted hover:text-neon transition-colors uppercase tracking-widest">
+      <Link to={`/league/${league.id}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted hover:text-neon transition-colors uppercase tracking-widest">
         <ArrowLeft size={11} /> Standings
       </Link>
 

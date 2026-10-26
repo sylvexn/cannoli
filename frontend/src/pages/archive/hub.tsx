@@ -173,7 +173,7 @@ export function ArchiveHubPage() {
               icon={Skull}
               tint="#ef4444"
               rows={data.allTimeLeaders.mostKills}
-              format={r => `${r.totalKills}K`}
+              format={r => `${r.totalKills} KOs`}
             />
             <LeaderCard
               title="Best K/D"
@@ -221,7 +221,7 @@ export function ArchiveHubPage() {
                     <PokemonSprite name={p.pokemonName} size="xs" />
                     <span className="flex-1 truncate text-text-primary">{p.pokemonName}</span>
                     <span className="font-mono text-text-muted text-[10px]">
-                      {p.totalKills}K · {p.gp}gp
+                      {p.totalKills} KOs · {p.gp}gp
                     </span>
                   </Link>
                 ))}

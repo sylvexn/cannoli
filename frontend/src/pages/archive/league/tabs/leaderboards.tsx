@@ -36,7 +36,7 @@ export function LeaderboardsTab({ data }: { data: FullLeagueData }) {
         tint="#ef4444"
         rows={mostKills}
         teamMap={teamMap}
-        format={r => `${r.kills}K`}
+        format={r => `${r.kills} KOs`}
       />
       <LeaderTable
         title="Best K/D"
@@ -165,7 +165,7 @@ function PeakTable({ peaks, teamMap }: { peaks: PeakRow[]; teamMap: Map<string, 
               {team && (
                 <span className="text-[9px] text-text-muted truncate max-w-[60px]">{team.teamAbbrev}</span>
               )}
-              <span className="font-mono font-bold text-[10px] text-orange-400 shrink-0">{p.kills}K</span>
+              <span className="font-mono font-bold text-[10px] text-orange-400 shrink-0">{p.kills} KOs</span>
             </div>
           );
         })}

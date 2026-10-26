@@ -41,6 +41,8 @@ export function ReplaysPage() {
   const [search, setSearch] = useState('');
   const [leagueFilter, setLeagueFilter] = useState<Set<string>>(new Set());
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('this-week');
+  // Exact-week filter ('all' | week number as string); mirrored to ?week=.
+  const [weekFilter, setWeekFilterState] = useState<string>(() => searchParams.get('week') ?? 'all');
   const [seasonFilter, setSeasonFilter] = useState<number | 'all'>('all');
   const [seasonInitialized, setSeasonInitialized] = useState(false);
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
@@ -111,6 +113,27 @@ export function ReplaysPage() {
     [entries, seasonFilter],
   );
 
+  // Week dropdown options: every week with a replay in the selected season.
+  // Playoff fixtures sit past the regular schedule, so they're labelled apart.
+  const weekOptions = useMemo(() => {
+    const m = new Map<number, boolean>();
+    for (const e of seasonEntries) m.set(e.match.week, (m.get(e.match.week) ?? false) || e.match.phase === 'playoffs');
+    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([week, playoff]) => ({
+      value: String(week),
+      label: playoff ? `Playoffs (Week ${week})` : `Week ${week}`,
+    }));
+  }, [seasonEntries]);
+
+  function setWeekFilter(w: string) {
+    setWeekFilterState(w);
+    if (w !== 'all') setTimeFilter('all');
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (w === 'all') next.delete('week'); else next.set('week', w);
+      return next;
+    }, { replace: true });
+  }
+
   // Leagues belonging to the selected season — drives the league chips (empty
   // for "All-time" so we don't render 9 chips with duplicate names).
   const seasonLeagues = useMemo(
@@ -159,18 +182,19 @@ export function ReplaysPage() {
     const maxSeason = entries.reduce((mx, e) => Math.max(mx, e.league.season?.seasonNumber ?? 0), 0);
     if (maxSeason > 0) {
       setSeasonFilter(maxSeason);
-      setTimeFilter(defaultTimeForSeason(
+      if (weekFilter === 'all') setTimeFilter(defaultTimeForSeason(
         seasons.find(s => s.seasonNumber === maxSeason),
         hasPlayoffReplays(maxSeason),
       ));
       setSeasonInitialized(true);
     }
-  }, [entries, seasons, seasonInitialized, hasPlayoffReplays]);
+  }, [entries, seasons, seasonInitialized, hasPlayoffReplays, weekFilter]);
 
   function handleSeasonChange(s: number | 'all') {
     setSeasonFilter(s);
     setLeagueFilter(new Set());
     setSeasonInitialized(true);
+    setWeekFilter('all');
     if (s === 'all') setTimeFilter('all');
     else setTimeFilter(defaultTimeForSeason(seasons.find(x => x.seasonNumber === s), hasPlayoffReplays(s)));
   }
@@ -249,6 +273,7 @@ export function ReplaysPage() {
       setSeasonFilter('all');
       setSeasonInitialized(true);
       setTimeFilter('all');
+      setWeekFilterState('all');
       setLeagueFilter(new Set());
       setSearch('');
     }
@@ -261,6 +286,10 @@ export function ReplaysPage() {
 
     if (leagueFilter.size > 0) {
       result = result.filter(e => leagueFilter.has(e.league.id));
+    }
+
+    if (weekFilter !== 'all') {
+      result = result.filter(e => String(e.match.week) === weekFilter);
     }
 
     if (timeFilter !== 'all') {
@@ -295,7 +324,7 @@ export function ReplaysPage() {
       if (b.match.week !== a.match.week) return b.match.week - a.match.week;
       return b.match.id.localeCompare(a.match.id);
     });
-  }, [seasonEntries, search, leagueFilter, timeFilter, referenceWeek, user]);
+  }, [seasonEntries, search, leagueFilter, timeFilter, weekFilter, referenceWeek, user]);
 
   // Hero pick = most recent in the current filtered set (filtered[0] after
   // descending sort). Rest of the cards fill the grid.
@@ -393,7 +422,10 @@ export function ReplaysPage() {
       {!theater && (
         <ReplayFilters
           timeFilter={timeFilter}
-          onTimeFilterChange={setTimeFilter}
+          onTimeFilterChange={f => { setTimeFilter(f); setWeekFilter('all'); }}
+          weekFilter={weekFilter}
+          weekOptions={weekOptions}
+          onWeekChange={setWeekFilter}
           search={search}
           onSearchChange={setSearch}
           leagues={seasonLeagues}
