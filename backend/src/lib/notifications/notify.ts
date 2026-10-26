@@ -21,6 +21,8 @@ export type NotifyResult = 'inserted' | 'skipped';
 
 export interface NotifyOpts {
   type: 'feedback' | 'system';
+  /** Bell tab. Defaults: feedback type -> 'feedback', otherwise 'admin'. */
+  category?: 'trades' | 'matches' | 'admin' | 'feedback';
   title: string;
   body?: string | null;
   link?: string | null;
@@ -44,6 +46,7 @@ export function notifyUser(userId: number, opts: NotifyOpts): NotifyResult {
     const result = db.insert(schema.notifications).values({
       userId,
       type: opts.type,
+      category: opts.category ?? (opts.type === 'feedback' ? 'feedback' : 'admin'),
       title: opts.title,
       body: opts.body ?? null,
       link: opts.link ?? null,
@@ -58,9 +61,9 @@ export function notifyUser(userId: number, opts: NotifyOpts): NotifyResult {
     // version, fall back to a raw INSERT OR IGNORE to guarantee idempotency.
     try {
       const metadataJson = opts.metadata != null ? JSON.stringify(opts.metadata) : null;
-      const stmt = sqlite.prepare<void, [number, string, string, string | null, string | null, string | null, string | null]>(
-        `INSERT OR IGNORE INTO notifications (user_id, type, title, body, link, metadata, dedupe_key)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      const stmt = sqlite.prepare<void, [number, string, string, string | null, string | null, string | null, string | null, string]>(
+        `INSERT OR IGNORE INTO notifications (user_id, type, title, body, link, metadata, dedupe_key, category)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       const info = stmt.run(
         userId,
@@ -70,6 +73,7 @@ export function notifyUser(userId: number, opts: NotifyOpts): NotifyResult {
         opts.link ?? null,
         metadataJson,
         opts.dedupeKey ?? null,
+        opts.category ?? (opts.type === 'feedback' ? 'feedback' : 'admin'),
       );
       return (info.changes ?? 0) > 0 ? 'inserted' : 'skipped';
     } catch (e2) {

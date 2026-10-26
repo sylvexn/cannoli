@@ -161,6 +161,7 @@ export const tradeRoutes = new Elysia()
 
         notifyStaff({
           type: 'system',
+          category: 'trades',
           title: 'Trade needs approval',
           body: `${proposerTeam.teamName} ↔ ${recipientTeam.teamName}`,
           link: '/admin/trades',

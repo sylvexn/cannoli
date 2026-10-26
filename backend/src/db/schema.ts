@@ -928,6 +928,8 @@ export const notifications = sqliteTable('notifications', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   /** ISO timestamp when the user read this item; null = unread. */
   readAt: text('read_at'),
+  /** Bell tab this item files under. */
+  category: text('category', { enum: ['trades', 'matches', 'admin', 'feedback'] }).notNull().default('admin'),
 }, (t) => ({
   userIdx: index('notifications_user_idx').on(t.userId),
   dedupeIdx: uniqueIndex('notifications_user_dedupe_idx').on(t.userId, t.dedupeKey),
@@ -946,7 +948,17 @@ export const changelog = sqliteTable('changelog', {
   date: text('date').notNull(),
   category: text('category', { enum: ['feature', 'improvement', 'fix'] }).notNull(),
   title: text('title').notNull(),
+  /** Legacy dashed list. Kept (unserved) after conversion to `sections`. */
   body: text('body'),
+  /** Semver-ish: '1.3' = planned patch, '1.3.1' = hotfix. */
+  version: text('version'),
+  /** Hotfixes point at their parent patch's id; null = top-level patch. */
+  parentId: text('parent_id'),
+  /** JSON: [{ kind: 'new'|'changes'|'fixes'|'balance', items: string[] }]. */
+  sections: text('sections'),
+  heroUrl: text('hero_url'),
+  /** Drafts are staff-only; publishing stamps `date` = now. */
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('published'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 }, (t) => ({

@@ -16,6 +16,8 @@ import { LoginPage } from '@/pages/login';
 import { ChangePasswordPage } from '@/pages/change-password';
 import { HomePage } from '@/pages/home';
 import { RulesPage } from '@/pages/rules';
+import { PatchNotesPage } from '@/pages/patch-notes';
+import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
 import { BadgesPage } from '@/pages/badges';
 import { StandingsPage } from '@/pages/standings';
@@ -146,6 +148,7 @@ export default function App() {
                 <Route path=":seasonId/:leagueId/:teamId" element={<ArchiveTeamPage />} />
               </Route>
               <Route path="rules" element={<RulesPage />} />
+              <Route path="patch-notes" element={<PatchNotesPage />} />
               <Route path="tiers" element={<TierListPage />} />
               <Route path="badges" element={<BadgesPage />} />
               <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
@@ -173,6 +176,7 @@ export default function App() {
                     <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
                     <Route path="announcements" element={<AdminAnnouncementsRoute />} />
                     <Route path="rules" element={<AdminRulesRoute />} />
+                    <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
                     <Route path="settings" element={<AdminSiteSettingsRoute />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
