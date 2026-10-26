@@ -226,6 +226,15 @@ function notifyBracket(leagueId: string, seeded: string[], matchups: PlayoffMatc
   return sent;
 }
 
+/** Drop only the week keys publish added; edits made since to pre-existing weeks survive. */
+export function restoreWeekDates(leagueId: string, pre: string | null): string | null {
+  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+  const cur: Record<string, string> = league?.weekDates ? JSON.parse(league.weekDates) : {};
+  const before: Record<string, string> = pre ? JSON.parse(pre) : {};
+  const kept = Object.fromEntries(Object.entries(cur).filter(([k]) => k in before));
+  return Object.keys(kept).length || pre ? JSON.stringify(kept) : null;
+}
+
 export function unpublishDraft(leagueId: string, actor: string): PlayoffFail | { removedNotifications: number } {
   const draft = getDraft(leagueId);
   if (!draft || draft.status !== 'published') return fail(409, 'not_published', 'Bracket is not published');
@@ -234,7 +243,7 @@ export function unpublishDraft(leagueId: string, actor: string): PlayoffFail | {
   }
   return tx(() => {
     clearPlayoffMatches(leagueId);
-    db.update(schema.leagues).set({ weekDates: draft.prePublishWeekDates }).where(eq(schema.leagues.id, leagueId)).run();
+    db.update(schema.leagues).set({ weekDates: restoreWeekDates(leagueId, draft.prePublishWeekDates) }).where(eq(schema.leagues.id, leagueId)).run();
     // Unread notifications are retracted; read ones stay (the coach already saw them).
     const removed = draft.publishedAt
       ? db.delete(schema.notifications).where(and(
