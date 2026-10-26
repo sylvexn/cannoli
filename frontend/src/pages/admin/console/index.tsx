@@ -18,7 +18,7 @@ import { AdminTemplates } from '../admin-templates';
 import { AdminTierList } from '../admin-tier-list';
 import { RulesetsAdmin } from '../rulesets';
 import { SECTIONS, SETTINGS, matchSettings, type SectionId } from './registry';
-import { DraftFields, GeneralFields, useSiteSettings } from './site-form';
+import { DeadlineFields, DraftFields, GeneralFields, useSiteSettings } from './site-form';
 
 const isSection = (h: string): h is SectionId => SECTIONS.some(s => s.id === h);
 
@@ -96,9 +96,10 @@ export function SettingsConsole() {
           <h2 className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-[0.12em] text-text-secondary border-b border-border-subtle pb-1.5 mb-3">
             <section.icon size={13} />{section.label}
           </h2>
-          {(active === 'general' || active === 'draft') && site.loading && <LoadingSprite label="Loading settings..." />}
+          {(active === 'general' || active === 'draft' || active === 'deadlines') && site.loading && <LoadingSprite label="Loading settings..." />}
           {active === 'general' && !site.loading && <GeneralFields site={site} hits={hitIds} />}
           {active === 'draft' && !site.loading && <DraftFields site={site} hits={hitIds} />}
+          {active === 'deadlines' && !site.loading && <DeadlineFields site={site} hits={hitIds} />}
           {active === 'league' && <LeagueLinks />}
           {active === 'rules' && <div id="set-rulesAll" className="scroll-mt-24"><AdminRules /></div>}
           {active === 'templates' && <div id="set-templates" className="scroll-mt-24"><AdminTemplates /></div>}
