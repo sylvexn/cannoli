@@ -1,3 +1,5 @@
+import type { Ruleset } from '@cannoli/rules';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -35,6 +37,9 @@ export function TierListPage() {
   const [filter, setFilter] = useState<FilterMode>('all');
   const [format, setFormat] = useState<CostFormat>(DEFAULT_FORMAT);
   const { leagues } = useAppData();
+  // Global page: captain eligibility follows the markup table of a league on this
+  // cost format (all leagues share one today), else the default rules.
+  const rs = getLeagueRuleset(leagues.find(l => l.costFormat === format));
 
   // Build a single ownership index across every active league: pokemon name →
   // [{leagueId, leagueColor, teamAbbrev}]. Avoids 1-fetch-per-card; the
@@ -68,7 +73,7 @@ export function TierListPage() {
       list = list.filter(e => e.name.toLowerCase().includes(q));
     }
     if (filter === 'captains') {
-      list = list.filter(e => canBeTeraCaptain(e.name, format));
+      list = list.filter(e => canBeTeraCaptain(e.name, format, rs));
     } else if (filter === 'tera-banned') {
       list = list.filter(e => e.teraBanned);
     }
@@ -91,7 +96,7 @@ export function TierListPage() {
 
   const tierList = getTierList(format);
   const totalCount = tierList.length;
-  const captainCount = tierList.filter(e => canBeTeraCaptain(e.name, format)).length;
+  const captainCount = tierList.filter(e => canBeTeraCaptain(e.name, format, rs)).length;
   const banCount = getTeraBanned(format).length;
 
   return (
@@ -176,6 +181,7 @@ export function TierListPage() {
             entries={entries}
             ownershipIndex={ownershipIndex}
             format={format}
+            rs={rs}
           />
         ))}
         {byTier.length === 0 && (
@@ -207,11 +213,12 @@ interface TierSectionProps {
   entries: TierEntry[];
   ownershipIndex: Map<string, OwnershipEntry[]>;
   format: CostFormat;
+  rs: Ruleset;
 }
 
-function TierSection({ tier, entries, ownershipIndex, format }: TierSectionProps) {
+function TierSection({ tier, entries, ownershipIndex, format, rs }: TierSectionProps) {
   const accent = tierColor(tier);
-  const captainEligible = entries.filter(e => canBeTeraCaptain(e.name, format)).length;
+  const captainEligible = entries.filter(e => canBeTeraCaptain(e.name, format, rs)).length;
   const teraBanned = entries.filter(e => e.teraBanned).length;
   const owned = entries.filter(e => (ownershipIndex.get(e.name)?.length ?? 0) > 0).length;
 

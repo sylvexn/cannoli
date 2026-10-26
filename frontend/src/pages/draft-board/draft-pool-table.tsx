@@ -17,6 +17,8 @@ import type { TierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
+import { useLeague } from '@/lib/league-context';
 import { findPickConflict, type ConflictInputRoster } from '@/lib/draft-rules';
 import type { MatchReason } from '@/lib/pool-search';
 
@@ -53,11 +55,13 @@ export function DraftPoolTable({
   userMaxAffordableCost,
   drafterMaxAffordableCost,
   drafterConflictRoster,
-  pointCap = 110,
+  pointCap: pointCapProp,
   matchReasons,
   bannedNames,
   onRowClick,
 }: DraftPoolTableProps) {
+  const rules = getLeagueRuleset(useLeague());
+  const pointCap = pointCapProp ?? rules.pointCap;
   const affordCap = drafterMaxAffordableCost ?? userMaxAffordableCost;
   return (
     <Table>
@@ -89,7 +93,7 @@ export function DraftPoolTable({
           // grid's conflictKind treatment so both views read the same.
           let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
           if (showTierBadges && !ownership && drafterConflictRoster) {
-            const c = findPickConflict(entry.name, entry.tier, drafterConflictRoster, pointCap);
+            const c = findPickConflict(entry.name, entry.tier, drafterConflictRoster, pointCap, rules);
             if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
               conflictKind = c.kind;
             }

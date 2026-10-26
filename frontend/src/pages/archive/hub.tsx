@@ -26,6 +26,8 @@ interface AllTimePayload {
     seasonNumber: number;
     pointCap: number;
     teraCaptainSlots: number;
+    /** Season's ruleset snapshot, when the API provides it (wins over the legacy fields). */
+    ruleset?: { pointCap?: number; teraCaptainSlots?: number } | null;
     archived: boolean;
     leagueCount: number;
   }[];
@@ -271,9 +273,9 @@ export function ArchiveHubPage() {
                       <div className="text-[11px] text-text-muted flex items-center gap-2">
                         <span>{season.leagueCount} leagues</span>
                         <span>·</span>
-                        <span>{season.pointCap}pt cap</span>
+                        <span>{season.ruleset?.pointCap ?? season.pointCap}pt cap</span>
                         <span>·</span>
-                        <span>{season.teraCaptainSlots} captains</span>
+                        <span>{season.ruleset?.teraCaptainSlots ?? season.teraCaptainSlots} captains</span>
                       </div>
 
                       {seasonChampions.length > 0 ? (

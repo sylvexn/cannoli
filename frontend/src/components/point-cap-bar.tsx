@@ -1,4 +1,6 @@
 import { cn } from '@/lib/utils';
+import { useLeagueOptional } from '@/lib/league-context';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 
 interface PointCapBarProps {
   used: number;
@@ -13,7 +15,8 @@ const COLORS = {
 };
 
 /** Compact bar for sidebars, popovers, standings rows */
-export function PointCapBar({ used, total = 110, className }: PointCapBarProps) {
+export function PointCapBar({ used, total: totalProp, className }: PointCapBarProps) {
+  const total = totalProp ?? getLeagueRuleset(useLeagueOptional()).pointCap;
   const pct = Math.min((used / total) * 100, 100);
   const remaining = total - used;
   const palette = pct > 95 ? COLORS.crit : pct > 80 ? COLORS.warn : COLORS.neon;
@@ -40,7 +43,8 @@ export function PointCapBar({ used, total = 110, className }: PointCapBarProps) 
 }
 
 /** Large featured bar for team profile page */
-export function PointCapBarLarge({ used, total = 110, className }: PointCapBarProps) {
+export function PointCapBarLarge({ used, total: totalProp, className }: PointCapBarProps) {
+  const total = totalProp ?? getLeagueRuleset(useLeagueOptional()).pointCap;
   const pct = Math.min((used / total) * 100, 100);
   const remaining = total - used;
   const palette = pct > 95 ? COLORS.crit : pct > 80 ? COLORS.warn : COLORS.neon;

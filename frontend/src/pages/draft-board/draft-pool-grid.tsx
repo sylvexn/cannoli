@@ -9,6 +9,9 @@ import { getTeraBanned } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
+import { useLeague } from '@/lib/league-context';
+import { captainEligible } from '@cannoli/rules';
 import { findPickConflict, isMegaForm, type ConflictInputRoster } from '@/lib/draft-rules';
 import type { MatchReason } from '@/lib/pool-search';
 
@@ -72,7 +75,7 @@ export function DraftPoolGrid({
   userConflictRoster,
   drafterConflictRoster,
   drafterMaxAffordableCost,
-  pointCap = 110,
+  pointCap: pointCapProp,
   draftQueue = [],
   density = 'comfortable',
   animatingPokemonName,
@@ -83,6 +86,8 @@ export function DraftPoolGrid({
   onCardHoverStart,
   onCardHoverEnd,
 }: DraftPoolGridProps) {
+  const rules = getLeagueRuleset(useLeague());
+  const pointCap = pointCapProp ?? rules.pointCap;
   if (poolByTier.length === 0 && bannedNames.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-text-muted text-sm">
@@ -161,7 +166,7 @@ export function DraftPoolGrid({
                 // Captain reserve is a soft warning shown in the popover, not on cards.
                 let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
                 if (showTierBadges && !ownership && conflictRoster) {
-                  const c = findPickConflict(entry.name, entry.tier, conflictRoster, pointCap);
+                  const c = findPickConflict(entry.name, entry.tier, conflictRoster, pointCap, rules);
                   if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
                     conflictKind = c.kind;
                   }
@@ -170,9 +175,9 @@ export function DraftPoolGrid({
                 const isMega = isMegaForm(entry.name);
                 const isTeraBanned = getTeraBanned(format).includes(entry.name);
                 // entry.teraBanned already reflects the format-correct ban list (entries
-                // come from a format-aware pool). The explicit tier range also guards the
-                // rule that only tiers 1–9 are captain-eligible.
-                const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9 && !entry.teraBanned;
+                // come from a format-aware pool). Eligibility otherwise comes from the
+                // ruleset's markup table.
+                const isCaptainEligible = captainEligible(rules, entry);
                 const isAnimating = animatingPokemonName === entry.name;
 
                 return (

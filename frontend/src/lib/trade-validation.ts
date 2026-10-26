@@ -6,7 +6,7 @@
  * Rules mirrored:
  *   - point cap (using mon.tier — locked at draft, mirrors backend costAtDraft —
  *     with the tera-captain markup applied, same as backend effectiveCost)
- *   - max 1 mega per team
+ *   - mega cap per team (ruleset.megaCap)
  *   - no duplicate species (proxy for the national-dex check)
  *   - roster band: neither team may exceed its max NOR drop below its min after
  *     the swap (min/max default to the league rosterSize when the band is unset)
@@ -24,6 +24,7 @@
  */
 
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
+import { DEFAULT_RULESET, megaLimit, type Ruleset } from '@cannoli/rules';
 import { getTermCost } from '@/data/tier-list';
 import type { Player } from '@/lib/types';
 
@@ -48,9 +49,9 @@ export function effectiveRoster(team: Player, pending?: PendingByTeam): Slot[] {
 }
 
 /** Points a slot contributes — captains carry the tera markup (backend: effectiveCost). */
-function slotCost(m: Slot): number {
+function slotCost(m: Slot, rs: Ruleset = DEFAULT_RULESET): number {
   const tier = m.tier || 0;
-  return m.isTeraCaptain ? getTermCost(tier) : tier;
+  return m.isTeraCaptain ? getTermCost(tier, rs) : tier;
 }
 
 /**
@@ -79,6 +80,8 @@ export interface ValidateTradeOpts {
   offering: Set<string>;
   requesting: Set<string>;
   pointCap: number;
+  /** League ruleset (markup table, mega cap). Omitted = default rules. */
+  ruleset?: Ruleset;
   /** League roster band — effective max a side may hold after the swap.
    *  If provided, validates neither side goes over. */
   maxRosterSize?: number;
@@ -90,7 +93,8 @@ export interface ValidateTradeOpts {
 }
 
 export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
-  const { proposer, recipient, offering, requesting, pointCap, maxRosterSize, minRosterSize, pending } = opts;
+  const { proposer, recipient, offering, requesting, pointCap, maxRosterSize, minRosterSize, pending, ruleset = DEFAULT_RULESET } = opts;
+  const megaMax = megaLimit(ruleset);
   const issues: ValidationIssue[] = [];
 
   // Nothing selected on a side yet → not-yet-legal, but don't nag.
@@ -137,15 +141,15 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
     }
 
     // Point cap
-    const total = roster.reduce((s, m) => s + slotCost(m), 0);
+    const total = roster.reduce((s, m) => s + slotCost(m, ruleset), 0);
     if (total > pointCap) {
       issues.push({ side, message: `${label} would exceed point cap (${total} > ${pointCap})` });
     }
 
     // Mega cap
     const megas = roster.filter(m => isMegaForm(m.name));
-    if (megas.length > 1) {
-      issues.push({ side, message: `${label} would have ${megas.length} megas (${megas.map(m => m.name).join(', ')}) — max 1` });
+    if (megas.length > megaMax) {
+      issues.push({ side, message: `${label} would have ${megas.length} megas (${megas.map(m => m.name).join(', ')}) — ${megaMax === 0 ? 'none allowed' : `max ${megaMax}`}` });
     }
 
     // Duplicate species
@@ -168,15 +172,15 @@ export function validateTrade(opts: ValidateTradeOpts): ValidationIssue[] {
 }
 
 /** Sum of effective (captain-marked-up) costs for the named pokemon on a roster. */
-export function pointDelta(team: Player, names: Set<string>, pending?: PendingByTeam): number {
+export function pointDelta(team: Player, names: Set<string>, pending?: PendingByTeam, rs?: Ruleset): number {
   return effectiveRoster(team, pending)
     .filter(m => names.has(m.name))
-    .reduce((s, m) => s + slotCost(m), 0);
+    .reduce((s, m) => s + slotCost(m, rs), 0);
 }
 
 /** Total effective cost of a roster. */
-export function rosterTotal(team: Player, pending?: PendingByTeam): number {
-  return effectiveRoster(team, pending).reduce((s, m) => s + slotCost(m), 0);
+export function rosterTotal(team: Player, pending?: PendingByTeam, rs?: Ruleset): number {
+  return effectiveRoster(team, pending).reduce((s, m) => s + slotCost(m, rs), 0);
 }
 
 export interface SidePoints {
@@ -201,16 +205,17 @@ export function tradePointSummary(
   requesting: Set<string>,
   pointCap: number,
   pending?: PendingByTeam,
+  rs?: Ruleset,
 ): { proposer: SidePoints; recipient: SidePoints } {
   // What each side gives up carries its captain markup; what it receives lands
   // as a non-captain, so it only costs base tier.
   const base = (team: Player, names: Set<string>) => effectiveRoster(team, pending)
     .filter(m => names.has(m.name))
     .reduce((s, m) => s + (m.tier || 0), 0);
-  const offeringPts = pointDelta(proposer, offering, pending);
-  const requestingPts = pointDelta(recipient, requesting, pending);
-  const proposerBefore = rosterTotal(proposer, pending);
-  const recipientBefore = rosterTotal(recipient, pending);
+  const offeringPts = pointDelta(proposer, offering, pending, rs);
+  const requestingPts = pointDelta(recipient, requesting, pending, rs);
+  const proposerBefore = rosterTotal(proposer, pending, rs);
+  const recipientBefore = rosterTotal(recipient, pending, rs);
   const proposerAfter = proposerBefore - offeringPts + base(recipient, requesting);
   const recipientAfter = recipientBefore - requestingPts + base(proposer, offering);
   return {

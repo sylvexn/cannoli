@@ -5,7 +5,7 @@ import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { getTermCost, canBeTeraCaptain, DEFAULT_FORMAT } from '@/data/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
-import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
+import { ruleConfig } from '@/lib/league-ruleset';
 import type { PokemonType } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
@@ -76,7 +76,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   // from `canManage` (which also includes team owners).
   const isAdmin = isStaff(user);
   const season = league.season;
-  const config = DEFAULT_LEAGUE_CONFIG;
+  const config = useMemo(() => ruleConfig(league), [league]);
+  const rs = config.ruleset;
 
   // Preload sprites for entire roster + free agent pool (theorycraft swaps)
   useEffect(() => {
@@ -154,8 +155,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     const indexed = activeRoster.map((mon, i) => ({ mon, originalIndex: i }));
     indexed.sort((a, b) => {
       let av: number, bv: number;
-      const aCost = a.mon.isTeraCaptain ? getTermCost(a.mon.tier) : a.mon.tier;
-      const bCost = b.mon.isTeraCaptain ? getTermCost(b.mon.tier) : b.mon.tier;
+      const aCost = a.mon.isTeraCaptain ? getTermCost(a.mon.tier, rs) : a.mon.tier;
+      const bCost = b.mon.isTeraCaptain ? getTermCost(b.mon.tier, rs) : b.mon.tier;
       switch (sortKey) {
         case 'tier': av = aCost; bv = bCost; break;
         case 'kills': av = a.mon.seasonStats.kills; bv = b.mon.seasonStats.kills; break;
@@ -172,8 +173,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     return indexed;
   }, [activeRoster, sortKey, sortDir]);
 
-  const pointsUsed = rosterPointsUsed(activeRoster);
-  const originalPoints = rosterPointsUsed(player.roster);
+  const pointsUsed = rosterPointsUsed(activeRoster, rs);
+  const originalPoints = rosterPointsUsed(player.roster, rs);
   const pointsDelta = pointsUsed - originalPoints;
   const captainCount = teraCaptainCount(activeRoster);
   const departed = player.departed ?? [];
@@ -280,8 +281,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       setTeraEditingIndex(null);
     } else {
       // Make captain (if valid)
-      if (!canBeTeraCaptain(mon.name, costFormat)) return;
-      const newCost = getTermCost(mon.tier);
+      if (!canBeTeraCaptain(mon.name, costFormat, rs)) return;
+      const newCost = getTermCost(mon.tier, rs);
       const oldCost = mon.tier;
       if (pointsUsed - oldCost + newCost > config.pointCap) return;
       if (captainCount >= config.teraCaptainSlots) return;

@@ -4,6 +4,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
 import { PokemonSprite } from '@/components/pokemon-sprite';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import { getTermCost, canBeTeraCaptain, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { Save, X, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +15,7 @@ import { getErrorMessage } from '@/lib/errors';
 interface TeraCaptainStripProps {
   activeRoster: RosterPokemon[];
   captainCount: number;
-  config: { teraCaptainSlots: number; pointCap: number };
+  config: RuleConfig;
   theorycraftMode: boolean;
   /** Whether the user can edit tera captains (theorycraft mode OR admin) */
   canEdit: boolean;
@@ -77,8 +78,8 @@ export function TeraCaptainStrip({
     .map((mon, i) => ({ mon, index: i }))
     .filter(({ mon }) => {
       if (mon.isTeraCaptain) return false;
-      if (!canBeTeraCaptain(mon.name, costFormat)) return false;
-      const costDelta = getTermCost(mon.tier) - mon.tier;
+      if (!canBeTeraCaptain(mon.name, costFormat, config.ruleset)) return false;
+      const costDelta = getTermCost(mon.tier, config.ruleset) - mon.tier;
       if (pointsUsed + costDelta > config.pointCap) return false;
       return true;
     });
@@ -177,7 +178,7 @@ export function TeraCaptainStrip({
                     </div>
                   )}
                   <div className="text-[10px] text-text-muted">
-                    {getTermCost(mon.tier)}pt
+                    {getTermCost(mon.tier, config.ruleset)}pt
                     <span className="text-text-muted ml-1">(base {mon.tier})</span>
                   </div>
                 </div>
@@ -228,12 +229,12 @@ export function TeraCaptainStrip({
               {isEditing && canEdit && (
                 <div className="px-3 pb-2.5 pt-1.5 border-t border-pink/10">
                   <div className="text-[9px] text-pink/60 font-semibold uppercase tracking-wider mb-1.5">
-                    Select up to 3 types
+                    Select up to {config.ruleset.teraTypesPerCaptain} types
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {POKEMON_TYPES.map(type => {
                       const isSelected = types.includes(type);
-                      const atMax = types.length >= 3 && !isSelected;
+                      const atMax = types.length >= config.ruleset.teraTypesPerCaptain && !isSelected;
                       return (
                         <button
                           key={type}
@@ -285,7 +286,7 @@ export function TeraCaptainStrip({
                   </div>
                 ) : (
                   eligible.map(({ mon, index: eligIdx }) => {
-                    const costDelta = getTermCost(mon.tier) - mon.tier;
+                    const costDelta = getTermCost(mon.tier, config.ruleset) - mon.tier;
                     return (
                       <button
                         key={eligIdx}

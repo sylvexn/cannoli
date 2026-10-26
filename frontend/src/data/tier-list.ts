@@ -7,6 +7,8 @@
  * without a format) default to 'natdexplus'.
  */
 
+import { DEFAULT_MARKUP, DEFAULT_RULESET, captainEligible, markupCost, type Ruleset } from '@cannoli/rules';
+
 export type CostFormat = 'natdex' | 'natdexplus';
 export const COST_FORMATS: CostFormat[] = ['natdex', 'natdexplus'];
 export const DEFAULT_FORMAT: CostFormat = 'natdexplus';
@@ -20,13 +22,17 @@ export interface TierEntry {
   teraBanned: boolean;
 }
 
-// Tera cost schedule (tiers 9 and below cost more as captains)
-const TERA_COST_MAP: Record<number, number> = {
-  9: 12, 8: 10, 7: 9, 6: 8, 5: 6, 4: 5, 3: 4, 2: 2, 1: 1,
-};
+/** The slice of a Ruleset the cost helpers read. Omitted = the default (standard) rules. */
+export type TeraRules = Pick<Ruleset, 'teraEnabled' | 'teraMarkup'>;
 
-export function getTermCost(baseTier: number): number {
-  return TERA_COST_MAP[baseTier] ?? baseTier;
+/** Captain cost for a base tier under the ruleset's markup table. */
+export function getTermCost(baseTier: number, rs: TeraRules = DEFAULT_RULESET): number {
+  return markupCost(rs, baseTier, true);
+}
+
+/** Captain cost of a tier entry under `rs` (TierEntry.teraCost is the default-rules value). */
+export function teraCostFor(entry: Pick<TierEntry, 'tier'>, rs: TeraRules = DEFAULT_RULESET): number {
+  return markupCost(rs, entry.tier, true);
 }
 
 // Raw per-format data
@@ -99,7 +105,7 @@ function build(data: FormatData): BuiltFormat {
     names.map((name) => ({
       name,
       tier,
-      teraCost: TERA_COST_MAP[tier] ?? tier,
+      teraCost: DEFAULT_MARKUP[tier] ?? tier,
       teraBanned: teraBannedSet.has(name),
     })),
   );
@@ -126,19 +132,16 @@ export function getTierEntry(name: string, format?: CostFormat): TierEntry | und
 }
 
 /** Get the effective point cost for a Pokemon on a roster */
-export function getEffectiveCost(name: string, isTeraCaptain: boolean, format?: CostFormat): number {
+export function getEffectiveCost(name: string, isTeraCaptain: boolean, format?: CostFormat, rs?: TeraRules): number {
   const entry = fmt(format).byName.get(name);
   if (!entry) return 0;
-  return isTeraCaptain ? entry.teraCost : entry.tier;
+  return isTeraCaptain ? teraCostFor(entry, rs) : entry.tier;
 }
 
-/** Check if a Pokemon can be a tera captain (tiers 1-9 only, not tera-banned) */
-export function canBeTeraCaptain(name: string, format?: CostFormat): boolean {
+/** Captain-eligible: tier present in the ruleset's markup table and not tera-banned. */
+export function canBeTeraCaptain(name: string, format?: CostFormat, rs: TeraRules = DEFAULT_RULESET): boolean {
   const entry = fmt(format).byName.get(name);
-  if (!entry) return false;
-  if (entry.teraBanned) return false;
-  if (entry.tier > 9) return false;
-  return true;
+  return !!entry && captainEligible(rs, entry);
 }
 
 // Format-agnostic exports (default 'natdexplus')

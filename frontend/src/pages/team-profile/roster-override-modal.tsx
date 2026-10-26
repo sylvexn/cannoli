@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { ShieldAlert, X, Plus, Undo2, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Player, RosterPokemon, LeagueConfig, LeagueSeason } from '@/lib/types';
+import type { Player, RosterPokemon, LeagueSeason } from '@/lib/types';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import { getTermCost, getBanned, type CostFormat } from '@/data/tier-list';
 import { isMegaForm, getBaseFormName } from '@/lib/draft-rules';
+import { megaLimit } from '@cannoli/rules';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { api } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
@@ -28,7 +30,7 @@ interface RosterOverrideModalProps {
   leagueId: string;
   players: Player[];
   costFormat: CostFormat;
-  config: LeagueConfig;
+  config: RuleConfig;
   season: LeagueSeason | null | undefined;
   onClose: () => void;
   onCommitted: () => void;
@@ -38,8 +40,8 @@ interface RosterOverrideModalProps {
  * Effective point cost of a roster entry (tera-captain markup folded in).
  * Mirrors rosterPointsUsed's per-mon rule so the row badges agree with the meter.
  */
-function effectiveCost(mon: RosterPokemon): number {
-  return mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier;
+function effectiveCost(mon: RosterPokemon, config: RuleConfig): number {
+  return mon.isTeraCaptain ? getTermCost(mon.tier, config.ruleset) : mon.tier;
 }
 
 /**
@@ -50,14 +52,14 @@ function effectiveCost(mon: RosterPokemon): number {
  */
 function computeSoftWarnings(
   roster: RosterPokemon[],
-  config: LeagueConfig,
+  config: RuleConfig,
   season: LeagueSeason | null | undefined,
   costFormat: CostFormat,
 ): string[] {
   const issues: string[] = [];
 
   // Point cap (effective, incl. captain markup)
-  const total = rosterPointsUsed(roster);
+  const total = rosterPointsUsed(roster, config.ruleset);
   if (total > config.pointCap) {
     issues.push(`Over point cap — ${total}/${config.pointCap}pt (+${total - config.pointCap})`);
   }
@@ -72,10 +74,11 @@ function computeSoftWarnings(
     issues.push(`Roster has ${roster.length} Pokemon (min ${effMin})`);
   }
 
-  // Mega cap — max 1 per team
+  // Mega cap (ruleset: null = unlimited, 0 = none)
+  const megaMax = megaLimit(config.ruleset);
   const megas = roster.filter(m => isMegaForm(m.name));
-  if (megas.length > 1) {
-    issues.push(`${megas.length} megas (${megas.map(m => m.name).join(', ')}) — max 1`);
+  if (megas.length > megaMax) {
+    issues.push(`${megas.length} megas (${megas.map(m => m.name).join(', ')}) — ${megaMax === 0 ? 'none allowed' : `max ${megaMax}`}`);
   }
 
   // Duplicate species (base-form proxy for the natdex check)
@@ -132,8 +135,8 @@ export function RosterOverrideModal({
     return [...kept, ...additions];
   }, [base, removedIds, additions]);
 
-  const pointsUsed = rosterPointsUsed(projected);
-  const originalPoints = rosterPointsUsed(base);
+  const pointsUsed = rosterPointsUsed(projected, config.ruleset);
+  const originalPoints = rosterPointsUsed(base, config.ruleset);
   const pointsDelta = pointsUsed - originalPoints;
   const captainCount = teraCaptainCount(projected);
 
@@ -290,7 +293,7 @@ export function RosterOverrideModal({
                       marked ? 'text-text-muted line-through' : 'text-text-primary',
                     )}
                   />
-                  <TierBadge points={effectiveCost(mon)} className="shrink-0" />
+                  <TierBadge points={effectiveCost(mon, config)} className="shrink-0" />
                   {mon.isTeraCaptain && (
                     <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-pink shrink-0">
                       Cap
@@ -336,7 +339,7 @@ export function RosterOverrideModal({
                   format={costFormat}
                   className="text-sm font-semibold text-text-primary truncate hover:text-neon transition-colors"
                 />
-                <TierBadge points={effectiveCost(mon)} className="shrink-0" />
+                <TierBadge points={effectiveCost(mon, config)} className="shrink-0" />
                 <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-win shrink-0">
                   New
                 </span>
