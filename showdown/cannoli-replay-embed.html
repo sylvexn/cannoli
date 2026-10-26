@@ -232,7 +232,7 @@
       <button data-action="next-turn" title="Next turn" aria-label="Next turn">
         <i class="fa fa-step-forward"></i>
       </button>
-      <button data-action="goto-turn" title="Go to turn…" aria-label="Go to turn">
+      <button data-action="last-turn" title="Skip to last turn" aria-label="Skip to last turn">
         <i class="fa fa-fast-forward"></i>
       </button>
     </div>
@@ -465,20 +465,11 @@
         case 'next-turn':
           battle.skipTurn();
           break;
-        case 'goto-turn': {
-          var t = window.prompt('Go to turn (e/end for final):');
-          if (t == null) break;
-          t = String(t).trim();
-          if (!t) break;
-          if (t === 'e' || t === 'end' || t === 'f' || t === 'finish') {
-            battle.seekTurn(Infinity);
-          } else {
-            var n = Number(t);
-            if (isNaN(n) || n < 0) { window.alert('Invalid turn'); break; }
-            battle.seekTurn(n);
-          }
+        case 'last-turn':
+          // window.prompt is blocked in the sandboxed iframe (no allow-modals),
+          // so this jumps straight to the final turn.
+          battle.seekTurn(Infinity);
           break;
-        }
         case 'mute':
           if (muted || volume === 0) {
             // Unmute → restore the slider's level (or a sensible default).

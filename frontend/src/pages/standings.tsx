@@ -52,10 +52,14 @@ export function StandingsPage() {
     currentSeason.phase === 'playoffs' ||
     currentSeason.phase === 'offseason' ||
     currentSeason.archived === true;
+  // In the playoffs phase the bracket view is offered (and led with) even
+  // before any playoff fixture exists — the bracket shows its own empty state —
+  // so the regular-season table never masquerades as the current surface.
+  const showBracket = hasPlayoffs || currentSeason.phase === 'playoffs';
   const [view, setView] = useState<StandingsView>('standings');
   useEffect(() => {
-    if (hasPlayoffs && isPlayoffPhase) setView('playoffs');
-  }, [hasPlayoffs, isPlayoffPhase]);
+    if (showBracket && isPlayoffPhase) setView('playoffs');
+  }, [showBracket, isPlayoffPhase]);
 
   // Find the last completed week and next upcoming week
   const { recentWeek, upcomingWeek } = useMemo(() => {
@@ -141,7 +145,7 @@ export function StandingsPage() {
          *  table otherwise. */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ResultsRevealQuickAction league={league} onRevealed={refresh} />
-          {hasPlayoffs && (
+          {showBracket && (
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
                 onClick={() => setView('standings')}
@@ -172,7 +176,7 @@ export function StandingsPage() {
         </div>
       </div>
 
-      {view === 'playoffs' && hasPlayoffs ? (
+      {view === 'playoffs' && showBracket ? (
         <PlayoffsFinalView />
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
