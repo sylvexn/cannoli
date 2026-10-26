@@ -125,13 +125,13 @@ function seedSiteSettings() {
 // Seed pin definitions
 //
 // Net-new auto-pin defs added when the archive feature shipped. The earlier
-// award set (garchomp/cannoli/cynthia/kingslayer/flawless + manual pins) lives
+// award set (garchomp/cannoli/cynthia + manual pins) lives
 // in migration 0022_real_awards.sql; that's where the canonical defs come
 // from. These four close the gaps: Champion (was DELETEd in 0022, restored
 // here for finals-winner recognition), High Score (single-game kill record),
 // Steal of the Draft (auto-derived best K/point value, distinct from the
-// manual `best-draft`), and Sweeper (most 6-0 sweeps, distinct from the
-// per-match `flawless`). Mint logic lives in lib/pins/archive-mint.ts.
+// manual `best-draft`), and Sweeper (most 6-0 sweeps)
+// Mint logic lives in lib/pins/archive-mint.ts.
 
 const ARCHIVE_PIN_DEFINITIONS = [
   {

@@ -3,7 +3,7 @@
  *
  * Pre-fix, force-result set status='completed' but never called
  * runAutoAwards or advancePlayoffWinner — the admin's forfeit/dispute tool,
- * exactly the messiest, most Kingslayer-relevant matches, silently never
+ * exactly the messiest, most award-relevant matches, silently never
  * earned pins and never advanced playoff brackets. Two things are proven
  * here against the REAL mounted route (mirrors admin-auth-guard.test.ts's
  * harness):
@@ -85,7 +85,7 @@ describe('force-result — advances the playoff bracket', () => {
         seasonNumber: 9901, pointCap: 110, teraCaptainSlots: 2, archived: false,
       }).returning().get();
       const leagueId = `${PFX}lg`;
-      const teamA = `${PFX}A`; // owned — QF winner, gets Flawless
+      const teamA = `${PFX}A`; // owned — QF winner
       const teamB = `${PFX}B`; // unowned — QF loser
       const teamC = `${PFX}C`; // unowned — already sits in the SF home slot
 

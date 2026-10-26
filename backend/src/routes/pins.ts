@@ -444,7 +444,7 @@ function manualAwardsForSeason(season: number): ManualAward[] | null {
 
 /**
  * True when this pin points at a match the viewer isn't allowed to see yet.
- * Kingslayer/Flawless carry `metadata.matchId` (see lib/pins/auto-award.ts), so
+ * Per-match pins (high-score) carry `metadata.matchId` (see lib/pins/auto-award.ts), so
  * resolving it to the match's leagueId/week reuses the exact `isMatchRevealed`
  * gate routes/matches.ts already applies (commit 48d5124) rather than inventing
  * a parallel one. Callers drop the whole pin when this is true.

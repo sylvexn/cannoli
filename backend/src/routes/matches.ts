@@ -640,7 +640,7 @@ export const matchRoutes = new Elysia()
         }
       }
 
-      // Drop per-match pins (kingslayer, flawless) earned by the voided result.
+      // Drop per-match pins earned by the voided result.
       db.run(sql`DELETE FROM pins WHERE match_id = ${params.matchId}`);
 
       db.insert(schema.activityLog).values({

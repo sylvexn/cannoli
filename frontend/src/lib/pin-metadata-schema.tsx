@@ -3,7 +3,7 @@
  * pin definition (`metadataFields`, edited in the admin definition dialog),
  * not hardcoded here. This module only turns a stored metadata blob into the
  * tooltip detail line — Pokemon and team names as real links, per the
- * cross-linking convention. Stat pins (champion, kingslayer, ...) get a
+ * cross-linking convention. Stat pins (champion, ...) get a
  * purpose-built line; everything else renders its declared pokemon/nickname.
  */
 import type { ReactNode } from 'react';
@@ -128,24 +128,6 @@ export function formatPinMetadata(
           {runnerUp && <> vs {team(runnerUp, leagueId)}</>}
         </>
       );
-    }
-
-    case 'kingslayer': {
-      const winnerRank = num(metadata, 'winnerRank');
-      const loserRank = num(metadata, 'loserRank');
-      const loserTeamId = str(metadata, 'loserTeamId');
-      if (winnerRank == null || loserRank == null) return null;
-      return (
-        <>
-          Upset — #{winnerRank} seed beat #{loserRank}
-          {loserTeamId && <> ({team(loserTeamId, leagueId)})</>}
-        </>
-      );
-    }
-
-    case 'flawless': {
-      const scoreLine = str(metadata, 'scoreLine');
-      return scoreLine ? `Flawless — won ${scoreLine}` : null;
     }
 
     default: {

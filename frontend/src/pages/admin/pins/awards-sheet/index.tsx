@@ -1,12 +1,11 @@
 /**
  * Awards Sheet - one screen per season for curating awards. Pick a pin at the
- * top; each league is a section with one row per team (or per qualifying
- * match). Engine suggestions are pre-shown and one click to accept. "Save"
+ * top; each league is a section with one row per team. Engine suggestions are pre-shown and one click to accept. "Save"
  * writes unpublished drafts in one transactional POST; "Publish" makes the
  * season's awards public (no notifications).
  */
 import { useState } from 'react';
-import { Eye, RotateCcw, Save, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, RotateCcw, Save, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,7 +34,7 @@ export function AwardsSheet({
   const [defId, setDefId] = useState<string | null>(initialDefId ?? defs[0]?.id ?? null);
   const sheet = useAwardsSheet(season.id, defId);
   const [showDiff, setShowDiff] = useState(false);
-  const [publishing, setPublishing] = useState<{ leagueId: string | null } | null>(null);
+  const [publishing, setPublishing] = useState<{ leagueId: string | null; published: boolean } | null>(null);
   const def = defs.find(d => d.id === defId) ?? null;
 
   const perDef = new Map<string, number>();
@@ -57,13 +56,13 @@ export function AwardsSheet({
     if (!publishing) return;
     try {
       const r = await api.publishPins(
-        { seasonId: season.id, leagueId: publishing.leagueId }, season.archived);
-      toast.success(`Published ${r.count} award${r.count === 1 ? '' : 's'}`);
+        { seasonId: season.id, leagueId: publishing.leagueId, published: publishing.published }, season.archived);
+      toast.success(`${publishing.published ? 'Published' : 'Unpublished'} ${r.count} award${r.count === 1 ? '' : 's'}`);
       setPublishing(null);
       await sheet.load();
       onChanged();
     } catch (e) {
-      toast.error(getErrorMessage(e, 'Publish failed'));
+      toast.error(getErrorMessage(e, publishing.published ? 'Publish failed' : 'Unpublish failed'));
     }
   }
 
@@ -150,7 +149,7 @@ export function AwardsSheet({
                 action={
                   <Button
                     variant="ghost" size="sm" className="h-6 text-[10px]"
-                    onClick={() => setPublishing({ leagueId: l.id })}
+                    onClick={() => setPublishing({ leagueId: l.id, published: true })}
                     title="Publish this league's awards"
                   >
                     <Eye size={10} />
@@ -170,11 +169,19 @@ export function AwardsSheet({
         </div>
         <Button
           size="sm" className="h-7 text-[11px]"
-          onClick={() => setPublishing({ leagueId: null })}
+          onClick={() => setPublishing({ leagueId: null, published: true })}
           disabled={sheet.draftCount === 0}
         >
           <Eye size={11} />
           Publish season awards
+        </Button>
+        <Button
+          variant="outline" size="sm" className="h-7 text-[11px]"
+          onClick={() => setPublishing({ leagueId: null, published: false })}
+          disabled={sheet.publishedCount === 0}
+        >
+          <EyeOff size={11} />
+          Unpublish season awards
         </Button>
       </div>
 
@@ -195,16 +202,19 @@ export function AwardsSheet({
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>
-                Publish S{season.seasonNumber} awards{publishing.leagueId ? ` (${publishing.leagueId})` : ''}
+                {publishing.published ? 'Publish' : 'Unpublish'} S{season.seasonNumber} awards{publishing.leagueId ? ` (${publishing.leagueId})` : ''}
               </DialogTitle>
               <DialogDescription>
-                Every saved draft {publishing.leagueId ? 'in this league ' : ''}becomes public on team,
-                coach and archive pages. No notifications are sent.
+                {publishing.published
+                  ? <>Every saved draft {publishing.leagueId ? 'in this league ' : ''}becomes public on team,
+                    coach and archive pages. No notifications are sent.</>
+                  : <>Every published award {publishing.leagueId ? 'in this league ' : ''}goes back to staff-only
+                    drafts and disappears from team, coach and archive pages. Selections are kept.</>}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="ghost" size="sm" onClick={() => setPublishing(null)}>Cancel</Button>
-              <Button size="sm" onClick={confirmPublish}>Publish</Button>
+              <Button size="sm" onClick={confirmPublish}>{publishing.published ? 'Publish' : 'Unpublish'}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

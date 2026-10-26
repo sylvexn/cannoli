@@ -89,8 +89,8 @@ describe('GET /api/users/:username/pins — results-reveal redaction', () => {
   // Two distinct defs (not two rows of the same def) — the identity index is
   // (user, def, season, league), and this user earns each per-match pin once
   // per match in real usage, so two matches need two defs here.
-  const defHidden = `${PFX}-def-kingslayer`;
-  const defRevealed = `${PFX}-def-flawless`;
+  const defHidden = `${PFX}-def-hidden`;
+  const defRevealed = `${PFX}-def-revealed`;
   let recipient: { id: number; username: string };
 
   beforeAll(() => {
@@ -116,8 +116,8 @@ describe('GET /api/users/:username/pins — results-reveal redaction', () => {
     }).returning().get();
 
     db.insert(schema.pinDefinitions).values([
-      { id: defHidden, name: 'Test Kingslayer', description: '', iconName: 'Swords', color: '#fbbf24', category: 'week', isAuto: true },
-      { id: defRevealed, name: 'Test Flawless', description: '', iconName: 'Shield', color: '#fbbf24', category: 'week', isAuto: true },
+      { id: defHidden, name: 'Test Hidden', description: '', iconName: 'Swords', color: '#fbbf24', category: 'week', isAuto: true },
+      { id: defRevealed, name: 'Test Revealed', description: '', iconName: 'Shield', color: '#fbbf24', category: 'week', isAuto: true },
     ]).run();
 
     db.insert(schema.pins).values([
@@ -142,7 +142,7 @@ describe('GET /api/users/:username/pins — results-reveal redaction', () => {
     const rows = await res.json() as { pinDefId: string; metadata: Record<string, unknown> | null }[];
 
     // Stripping spoiler fields is not enough: the pin's own existence leaks the
-    // result ("won Flawless in week 6" names the winner even with no scoreline),
+    // result ("won a match in week 6" names the winner even with no scoreline),
     // so an unrevealed pin must not appear in the payload at all.
     expect(rows.find(r => r.pinDefId === defHidden)).toBeUndefined();
 
