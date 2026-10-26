@@ -38,6 +38,11 @@ const BATTLE_ONLY_SUFFIXES = new Set([
   'Terastal', 'Stellar', // Terapagos (Tera Shift / Tera Form)
   'Gulping', 'Gorging',  // Cramorant (Gulp Missile)
   'Meteor',              // Minior (Shields Down)
+  // Purely cosmetic variants (battle logs carry them, rosters store the base):
+  'Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Indigo', 'Violet', // Minior colours, Florges/Squawkabilly
+  'Star', 'Dandy', 'Debutante', 'Diamond', 'Heart', 'Kabuki', 'La Reine', 'Matron', 'Pharaoh', // Furfrou trims
+  'Three', 'Segment', 'Four',                                     // Dudunsparce / Maushold
+  'Masterpiece', 'Unremarkable', 'Artisan',                       // Sinistcha / Poltchageist
 ]);
 
 function stripTeraSuffix(name: string): string {
