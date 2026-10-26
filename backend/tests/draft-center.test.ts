@@ -26,7 +26,7 @@ const lookup = (n: string) => {
   const c = COSTS[n];
   return c ? { tier: c.tier, banned: !!c.banned, teraBanned: !!c.teraBanned } : undefined;
 };
-const RS: Ruleset = { ...DEFAULT_RULESET, pointCap: 50, rosterSize: 4, teraCaptainSlots: 1 };
+const RS: Ruleset = { ...DEFAULT_RULESET, pointCap: 50, rosterSize: 4, rosterMax: null, teraCaptainSlots: 1 };
 const mon = (name: string, over: Partial<DcMon> = {}): DcMon => ({ name, captain: false, teraTypes: [], ...over });
 const codes = (r: DcMon[], rs = RS) => validateRoster(r, rs, lookup).violations.map(v => v.code);
 
@@ -93,6 +93,7 @@ describe('draft-center sanitize', () => {
 
 const tag = `dc-${Date.now()}`;
 const userIds: number[] = [];
+const rulesetIds: number[] = [];
 let app: Elysia;
 let seasonId: number;
 const leagueId = `${tag}-lg`;
@@ -140,6 +141,7 @@ afterAll(() => {
       db.delete(schema.users).where(eq(schema.users.id, id)).run();
     }
     db.delete(schema.leagues).where(eq(schema.leagues.id, leagueId)).run();
+    for (const id of rulesetIds) db.delete(schema.rulesets).where(eq(schema.rulesets.id, id)).run();
     db.delete(schema.seasons).where(eq(schema.seasons.id, seasonId)).run();
   } catch { /* DB may be closed during teardown */ }
 });
@@ -148,7 +150,7 @@ describe('draft-center ruleset resolver', () => {
   test('derives from a league; unknown league falls back to the default', () => {
     const rs = resolveRuleset(leagueId);
     expect(rs).toMatchObject({ pointCap: 99, rosterSize: 8, teraCaptainSlots: 3, costFormat: 'natdex', leagueId });
-    expect(rs.label).toBe('S991 Topaz — NatDex');
+    expect(rs.label).toBe('Topaz League (derived)');
     expect(resolveRuleset('nope')).toBe(DEFAULT_RULESET);
     expect(resolveRuleset(null)).toBe(DEFAULT_RULESET);
   });
@@ -156,6 +158,26 @@ describe('draft-center ruleset resolver', () => {
 
 describe('draft-center routes', () => {
   let id: string;
+
+  test('teams attach by ruleset_id; league-only teams get their league ruleset', async () => {
+    const rs = db.insert(schema.rulesets).values({
+      name: `${tag}-rs`, isTemplate: true, costFormat: 'natdex', pointCap: 70, rosterSize: 6,
+      teraCaptainSlots: 1, teraMarkup: JSON.stringify({ 9: 12 }),
+    }).returning().get();
+    rulesetIds.push(rs.id);
+    const a = await (await hit('POST', '/api/draft-center/teams', ownerCookie, { name: 'RS', rulesetId: rs.id })).json() as any;
+    expect(a.rulesetId).toBe(rs.id);
+    expect(a.ruleset).toMatchObject({ pointCap: 70, rosterSize: 6, costFormat: 'natdex' });
+    expect(a.validation.budget).toBe(70);
+    const bad = await (await hit('POST', '/api/draft-center/teams', ownerCookie, { name: 'X', rulesetId: 999999 })).json() as any;
+    expect(bad.rulesetId).toBeNull();
+    const lgTeam = await (await hit('POST', '/api/draft-center/teams', ownerCookie, { name: 'L', leagueId })).json() as any;
+    expect(lgTeam.validation.budget).toBe(99); // derived league ruleset
+    const moved = await (await hit('PUT', `/api/draft-center/teams/${a.id}`, ownerCookie, { rulesetId: null })).json() as any;
+    expect(moved.rulesetId).toBeNull();
+    expect(moved.validation.budget).toBe(110); // default
+    for (const t of [a, bad, lgTeam]) await hit('DELETE', `/api/draft-center/teams/${t.id}`, ownerCookie);
+  });
 
   test('requires auth', async () => {
     expect((await hit('GET', '/api/draft-center/teams')).status).toBe(401);
