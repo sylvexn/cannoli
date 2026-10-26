@@ -21,10 +21,7 @@ import { AdminSeason } from './admin-season';
 import { AdminMatches } from './admin-matches';
 import { AdminTrades } from './admin-trades';
 import { AdminFreeAgents } from './admin-free-agents';
-import { AdminTierList } from './admin-tier-list';
-import { AdminTemplates } from './admin-templates';
 import { AdminMoveCategories } from './admin-move-categories';
-import { AdminSiteSettings } from './admin-site-settings';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminApiLogs } from './admin-api-logs';
 import { AdminFeedback } from './admin-feedback';
@@ -34,13 +31,12 @@ import { AdminBot } from './admin-bot';
 import { PinsTab } from './admin-pins';
 import { AdminSim } from './admin-sim';
 import { AdminAnnouncements } from './announcements';
-import { AdminRules } from './rules';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
-  CalendarCog, List, Settings, Shield, MessageSquare,
-  Trophy, UserPlus, Award, Bot, Layers, FlaskConical, Activity, Gauge,
-  UsersRound, Megaphone, BookOpen, BarChart3,
+  CalendarCog, Shield, MessageSquare,
+  Trophy, UserPlus, Award, Bot, FlaskConical, Activity, Gauge,
+  UsersRound, Megaphone, BarChart3,
 } from 'lucide-react';
 
 export const AdminUsersRoute = () => (
@@ -67,17 +63,8 @@ export const AdminTradesRoute = () => (
 export const AdminFreeAgentsRoute = () => (
   <AdminSection icon={UserPlus} title="Free Agents"><AdminFreeAgents /></AdminSection>
 );
-export const AdminTierListRoute = () => (
-  <AdminSection icon={List} title="Tier List"><AdminTierList /></AdminSection>
-);
-export const AdminTemplatesRoute = () => (
-  <AdminSection icon={Layers} title="Templates"><AdminTemplates /></AdminSection>
-);
 export const AdminMoveCategoriesRoute = () => (
   <AdminSection icon={Swords} title="Move Categories"><AdminMoveCategories /></AdminSection>
-);
-export const AdminSiteSettingsRoute = () => (
-  <AdminSection icon={Settings} title="Settings"><AdminSiteSettings /></AdminSection>
 );
 export const AdminActivityRoute = () => {
   return (
@@ -148,9 +135,6 @@ export const AdminAnnouncementsRoute = () => (
   <AdminSection icon={Megaphone} title="Announcements"><AdminAnnouncements /></AdminSection>
 );
 
-export const AdminRulesRoute = () => (
-  <AdminSection icon={BookOpen} title="Rules"><AdminRules /></AdminSection>
-);
 
 /**
  * Season Simulator route — mock-mode only.

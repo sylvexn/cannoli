@@ -28,16 +28,14 @@ import { TradeDeskPage } from '@/pages/market/trade-desk';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
+import { SettingsConsole } from '@/pages/admin/console';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminMembershipRoute, AdminLeaguesRoute, AdminSeasonRoute,
-  AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
-  AdminTemplatesRoute,
-  AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
+  AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminMoveCategoriesRoute, AdminActivityRoute,
   AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
   AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute, AdminUsageRoute,
   AdminAnnouncementsRoute,
-  AdminRulesRoute,
-} from '@/pages/admin/admin-routes';
+  } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
 import { ArchiveHubPage } from '@/pages/archive/hub';
 import { ArchiveSeasonPage } from '@/pages/archive/season';
@@ -168,16 +166,17 @@ export default function App() {
                     <Route path="matches" element={<AdminMatchesRoute />} />
                     <Route path="trades" element={<AdminTradesRoute />} />
                     <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
-                    <Route path="tiers" element={<AdminTierListRoute />} />
-                    <Route path="templates" element={<AdminTemplatesRoute />} />
+                    <Route path="console" element={<SettingsConsole />} />
+                    <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
+                    <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
                     <Route path="pins" element={<AdminPinsRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
                     <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
                     <Route path="announcements" element={<AdminAnnouncementsRoute />} />
-                    <Route path="rules" element={<AdminRulesRoute />} />
+                    <Route path="rules" element={<Navigate to="/admin/console#rules" replace />} />
                     <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
-                    <Route path="settings" element={<AdminSiteSettingsRoute />} />
+                    <Route path="settings" element={<Navigate to="/admin/console#general" replace />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
                     <Route path="observability" element={<AdminObservabilityRoute />} />
