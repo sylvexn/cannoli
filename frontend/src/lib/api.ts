@@ -1915,11 +1915,6 @@ export const api = {
   getTeamPins: (teamId: string) =>
     fetchJson<ApiPin[]>(`/api/teams/${encodeURIComponent(teamId)}/pins`),
 
-  /** Public badge catalog — every pin definition, no auth required. Powers
-   *  the /badges page. Distinct from getPinDefinitions (staff-only, same
-   *  shape) so the catalog works for signed-out visitors. */
-  getPublicPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/pin-definitions'),
-
   getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
 
   createPinDefinition: (data: {
