@@ -34,6 +34,9 @@ import { markRequestStart, captureRequestError, logRequest, logServerFault, getR
 import { startHeartbeat, stopHeartbeat } from './lib/heartbeat';
 import { GIT_SHA } from './lib/version';
 import { sqlite } from './db';
+import { installConsoleTee } from './lib/log-buffer';
+
+installConsoleTee(); // dev console live tail
 
 // Boot-time env guards
 // Catch foot-guns before they cause silent corruption / silent auth failure.

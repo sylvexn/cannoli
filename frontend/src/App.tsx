@@ -75,6 +75,7 @@ function AnalyticsBeacon() {
   return null;
 }
 import { AdminCenterMockup } from '@/pages/admin/mockups/admin-center';
+import { DevConsolePage } from '@/pages/admin/dev-console';
 
 export default function App() {
   return (
@@ -180,6 +181,7 @@ export default function App() {
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
                     <Route path="observability" element={<AdminObservabilityRoute />} />
+                    <Route path="dev" element={<DevConsolePage />} />
                     <Route path="usage" element={<AdminUsageRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
                     <Route path="feedback" element={<AdminFeedbackRoute />} />
