@@ -5,7 +5,8 @@
  * roster name via resolveRosterPokemonName.
  *
  * W/L is the match's winner (matchWinner: winnerTeamId first, score fallback),
- * so a 0-0 forfeit still credits a W/L. Only completed matches count; the
+ * so a 0-0 forfeit still credits a W/L. Only completed regular-season matches
+ * count (playoffs never feed season stats, same as standings); the
  * results-reveal gate (`maxWeek`) is applied here so every caller honors it.
  */
 import { db, schema } from '../db';
@@ -39,6 +40,7 @@ export function pokemonSeasonStats(leagueId: string, maxWeek: number | null): Po
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.status, 'completed'),
+      eq(schema.matches.phase, 'regular'),
       maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
     ))
     .all();

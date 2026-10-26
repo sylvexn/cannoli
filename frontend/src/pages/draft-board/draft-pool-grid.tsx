@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
+import { PokemonSprite } from '@/components/pokemon-sprite';
+import { Ban } from 'lucide-react';
 import { PokemonCompactCard, type CardDensity } from './pokemon-compact-card';
 import type { TierEntry, CostFormat } from '@/data/tier-list';
 import { getTeraBanned } from '@/data/tier-list';
@@ -51,6 +53,8 @@ interface DraftPoolGridProps {
   format?: CostFormat;
   /** Match reasons keyed by Pokemon name — drives "why matched" badges on cards. */
   matchReasons?: Map<string, MatchReason>;
+  /** Format-banned names — rendered as a "0 cost" section below tier 1. */
+  bannedNames?: string[];
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -74,11 +78,12 @@ export function DraftPoolGrid({
   animatingPokemonName,
   format,
   matchReasons,
+  bannedNames = [],
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
 }: DraftPoolGridProps) {
-  if (poolByTier.length === 0) {
+  if (poolByTier.length === 0 && bannedNames.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-text-muted text-sm">
         No Pokemon match your filters
@@ -201,6 +206,40 @@ export function DraftPoolGrid({
           </div>
         );
       })}
+
+      {bannedNames.length > 0 && (
+        <div className="group/tier" data-tier="banned">
+          <div className={cn(
+            'sticky top-0 z-10 flex items-center gap-2.5 px-2 py-1.5',
+            'bg-surface/95 backdrop-blur-sm border-b border-border-subtle',
+          )}>
+            <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-sm border border-loss/40 bg-loss/10 text-loss">
+              <Ban size={11} aria-hidden />
+            </span>
+            <span className="text-xs font-heading font-semibold text-text-primary">Banned</span>
+            <span className="text-[10px] text-text-muted">not draftable in this format</span>
+            <Badge variant="outline" className="ml-auto text-[10px] h-4 px-1.5 border-border-subtle text-text-muted font-mono">
+              {bannedNames.length}
+            </Badge>
+          </div>
+          <div
+            className="grid gap-1 pl-5 pr-1 py-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size, 88px), 1fr))' }}
+          >
+            {bannedNames.map(name => (
+              <div
+                key={name}
+                aria-disabled
+                title="Banned in this format - not draftable"
+                className="flex flex-col items-center gap-0.5 rounded-md border border-border-subtle p-1.5 opacity-50 cursor-not-allowed"
+              >
+                <PokemonSprite name={name} size="sm" />
+                <span className="w-full min-w-0 truncate text-center text-[10px] text-text-muted line-through decoration-loss/40">{name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

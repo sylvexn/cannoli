@@ -124,7 +124,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // to live". Renamed so its meaning is unambiguous post-refactor.
   const isDraftRunning = state.view === 'active' && state.status === 'running';
 
-  // Format-banned Pokemon appear (marked, undraftable) in the list view when no
+  // Format-banned Pokemon appear (marked, undraftable) in both views when no
   // ownership/type/chip filter would exclude them; free-text matches by name.
   const bannedNames = useMemo(() => {
     const f = state.filters;
@@ -439,6 +439,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               animatingPokemonName={animatingPokemonName}
               format={format}
               matchReasons={matchReasons}
+              bannedNames={bannedNames}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
