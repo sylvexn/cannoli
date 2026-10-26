@@ -11,6 +11,7 @@ import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { eq, inArray, like } from 'drizzle-orm';
 import { db, schema, sqlite } from '../src/db';
 import { applyDueTransactions } from '../src/lib/scheduled-transactions';
+import { invalidateCostCache } from '../src/lib/league-costs';
 
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
@@ -48,6 +49,8 @@ beforeAll(() => {
     }).run();
   }
   mon(`${tag}-fa`);
+  // Cost maps are cached per format; earlier suites may have built them.
+  invalidateCostCache();
 });
 
 afterAll(() => {
