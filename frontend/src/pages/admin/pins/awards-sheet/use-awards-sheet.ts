@@ -153,9 +153,10 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
   }, [defId, diff, seasonId, load]);
 
   const draftCount = pins.filter(p => !p.published).length;
+  const publishedCount = pins.length - draftCount;
 
   return {
     leagues, pins, loading, error, load, existing, defSuggestions, defUnresolved, rows, setRows,
-    diff, changeCount, acceptAll, revert, save, saving, rowErrors, draftCount,
+    diff, changeCount, acceptAll, revert, save, saving, rowErrors, draftCount, publishedCount,
   };
 }

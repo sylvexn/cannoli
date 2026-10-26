@@ -16,6 +16,7 @@ import { archiveDeepRoutes } from '../src/routes/archive';
 import { suggestAwards } from '../src/lib/pins/suggest';
 
 const tag = `pa${Date.now() % 100000}`;
+const MATCH_DEF = `${tag}-matchpin`; // generic match-scoped def (no shipped badge uses one now)
 const L = `${tag}-lg`;     // league with per-Pokemon stats
 const L2 = `${tag}-lg2`;   // league with scores only (S9-style: no match_pokemon)
 const T = (n: string) => `${tag}-${n}`;
@@ -74,6 +75,10 @@ beforeAll(() => {
       id: T(n), leagueId: lg, userId: uid, coachName: n, teamName: `Team ${n}`, teamAbbrev: n,
     }).run();
   }
+  db.insert(schema.pinDefinitions).values({
+    id: MATCH_DEF, name: 'Test Match Pin', description: '', iconName: 'Swords', color: '#fbbf24',
+    category: 'week', isAuto: false, scope: 'match', metadataFields: JSON.stringify(['match']),
+  }).run();
   const roster = (team: string, mon: string, cost = 5) => db.insert(schema.rosters).values({
     teamId: T(team), pokemonName: mon, tier: cost, costAtDraft: cost,
   }).run();
@@ -89,15 +94,15 @@ beforeAll(() => {
 afterAll(() => { try { sqlite.exec('ROLLBACK'); } catch { /* already closed */ } });
 
 describe('suggest', () => {
-  test('flags a Garchomp tie, keeps canonical casing, lists every flawless match', () => {
+  test('flags a Garchomp tie, keeps canonical casing, sweeper present, retired match badges gone', () => {
     const out = suggestAwards(seasonId, L);
     const gar = out.suggestions.filter(s => s.pinDefId === 'garchomp');
     expect(gar.map(g => g.teamId).sort()).toEqual([T('A'), T('C')]);
     expect(gar.every(g => g.tie)).toBe(true);
     expect(gar.find(g => g.teamId === T('A'))!.pokemon).toBe('Dragapult');
 
-    const flawless = out.suggestions.filter(s => s.pinDefId === 'flawless' && s.teamId === T('A'));
-    expect(flawless.map(f => f.matchId).sort()).toEqual([`${tag}-m1`, `${tag}-m3`]);
+    expect(out.suggestions.some(s => s.pinDefId === 'sweeper' && s.teamId === T('A'))).toBe(true);
+    expect(out.suggestions.some(s => ['flawless', 'kingslayer'].includes(s.pinDefId))).toBe(false);
     expect(out.unresolved.some(u => u.pinDefId === 'champion')).toBe(true);
   });
 
@@ -105,7 +110,7 @@ describe('suggest', () => {
     const out = suggestAwards(seasonId, L2);
     const reasons = out.unresolved.filter(u => u.reason === 'no-stat-data').map(u => u.pinDefId);
     expect(reasons).toContain('garchomp');
-    expect(reasons).toContain('flawless');
+    expect(reasons).toContain('sweeper');
     expect(out.suggestions.some(s => s.pinDefId === 'cannoli')).toBe(true);
   });
 
@@ -154,9 +159,9 @@ describe('bulk save + publish', () => {
       { op: 'award', teamId: T('A'), matchId: `${tag}-m1`, stats: { scoreLine: '6-0' } },
       { op: 'award', teamId: T('A'), matchId: `${tag}-m3`, stats: { scoreLine: '6-0' } },
     ];
-    expect((await save('flawless', changes)).json).toMatchObject({ created: 2 });
-    expect((await save('flawless', changes)).json).toMatchObject({ created: 0, updated: 2 });
-    const bad = await save('flawless', [{ op: 'award', teamId: T('A'), matchId: `${tag}-m2` }]);
+    expect((await save(MATCH_DEF, changes)).json).toMatchObject({ created: 2 });
+    expect((await save(MATCH_DEF, changes)).json).toMatchObject({ created: 0, updated: 2 });
+    const bad = await save(MATCH_DEF, [{ op: 'award', teamId: T('A'), matchId: `${tag}-m2` }]);
     expect(bad.status).toBe(422);
   });
 
@@ -188,6 +193,56 @@ describe('bulk save + publish', () => {
     db.update(schema.seasons).set({ archived: false }).where(eq(schema.seasons.id, seasonId)).run();
     expect(arch).toHaveLength(4);
     expect(arch.find((p: any) => p.teamId === T('C')).username).toBeNull();
+  });
+
+  test('unpublish hides every public surface, keeps selections; re-publish restores them unchanged', async () => {
+    const userPins = () => call('GET', `/api/users/${tag}-coach/pins`);
+    const teamPins = () => call('GET', `/api/teams/${T('A')}/pins`);
+    const archive = () => call('GET', `/api/archive/seasons/${seasonId}/awards`);
+    const flip = (published: boolean) => call('POST', '/api/admin/pins/publish', { seasonId, published });
+    const rowsOf = () => db.select().from(schema.pins).where(eq(schema.pins.seasonId, seasonId)).all()
+      .map(p => ({ id: p.id, teamId: p.teamId, pinDefId: p.pinDefId, metadata: p.metadata }))
+      .sort((a, b) => a.id - b.id);
+    const archiveRows = async () => {
+      db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
+      const r = (await archive()).json.pins;
+      db.update(schema.seasons).set({ archived: false }).where(eq(schema.seasons.id, seasonId)).run();
+      return r;
+    };
+
+    asUser.current = STAFF;
+    await flip(true);
+    const saved = rowsOf();
+    asUser.current = null;
+    const before = { user: (await userPins()).json, team: (await teamPins()).json, arch: await archiveRows() };
+    expect(before.user.length).toBeGreaterThan(0);
+
+    asUser.current = STAFF;
+    const off = await flip(false);
+    expect(off.json).toMatchObject({ success: true, published: false, count: saved.length });
+    expect(rowsOf()).toEqual(saved); // selections preserved
+    asUser.current = null;
+    expect((await userPins()).json).toHaveLength(0);
+    expect((await teamPins()).json).toHaveLength(0);
+    expect(await archiveRows()).toHaveLength(0);
+    // staff still see the drafts
+    asUser.current = STAFF;
+    expect((await archive()).json.pins.length).toBe(saved.length);
+
+    await flip(true);
+    expect(rowsOf()).toEqual(saved);
+    asUser.current = null;
+    expect({ user: (await userPins()).json, team: (await teamPins()).json, arch: await archiveRows() }).toEqual(before);
+  });
+
+  test('unpublish is staff-only and refuses archived seasons without force', async () => {
+    asUser.current = { id: String(coachId), username: 'c', role: 'user' };
+    expect((await call('POST', '/api/admin/pins/publish', { seasonId, published: false })).status).toBe(403);
+    asUser.current = STAFF;
+    db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
+    const r = await call('POST', '/api/admin/pins/publish', { seasonId, published: false });
+    db.update(schema.seasons).set({ archived: false }).where(eq(schema.seasons.id, seasonId)).run();
+    expect(r.status).toBe(409);
   });
 
   test('revoke removes a pin', async () => {
