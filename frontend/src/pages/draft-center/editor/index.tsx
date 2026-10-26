@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, Swords, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, RotateCcw, Swords, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -27,6 +27,7 @@ export function TeamEditorPage() {
   const team = store.getTeam(id);
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const ruleset = useMemo(() => resolveRuleset(team?.leagueId ?? null, leagues), [team?.leagueId, leagues]);
   const roster = team?.roster;
@@ -86,6 +87,7 @@ export function TeamEditorPage() {
           <Button variant="outline" size="sm" nativeButton={false} render={<Link to={`/matchup?dc=${team.id}`} />}><Swords size={13} /> Matchup</Button>
           <SharePopover team={team} onSetShared={enabled => store.setShared(team.id, enabled)} />
           <Button variant="outline" size="sm" onClick={duplicate}><Copy size={13} /> Duplicate</Button>
+          <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)} disabled={team.roster.length === 0}><RotateCcw size={13} /> Reset</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)} className="text-loss hover:text-loss"><Trash2 size={13} /></Button>
         </div>
       </div>
@@ -109,6 +111,19 @@ export function TeamEditorPage() {
         taken={new Set(team.roster.map(m => m.name))} remaining={validation.remaining}
         onPick={addMon}
       />
+
+      <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset "{team.name}"?</DialogTitle>
+            <DialogDescription>This removes all {team.roster.length} Pokemon and their sets from the team. The team itself is kept.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmReset(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { setRoster([]); setConfirmReset(false); }}>Reset</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
