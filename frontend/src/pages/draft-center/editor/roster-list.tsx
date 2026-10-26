@@ -118,7 +118,7 @@ function MonRow({ mon, ruleset, owners, leagueId, warnings, expanded, onToggleOp
       <Tooltip>
         <TooltipTrigger render={
           <button
-            type="button" onClick={onCaptain} aria-pressed={mon.captain} aria-label="Toggle tera captain"
+            type="button" onClick={onCaptain} aria-pressed={mon.captain} aria-label={`Toggle tera captain: ${mon.name}`}
             className={cn(
               'shrink-0 size-7 rounded-md flex items-center justify-center border transition-colors',
               mon.captain
@@ -134,9 +134,9 @@ function MonRow({ mon, ruleset, owners, leagueId, warnings, expanded, onToggleOp
         </TooltipContent>
       </Tooltip>
 
-      {mon.captain && <TeraPicker value={mon.teraTypes} max={ruleset.teraTypesPerCaptain} onChange={onTera} />}
+      {mon.captain && ruleset.teraEnabled && <TeraPicker name={mon.name} value={mon.teraTypes} max={ruleset.teraTypesPerCaptain} onChange={onTera} />}
 
-      <button type="button" onClick={onToggleOpen} aria-expanded={expanded} aria-label="Edit set" title="Edit set"
+      <button type="button" onClick={onToggleOpen} aria-expanded={expanded} aria-label={`Edit set: ${mon.name}`} title="Edit set"
         className="shrink-0 size-7 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-overlay">
         <ChevronDown size={14} className={cn('transition-transform', expanded && 'rotate-180')} />
       </button>
@@ -150,13 +150,13 @@ function MonRow({ mon, ruleset, owners, leagueId, warnings, expanded, onToggleOp
 }
 
 /** Up to `max` tera types for a captain, picked from a popover grid of all 18. */
-function TeraPicker({ value, max, onChange }: { value: PokemonType[]; max: number; onChange: (t: PokemonType[]) => void }) {
+function TeraPicker({ name, value, max, onChange }: { name: string; value: PokemonType[]; max: number; onChange: (t: PokemonType[]) => void }) {
   const toggle = (t: PokemonType) => onChange(value.includes(t) ? value.filter(x => x !== t) : [...value, t].slice(0, max));
   return (
     <Popover>
       <PopoverTrigger render={
-        <button type="button" aria-label="Pick tera types" title="Tera types"
-          className="shrink-0 h-7 px-1.5 rounded-md border border-pink-400/30 flex items-center gap-0.5 hover:bg-pink-400/10" />
+        <button type="button" aria-label={`Pick tera types: ${name}`} title="Pick tera types"
+          className="shrink-0 h-7 min-w-7 px-1.5 rounded-md border border-pink-400/30 flex items-center justify-center gap-0.5 hover:bg-pink-400/10 focus-visible:ring-2 focus-visible:ring-pink-400/60 outline-none" />
       }>
         {value.length === 0 && <span className="text-[10px] font-mono text-pink-400">tera?</span>}
         {value.map(t => <span key={t} className="size-3 rounded-full ring-1 ring-white/20" style={{ backgroundColor: TYPE_COLORS[t] }} />)}

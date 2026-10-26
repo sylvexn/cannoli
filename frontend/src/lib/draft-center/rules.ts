@@ -4,7 +4,7 @@
  * (kept in step by tests on both sides) so the live editor and the server's
  * summary agree.
  */
-import { captainEligible, markupCost, megaLimit } from '@cannoli/rules';
+import { captainEligible, markupCost, megaLimit, rosterBand } from '@cannoli/rules';
 import { getBanned, getTierEntry, type CostFormat } from '@/data/tier-list';
 import { getBaseFormName, isMegaForm } from '@/lib/draft-rules';
 import { rosterSizeOf, type Ruleset } from './ruleset';
@@ -95,6 +95,10 @@ export function validateTeam(roster: DcMon[], rs: Ruleset): DcValidation {
   }
   if (roster.length > size) {
     v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${size}` });
+  }
+  const { min: rosterMin } = rosterBand(rs);
+  if (roster.length > 0 && roster.length < rosterMin) {
+    v.push({ code: 'roster_under', severity: 'info', message: `${roster.length}/${rosterMin} - ${rosterMin - roster.length} more to fill` });
   }
   if (used > rs.pointCap) {
     v.push({ code: 'over_budget', severity: 'warn', message: `${used} points used; budget is ${rs.pointCap}` });

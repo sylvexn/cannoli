@@ -48,7 +48,8 @@ export function resolveTeamRuleset(t: { rulesetId: number | null; leagueId: stri
 
 export type ViolationCode =
   | 'over_budget' | 'roster_over' | 'multi_mega' | 'duplicate_species' | 'banned' | 'unknown_pokemon'
-  | 'captain_count' | 'captain_tier' | 'captain_tera_banned' | 'tera_types_over' | 'captain_no_tera';
+  | 'captain_count' | 'captain_tier' | 'captain_tera_banned' | 'tera_types_over' | 'captain_no_tera'
+  | 'tera_disabled' | 'roster_under';
 
 export interface Violation {
   code: ViolationCode;
@@ -78,12 +79,9 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
 
   for (const m of roster) {
     const c = cost(m.name);
-    if (!c) {
-      v.push({ code: 'unknown_pokemon', severity: 'warn', pokemon: m.name, message: `${m.name} has no price in this format` });
-    } else {
-      used += markupCost(rs, c.tier, m.captain);
-      if (c.banned) v.push({ code: 'banned', severity: 'warn', pokemon: m.name, message: `${m.name} is banned in this format` });
-    }
+    if (c) used += markupCost(rs, c.tier, m.captain);
+    if (c?.banned) v.push({ code: 'banned', severity: 'warn', pokemon: m.name, message: `${m.name} is banned in this format` });
+    else if (!c) v.push({ code: 'unknown_pokemon', severity: 'warn', pokemon: m.name, message: `${m.name} has no price in this format` });
 
     const base = getBaseFormName(m.name);
     const prev = seen.get(base);
@@ -94,13 +92,16 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
     // ponytail: shared mega cap counts only Mega-category forms here (primals not detected by getFormCategory).
 
     if (m.captain) {
-      if (c && !captainEligible(rs, { tier: c.tier })) {
+      if (!rs.teraEnabled) {
+        v.push({ code: 'tera_disabled', severity: 'warn', pokemon: m.name, message: `${m.name} is a captain but Tera is disabled in this ruleset` });
+      } else if (c?.teraBanned) {
+        v.push({ code: 'captain_tera_banned', severity: 'warn', pokemon: m.name, message: `${m.name} is tera-banned and cannot be a captain` });
+      } else if (c && !captainEligible(rs, { tier: c.tier })) {
         v.push({ code: 'captain_tier', severity: 'warn', pokemon: m.name, message: `${m.name} is tier ${c.tier}, which cannot be a tera captain under this ruleset` });
       }
-      if (c?.teraBanned) {
-        v.push({ code: 'captain_tera_banned', severity: 'warn', pokemon: m.name, message: `${m.name} is tera-banned and cannot be a captain` });
-      }
-      if (m.teraTypes.length > rs.teraTypesPerCaptain) {
+      if (!rs.teraEnabled) {
+        // no tera-type checks without tera
+      } else if (m.teraTypes.length > rs.teraTypesPerCaptain) {
         v.push({ code: 'tera_types_over', severity: 'warn', pokemon: m.name, message: `${m.name} has more than ${rs.teraTypesPerCaptain} tera types` });
       } else if (m.teraTypes.length < rs.teraTypesPerCaptain) {
         v.push({ code: 'captain_no_tera', severity: 'info', pokemon: m.name, message: `${m.name} has ${m.teraTypes.length}/${rs.teraTypesPerCaptain} tera types picked` });
@@ -111,12 +112,15 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
   if (megas.length > megaLimit(rs)) {
     v.push({ code: 'multi_mega', severity: 'warn', message: `${megas.length} Megas (${megas.join(', ')}); max ${megaLimit(rs)} per team` });
   }
-  if (captains.length > rs.teraCaptainSlots) {
+  if (rs.teraEnabled && captains.length > rs.teraCaptainSlots) {
     v.push({ code: 'captain_count', severity: 'warn', message: `${captains.length} captains; this league allows ${rs.teraCaptainSlots}` });
   }
-  const { max: rosterCap } = rosterBand(rs);
+  const { min: rosterMin, max: rosterCap } = rosterBand(rs);
   if (roster.length > rosterCap) {
     v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${rosterCap}` });
+  }
+  if (roster.length > 0 && roster.length < rosterMin) {
+    v.push({ code: 'roster_under', severity: 'info', message: `${roster.length}/${rosterMin} - ${rosterMin - roster.length} more to fill` });
   }
   if (used > rs.pointCap) {
     v.push({ code: 'over_budget', severity: 'warn', message: `${used} points used; budget is ${rs.pointCap}` });

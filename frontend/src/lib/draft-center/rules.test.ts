@@ -1,12 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_RULESET, EMPTY_CATALOG, resolveTeamRuleset, rosterSizeOf, toDcRuleset, type Ruleset } from './ruleset';
 import { captainEligibility, monCost, validateTeam } from './rules';
+import { POKEMON_TYPES } from '@/lib/pokemon';
 import { calcStat, setSpeed, speedNature } from './sets';
 import type { DcMon } from './types';
 
 const RS: Ruleset = { ...DEFAULT_RULESET, pointCap: 40, rosterSize: 3, teraCaptainSlots: 1 };
 const mon = (name: string, over: Partial<DcMon> = {}): DcMon => ({ name, captain: false, teraTypes: [], ...over });
 const codes = (r: DcMon[], rs = RS) => validateTeam(r, rs).violations.map(v => v.code);
+
+
+// Parity fixtures: IDENTICAL block lives in frontend/src/lib/draft-center/rules.test.ts and
+// backend/tests/draft-center.test.ts; both validators must emit exactly these codes.
+const PARITY: [string, DcMon[], Partial<Ruleset>, string[]][] = [
+  ['empty roster is silent', [], {}, []],
+  ['under minimum', [mon('Muk')], {}, ['roster_under']],
+  ['at minimum', [mon('Muk'), mon('Gengar'), mon('Breloom')], {}, []],
+  ['over size', [mon('Muk'), mon('Gengar'), mon('Breloom'), mon('Araquanid')], {}, ['roster_over']],
+  ['banned only (not also unknown)', [mon('Arceus'), mon('Muk'), mon('Gengar')], {}, ['banned']],
+  ['unknown only', [mon('Zzzmon'), mon('Muk'), mon('Gengar')], {}, ['unknown_pokemon']],
+  ['captain tier + no tera', [mon('Garchomp', { captain: true }), mon('Muk'), mon('Gengar')], { pointCap: 99 }, ['captain_tier', 'captain_no_tera']],
+  ['tera-banned captain', [mon('Alcremie', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Muk'), mon('Gengar')], {}, ['captain_tera_banned']],
+  ['captain count', [mon('Muk', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Araquanid', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Gengar')], {}, ['captain_count']],
+  ['tera disabled', [mon('Muk', { captain: true }), mon('Gengar'), mon('Breloom')], { teraEnabled: false, teraCaptainSlots: 0 }, ['tera_disabled']],
+  ['band min 3 max 4', [mon('Muk'), mon('Gengar')], { rosterMin: 3, rosterMax: 4 }, ['roster_under']],
+];
 
 describe('draft-center rules (frontend mirror)', () => {
   test('budget uses captain markup', () => {
@@ -39,7 +57,7 @@ describe('draft-center custom rulesets', () => {
     const rs = custom({ teraEnabled: false, teraCaptainSlots: 0 });
     expect(monCost(mon('Araquanid', { captain: true }), rs)).toBe(9);
     expect(captainEligibility('Muk', rs).ok).toBe(false);
-    expect(codes([mon('Araquanid', { captain: true })], rs)).toEqual(['tera_disabled']);
+    expect(codes([mon('Araquanid', { captain: true })], rs)).toEqual(['tera_disabled', 'roster_under']);
   });
 
   test('custom markup table drives cost and eligibility', () => {
@@ -95,4 +113,14 @@ describe('draft-center sets', () => {
     expect(setSpeed(mon('Garchomp', { set }))).toBe(Math.floor(333 * 1.5));
     expect(setSpeed(mon('Garchomp'))).toBeNull();
   });
+});
+
+describe('validator parity', () => {
+  for (const [label, roster, over, expected] of PARITY) {
+    test(label, () => expect(codes(roster, { ...RS, pointCap: 40, rosterSize: 3, teraCaptainSlots: 1, ...over }).sort()).toEqual([...expected].sort()));
+  }
+});
+
+test('tera type picker values stay lowercase PokemonType ids', () => {
+  expect(POKEMON_TYPES.every(t => t === t.toLowerCase())).toBe(true);
 });
