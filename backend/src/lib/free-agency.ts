@@ -31,6 +31,10 @@ export interface FaPickupInput {
    *  league's currentWeek when omitted — the pickup still applies
    *  immediately; this only labels which week the ledger records it under. */
   effectiveWeek?: number;
+  /** Week the request was made in. The scheduled sweep passes it so a pickup
+   *  approved in the deadline week still lands at the rollover — the deadline
+   *  gates when coaches act, not when the move applies. Defaults to now. */
+  actedWeek?: number;
 }
 
 export interface FaPickupOk {
@@ -105,7 +109,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
       // following week, so deadline + 1 is the furthest a pickup may land: that
       // second clause only stops an admin stamping an arbitrary later week.
       const faDeadline = settings?.faDeadlineWeek ?? 7;
-      if (week > faDeadline || stampWeek > faDeadline + 1) {
+      if ((input.actedWeek ?? week) > faDeadline || stampWeek > faDeadline + 1) {
         return err(409, `Free agent deadline has passed (week ${faDeadline}, effective week ${stampWeek})`, 'fa_deadline_passed');
       }
     }
