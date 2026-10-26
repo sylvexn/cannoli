@@ -70,6 +70,7 @@ function notifyRequester(teamId: string, leagueId: string, msg: { title: string;
     if (team?.userId == null) return;
     notifyUser(team.userId, {
       type: 'system',
+      category: 'trades',
       title: msg.title,
       body: msg.body,
       link: `/league/${leagueId}/market/free-agents`,

@@ -274,6 +274,7 @@ export const teamRoutes = new Elysia()
 
     notifyStaff({
       type: 'system',
+      category: 'trades',
       title: 'Tera change needs approval',
       body: `${team.teamName} requested ${captains.map(c => c.pokemonName).join(', ')}`,
       link: '/admin/free-agents',
@@ -475,6 +476,7 @@ export const teamRoutes = new Elysia()
 
     notifyStaff({
       type: 'system',
+      category: 'trades',
       title: 'Free agent pickup needs approval',
       body: `${team.teamName} requested ${pickupNames.join(', ')}${dropNames.length ? `, dropping ${dropNames.join(', ')}` : ''}`,
       link: '/admin/free-agents',

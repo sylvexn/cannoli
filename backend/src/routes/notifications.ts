@@ -1,10 +1,11 @@
 /**
- * Unified notifications feed — merges changelog, announcements, directed
- * notifications, and match reminders into a single sorted list.
+ * Personal bell feed — announcements, directed notifications, and the match
+ * reminder in one sorted list, each filed under a tab group. (Patch notes live
+ * on /patch-notes, not here.)
  *
  * Endpoints:
- *   GET  /api/notifications               — public (guests get changelog-only)
- *   POST /api/notifications/seen          — stamp changelog+announcements seen (auth)
+ *   GET  /api/notifications               — auth (guests get an empty feed)
+ *   POST /api/notifications/seen          — mark all read, optional { group } (auth)
  *   POST /api/notifications/read          — mark specific directed notifications read (auth)
  *   GET  /api/banners                     — active banner announcements (public)
  *   POST /api/announcements/:id/dismiss   — dismiss a banner for authed user
@@ -12,14 +13,13 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
-// Read the changelog feed from the DB (newest-first) via the shared helper in
-// changelog.ts, so the bell reflects entries published through the admin API.
-import { getChangelogEntries } from './changelog';
 import { getCurrentMatchReminder } from '../lib/arena-state';
 
 // Types
 
-type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
+type NotificationSource = 'feedback' | 'announcement' | 'match';
+export type NotificationGroup = 'trades' | 'matches' | 'admin' | 'feedback';
+const GROUPS: NotificationGroup[] = ['trades', 'matches', 'admin', 'feedback'];
 
 interface NotificationItem {
   id: string;
@@ -28,6 +28,8 @@ interface NotificationItem {
   body: string | null;
   link: string | null;
   category: string | null;
+  /** Bell tab this item files under. */
+  group: NotificationGroup;
   createdAt: string;
   read: boolean;
 }
@@ -86,32 +88,7 @@ export const notificationRoutes = new Elysia()
   .get('/api/notifications', ({ user }) => {
     const items: NotificationItem[] = [];
 
-    // 1. Changelog items
-    // Read seenAt for unread comparison. Guests: all unread.
-    let changelogSeenAt: string | null = null;
-    if (user) {
-      const row = db.select({ seen: schema.userPreferences.changelogSeenAt })
-        .from(schema.userPreferences)
-        .where(eq(schema.userPreferences.userId, parseInt(user.id)))
-        .get();
-      changelogSeenAt = row?.seen ?? null;
-    }
-
-    for (const entry of getChangelogEntries()) {
-      const read = changelogSeenAt != null && entry.date <= changelogSeenAt;
-      items.push({
-        id: `changelog:${entry.id}`,
-        source: 'changelog',
-        title: entry.title,
-        body: entry.body ?? null,
-        link: null,
-        category: entry.category,
-        createdAt: entry.date,
-        read: user ? read : false,
-      });
-    }
-
-    // 2. Announcements
+    // 1. Announcements
     // Only for authenticated users. Only bell-surface (banner-only must NOT
     // appear in the pane). Apply the shared visibility predicate.
     if (user) {
@@ -141,13 +118,14 @@ export const notificationRoutes = new Elysia()
           body: ann.body,
           link: ann.link ?? null,
           category: ann.category,
+          group: 'admin',
           createdAt: ann.createdAt ?? new Date().toISOString(),
           read,
         });
       }
     }
 
-    // 3. Directed notifications
+    // 2. Directed notifications
     if (user) {
       const directed = db.select().from(schema.notifications)
         .where(eq(schema.notifications.userId, parseInt(user.id)))
@@ -161,13 +139,14 @@ export const notificationRoutes = new Elysia()
           body: n.body ?? null,
           link: n.link ?? null,
           category: n.type,
+          group: n.category,
           createdAt: n.createdAt ?? new Date().toISOString(),
           read: n.readAt != null,
         });
       }
     }
 
-    // 4. Match reminder
+    // 3. Match reminder
     if (user) {
       const reminder = getCurrentMatchReminder(parseInt(user.id));
       if (reminder) {
@@ -178,6 +157,7 @@ export const notificationRoutes = new Elysia()
           body: null,
           link: reminder.link,
           category: null,
+          group: 'matches',
           createdAt: reminder.createdAt,
           read: false,
         });
@@ -190,53 +170,41 @@ export const notificationRoutes = new Elysia()
     // Compute counts
     const unreadItems = items.filter(i => !i.read);
     const unreadCount = unreadItems.length;
-    const unreadBySource = {
-      changelog: unreadItems.filter(i => i.source === 'changelog').length,
-      feedback: unreadItems.filter(i => i.source === 'feedback').length,
-      announcement: unreadItems.filter(i => i.source === 'announcement').length,
-      match: unreadItems.filter(i => i.source === 'match').length,
-    };
+    const unreadByGroup = Object.fromEntries(
+      GROUPS.map(g => [g, unreadItems.filter(i => i.group === g).length]),
+    ) as Record<NotificationGroup, number>;
 
-    return { items, unreadCount, unreadBySource };
+    return { items, unreadCount, unreadByGroup };
   })
 
   // POST /api/notifications/seen
-  // Stamps changelogSeenAt + announcementsSeenAt = now,
-  // and bulk-reads all unread directed notifications.
-  .post('/api/notifications/seen', ({ user, set }) => {
+  // "Mark all read". Body { group? }: with a group, only that tab's directed rows
+  // (and the announcements stamp when the group is 'admin'); without, everything.
+  .post('/api/notifications/seen', ({ user, body, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const userId = parseInt(user.id);
-
-    // Mirror the future-dated-entry guard from changelog.ts POST /api/changelog/seen:
-    // if the newest entry is ahead of wall-clock, stamp to that date so it
-    // can't stay permanently "unread" after the user opens the panel.
+    const g = (body as { group?: unknown } | null)?.group;
+    const group = GROUPS.includes(g as NotificationGroup) ? (g as NotificationGroup) : null;
     const now = new Date().toISOString();
-    const newestEntry = getChangelogEntries()[0]?.date;
-    const seenAt = newestEntry && newestEntry > now ? newestEntry : now;
 
-    const existing = db.select({ userId: schema.userPreferences.userId })
-      .from(schema.userPreferences)
-      .where(eq(schema.userPreferences.userId, userId))
-      .get();
-
-    if (existing) {
-      db.update(schema.userPreferences).set({
-        changelogSeenAt: seenAt,
-        announcementsSeenAt: now,
-      }).where(eq(schema.userPreferences.userId, userId)).run();
-    } else {
-      db.insert(schema.userPreferences).values({
-        userId,
-        changelogSeenAt: seenAt,
-        announcementsSeenAt: now,
-      }).run();
+    if (!group || group === 'admin') {
+      const existing = db.select({ userId: schema.userPreferences.userId })
+        .from(schema.userPreferences)
+        .where(eq(schema.userPreferences.userId, userId))
+        .get();
+      if (existing) {
+        db.update(schema.userPreferences).set({ announcementsSeenAt: now })
+          .where(eq(schema.userPreferences.userId, userId)).run();
+      } else {
+        db.insert(schema.userPreferences).values({ userId, announcementsSeenAt: now }).run();
+      }
     }
 
-    // Bulk-mark all directed notifications read.
     db.update(schema.notifications).set({ readAt: now })
       .where(and(
         eq(schema.notifications.userId, userId),
         isNull(schema.notifications.readAt),
+        group ? eq(schema.notifications.category, group) : undefined,
       )).run();
 
     return { success: true };
