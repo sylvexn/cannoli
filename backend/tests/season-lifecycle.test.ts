@@ -137,7 +137,7 @@ function advancePhase(
 // computeStandings. This is the exact matchup table from the production route.
 
 function generatePlayoffBracket(leagueId: string, seedCount = 6): { success: boolean } {
-  const records = computeStandings(leagueId, { phase: 'regular' });
+  const records = computeStandings(leagueId);
   const seeded = records.slice(0, seedCount);
   const maxWeek = db.select({ max: sql<number>`MAX(week)` })
     .from(schema.matches)
@@ -384,7 +384,7 @@ describe('full season lifecycle (production code paths)', () => {
       )).get()!.c;
     expect(remaining).toBe(0);
 
-    const standings = computeStandings(LEAGUE_ID, { phase: 'regular' });
+    const standings = computeStandings(LEAGUE_ID);
     expect(standings).toHaveLength(TEAM_COUNT);
     // Every team played 5 games; wins+losses sums to 5 each.
     for (const row of standings) {
@@ -434,7 +434,7 @@ describe('full season lifecycle (production code paths)', () => {
     expect(finalsTbd.awayTeamId).toBeNull();
 
     // Top-2 seeds occupy the SF home slots (byes).
-    const seeded = computeStandings(LEAGUE_ID, { phase: 'regular' });
+    const seeded = computeStandings(LEAGUE_ID);
     const sfHomes = po.filter(m => m.playoffRound === 'sf').map(m => m.homeTeamId).sort();
     expect(sfHomes).toEqual([seeded[0]!.id, seeded[1]!.id].sort());
   });

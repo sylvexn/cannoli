@@ -120,7 +120,7 @@ export const archiveRoutes = new Elysia()
     }
 
     return leagues.map(l => {
-      const standings = computeStandings(l.id, { phase: 'all' });
+      const standings = computeStandings(l.id);
       const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
 
       const teams = standings
