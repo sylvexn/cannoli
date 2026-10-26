@@ -16,6 +16,8 @@ import type { Acquisition } from './types';
 import type { DraftPresenceData } from './use-draft-websocket';
 import { getTierEntry, type CostFormat } from '@/data/tier-list';
 import { captainHeadroomNeeded } from '@/lib/draft-rules';
+import { useLeague } from '@/lib/league-context';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { ViewTransitionShim } from './use-pick-animation-queue';
 
 /** Matches the unified Phase 2 VT name pattern. The same name is stamped on
@@ -71,7 +73,6 @@ export interface DraftSidebarPanelProps {
   format?: CostFormat;
 }
 
-const DEFAULT_ROSTER_SIZE = 10;
 
 /**
  * The actual sidebar content (team list + your-team panel + queue + budget cue
@@ -79,10 +80,11 @@ const DEFAULT_ROSTER_SIZE = 10;
  * pinned, overlay drawer, and bottom sheet.
  */
 export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
+  const rules = getLeagueRuleset(useLeague());
   const {
     teamOrder, teamRosters, teamPoints, selectedTeamId, onSelectTeam,
     currentDrafterId, isLiveMode, userTeamId,
-    pointCap = 110, teraCaptainSlots = 2, rosterSize = DEFAULT_ROSTER_SIZE,
+    pointCap = rules.pointCap, teraCaptainSlots = rules.teraCaptainSlots, rosterSize = rules.rosterSize,
     draftQueue = [], onQueueRemove, autoDraftQueue, onToggleAutoDraft,
     onDraftFromQueue, isUserTurn, presence, animatingPokemonName,
     onClose, pinned, onTogglePin, floating, format,
@@ -97,7 +99,7 @@ export function DraftSidebarPanel(props: DraftSidebarPanelProps) {
   const picksLeft = Math.max(0, rosterSize - userRoster.length);
   const avgPerPick = picksLeft > 0 ? remaining / picksLeft : 0;
   const captainReserve = isLiveMode && userPlayer
-    ? captainHeadroomNeeded(userRoster, teraCaptainSlots, format)
+    ? captainHeadroomNeeded(userRoster, teraCaptainSlots, format, rules)
     : 0;
   const captainBudgetWarning = captainReserve > 0 && remaining < captainReserve;
   // Effective budget for the NEXT pick: raw remaining minus 1pt reserved for

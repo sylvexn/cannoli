@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import type { Player, RosterPokemon, LeagueConfig, LeagueSeason } from '@/lib/types';
+import type { Player, RosterPokemon, LeagueSeason } from '@/lib/types';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import type { PokemonType } from '@/lib/pokemon';
 import { getTermCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -15,7 +16,7 @@ import type { SwapEntry, TeraEdit } from './utils';
 
 interface SpriteShowcaseProps {
   player: Player;
-  config: LeagueConfig;
+  config: RuleConfig;
   activeRoster: RosterPokemon[];
   swaps: SwapEntry[];
   rosterOrder: number[];
@@ -96,7 +97,7 @@ export function SpriteShowcase({
           {activeRoster.map((mon, i) => {
             const isSwapped = swaps.some(s => s.index === (rosterOrder[i] ?? i));
             const isSwapping = swappingIndex === i;
-            const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier;
+            const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier, config.ruleset) : mon.tier;
             const isPosOver = dragOverIndex === i && draggingPosFrom !== null && draggingPosFrom !== i;
             const beingDragged = draggingPosFrom === i;
             return (

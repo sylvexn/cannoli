@@ -6,6 +6,7 @@ import {
 } from '@/lib/draft-rules';
 import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import type { ApiDraftPick, ApiDraftState } from '@/lib/api';
@@ -47,6 +48,7 @@ interface UseDraftStateOptions {
  */
 export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) {
   const league = useLeague();
+  const rules = getLeagueRuleset(league);
   /** Cost format for this league — drives tier list, bans, and captain reserve. */
   const format: CostFormat = league.costFormat ?? DEFAULT_FORMAT;
   const { players, standings, transactions } = useLeagueData();
@@ -126,7 +128,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     selectedTeamId: null,
     filters: DEFAULT_FILTERS,
     detailPokemon: null,
-    pointCap: league.season?.pointCap ?? 110,
+    pointCap: rules.pointCap,
     draftQueue: [],
     autoDraftQueue: false,
     liveTimerExpiresAt: null,
@@ -186,7 +188,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   // Timer derive
   const { displayTimerSeconds } = useDraftTimer(state, dispatch);
 
-  const teraCaptainSlots = league.season.teraCaptainSlots ?? 0;
+  const teraCaptainSlots = rules.teraEnabled ? rules.teraCaptainSlots : 0;
 
   // Pick animation queue (presentational)
   // Serializes pick celebrations so batched picks (reconnect catch-up, fast
@@ -202,7 +204,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
     state, dispatch, draftedSet,
     demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
-    teraCaptainSlots, queueIdle, format,
+    teraCaptainSlots, queueIdle, format, rules,
   });
 
   // Enqueue new picks into the animation queue
@@ -334,7 +336,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
     if (ctx) {
-      const conflict = findPickConflict(pokemonName, entry.tier, ctx, state.pointCap);
+      const conflict = findPickConflict(pokemonName, entry.tier, ctx, state.pointCap, rules);
       if (conflict) {
         toast.error(describeConflict(conflict));
         return;

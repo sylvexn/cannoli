@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { RosterPokemon } from '@/lib/types';
-import type { LeagueConfig } from '@/lib/types';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import { getTermCost } from '@/data/tier-list';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { TierBadge } from '@/components/tier-badge';
@@ -14,7 +14,7 @@ interface SwapPickerProps {
   activeRoster: RosterPokemon[];
   pool: PoolEntry[];
   pointsUsed: number;
-  config: LeagueConfig;
+  config: RuleConfig;
   onSwap: (index: number, replacement: RosterPokemon) => void;
   onClose: () => void;
 }
@@ -33,7 +33,7 @@ export function SwapPicker({
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null);
 
   const currentMon = activeRoster[swappingIndex];
-  const currentCost = currentMon.isTeraCaptain ? getTermCost(currentMon.tier) : currentMon.tier;
+  const currentCost = currentMon.isTeraCaptain ? getTermCost(currentMon.tier, config.ruleset) : currentMon.tier;
 
   const filteredAgents = useMemo(() => {
     let list = showTaken ? pool : pool.filter(p => !p.drafted);
@@ -189,7 +189,7 @@ interface AddPickerProps {
   activeRoster: RosterPokemon[];
   pool: PoolEntry[];
   pointsUsed: number;
-  config: LeagueConfig;
+  config: RuleConfig;
   onAdd: (mon: RosterPokemon) => void;
   onClose: () => void;
   /** When true, over–point-cap mons stay pickable (the cap is shown as a soft

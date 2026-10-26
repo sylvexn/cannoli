@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Player, LeagueConfig, LeagueSeason } from '@/lib/types';
+import type { Player, LeagueSeason } from '@/lib/types';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import type { PokemonType } from '@/lib/pokemon';
 import { POKEMON_TYPES } from '@/lib/pokemon';
 import { TYPE_COLORS, TYPE_ABBR } from '@/lib/constants';
@@ -46,7 +47,7 @@ export function ManageRosterModal(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   player: Player;
-  config: LeagueConfig;
+  config: RuleConfig;
   costFormat: CostFormat;
   season: LeagueSeason | null | undefined;
   onSaved: () => void | Promise<void>;
@@ -84,11 +85,11 @@ export function ManageRosterModal(props: {
 
   // Derived values
   const pointsUsed = roster.reduce(
-    (sum, mon, i) => sum + (captain[i] ? getTermCost(mon.tier) : mon.tier),
+    (sum, mon, i) => sum + (captain[i] ? getTermCost(mon.tier, config.ruleset) : mon.tier),
     0,
   );
   const originalPointsUsed = roster.reduce(
-    (sum, mon) => sum + (mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier),
+    (sum, mon) => sum + (mon.isTeraCaptain ? getTermCost(mon.tier, config.ruleset) : mon.tier),
     0,
   );
   const captainCount = captain.filter(Boolean).length;
@@ -97,13 +98,13 @@ export function ManageRosterModal(props: {
 
   function captainEligibility(i: number): { eligible: boolean; reason?: string } {
     const mon = roster[i];
-    if (!canBeTeraCaptain(mon.name, costFormat)) {
+    if (!canBeTeraCaptain(mon.name, costFormat, config.ruleset)) {
       return { eligible: false, reason: 'Not eligible to be a tera captain' };
     }
     if (captainCount >= config.teraCaptainSlots) {
       return { eligible: false, reason: `All ${config.teraCaptainSlots} captain slots are full` };
     }
-    const projected = pointsUsed - mon.tier + getTermCost(mon.tier);
+    const projected = pointsUsed - mon.tier + getTermCost(mon.tier, config.ruleset);
     if (projected > config.pointCap) {
       return { eligible: false, reason: 'Captain markup would exceed the point cap' };
     }
@@ -260,7 +261,7 @@ export function ManageRosterModal(props: {
         <div className="flex-1 overflow-y-auto -mx-1 px-1 flex flex-col gap-1.5">
           {roster.map((mon, i) => {
             const isCaptain = captain[i];
-            const effectiveCost = isCaptain ? getTermCost(mon.tier) : mon.tier;
+            const effectiveCost = isCaptain ? getTermCost(mon.tier, config.ruleset) : mon.tier;
             const elig = captainEligibility(i);
             const captainDisabled = !isCaptain && !elig.eligible;
             const types = teraTypes[i] ?? [];
@@ -368,12 +369,12 @@ export function ManageRosterModal(props: {
                 {isCaptain && (
                   <div className="px-2.5 pb-2.5 pt-0.5 border-t border-pink/10">
                     <div className="text-[9px] text-pink/60 font-semibold uppercase tracking-wider mb-1.5">
-                      Select up to 3 types
+                      Select up to {config.ruleset.teraTypesPerCaptain} types
                     </div>
                     <div className="flex flex-wrap gap-1">
                       {POKEMON_TYPES.map(type => {
                         const selected = types.includes(type);
-                        const atMax = types.length >= 3 && !selected;
+                        const atMax = types.length >= config.ruleset.teraTypesPerCaptain && !selected;
                         return (
                           <button
                             key={type}
