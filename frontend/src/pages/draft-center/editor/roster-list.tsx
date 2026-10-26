@@ -81,11 +81,11 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
   const setSummary = mon.set ? [mon.set.item, ...mon.set.moves.filter(Boolean)].filter(Boolean).join(' / ') : '';
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 min-w-0">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 py-1.5 min-w-0">
       <Link to={pokemonRoute(mon.name)} className="shrink-0 hover:scale-105 transition-transform">
         <PokemonSprite name={mon.name} size="md" />
       </Link>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-36">
         <div className="flex items-center gap-1.5 min-w-0">
           <Link to={pokemonRoute(mon.name)} className={cn('truncate text-sm font-mono font-semibold hover:underline', mon.captain ? 'text-pink-400' : 'text-text-primary hover:text-neon')}>
             {mon.name}
@@ -103,6 +103,8 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
         </div>
       </div>
 
+      {/* Controls wrap under the identity block when the row is too narrow, instead of crushing the type chips. */}
+      <div className="ml-auto shrink-0 flex items-center gap-2">
       <div className="shrink-0 flex flex-col items-center gap-0.5 w-8">
         {tier != null ? <TierBadge points={tier} /> : <span className="text-[9px] text-loss font-mono">n/a</span>}
         <span className={cn('text-[10px] font-mono tabular-nums', mon.captain && cost !== tier ? 'text-pink-400 font-bold' : 'text-text-muted')}>{cost}pt</span>
@@ -137,6 +139,7 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
         className="shrink-0 size-7 rounded-md flex items-center justify-center text-text-muted opacity-60 hover:opacity-100 hover:text-loss hover:bg-surface-overlay">
         <X size={14} />
       </button>
+      </div>
     </div>
   );
 }
