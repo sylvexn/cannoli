@@ -4,6 +4,7 @@ import { DraftCenterProvider } from '@/lib/draft-center/store';
 export { DraftCenterHome } from './home';
 export { TeamEditorPage } from './editor';
 export { PastTeamPage } from './past-team';
+export { ComparePage } from './compare';
 export { SharedTeamPage } from './shared-page';
 
 /** Shell for every /draft-center route: shared team store + page title. */
