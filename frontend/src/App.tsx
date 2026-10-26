@@ -51,6 +51,7 @@ import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
 import { NotFoundPage } from '@/pages/not-found';
 
 // Lazy-loaded heavy routes
+const PlayoffsApprovalMockup = lazyWithReload(() => import("./pages/admin/mockups/playoffs").then(m => ({ default: m.PlayoffsApprovalMockup })));
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
 const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
 const DraftCenterLayout = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterLayout })));
@@ -180,6 +181,7 @@ export default function App() {
                     <Route path="feedback" element={<AdminFeedbackRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
                     <Route path="sim" element={<AdminSimRoute />} />
+                    <Route path="mockups/playoffs" element={<Suspense fallback={null}><PlayoffsApprovalMockup /></Suspense>} />
                   </Route>
                 </Route>
               </Route>
