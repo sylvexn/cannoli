@@ -28,6 +28,7 @@ import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
 import { SidebarNavItem } from './app-shell/sidebar-nav-item';
+import { PatchNotesNavItem } from './app-shell/patch-notes-nav-item';
 import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
@@ -406,6 +407,7 @@ export function AppShell() {
           <SidebarNavItem to="/speed-tiers" icon={Gauge} label="Speed Tiers" activeClass="bg-cyan-300/10 text-cyan-300" collapsed={collapsedRail} />
           <SidebarNavItem to="/badges" icon={Award} label="Badges" activeClass="bg-amber-400/10 text-amber-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/rules" icon={ScrollText} label="Rules" activeClass="bg-pink/10 text-pink" collapsed={collapsedRail} />
+          <PatchNotesNavItem collapsed={collapsedRail} />
         </nav>
 
         {/* Collapse toggle — docked mode only (the drawer has its own close). */}

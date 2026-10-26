@@ -920,15 +920,31 @@ export type ApiBulkPinChange =
   | { op: 'award'; teamId: string; pokemon?: string; nickname?: string; note?: string; matchId?: string; stats?: Record<string, unknown> }
   | { op: 'revoke'; pinId: number };
 
-export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
-
-export interface ApiChangelogEntry {
+// Patch notes
+export type PatchSectionKind = 'new' | 'changes' | 'fixes' | 'balance';
+export interface PatchSection { kind: PatchSectionKind; items: string[] }
+export interface ApiPatchNote {
   id: string;
-  /** ISO 8601 timestamp (UTC). */
+  /** '1.3' = planned patch, '1.3.1' = hotfix; null on unparseable legacy rows. */
+  version: string | null;
+  /** ISO 8601 UTC. Drives ordering + unread. */
   date: string;
-  category: ChangelogCategory;
   title: string;
-  body?: string;
+  heroUrl: string | null;
+  sections: PatchSection[];
+  parentId: string | null;
+  status: 'draft' | 'published';
+}
+export interface ApiPatch extends ApiPatchNote { hotfixes: ApiPatchNote[] }
+export interface ApiAdminPatchNote extends ApiPatchNote { createdAt: string | null; updatedAt: string | null }
+export interface PatchNoteInput {
+  id?: string;
+  version?: string;
+  title?: string;
+  heroUrl?: string;
+  sections?: PatchSection[];
+  parentId?: string | null;
+  status?: 'draft' | 'published';
 }
 
 // Feedback (DB-backed, all 4 categories)
@@ -954,11 +970,12 @@ export interface ApiFeedbackItem {
   createdAt: string;
 }
 
-// Notifications (unified pane: changelog + feedback + announcement + match)
-export type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
+// Notifications (personal bell: feedback + announcement + match, filed under tab groups)
+export type NotificationSource = 'feedback' | 'announcement' | 'match';
+export type NotificationGroup = 'trades' | 'matches' | 'admin' | 'feedback';
 
 export interface NotificationItem {
-  /** Prefixed composite id, e.g. 'changelog:<entryId>' | 'notif:<rowId>' | 'announcement:<rowId>' | 'match:<matchId>'. */
+  /** Prefixed composite id, e.g. 'notif:<rowId>' | 'announcement:<rowId>' | 'match:<matchId>'. */
   id: string;
   source: NotificationSource;
   title: string;
@@ -967,6 +984,8 @@ export interface NotificationItem {
   link: string | null;
   /** Source-specific category driving icon + accent (changelog/announcement category). */
   category: string | null;
+  /** Bell tab this item files under. */
+  group: NotificationGroup;
   createdAt: string;
   read: boolean;
 }
@@ -974,7 +993,7 @@ export interface NotificationItem {
 export interface NotificationsResponse {
   items: NotificationItem[];
   unreadCount: number;
-  unreadBySource: { changelog: number; feedback: number; announcement: number; match: number };
+  unreadByGroup: Record<NotificationGroup, number>;
 }
 
 export type AnnouncementCategory = 'info' | 'feature' | 'event' | 'maintenance';
@@ -1690,18 +1709,30 @@ export const api = {
   syncFeedbackResolutions: () =>
     fetchJson<{ notified: number }>('/api/feedback/notifications'),
 
-  // Changelog ("What's New") — still served standalone; the pane aggregates it.
-  getChangelog: () =>
-    fetchJson<{ entries: ApiChangelogEntry[]; lastSeenAt: string | null }>('/api/changelog'),
+  // Patch notes (public page + sidebar badge)
+  getPatchNotes: () =>
+    fetchJson<{ patches: ApiPatch[]; lastSeenAt: string | null; unreadCount: number | null }>('/api/changelog'),
 
   markChangelogSeen: () =>
     postJson<{ success: boolean; seenAt: string }>('/api/changelog/seen'),
 
-  // Unified notifications pane
+  // Patch notes admin (draft -> preview -> publish)
+  adminListPatchNotes: () => fetchJson<ApiAdminPatchNote[]>('/api/admin/changelog'),
+  adminCreatePatchNote: (input: PatchNoteInput) =>
+    postJson<{ success: boolean; id: string }>('/api/admin/changelog', input),
+  adminUpdatePatchNote: (id: string, input: PatchNoteInput) =>
+    putJson<{ success: boolean }>(`/api/admin/changelog/${encodeURIComponent(id)}`, input),
+  adminPublishPatchNote: (id: string) =>
+    postJson<{ success: boolean; date: string }>(`/api/admin/changelog/${encodeURIComponent(id)}/publish`),
+  adminDeletePatchNote: (id: string) =>
+    deleteJson<{ success: boolean }>(`/api/admin/changelog/${encodeURIComponent(id)}`),
+
+  // Personal bell
   getNotifications: () => fetchJson<NotificationsResponse>('/api/notifications'),
 
-  /** Mark everything seen on pane open (changelog + announcements + all directed rows). */
-  markNotificationsSeen: () => postJson<{ success: boolean }>('/api/notifications/seen'),
+  /** Mark all read (optionally only one tab's group). */
+  markNotificationsSeen: (group?: NotificationGroup) =>
+    postJson<{ success: boolean }>('/api/notifications/seen', group ? { group } : {}),
 
   /** Mark specific directed notifications read (composite ids; non-directed ids ignored). */
   markNotificationsRead: (ids: string[]) =>

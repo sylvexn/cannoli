@@ -1,7 +1,16 @@
 import type { PokemonType } from './pokemon';
 import type { LucideIcon } from 'lucide-react';
-import { Info, Zap, CalendarDays, AlertTriangle } from 'lucide-react';
-import type { AnnouncementCategory } from './api';
+import { Info, Zap, CalendarDays, AlertTriangle, Sparkles, Wrench, Bug, Scale } from 'lucide-react';
+import type { AnnouncementCategory, PatchSectionKind } from './api';
+
+/** Patch-notes section headings (public page, admin editor, preview). */
+export const PATCH_SECTION_META: Record<PatchSectionKind, { label: string; color: string; Icon: LucideIcon }> = {
+  new:     { label: 'New',             color: 'var(--color-neon, #34d399)',       Icon: Sparkles },
+  changes: { label: 'Changes',         color: 'var(--color-cyan-300, #67e8f9)',   Icon: Wrench },
+  fixes:   { label: 'Fixes',           color: 'var(--color-amber-400, #fbbf24)',  Icon: Bug },
+  balance: { label: 'Rules & Balance', color: 'var(--color-purple-400, #c084fc)', Icon: Scale },
+};
+export const PATCH_SECTION_ORDER: PatchSectionKind[] = ['new', 'changes', 'fixes', 'balance'];
 
 /**
  * Gem identity for a league id, used to pick its `.league-banner-<gem>` styling.
