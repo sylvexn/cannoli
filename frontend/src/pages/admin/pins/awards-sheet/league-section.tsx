@@ -1,6 +1,5 @@
 /**
- * One league's block in the Awards Sheet: a row per team (league / season /
- * team scoped pins) or a row per qualifying match (match scoped pins).
+ * One league's block in the Awards Sheet: a row per team.
  */
 import type { ReactNode } from 'react';
 import { AlertTriangle, Check, Plus } from 'lucide-react';
@@ -67,11 +66,10 @@ interface SectionProps {
 export function LeagueSection(p: SectionProps) {
   const { league, def, rows, unresolved } = p;
   const fields = def.metadataFields ?? [];
-  const isMatch = def.scope === 'match';
   const teamIds = new Set(league.teams.map(t => t.id));
   const awardedHere = [...rows.values()].filter(r => teamIds.has(r.teamId)).length;
   const myUnresolved = unresolved.filter(u => u.leagueId === league.id);
-  const missing = def.scope !== 'match' && awardedHere === 0;
+  const missing = awardedHere === 0;
 
   return (
     <section className="rounded-md border border-border-default bg-surface-raised/30">
@@ -95,9 +93,7 @@ export function LeagueSection(p: SectionProps) {
       )}
 
       <div className="divide-y divide-border-subtle">
-        {isMatch
-          ? <MatchRows {...p} />
-          : league.teams.map(t => <TeamRow key={t.id} team={t} fields={fields} {...p} />)}
+        {league.teams.map(t => <TeamRow key={t.id} team={t} fields={fields} {...p} />)}
       </div>
     </section>
   );
@@ -179,56 +175,5 @@ function TeamRow({
       )}
       {rowErrors[key] && <span className="w-full text-[11px] text-loss">{rowErrors[key]}</span>}
     </div>
-  );
-}
-
-/** Per-match pins: every qualifying match (suggested or already saved) with a tick. */
-function MatchRows({ league, rows, setRows, existing, suggestions, rowErrors }: SectionProps) {
-  const teams = new Map(league.teams.map(t => [t.id, t]));
-  const entries = new Map<string, { teamId: string; matchId: string; reason: string; sugg?: ApiPinSuggestion }>();
-  for (const s of suggestions.filter(x => x.leagueId === league.id && x.matchId)) {
-    entries.set(rowKey(s.teamId, s.matchId), { teamId: s.teamId, matchId: s.matchId!, reason: s.reason, sugg: s });
-  }
-  for (const [k, pin] of existing) {
-    if (entries.has(k) || !pin.teamId || !teams.has(pin.teamId) || !pin.matchId) continue;
-    const m = pin.metadata ?? {};
-    entries.set(k, {
-      teamId: pin.teamId, matchId: pin.matchId,
-      reason: `Saved award${m.week != null ? ` (week ${String(m.week)})` : ''}${typeof m.scoreLine === 'string' ? `, ${m.scoreLine}` : ''}`,
-    });
-  }
-  if (entries.size === 0) {
-    return <div className="px-3 py-3 text-[11px] text-text-muted">No qualifying matches.</div>;
-  }
-  return (
-    <>
-      {[...entries].map(([k, e]) => {
-        const team = teams.get(e.teamId)!;
-        const row = rows.get(k);
-        const saved = existing.get(k);
-        const status: Status = row ? (saved ? 'awarded' : 'unsaved') : 'suggested';
-        return (
-          <div key={k} className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2', rowErrors[k] && 'bg-loss/5')}>
-            <Tick
-              on={!!row}
-              label={`Award ${team.teamName} for ${e.reason}`}
-              onClick={() => setRows(m => {
-                if (m.has(k)) m.delete(k);
-                else m.set(k, e.sugg ? rowFromSuggestion(e.sugg) : { teamId: e.teamId, matchId: e.matchId });
-              })}
-            />
-            <div className="min-w-[8rem] shrink-0">
-              <TeamLink
-                team={{ leagueId: team.leagueId, teamId: team.id, teamName: team.teamName, teamAbbrev: team.teamAbbrev, teamColor: team.teamColor }}
-                size="sm"
-              />
-            </div>
-            <span className="min-w-0 flex-1 basis-40 truncate text-[11px] text-text-secondary" title={e.reason}>{e.reason}</span>
-            <StatusChip status={status} draft={!!saved && !saved.published} />
-            {rowErrors[k] && <span className="w-full text-[11px] text-loss">{rowErrors[k]}</span>}
-          </div>
-        );
-      })}
-    </>
   );
 }

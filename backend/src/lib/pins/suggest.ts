@@ -25,7 +25,7 @@ export interface Suggestion {
   teamId: string;
   /** Canonical roster spelling when the pin is mon-headlined. */
   pokemon?: string;
-  /** Set for per-match pins (kingslayer / flawless) and high-score. */
+  /** Set for per-match pins (high-score). */
   matchId?: string;
   /** Derived stats shown in the tooltip (kills, wins, seriesScore, ...). */
   metadata: Record<string, unknown>;
@@ -47,7 +47,7 @@ export interface SuggestResult {
   unresolved: UnresolvedSuggestion[];
 }
 
-const STAT_PINS = ['garchomp', 'high-score', 'steal-of-the-draft', 'sweeper', 'flawless', 'team-mvp'] as const;
+const STAT_PINS = ['garchomp', 'high-score', 'steal-of-the-draft', 'sweeper', 'team-mvp'] as const;
 
 type MatchRow = typeof schema.matches.$inferSelect;
 type Push = (s: Omit<Suggestion, 'leagueId' | 'tie'>, tie: boolean) => void;
@@ -139,9 +139,6 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
     push({ pinDefId: 'cynthia', teamId: s.teamId, metadata: { streak: s.best }, reason: `${s.best}-game win streak` },
       cynthia.length > 1);
   }
-
-  // kingslayer: every qualifying match
-  suggestKingslayer(regular, teams.map(t => t.id), push);
 
   // stat-based pins need per-Pokemon rows. S9 has none: say so, don't crash.
   const statCount = db.select({ c: sql<number>`COUNT(*)` }).from(schema.matchPokemon)
@@ -238,7 +235,7 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
     }, steals.length > 1);
   }
 
-  // sweeper (most flawless wins) + flawless (each flawless win)
+  // sweeper (most flawless wins)
   const sweepRows = completed.flatMap(m => {
     const winner = matchWinner(m);
     if (!winner || m.homeScore == null || m.awayScore == null) return [];
@@ -256,54 +253,5 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
   for (const w of sweepers) {
     push({ pinDefId: 'sweeper', teamId: w.teamId, metadata: { sweeps: w.sweeps }, reason: `${w.sweeps} flawless wins` },
       sweepers.length > 1);
-  }
-  for (const r of sweepRows) {
-    if (r.winnerGp <= 0 || r.winnerDeaths > 0) continue;
-    const m = r.match;
-    push({
-      pinDefId: 'flawless', teamId: r.winnerTeamId, matchId: r.matchId,
-      metadata: { scoreLine: `${m.homeScore}-${m.awayScore}`, week: m.week },
-      reason: `Won ${m.homeScore}-${m.awayScore} (week ${m.week}) with no losses`,
-    }, false);
-  }
-}
-
-/** Kingslayer: a bottom-half team beating a top-3 team, judged on the
- *  standings through that match's week. Lists EVERY qualifying match. */
-function suggestKingslayer(regular: MatchRow[], teamIds: string[], push: Push) {
-  const rankCache = new Map<number, Map<string, number>>();
-  const ranksThrough = (week: number) => {
-    const hit = rankCache.get(week);
-    if (hit) return hit;
-    const rec = new Map(teamIds.map(id => [id, { wins: 0, diff: 0 }]));
-    for (const m of regular) {
-      if (m.week > week || m.homeScore == null || m.awayScore == null) continue;
-      if (!m.homeTeamId || !m.awayTeamId) continue;
-      const w = matchWinner(m);
-      const h = rec.get(m.homeTeamId), a = rec.get(m.awayTeamId);
-      if (h) { h.diff += m.homeScore - m.awayScore; if (w === m.homeTeamId) h.wins++; }
-      if (a) { a.diff += m.awayScore - m.homeScore; if (w === m.awayTeamId) a.wins++; }
-    }
-    const ranked = [...rec.entries()].sort((x, y) =>
-      (y[1].wins - x[1].wins) || (y[1].diff - x[1].diff) || x[0].localeCompare(y[0]));
-    const map = new Map(ranked.map(([id], i) => [id, i + 1]));
-    rankCache.set(week, map);
-    return map;
-  };
-  const half = Math.ceil(teamIds.length / 2);
-  for (const m of regular) {
-    if (m.homeScore == null || m.awayScore == null) continue;
-    const winner = matchWinner(m);
-    if (!winner) continue;
-    const loser = winner === m.homeTeamId ? m.awayTeamId : m.homeTeamId;
-    if (!loser) continue;
-    const ranks = ranksThrough(m.week);
-    const wr = ranks.get(winner), lr = ranks.get(loser);
-    if (!wr || !lr || wr <= half || lr > 3) continue;
-    push({
-      pinDefId: 'kingslayer', teamId: winner, matchId: m.id,
-      metadata: { loserTeamId: loser, winnerRank: wr, loserRank: lr, week: m.week },
-      reason: `#${wr} seed beat #${lr} (week ${m.week})`,
-    }, false);
   }
 }

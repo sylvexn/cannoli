@@ -7,7 +7,9 @@
  * What it does (in one transaction on --apply):
  *   a. exports EVERY pin (joined with its definition) to a JSON file,
  *   b. deletes only the auto-minted pins (source = 'auto') — those get
- *      re-awarded through the Awards Sheet using the suggestions,
+ *      re-awarded through the Awards Sheet using the suggestions — then drops
+ *      the retired kingslayer / flawless definitions (migration 0072 leaves
+ *      them while pins reference them; pins cascade, hence export-first),
  *   c. backfills team_id (and metadata.teamId / leagueId) on the remaining
  *      rows from metadata / team ownership,
  *   d. marks the remaining hand-curated / fixture rows published.
@@ -74,6 +76,10 @@ console.log(`\nexported ${rows.length} pins -> ${outPath}`);
 
 db.transaction(() => {
   const del = db.query(`DELETE FROM pins WHERE source = 'auto'`).run();
+  // Retired badges. Any non-auto pin left on them would cascade away with the
+  // definition, so drop their pins explicitly (already in the export above).
+  db.query(`DELETE FROM pins WHERE pin_def_id IN ('kingslayer', 'flawless')`).run();
+  db.query(`DELETE FROM pin_definitions WHERE id IN ('kingslayer', 'flawless')`).run();
 
   // Backfill team_id: metadata.teamId, then winnerTeamId, then the user's team in the pin's league.
   db.query(`

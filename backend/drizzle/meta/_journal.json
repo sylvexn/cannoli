@@ -505,6 +505,13 @@
       "when": 1784200000001,
       "tag": "0071_draft_center",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1784200000002,
+      "tag": "0072_drop_match_badges",
+      "breakpoints": true
     }
   ]
 }
