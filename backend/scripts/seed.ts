@@ -15,6 +15,7 @@
  * when S11 becomes the active season.
  */
 
+import { backfillRulesets } from './backfill-rulesets';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
@@ -1096,6 +1097,14 @@ if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
   })();
   const perFmt = Object.entries(fmt.written).map(([f, n]) => `${f}=${n}`).join(' ');
   console.log(`\n  cost formats: format_costs(${perFmt}), ${fmt.leaguesChanged} leagues assigned`);
+}
+
+// Rulesets
+// Snapshot each league's legacy rules into a `rulesets` row and point the
+// league at it, so seeded data exercises the same enforcement path as new leagues.
+{
+  const rep = backfillRulesets(sqlite, true);
+  console.log(`\n  rulesets: ${rep.instances.length} instances, ${rep.templates.length} templates`);
 }
 
 // Final summary

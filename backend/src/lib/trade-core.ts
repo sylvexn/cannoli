@@ -13,6 +13,8 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
 import { projectRoster } from './projected-roster';
+import { getLeagueRuleset } from './rulesets';
+import { rosterBand } from '@cannoli/rules';
 
 /**
  * Validate that a proposed trade would leave both rosters legal:
@@ -37,14 +39,13 @@ export function validateProposedTrade(opts: {
   recipientId: string;
   offering: string[];
   requesting: string[];
-  pointCap: number;
   leagueId: string;
-  minRosterSize?: number;
-  maxRosterSize?: number;
   /** Trade row being validated, so the projection doesn't count it twice. */
   excludeTradeId?: number;
 }): string | null {
-  const { proposerId, recipientId, offering, requesting, pointCap, leagueId, minRosterSize, maxRosterSize } = opts;
+  const { proposerId, recipientId, offering, requesting, leagueId } = opts;
+  const rs = getLeagueRuleset(leagueId);
+  const { min: minRosterSize, max: maxRosterSize } = rosterBand(rs);
 
   if (offering.length === 0) return 'Must offer at least one Pokemon';
   if (requesting.length === 0) return 'Must request at least one Pokemon';
@@ -108,7 +109,7 @@ export function validateProposedTrade(opts: {
   ];
 
   // Roster band: each post-trade roster must stay within [minRosterSize,
-  // maxRosterSize]. Callers pass the effective bounds (NULL columns already
+  // maxRosterSize]. Bounds come from the league ruleset (NULL columns already
   // resolved to rosterSize), so an unbanded league pins both to rosterSize.
   if (maxRosterSize != null) {
     if (postProposer.length > maxRosterSize) {
@@ -138,7 +139,7 @@ export function validateProposedTrade(opts: {
       isTeraCaptain: !!r.isTeraCaptain,
     }));
 
-    const violation = validateRosterLegality(entries, pokeByName, { pointCap, label: side });
+    const violation = validateRosterLegality(entries, pokeByName, { ruleset: rs, label: side });
     if (violation) return violation.message;
   }
 
