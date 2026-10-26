@@ -249,3 +249,6 @@ export interface ActivityEvent {
   metadata: Record<string, unknown>;
   timestamp: string;
 }
+
+/** Pure rules object shared with the backend (workspace package `@cannoli/rules`). */
+export type { Ruleset, TeraMarkup } from '@cannoli/rules';
