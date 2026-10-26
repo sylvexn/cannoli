@@ -54,6 +54,7 @@ import { NotFoundPage } from '@/pages/not-found';
 
 // Lazy-loaded heavy routes
 const PlayoffsApprovalMockup = lazyWithReload(() => import("./pages/admin/mockups/playoffs").then(m => ({ default: m.PlayoffsApprovalMockup })));
+const AdminPlayoffs = lazyWithReload(() => import("./pages/admin/playoffs").then(m => ({ default: m.AdminPlayoffs })));
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
 const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
 const DraftCenterLayout = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterLayout })));
@@ -177,6 +178,7 @@ export default function App() {
                     <Route path="announcements" element={<AdminAnnouncementsRoute />} />
                     <Route path="rules" element={<AdminRulesRoute />} />
                     <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
+                    <Route path="playoffs" element={<Suspense fallback={null}><AdminPlayoffs /></Suspense>} />
                     <Route path="settings" element={<AdminSiteSettingsRoute />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
