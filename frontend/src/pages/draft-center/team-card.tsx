@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Copy, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowLeftRight, Copy, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -24,7 +24,7 @@ export function TeamCard({ team, ruleset, onDuplicate, onDelete }: {
   return (
     <div className="group relative rounded-lg border border-border-default bg-surface-raised/50 hover:border-emerald-400/40 transition-colors min-w-0">
       <Link to={`/draft-center/team/${team.id}`} className="block p-3 pb-2.5 min-w-0" aria-label={`Open ${team.name}`}>
-        <div className="flex items-center gap-2 min-w-0 pr-14">
+        <div className="flex items-center gap-2 min-w-0 pr-20">
           <span className="truncate font-mono font-semibold text-sm">{team.name}</span>
           {team.shareToken && <span className="shrink-0 text-[9px] font-mono uppercase text-neon border border-neon/40 rounded px-1">shared</span>}
         </div>
@@ -60,6 +60,8 @@ export function TeamCard({ team, ruleset, onDuplicate, onDelete }: {
       </Link>
 
       <div className="absolute top-1.5 right-1.5 flex opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <Link to={`/draft-center/compare?a=${team.id}`} title="Compare with..." aria-label="Compare with another team"
+          className="size-7 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-overlay"><ArrowLeftRight size={13} /></Link>
         <button type="button" onClick={onDuplicate} title="Duplicate" aria-label="Duplicate team"
           className="size-7 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-overlay"><Copy size={13} /></button>
         <button type="button" onClick={onDelete} title="Delete" aria-label="Delete team"

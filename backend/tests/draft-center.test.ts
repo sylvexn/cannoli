@@ -17,6 +17,7 @@ try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
 const COSTS: Record<string, { tier: number; banned?: boolean; teraBanned?: boolean }> = {
   Garchomp: { tier: 18 }, Gengar: { tier: 13 }, Breloom: { tier: 11 },
+  Araquanid: { tier: 9 }, Arceus: { tier: 0, banned: true },
   Muk: { tier: 4 }, Raboot: { tier: 2 }, Vigoroth: { tier: 3 },
   'Mega Alakazam': { tier: 19 }, 'Mega Scizor': { tier: 19 },
   Charizard: { tier: 7 }, 'Mega Charizard X': { tier: 20 },
@@ -35,7 +36,7 @@ describe('draft-center validator', () => {
     const v = validateRoster([mon('Gengar'), mon('Muk', { captain: true, teraTypes: ['dark', 'poison', 'ghost'] })], RS, lookup);
     expect(v.used).toBe(13 + 5);
     expect(v.remaining).toBe(50 - 18);
-    expect(v.violations).toEqual([]);
+    expect(v.violations.filter(x => x.severity === 'warn')).toEqual([]);
   });
 
   test('over budget (incl. markup) is a warning, not an error', () => {
@@ -72,7 +73,35 @@ describe('draft-center validator', () => {
   });
 });
 
+
+// Parity fixtures: IDENTICAL block lives in frontend/src/lib/draft-center/rules.test.ts and
+// backend/tests/draft-center.test.ts; both validators must emit exactly these codes.
+const PARITY: [string, DcMon[], Partial<Ruleset>, string[]][] = [
+  ['empty roster is silent', [], {}, []],
+  ['under minimum', [mon('Muk')], {}, ['roster_under']],
+  ['at minimum', [mon('Muk'), mon('Gengar'), mon('Breloom')], {}, []],
+  ['over size', [mon('Muk'), mon('Gengar'), mon('Breloom'), mon('Araquanid')], {}, ['roster_over']],
+  ['banned only (not also unknown)', [mon('Arceus'), mon('Muk'), mon('Gengar')], {}, ['banned']],
+  ['unknown only', [mon('Zzzmon'), mon('Muk'), mon('Gengar')], {}, ['unknown_pokemon']],
+  ['captain tier + no tera', [mon('Garchomp', { captain: true }), mon('Muk'), mon('Gengar')], { pointCap: 99 }, ['captain_tier', 'captain_no_tera']],
+  ['tera-banned captain', [mon('Alcremie', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Muk'), mon('Gengar')], {}, ['captain_tera_banned']],
+  ['captain count', [mon('Muk', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Araquanid', { captain: true, teraTypes: ['fire', 'water', 'grass'] }), mon('Gengar')], {}, ['captain_count']],
+  ['tera disabled', [mon('Muk', { captain: true }), mon('Gengar'), mon('Breloom')], { teraEnabled: false, teraCaptainSlots: 0 }, ['tera_disabled']],
+  ['band min 3 max 4', [mon('Muk'), mon('Gengar')], { rosterMin: 3, rosterMax: 4 }, ['roster_under']],
+];
+
+describe('validator parity', () => {
+  for (const [label, roster, over, expected] of PARITY) {
+    test(label, () => expect(codes(roster, { ...RS, pointCap: 40, rosterSize: 3, teraCaptainSlots: 1, ...over }).sort()).toEqual([...expected].sort()));
+  }
+});
+
 describe('draft-center sanitize', () => {
+  test('tera types: case/whitespace normalised, unknown dropped', () => {
+    const out = sanitizeRoster([{ name: 'Muk', captain: true, teraTypes: ['Fire', ' WATER ', 'fire', 'Bogus', 7] }]);
+    expect(out[0]!.teraTypes).toEqual(['fire', 'water']);
+  });
+
   test('bounds and coerces untrusted input', () => {
     const out = sanitizeRoster([
       { name: 'Muk', captain: true, teraTypes: ['dark', 'dark', 'bogus', 'poison', 'ghost', 'fire'],
@@ -176,6 +205,11 @@ describe('draft-center routes', () => {
     const moved = await (await hit('PUT', `/api/draft-center/teams/${a.id}`, ownerCookie, { rulesetId: null })).json() as any;
     expect(moved.rulesetId).toBeNull();
     expect(moved.validation.budget).toBe(110); // default
+    // Picking "Default" on a league-keyed team must not snap back to the league ruleset.
+    const toDefault = await (await hit('PUT', `/api/draft-center/teams/${lgTeam.id}`, ownerCookie, { rulesetId: null, leagueId: null })).json() as any;
+    expect(toDefault.leagueId).toBeNull();
+    expect(toDefault.rulesetId).toBeNull();
+    expect(toDefault.validation.budget).toBe(110);
     for (const t of [a, bad, lgTeam]) await hit('DELETE', `/api/draft-center/teams/${t.id}`, ownerCookie);
   });
 

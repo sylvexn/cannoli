@@ -94,6 +94,12 @@ const isoOk = (d: unknown): d is string => typeof d === 'string' && !Number.isNa
 const heroOk = (h: unknown) => h == null || h === '' || (typeof h === 'string' && /^(https?:\/\/|\/)/.test(h));
 const versionOk = (v: string) => /^\d+\.\d+(\.\d+)?$/.test(v);
 
+const versionTaken = (v: string, exceptId?: string) =>
+  db.select({ id: schema.changelog.id }).from(schema.changelog).where(eq(schema.changelog.version, v)).all()
+    .some(r => r.id !== exceptId);
+const parentPublished = (parentId: string) =>
+  db.select({ status: schema.changelog.status }).from(schema.changelog).where(eq(schema.changelog.id, parentId)).get()?.status === 'published';
+
 function slugFor(version: string | null, title: string): string {
   const base = (version ? `v${version}` : title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `${base || 'patch'}-${new Date().toISOString().slice(0, 7)}`;
@@ -169,6 +175,7 @@ export const changelogRoutes = new Elysia()
     const status = b.status === 'published' ? 'published' : 'draft';
     const version = typeof b.version === 'string' && b.version.trim() ? b.version.trim() : null;
     if (version && !versionOk(version)) { set.status = 400; return { error: 'version must look like 1.3 or 1.3.1' }; }
+    if (version && versionTaken(version)) { set.status = 409; return { error: `Version ${version} already exists`, code: 'version_exists' }; }
 
     let parentId: string | null = null;
     if (typeof b.parentId === 'string' && b.parentId) {
@@ -176,6 +183,7 @@ export const changelogRoutes = new Elysia()
       if (!parent) { set.status = 400; return { error: 'parent patch not found' }; }
       if (parent.parentId) { set.status = 400; return { error: 'hotfixes cannot nest under a hotfix' }; }
       parentId = parent.id;
+      if (status === 'published' && !parentPublished(parent.id)) { set.status = 409; return { error: 'Publish the parent patch first' }; }
     }
 
     const slug = typeof b.id === 'string' && b.id.trim() ? b.id.trim() : slugFor(version, b.title);
@@ -186,7 +194,7 @@ export const changelogRoutes = new Elysia()
     const secs = sections ?? [];
     db.insert(schema.changelog).values({
       id: slug,
-      date: isoOk(b.date) ? b.date.trim() : new Date().toISOString(),
+      date: isoOk(b.date) ? new Date(b.date).toISOString() : new Date().toISOString(),
       category: deriveCategory(secs),
       title: b.title.trim(),
       version,
@@ -210,12 +218,13 @@ export const changelogRoutes = new Elysia()
     const updates: Record<string, unknown> = {};
     if (b.date !== undefined) {
       if (!isoOk(b.date)) { set.status = 400; return { error: 'date must be an ISO-8601 timestamp' }; }
-      updates.date = b.date.trim();
+      updates.date = new Date(b.date).toISOString();
     }
     if (typeof b.title === 'string' && b.title.trim()) updates.title = b.title.trim();
     if (b.version !== undefined) {
       const v = typeof b.version === 'string' ? b.version.trim() : '';
       if (v && !versionOk(v)) { set.status = 400; return { error: 'version must look like 1.3 or 1.3.1' }; }
+      if (v && versionTaken(v, params.id)) { set.status = 409; return { error: `Version ${v} already exists`, code: 'version_exists' }; }
       updates.version = v || null;
     }
     if (b.heroUrl !== undefined) {
@@ -242,9 +251,7 @@ export const changelogRoutes = new Elysia()
     if (!existing) { set.status = 404; return { error: 'Entry not found' }; }
     if (existing.status === 'published') { set.status = 409; return { error: 'Already published' }; }
     if (existing.parentId) {
-      const parent = db.select({ status: schema.changelog.status }).from(schema.changelog)
-        .where(eq(schema.changelog.id, existing.parentId)).get();
-      if (parent?.status !== 'published') { set.status = 409; return { error: 'Publish the parent patch first' }; }
+      if (!parentPublished(existing.parentId)) { set.status = 409; return { error: 'Publish the parent patch first' }; }
     }
     const date = new Date().toISOString();
     db.update(schema.changelog).set({ status: 'published', date, updatedAt: sql`(datetime('now'))` })

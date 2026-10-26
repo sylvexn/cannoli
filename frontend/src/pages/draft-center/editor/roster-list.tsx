@@ -14,6 +14,8 @@ import { pokemonRoute } from '@/lib/pokemon-route';
 import { baseTier, captainEligibility, monCost } from '@/lib/draft-center/rules';
 import { rosterSizeOf, type Ruleset } from '@/lib/draft-center/ruleset';
 import type { DcMon, DcSet, DcViolation } from '@/lib/draft-center/types';
+import type { OwnerMap } from '@/lib/draft-center/availability';
+import { AvailBadge } from './avail-badge';
 import { SetEditor } from './set-editor';
 
 interface Props {
@@ -22,10 +24,12 @@ interface Props {
   violations: DcViolation[];
   onChange: (roster: DcMon[]) => void;
   onAdd: () => void;
+  owners?: OwnerMap | null;
+  leagueId?: string | null;
 }
 
 /** Roster slots: captain toggle, tera types, cost, expandable set editor. Empty slots are add-targets. */
-export function RosterList({ roster, ruleset, violations, onChange, onAdd }: Props) {
+export function RosterList({ roster, ruleset, violations, onChange, onAdd, owners = null, leagueId = null }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const patch = (name: string, p: Partial<DcMon>) => onChange(roster.map(m => (m.name === name ? { ...m, ...p } : m)));
   const emptySlots = Math.max(0, rosterSizeOf(ruleset) - roster.length);
@@ -41,7 +45,7 @@ export function RosterList({ roster, ruleset, violations, onChange, onAdd }: Pro
             mine.length ? 'border-amber-400/40' : m.captain ? 'border-pink-400/40' : 'border-border-default',
           )}>
             <MonRow
-              mon={m} ruleset={ruleset} warnings={mine} expanded={expanded}
+              mon={m} ruleset={ruleset} owners={owners} leagueId={leagueId} warnings={mine} expanded={expanded}
               onToggleOpen={() => setOpen(expanded ? null : m.name)}
               onCaptain={() => patch(m.name, { captain: !m.captain })}
               onTera={teraTypes => patch(m.name, { teraTypes })}
@@ -70,8 +74,8 @@ export function RosterList({ roster, ruleset, violations, onChange, onAdd }: Pro
   );
 }
 
-function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onTera, onRemove }: {
-  mon: DcMon; ruleset: Ruleset; warnings: DcViolation[]; expanded: boolean;
+function MonRow({ mon, ruleset, owners, leagueId, warnings, expanded, onToggleOpen, onCaptain, onTera, onRemove }: {
+  mon: DcMon; ruleset: Ruleset; owners: OwnerMap | null; leagueId: string | null; warnings: DcViolation[]; expanded: boolean;
   onToggleOpen: () => void; onCaptain: () => void; onTera: (t: PokemonType[]) => void; onRemove: () => void;
 }) {
   const data = getPokemonData(mon.name);
@@ -90,6 +94,7 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
           <Link to={pokemonRoute(mon.name)} className={cn('truncate text-sm font-mono font-semibold hover:underline', mon.captain ? 'text-pink-400' : 'text-text-primary hover:text-neon')}>
             {mon.name}
           </Link>
+          <AvailBadge owners={owners} leagueId={leagueId} name={mon.name} />
           {warnings.length > 0 && (
             <Tooltip>
               <TooltipTrigger render={<span className="size-1.5 rounded-full bg-amber-400 shrink-0" />} />
@@ -113,7 +118,7 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
       <Tooltip>
         <TooltipTrigger render={
           <button
-            type="button" onClick={onCaptain} aria-pressed={mon.captain} aria-label="Toggle tera captain"
+            type="button" onClick={onCaptain} aria-pressed={mon.captain} aria-label={`Toggle tera captain: ${mon.name}`}
             className={cn(
               'shrink-0 size-7 rounded-md flex items-center justify-center border transition-colors',
               mon.captain
@@ -129,9 +134,9 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
         </TooltipContent>
       </Tooltip>
 
-      {mon.captain && <TeraPicker value={mon.teraTypes} max={ruleset.teraTypesPerCaptain} onChange={onTera} />}
+      {mon.captain && ruleset.teraEnabled && <TeraPicker name={mon.name} value={mon.teraTypes} max={ruleset.teraTypesPerCaptain} onChange={onTera} />}
 
-      <button type="button" onClick={onToggleOpen} aria-expanded={expanded} aria-label="Edit set" title="Edit set"
+      <button type="button" onClick={onToggleOpen} aria-expanded={expanded} aria-label={`Edit set: ${mon.name}`} title="Edit set"
         className="shrink-0 size-7 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-overlay">
         <ChevronDown size={14} className={cn('transition-transform', expanded && 'rotate-180')} />
       </button>
@@ -145,13 +150,13 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
 }
 
 /** Up to `max` tera types for a captain, picked from a popover grid of all 18. */
-function TeraPicker({ value, max, onChange }: { value: PokemonType[]; max: number; onChange: (t: PokemonType[]) => void }) {
+function TeraPicker({ name, value, max, onChange }: { name: string; value: PokemonType[]; max: number; onChange: (t: PokemonType[]) => void }) {
   const toggle = (t: PokemonType) => onChange(value.includes(t) ? value.filter(x => x !== t) : [...value, t].slice(0, max));
   return (
     <Popover>
       <PopoverTrigger render={
-        <button type="button" aria-label="Pick tera types" title="Tera types"
-          className="shrink-0 h-7 px-1.5 rounded-md border border-pink-400/30 flex items-center gap-0.5 hover:bg-pink-400/10" />
+        <button type="button" aria-label={`Pick tera types: ${name}`} title="Pick tera types"
+          className="shrink-0 h-7 min-w-7 px-1.5 rounded-md border border-pink-400/30 flex items-center justify-center gap-0.5 hover:bg-pink-400/10 focus-visible:ring-2 focus-visible:ring-pink-400/60 outline-none" />
       }>
         {value.length === 0 && <span className="text-[10px] font-mono text-pink-400">tera?</span>}
         {value.map(t => <span key={t} className="size-3 rounded-full ring-1 ring-white/20" style={{ backgroundColor: TYPE_COLORS[t] }} />)}

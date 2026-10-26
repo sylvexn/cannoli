@@ -150,7 +150,7 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
   }
 
   // garchomp (most season kills on one Pokemon)
-  const kills = db.select({
+  const killRows = db.select({
     teamId: schema.matchPokemon.teamId, pokemon: schema.matchPokemon.pokemonName,
     kills: sql<number>`COALESCE(SUM(${schema.matchPokemon.kills}), 0)`,
     deaths: sql<number>`COALESCE(SUM(${schema.matchPokemon.deaths}), 0)`,
@@ -159,6 +159,15 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
     .where(and(eq(schema.matches.leagueId, leagueId), eq(schema.matches.phase, 'regular'),
       eq(schema.matches.status, 'completed')))
     .groupBy(schema.matchPokemon.teamId, schema.matchPokemon.pokemonName).all();
+  // Fold stored formes (Minior + Minior-Indigo) onto the roster name before ranking.
+  const folded = new Map<string, typeof killRows[number]>();
+  for (const r of killRows) {
+    const pokemon = canon(r.teamId, r.pokemon);
+    const key = `${r.teamId}\0${pokemon.toLowerCase()}`;
+    const hit = folded.get(key);
+    if (hit) { hit.kills += r.kills; hit.deaths += r.deaths; } else folded.set(key, { ...r, pokemon });
+  }
+  const kills = [...folded.values()];
   const garchomp = pickGarchompWinners(kills.map(r => ({
     teamId: r.teamId, pokemon: canon(r.teamId, r.pokemon), kills: r.kills, deaths: r.deaths,
     teamRank: rankOf.get(r.teamId) ?? null,

@@ -25,13 +25,15 @@ import { computeStandings, matchWinner } from '../lib/standings';
 export const archiveDeepRoutes = new Elysia()
 
   // League full archive
-  .get('/api/archive/leagues/:leagueId/full', ({ params, set }) => {
+  .get('/api/archive/leagues/:leagueId/full', ({ params, set, user }) => {
     const league = db.select().from(schema.leagues)
       .where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
     const season = db.select().from(schema.seasons)
       .where(eq(schema.seasons.id, league.seasonId)).get();
+    // Live-season results are unrevealed: non-staff only read archived history.
+    if (!season?.archived && !isStaff(user)) { set.status = 404; return { error: 'League not found' }; }
 
     // Bulk-fetch teams once; everything below is JOIN-or-group on this set.
     const teamRows = db.select().from(schema.teams)
@@ -211,7 +213,7 @@ export const archiveDeepRoutes = new Elysia()
   })
 
   // Single team-season report
-  .get('/api/archive/leagues/:leagueId/teams/:teamId', ({ params, set }) => {
+  .get('/api/archive/leagues/:leagueId/teams/:teamId', ({ params, set, user }) => {
     const team = db.select().from(schema.teams)
       .where(and(
         eq(schema.teams.id, params.teamId),
@@ -224,6 +226,7 @@ export const archiveDeepRoutes = new Elysia()
     const season = league
       ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get()
       : null;
+    if (!season?.archived && !isStaff(user)) { set.status = 404; return { error: 'Team not found in league' }; }
 
     const roster = db.select({
       pokemonName: schema.rosters.pokemonName,
@@ -431,6 +434,7 @@ export const archiveDeepRoutes = new Elysia()
       awayTeamId: schema.matches.awayTeamId,
       homeScore: schema.matches.homeScore,
       awayScore: schema.matches.awayScore,
+      winnerTeamId: schema.matches.winnerTeamId,
     })
       .from(schema.matches)
       .innerJoin(schema.leagues, eq(schema.leagues.id, schema.matches.leagueId))
@@ -440,10 +444,9 @@ export const archiveDeepRoutes = new Elysia()
 
     const winnerTeamIds = new Set<string>();
     const championsRaw = finalsRows
-      .filter(r => r.homeScore != null && r.awayScore != null && r.homeScore !== r.awayScore)
       .filter(r => r.archived || isStaff(user))
       .map(r => {
-        const winnerId = (r.homeScore as number) > (r.awayScore as number) ? r.homeTeamId : r.awayTeamId;
+        const winnerId = matchWinner(r);
         if (winnerId != null) winnerTeamIds.add(winnerId);
         return { ...r, winnerTeamId: winnerId };
       })

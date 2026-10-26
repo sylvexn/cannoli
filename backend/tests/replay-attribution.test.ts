@@ -42,7 +42,7 @@ describe('indirect KO attribution', () => {
     const log = `${head('Toxapex', 'Garchomp')}
 |move|p1a: Toxapex|Baneful Bunker|p1a: Toxapex
 |move|p2a: Garchomp|Earthquake|p1a: Toxapex
-|-activate|p1a: Toxapex|move: Baneful Bunker
+|-activate|p1a: Toxapex|move: Protect
 |-status|p2a: Garchomp|psn
 |-damage|p2a: Garchomp|0 fnt|[from] psn
 |faint|p2a: Garchomp`;

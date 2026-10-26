@@ -103,6 +103,27 @@ describe('rulesets routes', () => {
     const off = mkLeague('assign-off', 'offseason', null);
     expect((await call('POST', `/api/admin/rulesets/${t.json.id}/assign`, { leagueId: off })).status).toBe(409);
   });
+
+  test('assign + edit keep the league cost format and roster columns in step', async () => {
+    const t = await call('POST', '/api/admin/rulesets', { name: `${tag}-tpl4`, costFormat: 'natdexplus', rosterSize: 11 });
+    const lid = mkLeague('mirror', 'predraft', null); // league column starts as natdex
+    const a = await call('POST', `/api/admin/rulesets/${t.json.id}/assign`, { leagueId: lid });
+    let row = db.select().from(schema.leagues).where(eq(schema.leagues.id, lid)).get()!;
+    expect([row.costFormat, row.rosterSize]).toEqual(['natdexplus', 11]);
+    expect((await call('PUT', `/api/admin/rulesets/${a.json.id}`, { costFormat: 'natdex', rosterMin: 10, rosterMax: 12 })).status).toBe(200);
+    row = db.select().from(schema.leagues).where(eq(schema.leagues.id, lid)).get()!;
+    expect([row.costFormat, row.minRosterSize, row.maxRosterSize]).toEqual(['natdex', 10, 12]);
+  });
+
+  test('frozen instance: full-form save that only renames is allowed', async () => {
+    const t = await call('POST', '/api/admin/rulesets', { name: `${tag}-tpl5` });
+    const lid = mkLeague('frozen-save', 'predraft', null);
+    const inst = (await call('POST', `/api/admin/rulesets/${t.json.id}/assign`, { leagueId: lid })).json;
+    db.update(schema.leagues).set({ phase: 'draft' }).where(eq(schema.leagues.id, lid)).run();
+    const full = { ...inst, name: `${tag}-renamed`, teraMarkup: { ...inst.teraMarkup } };
+    expect((await call('PUT', `/api/admin/rulesets/${inst.id}`, full)).status).toBe(200);
+    expect((await call('PUT', `/api/admin/rulesets/${inst.id}`, { ...full, pointCap: inst.pointCap + 5 })).status).toBe(409);
+  });
 });
 
 function getRow(id: number) {

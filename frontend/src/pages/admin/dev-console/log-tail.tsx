@@ -22,6 +22,7 @@ export function LogTail() {
   const pausedRef = useRef(false);
   const held = useRef<DevLogLine[]>([]);
   const lastN = useRef(0);
+  const boot = useRef('');
   pausedRef.current = paused;
 
   // History prefetch, then SSE. Lines arriving while paused are held and flushed on resume.
@@ -29,13 +30,14 @@ export function LogTail() {
     let es: EventSource | null = null;
     let dead = false;
     const onLine = (l: DevLogLine) => {
+      if (l.boot !== boot.current) { boot.current = l.boot; lastN.current = 0; } // backend restarted: seq restarts at 1
       if (l.n <= lastN.current) return;
       lastN.current = l.n;
-      if (pausedRef.current) held.current.push(l); else setLines(p => [...p, l].slice(-VIEW_CAP));
+      if (pausedRef.current) held.current = [...held.current, l].slice(-VIEW_CAP); else setLines(p => [...p, l].slice(-VIEW_CAP));
     };
     devConsoleApi.logs(500).then(r => {
       if (dead) return;
-      for (const l of r.lines) lastN.current = Math.max(lastN.current, l.n);
+      for (const l of r.lines) { boot.current = l.boot; lastN.current = Math.max(lastN.current, l.n); }
       setLines(r.lines);
       es = new EventSource(devConsoleApi.streamUrl(), { withCredentials: true });
       es.onopen = () => setConnected(true);

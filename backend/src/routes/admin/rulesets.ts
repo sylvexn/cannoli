@@ -3,7 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import { validateRulesetShape, parseMarkup, type Ruleset } from '@cannoli/rules';
 import { db, schema } from '../../db';
 import { requireStaff } from '../../lib/auth-guards';
-import { getLeagueRuleset, invalidateRulesetCache, rowToRuleset, rulesetUsage } from '../../lib/rulesets';
+import { getLeagueRuleset, invalidateRulesetCache, rowToRuleset, rulesetUsage, syncLeagueMirrors } from '../../lib/rulesets';
 
 /**
  * Ruleset library + instances (plan/ruleset-design.md).
@@ -159,18 +159,22 @@ export const rulesetAdminRoutes = new Elysia()
       return l?.a;
     });
     const allowed = row.archived ? ['archived'] : seasonArchived ? META_ONLY : usage?.frozen ? ALWAYS_EDITABLE : null;
+    const { values, error } = merge(row, b);
+    // Compare normalised column values, so a full-form save (markup sent as an
+    // object) of a frozen instance only trips on fields that actually change.
     if (allowed) {
-      const blocked = FIELDS.filter(f => f in b && !allowed.includes(f) && b[f] !== (row as Record<string, unknown>)[f]);
+      const blocked = (Object.keys(values) as (keyof Row)[])
+        .filter(f => !allowed.includes(f) && values[f] !== row[f]);
       if (blocked.length) {
         set.status = 409;
         return { error: 'Ruleset is frozen', code: 'RULESET_FROZEN', usedBy: usage?.leagueIds ?? [], fields: blocked };
       }
     }
-    const { values, error } = merge(row, b);
     if (error) { set.status = 400; return { error }; }
     const updated = db.update(schema.rulesets)
       .set({ ...values, updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19) })
       .where(eq(schema.rulesets.id, row.id)).returning().get();
+    syncLeagueMirrors(row.id);
     invalidateRulesetCache(row.id);
     log(user, 'ruleset_updated', `Updated ruleset "${updated.name}"`, { rulesetId: row.id, changed: Object.keys(values) });
     return toJson(updated);
@@ -203,6 +207,7 @@ export const rulesetAdminRoutes = new Elysia()
     const row = db.transaction(() => {
       const fork = clone(src, typeof b.name === 'string' && b.name.trim() ? b.name.trim() : `${src.name} · ${league.name}`, false, parseInt(user.id), values);
       db.update(schema.leagues).set({ rulesetId: fork.id }).where(eq(schema.leagues.id, league.id)).run();
+      syncLeagueMirrors(fork.id);
       return fork;
     });
     log(user, 'ruleset_forked', `Forked ruleset "${src.name}" for ${league.name}`, { from: src.id, to: row.id }, league.id);
@@ -221,6 +226,7 @@ export const rulesetAdminRoutes = new Elysia()
     const row = db.transaction(() => {
       const target = src.isTemplate ? clone(src, `${src.name} · ${league.name}`, false, parseInt(user.id)) : src;
       db.update(schema.leagues).set({ rulesetId: target.id }).where(eq(schema.leagues.id, league.id)).run();
+      syncLeagueMirrors(target.id);
       return target;
     });
     log(user, 'ruleset_assigned', `Set ruleset "${row.name}" on ${league.name}`, { rulesetId: row.id }, league.id);

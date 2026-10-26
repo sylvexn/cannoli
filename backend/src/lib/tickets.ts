@@ -39,10 +39,10 @@ export function setTicketStatus(id: number, to: Status, actorUserId: number | nu
     closedAt: resolved ? now : null,
     fixedIn: newFixedIn,
   }).where(eq(schema.tickets.id, id)).run();
-  db.insert(schema.ticketEvents).values({
+  const ev = db.insert(schema.ticketEvents).values({
     ticketId: id, actorUserId, kind: 'status', fromStatus: t.status, toStatus: to,
     text: newFixedIn ? `Fixed in v${newFixedIn}` : null,
-  }).run();
+  }).returning({ id: schema.ticketEvents.id }).get()!;
 
   if (resolved && t.status !== to) {
     if (t.feedbackId) {
@@ -56,7 +56,7 @@ export function setTicketStatus(id: number, to: Status, actorUserId: number | nu
         body: null,
         link: newFixedIn ? `/patch-notes#v${newFixedIn}` : null,
         metadata: { ticketId: id },
-        dedupeKey: `ticket:${id}:${to}`,
+        dedupeKey: `ticket:${id}:${to}:${ev.id}`,
       });
     }
   }

@@ -411,9 +411,9 @@ function publicPins(
       seasonNumber: r.seasonNumber,
       leagueId: r.leagueId,
       published: r.published,
-      source: r.source,
       awardedAt: r.awardedAt,
-      awardedBy: r.awardedBy,
+      // Provenance is staff-only.
+      ...(staffViewer ? { source: r.source, awardedBy: r.awardedBy } : {}),
       metadata: bypassGate ? r.meta : redactUnrevealedMetadata(r.meta, viewer),
       definition: {
         id: r.pinDefId,

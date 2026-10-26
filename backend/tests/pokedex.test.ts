@@ -182,3 +182,12 @@ describe('toCannoliSpeciesName', () => {
     expect(toCannoliSpeciesName('Altaria-Mega (T)')).toBe('Mega Altaria (T)');
   });
 });
+
+describe("Squawkabilly-White folding", () => {
+  test("folds Squawkabilly-White but leaves Basculin-White-Striped and Kyurem-White", async () => {
+    const { getBaseFormName } = await import("../src/lib/pokedex");
+    expect(getBaseFormName("Squawkabilly-White")).toBe("Squawkabilly");
+    expect(getBaseFormName("Basculin-White-Striped")).toBe("Basculin-White-Striped");
+    expect(getBaseFormName("Kyurem-White")).toBe("Kyurem-White");
+  });
+});

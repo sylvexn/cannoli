@@ -187,7 +187,8 @@ export const draftCenterRoutes = new Elysia()
     if (b.name !== undefined) patch.name = sanitizeName(b.name, row.name);
     if ('leagueId' in b) patch.leagueId = knownLeague(b.leagueId);
     if ('rulesetId' in b || 'leagueId' in b) {
-      patch.rulesetId = rulesetFor(b.rulesetId, patch.leagueId ?? row.leagueId);
+      // An explicit leagueId (even null) wins; `??` would fall back to the old league.
+      patch.rulesetId = rulesetFor(b.rulesetId, 'leagueId' in b ? patch.leagueId : row.leagueId);
     }
     if (b.roster !== undefined) patch.roster = JSON.stringify(sanitizeRoster(b.roster));
     const updated = db.update(schema.draftCenterTeams)

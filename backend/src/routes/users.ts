@@ -849,7 +849,7 @@ export function computeLifetimeStats(userId: number) {
     totalWins += wins;
     totalLosses += losses;
 
-    const final = matches.find(m => m.phase === 'playoffs' && m.playoffRound === 'f' && m.status === 'completed');
+    const final = matches.find(m => m.phase === 'playoffs' && m.playoffRound === 'f' && m.status === 'completed' && weekAllowed(ut.leagueId, m.week));
     let finish: string | null = null;
     let isChampion = false;
     if (final && final.homeScore != null && final.awayScore != null) {

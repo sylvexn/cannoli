@@ -81,6 +81,30 @@ describe('status moves', () => {
     expect(notes().length).toBe(2);
   });
 
+  test('reopen then fixed again notifies a second time', async () => {
+    const tid = db.insert(schema.tickets).values({ title: `${tag} re`, body: 'b', reporterUserId: Number(COACH.id) }).returning().get().id;
+    asUser.current = STAFF;
+    const count = () => db.select().from(schema.notifications).where(eq(schema.notifications.userId, Number(COACH.id))).all()
+      .filter(n => String(n.metadata).includes(`"ticketId":${tid}`)).length;
+    await call('PATCH', `/api/admin/tickets/${tid}`, { status: 'fixed', fixedIn: '1.4' });
+    await call('PATCH', `/api/admin/tickets/${tid}`, { status: 'triaged' });
+    await call('PATCH', `/api/admin/tickets/${tid}`, { status: 'fixed', fixedIn: '1.4.1' });
+    expect(count()).toBe(2);
+  });
+
+  test('feedback page keeps same-site paths only', async () => {
+    asUser.current = COACH;
+    const pageFor = async (page: string) => {
+      const form = new FormData();
+      form.set('category', 'bug'); form.set('title', `${tag} pg`); form.set('description', 'd'); form.set('page', page);
+      const j = await (await app.handle(new Request('http://localhost/api/feedback', { method: 'POST', body: form }))).json() as any;
+      return db.select().from(schema.tickets).where(eq(schema.tickets.id, j.ticketId)).get()!.pageUrl;
+    };
+    expect(await pageFor('/league/x')).toBe('/league/x');
+    for (const bad of ['https://evil.test', '//evil.test', 'javascript:alert(1)']) expect(await pageFor(bad)).toBeNull();
+    asUser.current = STAFF;
+  });
+
   test('bad input rejected, notes recorded in detail', async () => {
     expect((await call('PATCH', `/api/admin/tickets/${id}`, { status: 'nope' })).status).toBe(400);
     expect((await call('PATCH', `/api/admin/tickets/${id}`, { fixedIn: 'x' })).status).toBe(400);

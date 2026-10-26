@@ -60,6 +60,7 @@ const DraftCenterLayout = lazyWithReload(() => import('./pages/draft-center').th
 const DraftCenterHome = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterHome })));
 const DraftCenterEditor = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.TeamEditorPage })));
 const DraftCenterPast = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.PastTeamPage })));
+const DraftCenterCompare = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.ComparePage })));
 const DraftCenterShared = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.SharedTeamPage })));
 const MatchupCenterPage = lazyWithReload(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazyWithReload(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
@@ -136,6 +137,7 @@ export default function App() {
               <Route path="draft-center" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterLayout /></Suspense>}>
                 <Route index element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterHome /></Suspense>} />
                 <Route path="team/:id" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterEditor /></Suspense>} />
+                <Route path="compare" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterCompare /></Suspense>} />
                 <Route path="past/:leagueId/:teamId" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterPast /></Suspense>} />
                 <Route path="s/:token" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterShared /></Suspense>} />
               </Route>

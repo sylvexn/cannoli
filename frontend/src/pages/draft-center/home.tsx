@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Plus } from 'lucide-react';
+import { ArrowLeftRight, Download, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import { useDraftCenter } from '@/lib/draft-center/store';
 import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { importPrompted, markImportPrompted } from '@/lib/draft-center/local-store';
 import { preloadSprites } from '@/components/pokemon-sprite';
+import type { DcMon } from '@/lib/draft-center/types';
 import { NewTeamDialog } from './new-team-dialog';
 import { PastTeams } from './past-teams';
 import { TeamCard } from './team-card';
@@ -39,9 +40,9 @@ export function DraftCenterHome() {
   const defaultRulesetId = rulesets.find(r => !r.isTemplate)?.id ?? null;
   const defaultName = useMemo(() => `Team ${store.teams.length + 1}`, [store.teams.length]);
 
-  async function create(name: string, rulesetId: number | null) {
+  async function create(name: string, rulesetId: number | null, roster: DcMon[]) {
     try {
-      const t = await store.createTeam({ name, rulesetId, roster: [] });
+      const t = await store.createTeam({ name, rulesetId, roster });
       setCreating(false);
       nav(`/draft-center/team/${t.id}`);
     } catch (e) { toast.error(getErrorMessage(e)); }
@@ -70,6 +71,14 @@ export function DraftCenterHome() {
                 <Download size={13} /> Import {store.localCount} local
               </Button>
             )}
+            <Button
+              size="sm" variant="outline" disabled={store.teams.length < 2}
+              title={store.teams.length < 2 ? 'Needs two teams' : 'Compare your two most recently edited teams'}
+              onClick={() => {
+                const [x, y] = [...store.teams].sort((p, q) => q.updatedAt.localeCompare(p.updatedAt));
+                nav(`/draft-center/compare?a=${x.id}&b=${y.id}`);
+              }}
+            ><ArrowLeftRight size={13} /> Compare</Button>
             <Button size="sm" onClick={() => setCreating(true)}><Plus size={13} /> New team</Button>
           </div>
         </div>

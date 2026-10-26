@@ -9,10 +9,9 @@ import { api } from '@/lib/api';
 import { DEFAULT_MOVE_CATEGORIES, type MoveCategory } from '@/data/move-categories';
 import { getMoveColor } from '@/data/move-type-map';
 import { getTeamMoveCoverage } from '@/lib/move-coverage';
-import { normalizeAbility } from '@/lib/type-effectiveness';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { teamToRoster } from '@/lib/draft-center/roster';
-import { moveId } from '@/lib/draft-center/sets';
+import { monHasEntry } from '@/lib/draft-center/compare';
 import type { Ruleset } from '@/lib/draft-center/ruleset';
 import type { DcMon } from '@/lib/draft-center/types';
 
@@ -20,7 +19,7 @@ type Mode = 'set' | 'learn';
 
 // The admin-managed category list is fetched once per page load.
 let categoriesCache: Promise<MoveCategory[]> | null = null;
-const loadCategories = () => (categoriesCache ??= api.getMoveCategories()
+export const loadCategories = () => (categoriesCache ??= api.getMoveCategories()
   .then(c => (c.length > 0 ? c : DEFAULT_MOVE_CATEGORIES))
   .catch(() => DEFAULT_MOVE_CATEGORIES));
 
@@ -45,11 +44,6 @@ export function RolesPanel({ roster, ruleset }: { roster: DcMon[]; ruleset: Rule
   );
 
   const byName = useMemo(() => new Map(roster.map(m => [m.name, m])), [roster]);
-
-  function hasIt(mon: DcMon, entry: { moveId: string; isAbility?: boolean }): boolean {
-    if (entry.isAbility) return !!mon.set?.ability && normalizeAbility(mon.set.ability) === entry.moveId;
-    return !!mon.set?.moves.some(mv => moveId(mv) === entry.moveId);
-  }
 
   if (roster.length === 0) {
     return <div className="rounded-lg border border-dashed border-border-default p-8 text-center text-sm text-text-muted">Add Pokemon to see role coverage.</div>;
@@ -77,7 +71,7 @@ export function RolesPanel({ roster, ruleset }: { roster: DcMon[]; ruleset: Rule
         {coverage.map(({ category, entries }) => {
           const rows = entries.map(({ entry, teamA }) => {
             const members = teamA.map(n => byName.get(n)).filter((m): m is DcMon => !!m);
-            const has = members.filter(m => hasIt(m, entry));
+            const has = members.filter(m => monHasEntry(m, entry));
             const shown = mode === 'set' ? has : members;
             return { entry, shown, has };
           });

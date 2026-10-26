@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, RotateCcw, Swords, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Download, RotateCcw, Swords, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/errors';
 import { useDraftCenter } from '@/lib/draft-center/store';
+import { useLeagueAvailability } from '@/lib/draft-center/use-league-availability';
 import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { validateTeam } from '@/lib/draft-center/rules';
 import type { DcMon } from '@/lib/draft-center/types';
@@ -14,6 +15,9 @@ import { preloadSprites } from '@/components/pokemon-sprite';
 import { AnalysisTabs } from '../analysis/analysis-tabs';
 import { RulesetSelect } from '../ruleset-select';
 import { MonPicker } from './mon-picker';
+import { PasteExportDialog } from './paste-export-dialog';
+import { PasteImportDialog } from './paste-import-dialog';
+import { LeagueSelect } from './avail-badge';
 import { RosterList } from './roster-list';
 import { SharePopover } from './share-popover';
 import { BudgetMeter, Violations } from './status-bar';
@@ -24,9 +28,11 @@ export function TeamEditorPage() {
   const store = useDraftCenter();
   const team = store.getTeam(id);
   const { rulesets, resolve, loading: rulesetsLoading } = useRulesetCatalog(team ? [team] : []);
+  const lg = useLeagueAvailability();
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [pasteDialog, setPasteDialog] = useState<'import' | 'export' | null>(null);
 
   const ruleset = useMemo(() => resolve({ rulesetId: team?.rulesetId, leagueId: team?.leagueId }), [resolve, team?.rulesetId, team?.leagueId]);
   const roster = team?.roster;
@@ -79,12 +85,17 @@ export function TeamEditorPage() {
           onChange={rulesetId => store.updateTeam(team.id, { rulesetId, leagueId: null })}
           className="max-w-full min-w-0 basis-56"
         />
+        {lg.leagues.length > 0 && (
+          <LeagueSelect leagues={lg.leagues} value={lg.leagueId} onChange={lg.setLeagueId} className="max-w-full min-w-0 basis-40" />
+        )}
         <span className="text-[11px] font-mono text-text-muted min-w-16" aria-live="polite">
           {store.saveError ? <span className="text-loss" title={store.saveError}>Save failed</span> : store.saving ? 'Saving...' : 'Saved'}
         </span>
         <div className="ml-auto flex items-center gap-1.5 flex-wrap">
           <Button variant="outline" size="sm" nativeButton={false} render={<Link to={`/matchup?dc=${team.id}`} />}><Swords size={13} /> Matchup</Button>
           <SharePopover team={team} onSetShared={enabled => store.setShared(team.id, enabled)} />
+          <Button variant="outline" size="sm" onClick={() => setPasteDialog('import')}><Upload size={13} /> Import</Button>
+          <Button variant="outline" size="sm" onClick={() => setPasteDialog('export')} disabled={team.roster.length === 0}><Download size={13} /> Export</Button>
           <Button variant="outline" size="sm" onClick={duplicate}><Copy size={13} /> Duplicate</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)} disabled={team.roster.length === 0}><RotateCcw size={13} /> Reset</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)} className="text-loss hover:text-loss"><Trash2 size={13} /></Button>
@@ -97,7 +108,7 @@ export function TeamEditorPage() {
           <Violations v={validation} />
           <RosterList
             roster={team.roster} ruleset={ruleset} violations={validation.violations}
-            onChange={setRoster} onAdd={() => setPicker(true)}
+            onChange={setRoster} onAdd={() => setPicker(true)} owners={lg.owners} leagueId={lg.leagueId}
           />
         </div>
         <div className="min-w-0">
@@ -108,8 +119,11 @@ export function TeamEditorPage() {
       <MonPicker
         open={picker} onOpenChange={setPicker} ruleset={ruleset}
         taken={new Set(team.roster.map(m => m.name))} remaining={validation.remaining}
-        onPick={addMon}
+        onPick={addMon} owners={lg.owners} leagueId={lg.leagueId}
       />
+
+      <PasteImportDialog open={pasteDialog === 'import'} onOpenChange={o => setPasteDialog(o ? 'import' : null)} roster={team.roster} onApply={setRoster} />
+      <PasteExportDialog open={pasteDialog === 'export'} onOpenChange={o => setPasteDialog(o ? 'export' : null)} roster={team.roster} />
 
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
         <DialogContent>

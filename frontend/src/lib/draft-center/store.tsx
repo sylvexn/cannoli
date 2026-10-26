@@ -73,20 +73,30 @@ export function DraftCenterProvider({ children }: { children: React.ReactNode })
     return () => { cancelled = true; };
   }, [authLoading, user]);
 
-  const flush = useCallback(async (id: string) => {
-    const patch = patches.current.get(id);
-    patches.current.delete(id);
-    timers.current.delete(id);
-    if (!patch) return;
-    try {
-      const saved = await api.dcUpdateTeam(id, patch);
-      setSaveError(null);
-      setTeams(prev => prev.map(t => (t.id === id ? { ...t, updatedAt: saved.updatedAt } : t)));
-    } catch (err) {
-      setSaveError(getErrorMessage(err));
-    } finally {
-      setPending(n => Math.max(0, n - 1));
-    }
+  // Saves for one team run one after another: a slow full-roster PUT must not
+  // land after a newer one. The patch is read when the save runs, so edits made
+  // while an earlier save is in flight go out together in the next one.
+  const chains = useRef(new Map<string, Promise<void>>());
+  const flush = useCallback((id: string): Promise<void> => {
+    const run = async () => {
+      const patch = patches.current.get(id);
+      patches.current.delete(id);
+      timers.current.delete(id);
+      if (!patch) return;
+      try {
+        const saved = await api.dcUpdateTeam(id, patch);
+        setSaveError(null);
+        setTeams(prev => prev.map(t => (t.id === id ? { ...t, updatedAt: saved.updatedAt } : t)));
+      } catch (err) {
+        setSaveError(getErrorMessage(err));
+      } finally {
+        setPending(n => Math.max(0, n - 1));
+      }
+    };
+    const next = (chains.current.get(id) ?? Promise.resolve()).then(run);
+    chains.current.set(id, next);
+    void next.finally(() => { if (chains.current.get(id) === next) chains.current.delete(id); });
+    return next;
   }, []);
 
   // Don't lose an edit made in the last debounce window when leaving the page.
@@ -154,15 +164,22 @@ export function DraftCenterProvider({ children }: { children: React.ReactNode })
     setTeams(prev => prev.map(t => (t.id === id ? { ...t, shareToken: saved.shareToken } : t)));
   }, [flush]);
 
+  const importing = useRef(false);
   const importLocal = useCallback(async (): Promise<number> => {
     const local = readLocalTeams();
-    if (local.length === 0 || !user) return 0;
-    const res = await api.dcImportTeams(local.map(({ name, rulesetId, leagueId, roster }) => ({ name, rulesetId, leagueId, roster })));
-    // Only drop the guest copies once the server has them.
-    writeLocalTeams([]);
-    setLocalCount(0);
-    setTeams(prev => [...res.teams, ...prev]);
-    return res.imported;
+    if (local.length === 0 || !user || importing.current) return 0;
+    importing.current = true;
+    try {
+      const res = await api.dcImportTeams(local.map(({ name, rulesetId, leagueId, roster }) => ({ name, rulesetId, leagueId, roster })));
+      // The server imports in order up to the account limit; keep the rest in this browser.
+      const left = local.slice(res.imported);
+      writeLocalTeams(left);
+      setLocalCount(left.length);
+      setTeams(prev => [...res.teams, ...prev]);
+      return res.imported;
+    } finally {
+      importing.current = false;
+    }
   }, [user]);
 
   const value = useMemo<DcStore>(() => ({

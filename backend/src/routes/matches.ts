@@ -10,7 +10,7 @@ import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
-import { writePlayoffBracket } from '../lib/playoff-publish';
+import { writePlayoffBracket, getDraft } from '../lib/playoff-publish';
 
 export const matchRoutes = new Elysia()
 
@@ -915,6 +915,11 @@ export const matchRoutes = new Elysia()
 
     const league = getLeague(params.leagueId);
     if (!league) { set.status = 404; return { error: 'League not found' }; }
+    // The draft flow owns the bracket once a draft row exists; regenerating here would leave it stale.
+    if (getDraft(params.leagueId)) {
+      set.status = 409;
+      return { error: 'This league has a playoff draft - manage the bracket from the playoff draft flow.', code: 'playoff_draft_exists' };
+    }
 
     // Bracket size: explicit override > league config > default 6
     const requested = topN ?? league.playoffTeamCount ?? 6;

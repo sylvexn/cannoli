@@ -17,7 +17,9 @@ export function PatchNotesPage() {
 
   useEffect(() => {
     if (!loaded || !hash) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+    const el = document.getElementById(hash.slice(1));
+    if (el instanceof HTMLDetailsElement) el.open = true; // hotfix anchors land on a collapsed <details>
+    el?.scrollIntoView({ block: 'start' });
   }, [loaded, hash]);
 
   const isNew = (date: string) => priorSeen.current !== undefined && (!priorSeen.current || date > priorSeen.current);

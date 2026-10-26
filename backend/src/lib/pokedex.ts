@@ -86,6 +86,8 @@ export function getFormCategory(rawName: string): FormCategory {
  */
 export function stripBattleOnlySuffixes(rawName: string): string {
   let name = stripTeraSuffix(rawName);
+  // White is only cosmetic on Squawkabilly (Kyurem-White is a distinct forme).
+  if (name === 'Squawkabilly-White') return 'Squawkabilly';
   let dash = name.lastIndexOf('-');
   while (dash > 0 && BATTLE_ONLY_SUFFIXES.has(name.slice(dash + 1))) {
     name = name.slice(0, dash);
