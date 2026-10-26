@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from '../src/db';
 import { createSession, parseSessionToken, validateSession } from '../src/lib/auth';
 import { devConsoleRoutes } from '../src/routes/admin/dev-console';
-import { LOG_CAPACITY, getLogs, pushLog, redact, resetLogBuffer } from '../src/lib/log-buffer';
+import { BOOT_ID, LOG_CAPACITY, getLogs, pushLog, redact, resetLogBuffer } from '../src/lib/log-buffer';
 import { getDeployStatus, resetCoolifyCache } from '../src/lib/coolify';
 
 describe('log buffer', () => {
@@ -16,6 +16,10 @@ describe('log buffer', () => {
     expect(lines.length).toBe(LOG_CAPACITY);
     expect(lines.at(-1)!.msg).toBe(`line ${LOG_CAPACITY + 49}`);
     expect(lines[0]!.msg).toBe('line 50');
+  });
+
+  test('lines carry the per-process boot id', () => {
+    expect(pushLog('info', 'x').boot).toBe(BOOT_ID);
   });
 
   test('tags ps-bot source', () => {

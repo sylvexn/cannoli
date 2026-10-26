@@ -2,7 +2,7 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-export interface DevLogLine { n: number; t: number; src: 'backend' | 'ps-bot'; level: LogLevel; msg: string }
+export interface DevLogLine { boot: string; n: number; t: number; src: 'backend' | 'ps-bot'; level: LogLevel; msg: string }
 export interface DeployApp {
   name: string; fqdn: string | null; status: string; health: 'healthy' | 'degraded' | 'stopped' | 'unknown';
   commit: string | null; image: string | null; lastDeployAt: string | null; deployStatus: string | null;

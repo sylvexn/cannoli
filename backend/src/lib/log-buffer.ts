@@ -6,7 +6,9 @@ import { format } from 'node:util';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LogSource = 'backend' | 'ps-bot';
-export interface LogLine { n: number; t: number; src: LogSource; level: LogLevel; msg: string }
+/** Per-process id: seq restarts at 1 on every boot, so clients key their dedupe on (boot, n). */
+export const BOOT_ID = Math.random().toString(36).slice(2, 10);
+export interface LogLine { boot: string; n: number; t: number; src: LogSource; level: LogLevel; msg: string }
 
 export const LOG_CAPACITY = 2000;
 const MAX_LINE = 4000;
@@ -35,7 +37,7 @@ export function redact(s: string): string {
 export function pushLog(level: LogLevel, msg: string, src?: LogSource): LogLine {
   let clean = redact(msg);
   if (clean.length > MAX_LINE) clean = clean.slice(0, MAX_LINE) + '…';
-  const line: LogLine = { n: ++seq, t: Date.now(), src: src ?? (/^\[PS Bot\]/i.test(clean) ? 'ps-bot' : 'backend'), level, msg: clean };
+  const line: LogLine = { boot: BOOT_ID, n: ++seq, t: Date.now(), src: src ?? (/^\[PS Bot\]/i.test(clean) ? 'ps-bot' : 'backend'), level, msg: clean };
   buf.push(line);
   if (buf.length > LOG_CAPACITY) buf = buf.slice(-LOG_CAPACITY); // ponytail: O(n) trim every push once full; fine at 2000
   for (const l of listeners) { try { l(line); } catch { /* listener errors never break logging */ } }
