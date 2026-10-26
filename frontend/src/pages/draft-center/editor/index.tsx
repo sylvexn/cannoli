@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/errors';
 import { useDraftCenter } from '@/lib/draft-center/store';
+import { useLeagueAvailability } from '@/lib/draft-center/use-league-availability';
 import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { validateTeam } from '@/lib/draft-center/rules';
 import type { DcMon } from '@/lib/draft-center/types';
@@ -14,6 +15,7 @@ import { preloadSprites } from '@/components/pokemon-sprite';
 import { AnalysisTabs } from '../analysis/analysis-tabs';
 import { RulesetSelect } from '../ruleset-select';
 import { MonPicker } from './mon-picker';
+import { LeagueSelect } from './avail-badge';
 import { RosterList } from './roster-list';
 import { SharePopover } from './share-popover';
 import { BudgetMeter, Violations } from './status-bar';
@@ -24,6 +26,7 @@ export function TeamEditorPage() {
   const store = useDraftCenter();
   const team = store.getTeam(id);
   const { rulesets, resolve, loading: rulesetsLoading } = useRulesetCatalog(team ? [team] : []);
+  const lg = useLeagueAvailability();
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -79,6 +82,9 @@ export function TeamEditorPage() {
           onChange={rulesetId => store.updateTeam(team.id, { rulesetId, leagueId: null })}
           className="max-w-full min-w-0 basis-56"
         />
+        {lg.leagues.length > 0 && (
+          <LeagueSelect leagues={lg.leagues} value={lg.leagueId} onChange={lg.setLeagueId} className="max-w-full min-w-0 basis-40" />
+        )}
         <span className="text-[11px] font-mono text-text-muted min-w-16" aria-live="polite">
           {store.saveError ? <span className="text-loss" title={store.saveError}>Save failed</span> : store.saving ? 'Saving...' : 'Saved'}
         </span>
@@ -97,7 +103,7 @@ export function TeamEditorPage() {
           <Violations v={validation} />
           <RosterList
             roster={team.roster} ruleset={ruleset} violations={validation.violations}
-            onChange={setRoster} onAdd={() => setPicker(true)}
+            onChange={setRoster} onAdd={() => setPicker(true)} owners={lg.owners} leagueId={lg.leagueId}
           />
         </div>
         <div className="min-w-0">
@@ -108,7 +114,7 @@ export function TeamEditorPage() {
       <MonPicker
         open={picker} onOpenChange={setPicker} ruleset={ruleset}
         taken={new Set(team.roster.map(m => m.name))} remaining={validation.remaining}
-        onPick={addMon}
+        onPick={addMon} owners={lg.owners} leagueId={lg.leagueId}
       />
 
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
