@@ -1109,3 +1109,21 @@ export const ticketEvents = sqliteTable('ticket_events', {
 }, (t) => ({
   ticketIdx: index('ticket_events_ticket_idx').on(t.ticketId),
 }));
+// Playoff bracket drafts (staff-only until published)
+// One row per league. The draft never touches `matches`; publishing writes the
+// bracket rows and flips status to 'published'. `seedOrder` is the full team
+// order (first `topN` make the bracket). `prePublishWeekDates` is the raw
+// leagues.weekDates before publish extended it, restored on unpublish.
+export const playoffDrafts = sqliteTable('playoff_drafts', {
+  leagueId: text('league_id').primaryKey().references(() => leagues.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('draft'),
+  topN: integer('top_n').notNull(),
+  seedOrder: text('seed_order').notNull(),
+  prePublishWeekDates: text('pre_publish_week_dates'),
+  createdBy: text('created_by'),
+  updatedBy: text('updated_by'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  publishedAt: text('published_at'),
+  publishedBy: text('published_by'),
+});

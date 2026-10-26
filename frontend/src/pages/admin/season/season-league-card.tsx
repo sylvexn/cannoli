@@ -288,7 +288,7 @@ export function SeasonLeagueCard({
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-draw bg-draw/10 border-draw/30">
-                            Not generated
+                            No bracket published
                           </Badge>
                         )}
                       </div>
@@ -300,7 +300,7 @@ export function SeasonLeagueCard({
                             className="bg-pink text-surface-base hover:bg-pink/90 h-7 text-xs"
                           >
                             <Trophy size={12} />
-                            Generate
+                            Create draft
                           </Button>
                         ) : (
                           <Button

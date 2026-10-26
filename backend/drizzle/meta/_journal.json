@@ -526,6 +526,13 @@
       "when": 1784200000004,
       "tag": "0074_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "6",
+      "when": 1784200000005,
+      "tag": "0075_playoff_drafts",
+      "breakpoints": true
     }
   ]
 }
