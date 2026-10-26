@@ -176,8 +176,9 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   const originalPoints = rosterPointsUsed(player.roster);
   const pointsDelta = pointsUsed - originalPoints;
   const captainCount = teraCaptainCount(activeRoster);
-  const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
-  const teamDeaths = activeRoster.reduce((sum, p) => sum + p.seasonStats.deaths, 0);
+  const departed = player.departed ?? [];
+  const teamKills = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.kills, 0);
+  const teamDeaths = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.deaths, 0);
   const typeProfile = useMemo(() => getTeamDefensiveProfile(activeRoster), [activeRoster]);
   const pokemonTypesMap = useMemo(() => new Map(activeRoster.map(m => [m.name, m.types])), [activeRoster]);
 
@@ -458,6 +459,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         {/* ─── ROSTER TABLE (2 cols) ─── */}
         <div className="xl:col-span-2 flex flex-col gap-4">
           <RosterTable
+            departed={departed}
             activeRoster={activeRoster}
             sortedRoster={sortedRoster}
             swaps={swaps}

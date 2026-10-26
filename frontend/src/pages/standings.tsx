@@ -410,8 +410,8 @@ function StandingsRow({
   const isPlayoff = rank <= playoffCount;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
-  const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
-  const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
+  const totalKills = [...player.roster, ...(player.departed ?? [])].reduce((s, m) => s + m.seasonStats.kills, 0);
+  const totalDeaths = [...player.roster, ...(player.departed ?? [])].reduce((s, m) => s + m.seasonStats.deaths, 0);
 
   const narrativeChip = useMemo<StandingsChip | null>(() => {
     const teamMatches: Match[] = getTeamMatches(player.id);
@@ -562,6 +562,16 @@ function StandingsRow({
                     <span className="text-win">{mon.seasonStats.kills}</span>
                     <span className="text-text-muted">/</span>
                     <span className="text-loss">{mon.seasonStats.deaths}</span>
+                  </span>
+                </div>
+              ))}
+              {(player.departed ?? []).map(mon => (
+                <div key={`departed-${mon.name}`} title="No longer on roster" className="flex items-center gap-2 py-1.5 border-b border-border-subtle last:border-b-0 px-1 -mx-1 opacity-60">
+                  <PokemonSprite name={mon.name} size="xs" />
+                  <span className="text-xs font-medium truncate min-w-0 flex-1">{mon.name} <span className="text-[9px] text-text-muted italic">(former)</span></span>
+                  <TypeChip types={mon.types} size="xs" />
+                  <span className="shrink-0 w-12 tabular-nums text-[10px] text-right">
+                    <span className="text-win">{mon.seasonStats.kills}</span><span className="text-text-muted">/</span><span className="text-loss">{mon.seasonStats.deaths}</span>
                   </span>
                 </div>
               ))}

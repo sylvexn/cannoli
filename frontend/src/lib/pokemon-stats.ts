@@ -13,11 +13,13 @@ export interface PokemonLeagueStat {
   kpg: number;
   record: { wins: number; losses: number };
   isTeraCaptain: boolean;
+  /** Played for the team but is no longer on its roster. */
+  departed?: boolean;
 }
 
 /**
- * Build league stats from player rosters.
- * Uses season stats already computed by the backend and attached to roster entries.
+ * Build league stats from player rosters plus departed mons.
+ * Uses season stats already computed by the backend (from match_pokemon).
  */
 export function computeLeagueStats(players: Player[]): PokemonLeagueStat[] {
   const stats: PokemonLeagueStat[] = [];
@@ -38,8 +40,25 @@ export function computeLeagueStats(players: Player[]): PokemonLeagueStat[] {
         differential: kills - deaths,
         gp,
         kpg: gp > 0 ? Math.round((kills / gp) * 100) / 100 : 0,
-        record: { wins: 0, losses: 0 }, // Win/loss per pokemon not tracked in API yet
+        record: { wins: mon.seasonStats.wins ?? 0, losses: mon.seasonStats.losses ?? 0 },
         isTeraCaptain: mon.isTeraCaptain,
+      });
+    }
+    for (const mon of player.departed ?? []) {
+      const { kills, deaths, gp, wins, losses } = mon.seasonStats;
+      stats.push({
+        name: mon.name,
+        teamId: player.id,
+        types: mon.types,
+        tier: mon.tier,
+        kills,
+        deaths,
+        differential: kills - deaths,
+        gp,
+        kpg: gp > 0 ? Math.round((kills / gp) * 100) / 100 : 0,
+        record: { wins, losses },
+        isTeraCaptain: false,
+        departed: true,
       });
     }
   }

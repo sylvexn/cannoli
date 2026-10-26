@@ -283,6 +283,7 @@ export function StatsPage() {
                             >
                               {stat.name}
                               {stat.isTeraCaptain && <span className="text-text-muted ml-1 text-[10px]">(T)</span>}
+                              {stat.departed && <span className="text-text-muted ml-1 text-[10px] italic" title="Played for this team but is no longer on its roster">(former)</span>}
                             </Link>
                             {team && (
                               <Link

@@ -1,4 +1,4 @@
-import type { RosterPokemon } from '@/lib/types';
+import type { RosterPokemon, DepartedPokemon } from '@/lib/types';
 import type { LeagueConfig } from '@/lib/types';
 import { getTermCost } from '@/data/tier-list';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
@@ -21,6 +21,8 @@ import { NicknameEditor } from './nickname-editor';
 type SortKey = 'tier' | 'kills' | 'deaths' | 'kpg' | 'spe';
 
 interface RosterTableProps {
+  /** Mons that played for the team but have left the roster — still counted in the K/D totals. */
+  departed?: DepartedPokemon[];
   activeRoster: RosterPokemon[];
   sortedRoster: { mon: RosterPokemon; originalIndex: number }[];
   swaps: SwapEntry[];
@@ -37,6 +39,7 @@ interface RosterTableProps {
 }
 
 export function RosterTable({
+  departed = [],
   activeRoster,
   sortedRoster,
   swaps,
@@ -53,8 +56,8 @@ export function RosterTable({
   const { openSideCard } = usePokemonSideCard();
   const pointsUsed = rosterPointsUsed(activeRoster);
   const captainCount = teraCaptainCount(activeRoster);
-  const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
-  const teamDeaths = activeRoster.reduce((sum, p) => sum + p.seasonStats.deaths, 0);
+  const teamKills = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.kills, 0);
+  const teamDeaths = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.deaths, 0);
 
   const SortIcon = ({ k }: { k: SortKey }) => {
     if (sortKey !== k) return null;
@@ -226,6 +229,17 @@ export function RosterTable({
             </tbody>
           </table>
         </div>
+
+        {departed.length > 0 && (
+          <div className="px-4 py-2 border-t border-border-subtle text-[11px] text-text-muted opacity-70">
+            <span className="italic mr-2">No longer on roster</span>
+            {departed.map(d => (
+              <Link key={d.name} to={pokemonRoute(d.name)} className="inline-block mr-3 font-mono hover:text-neon">
+                {d.name} <span className="text-win">{d.seasonStats.kills}</span>/<span className="text-loss">{d.seasonStats.deaths}</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Totals */}
         <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted font-medium">
