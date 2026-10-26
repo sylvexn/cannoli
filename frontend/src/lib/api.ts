@@ -38,13 +38,13 @@ function readCsrfToken(): string | null {
   return m ? decodeURIComponent(m[1]!) : null;
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
+export async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
-async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const csrf = readCsrfToken();
@@ -1683,7 +1683,7 @@ export const api = {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || `Failed: ${res.status}`);
     }
-    return res.json() as Promise<{ success: boolean; id: number; issueNumber: number | null; issueUrl: string | null }>;
+    return res.json() as Promise<{ success: boolean; id: number; ticketId: number }>;
   },
 
   // Admin feedback triage (reads from the feedback table)
