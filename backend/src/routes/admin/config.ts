@@ -14,18 +14,21 @@ export const configRoutes = new Elysia()
 
   // Site Settings
 
+  // Partial update: only the keys sent are written, so a form that edits a
+  // few settings never resets the rest to defaults.
   .put('/api/site-settings', ({ body, set }) => {
-    const s = body as Record<string, unknown>;
-
-    db.update(schema.siteSettings).set({
-      defaultUserPassword: (s.defaultUserPassword as string) ?? 'password',
-      tradeExpiryDays: (s.tradeExpiryDays as number) ?? 7,
-      draftTimerEnabled: s.draftTimerEnabled !== undefined ? !!s.draftTimerEnabled : true,
-      draftDemoVisible: s.draftDemoVisible !== undefined ? !!s.draftDemoVisible : true,
-      faDeadlineWeek: (s.faDeadlineWeek as number) ?? 7,
-      defaultPlayoffTeamCount: (s.defaultPlayoffTeamCount as number) ?? 6,
-      faPickupsPerSeason: (s.faPickupsPerSeason as number) ?? 6,
-    }).where(eq(schema.siteSettings.id, 1)).run();
+    const s = (body ?? {}) as Record<string, unknown>;
+    const ints = ['tradeExpiryDays', 'faDeadlineWeek', 'defaultPlayoffTeamCount', 'faPickupsPerSeason'] as const;
+    const bools = ['draftTimerEnabled', 'draftDemoVisible'] as const;
+    const patch: Partial<typeof schema.siteSettings.$inferInsert> = {};
+    if (typeof s.defaultUserPassword === 'string') patch.defaultUserPassword = s.defaultUserPassword;
+    for (const k of ints) {
+      if (s[k] === undefined) continue;
+      if (!Number.isInteger(s[k]) || (s[k] as number) < 0) { set.status = 400; return { error: `${k} must be a non-negative integer` }; }
+      patch[k] = s[k] as number;
+    }
+    for (const k of bools) if (s[k] !== undefined) patch[k] = !!s[k];
+    if (Object.keys(patch).length) db.update(schema.siteSettings).set(patch).where(eq(schema.siteSettings.id, 1)).run();
 
     return { success: true };
   })

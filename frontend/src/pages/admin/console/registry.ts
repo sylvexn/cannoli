@@ -1,12 +1,13 @@
-import { Settings, Zap, ScrollText, Layers, List, CalendarCog, Lock, type LucideIcon } from 'lucide-react';
+import { Settings, Zap, CalendarClock, ScrollText, Layers, List, CalendarCog, Lock, type LucideIcon } from 'lucide-react';
 
-export type SectionId = 'general' | 'draft' | 'league' | 'rules' | 'templates' | 'tiers' | 'rulesets';
+export type SectionId = 'general' | 'draft' | 'deadlines' | 'league' | 'rules' | 'templates' | 'tiers' | 'rulesets';
 
 export interface SectionDef { id: SectionId; label: string; icon: LucideIcon; from: string }
 
 export const SECTIONS: SectionDef[] = [
   { id: 'general', label: 'General', icon: Settings, from: 'Site Settings' },
   { id: 'draft', label: 'Draft', icon: Zap, from: 'Site Settings' },
+  { id: 'deadlines', label: 'Deadlines', icon: CalendarClock, from: 'Site Settings + leagues' },
   { id: 'league', label: 'League & season', icon: CalendarCog, from: 'Seasons & Leagues' },
   { id: 'rules', label: 'Rules text', icon: ScrollText, from: 'Rules tab' },
   { id: 'templates', label: 'Templates', icon: Layers, from: 'Templates tab' },
@@ -24,7 +25,9 @@ export const SETTINGS: SettingDef[] = [
   { id: 'pointCap', label: 'Point cap', section: 'league', keywords: 'budget cost' },
   { id: 'rosterSize', label: 'Roster size', section: 'league', keywords: 'min max team size' },
   { id: 'captains', label: 'Tera captain slots', section: 'league', keywords: 'tera captain count' },
-  { id: 'tradeDeadline', label: 'Trade deadline (week)', section: 'league', keywords: 'trades fa free agent deadline cutoff' },
+  { id: 'tradeDeadline', label: 'Trade deadline (week)', section: 'deadlines', keywords: 'trades deadline cutoff league', field: true },
+  { id: 'faDeadlineWeek', label: 'Free agent deadline (week)', section: 'deadlines', keywords: 'fa free agent pickup deadline cutoff', field: true },
+  { id: 'faPickupsPerSeason', label: 'Free agent pickups per season', section: 'deadlines', keywords: 'fa free agent pickup limit budget', field: true },
   { id: 'playoffTeams', label: 'Playoff team count', section: 'league', keywords: 'seeds bracket' },
   { id: 'forfeit', label: 'Forfeit policy', section: 'league', keywords: 'double forfeit admin review' },
   { id: 'format', label: 'Battle format', section: 'league', keywords: 'gen9 natdex ou' },

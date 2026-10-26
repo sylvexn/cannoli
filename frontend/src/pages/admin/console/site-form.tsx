@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { NumberInput } from '@/components/ui/number-input';
 import { api } from '@/lib/api';
+import { useAppData } from '@/lib/app-data-context';
 import { getErrorMessage } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 
@@ -10,12 +12,22 @@ export interface SiteSettings {
   defaultUserPassword: string;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
+  faDeadlineWeek: number;
+  faPickupsPerSeason: number;
+  /** Per-league trade deadline week, keyed by league id (saved via the league, not site settings). */
+  tradeDeadlines: Record<string, number>;
 }
+type Scalar = Exclude<keyof SiteSettings, 'tradeDeadlines'>;
 
-const DEFAULTS: SiteSettings = { defaultUserPassword: 'password', draftTimerEnabled: true, draftDemoVisible: true };
+const DEFAULTS: SiteSettings = {
+  defaultUserPassword: 'password', draftTimerEnabled: true, draftDemoVisible: true,
+  faDeadlineWeek: 7, faPickupsPerSeason: 6, tradeDeadlines: {},
+};
 
-/** Loads site settings and tracks which keys differ from the last saved baseline. */
+/** Loads site settings (+ active leagues' trade deadlines) and tracks keys that differ from the saved baseline. */
 export function useSiteSettings() {
+  const { leagues, refreshLeagues } = useAppData();
+  const activeLeagues = useMemo(() => leagues.filter(l => !l.season?.archived), [leagues]);
   const [saved, setSaved] = useState<SiteSettings>(DEFAULTS);
   const [draft, setDraft] = useState<SiteSettings>(DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -24,27 +36,48 @@ export function useSiteSettings() {
   useEffect(() => {
     api.getSiteSettings()
       .then(s => {
-        const v: SiteSettings = {
+        const v = {
           defaultUserPassword: s.defaultUserPassword ?? DEFAULTS.defaultUserPassword,
           draftTimerEnabled: s.draftTimerEnabled ?? true,
           draftDemoVisible: s.draftDemoVisible ?? true,
+          faDeadlineWeek: s.faDeadlineWeek ?? DEFAULTS.faDeadlineWeek,
+          faPickupsPerSeason: s.faPickupsPerSeason ?? DEFAULTS.faPickupsPerSeason,
         };
-        setSaved(v); setDraft(v);
+        setSaved(p => ({ ...p, ...v })); setDraft(p => ({ ...p, ...v }));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const dirtyKeys = useMemo(
-    () => (Object.keys(draft) as (keyof SiteSettings)[]).filter(k => draft[k] !== saved[k]),
+  // Trade deadlines come from the league list (refreshes after a save).
+  useEffect(() => {
+    const td = Object.fromEntries(activeLeagues.map(l => [l.id, l.season?.tradeDeadlineWeek ?? 0]));
+    setSaved(p => ({ ...p, tradeDeadlines: td }));
+    setDraft(p => ({ ...p, tradeDeadlines: { ...td, ...p.tradeDeadlines } }));
+  }, [activeLeagues]);
+
+  const changedLeagues = useMemo(
+    () => Object.keys(draft.tradeDeadlines).filter(id => draft.tradeDeadlines[id] !== saved.tradeDeadlines[id]),
     [draft, saved],
   );
-  const set = useCallback(<K extends keyof SiteSettings>(k: K, v: SiteSettings[K]) => setDraft(p => ({ ...p, [k]: v })), []);
+  const dirtyKeys = useMemo(
+    () => [
+      ...(Object.keys(draft) as (keyof SiteSettings)[]).filter(k => k !== 'tradeDeadlines' && draft[k] !== saved[k]),
+      ...changedLeagues.map(id => `tradeDeadline:${id}`),
+    ],
+    [draft, saved, changedLeagues],
+  );
+  const set = useCallback(<K extends Scalar>(k: K, v: SiteSettings[K]) => setDraft(p => ({ ...p, [k]: v })), []);
+  const setTradeDeadline = useCallback((leagueId: string, week: number) =>
+    setDraft(p => ({ ...p, tradeDeadlines: { ...p.tradeDeadlines, [leagueId]: week } })), []);
   const discard = useCallback(() => setDraft(saved), [saved]);
   const save = useCallback(async () => {
     setSaving(true);
     try {
-      await api.saveSiteSettings(draft as unknown as Record<string, unknown>);
+      const { tradeDeadlines, ...scalars } = draft;
+      await api.saveSiteSettings(scalars as unknown as Record<string, unknown>);
+      for (const id of changedLeagues) await api.updateLeague(id, { tradeDeadlineWeek: tradeDeadlines[id] });
+      if (changedLeagues.length) refreshLeagues();
       setSaved(draft);
       toast.success('Settings saved');
     } catch (err: unknown) {
@@ -52,9 +85,9 @@ export function useSiteSettings() {
     } finally {
       setSaving(false);
     }
-  }, [draft]);
+  }, [draft, changedLeagues, refreshLeagues]);
 
-  return { draft, loading, saving, dirtyKeys, set, discard, save };
+  return { draft, loading, saving, dirtyKeys, set, setTradeDeadline, discard, save, activeLeagues };
 }
 
 type Site = ReturnType<typeof useSiteSettings>;
@@ -97,6 +130,34 @@ export function DraftFields({ site, hits }: { site: Site; hits: Set<string> }) {
         hint="When hidden, only Season and Live modes are available on the draft board.">
         <Switch checked={draft.draftDemoVisible} onCheckedChange={v => set('draftDemoVisible', v)} />
       </Row>
+    </>
+  );
+}
+
+export function DeadlineFields({ site, hits }: { site: Site; hits: Set<string> }) {
+  const { draft, dirtyKeys, set, setTradeDeadline, activeLeagues } = site;
+  return (
+    <>
+      <Row id="faDeadlineWeek" label="Free agent deadline (week)" hit={hits.has('faDeadlineWeek')} dirty={dirtyKeys.includes('faDeadlineWeek')}
+        hint="Last week coaches can request pickups, for every league. Approvals still land the following week.">
+        <NumberInput value={draft.faDeadlineWeek} onChange={v => set('faDeadlineWeek', v)} min={0} max={30} />
+      </Row>
+      <Row id="faPickupsPerSeason" label="Free agent pickups per season" hit={hits.has('faPickupsPerSeason')} dirty={dirtyKeys.includes('faPickupsPerSeason')}
+        hint="How many free agents each team may pick up in a season.">
+        <NumberInput value={draft.faPickupsPerSeason} onChange={v => set('faPickupsPerSeason', v)} min={0} max={30} />
+      </Row>
+      <div id="set-tradeDeadline" className="scroll-mt-24 pt-2">
+        <div className={cn('px-3 pb-1 text-[11px] font-mono uppercase tracking-wider', hits.has('tradeDeadline') ? 'text-neon' : 'text-text-muted')}>
+          Trade deadline (week) — per league, 0 = no deadline
+        </div>
+        {activeLeagues.length === 0 && <p className="px-3 text-xs text-text-muted">No active leagues.</p>}
+        {activeLeagues.map(l => (
+          <Row key={l.id} id={`tradeDeadline-${l.id}`} label={l.name} hit={false} dirty={dirtyKeys.includes(`tradeDeadline:${l.id}`)}
+            hint={`Season ${l.season?.seasonNumber ?? '?'} · week ${l.season?.currentWeek ?? 0} of ${l.season?.totalWeeks ?? '?'}`}>
+            <NumberInput value={draft.tradeDeadlines[l.id] ?? 0} onChange={v => setTradeDeadline(l.id, v)} min={0} max={l.season?.totalWeeks ?? 30} />
+          </Row>
+        ))}
+      </div>
     </>
   );
 }
