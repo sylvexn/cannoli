@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ChevronDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { ApiRuleset } from '@/lib/api';
 import { resolveTeamRuleset } from '@/lib/draft-center/ruleset';
+import { importPaste } from '@/lib/draft-center/showdown-paste';
+import type { DcMon } from '@/lib/draft-center/types';
+import { PasteField } from './editor/paste-import-dialog';
 import { RulesetSelect } from './ruleset-select';
 
 /** Blank-team creation: a name and the ruleset to check against. */
@@ -13,21 +17,23 @@ export function NewTeamDialog({ open, onOpenChange, rulesets, defaultRulesetId, 
   rulesets: ApiRuleset[];
   defaultRulesetId: number | null;
   defaultName: string;
-  onCreate: (name: string, rulesetId: number | null) => Promise<void>;
+  onCreate: (name: string, rulesetId: number | null, roster: DcMon[]) => Promise<void>;
 }) {
   const [name, setName] = useState(defaultName);
   const [rulesetId, setRulesetId] = useState<number | null>(defaultRulesetId);
   const [busy, setBusy] = useState(false);
+  const [paste, setPaste] = useState('');
+  const [showPaste, setShowPaste] = useState(false);
 
   return (
-    <Dialog open={open} onOpenChange={o => { onOpenChange(o); if (o) { setName(defaultName); setRulesetId(defaultRulesetId); } }}>
+    <Dialog open={open} onOpenChange={o => { onOpenChange(o); if (o) { setName(defaultName); setRulesetId(defaultRulesetId); setPaste(''); setShowPaste(false); } }}>
       <DialogContent className="max-w-md">
         <form
           className="contents"
           onSubmit={async e => {
             e.preventDefault();
             setBusy(true);
-            try { await onCreate(name.trim() || defaultName, rulesetId); } finally { setBusy(false); }
+            try { await onCreate(name.trim() || defaultName, rulesetId, importPaste(paste).mons); } finally { setBusy(false); }
           }}
         >
           <DialogHeader>
@@ -42,6 +48,10 @@ export function NewTeamDialog({ open, onOpenChange, rulesets, defaultRulesetId, 
             <span className="text-[10px] font-mono uppercase text-text-muted">Ruleset</span>
             <RulesetSelect rulesets={rulesets} current={resolveTeamRuleset({ rulesetId }, { rulesets, leagueRulesets: {}, leagues: [] })} onChange={setRulesetId} className="w-full" />
           </label>
+          <button type="button" onClick={() => setShowPaste(v => !v)} className="flex items-center gap-1 text-[11px] font-mono uppercase text-text-muted hover:text-text-secondary self-start">
+            <ChevronDown size={12} className={showPaste ? '' : '-rotate-90'} /> Start from a Showdown paste
+          </button>
+          {showPaste && <PasteField text={paste} onText={setPaste} />}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={busy}>Create</Button>
