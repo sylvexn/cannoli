@@ -11,7 +11,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'rules', label: 'Rules text', icon: ScrollText, from: 'Rules tab' },
   { id: 'templates', label: 'Templates', icon: Layers, from: 'Templates tab' },
   { id: 'tiers', label: 'Tier list', icon: List, from: 'Tier List tab' },
-  { id: 'rulesets', label: 'Rulesets', icon: Lock, from: 'coming soon' },
+  { id: 'rulesets', label: 'Rulesets', icon: Lock, from: 'rule bundles' },
 ];
 
 /** `field` = a real form field in the console (highlight + scroll). Otherwise the hit just opens the section. */
@@ -32,7 +32,7 @@ export const SETTINGS: SettingDef[] = [
   { id: 'rulesAll', label: 'Draft, battle rules, clauses, bans', section: 'rules', keywords: 'clause ban ability item move tera notes' },
   { id: 'templates', label: 'League templates', section: 'templates', keywords: 'preset banlist new season' },
   { id: 'tiers', label: 'Tier list and costs', section: 'tiers', keywords: 'pokemon cost tier format lock' },
-  { id: 'rulesets', label: 'Rulesets', section: 'rulesets', keywords: 'coming soon' },
+  { id: 'rulesets', label: 'Rulesets', section: 'rulesets', keywords: 'ruleset point cap tera markup mega roster' },
 ];
 
 /** Every whitespace-separated term must appear in label, section label or keywords. */

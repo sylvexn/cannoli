@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, Loader2, Lock, Save, Search, Undo2 } from 'lucide-react';
+import { ArrowRight, Loader2, Save, Search, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { LoadingSprite } from '@/components/loading-sprite';
@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { AdminRules } from '../rules';
 import { AdminTemplates } from '../admin-templates';
 import { AdminTierList } from '../admin-tier-list';
+import { RulesetsAdmin } from '../rulesets';
 import { SECTIONS, SETTINGS, matchSettings, type SectionId } from './registry';
 import { DraftFields, GeneralFields, useSiteSettings } from './site-form';
 
@@ -102,13 +103,7 @@ export function SettingsConsole() {
           {active === 'rules' && <div id="set-rulesAll" className="scroll-mt-24"><AdminRules /></div>}
           {active === 'templates' && <div id="set-templates" className="scroll-mt-24"><AdminTemplates /></div>}
           {active === 'tiers' && <div id="set-tiers" className="scroll-mt-24"><AdminTierList /></div>}
-          {active === 'rulesets' && (
-            <div id="rulesets" className="rounded-lg border border-dashed border-border-default p-6 text-center">
-              <Lock size={18} className="mx-auto mb-2 text-text-muted" />
-              <div className="text-sm text-text-primary">Rulesets: coming soon</div>
-              <p className="text-xs text-text-muted mt-1">Reusable rule bundles will be managed here.</p>
-            </div>
-          )}
+          {active === 'rulesets' && <div id="rulesets" className="scroll-mt-24"><RulesetsAdmin /></div>}
         </div>
       </div>
 
