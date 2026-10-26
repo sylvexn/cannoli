@@ -29,6 +29,7 @@ import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
 import { SettingsConsole } from '@/pages/admin/console';
+import { AdminDashboard } from '@/pages/admin/dashboard';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminMembershipRoute, AdminLeaguesRoute, AdminSeasonRoute,
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminMoveCategoriesRoute, AdminActivityRoute,
@@ -158,7 +159,7 @@ export default function App() {
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>
                   <Route path="admin" element={<AdminPage />}>
-                    <Route index element={<AdminUsersRoute />} />
+                    <Route index element={<AdminDashboard />} />
                     <Route path="users" element={<AdminUsersRoute />} />
                     <Route path="teams" element={<AdminTeamsRoute />} />
                     <Route path="membership" element={<AdminMembershipRoute />} />
