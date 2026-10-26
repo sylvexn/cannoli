@@ -125,7 +125,7 @@ export function SwapPicker({
         </div>
 
         {/* Comparison panel */}
-        <div className="w-52 shrink-0 border-l border-border-subtle p-3 flex flex-col">
+        <div className="w-52 shrink-0 min-h-0 overflow-y-auto border-l border-border-subtle p-3 flex flex-col">
           {hovered ? (
             <div className="space-y-2.5">
               {/* Large preview */}
@@ -308,7 +308,7 @@ export function AddPicker({
         </div>
 
         {/* Preview panel */}
-        <div className="w-52 shrink-0 border-l border-border-subtle p-3 flex flex-col">
+        <div className="w-52 shrink-0 min-h-0 overflow-y-auto border-l border-border-subtle p-3 flex flex-col">
           {hovered ? (
             <div className="space-y-2.5">
               <div className="flex items-start gap-2.5">
