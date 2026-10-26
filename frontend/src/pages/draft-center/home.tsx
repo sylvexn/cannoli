@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Download, Plus } from 'lucide-react';
+import { ArrowLeftRight, Download, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -70,6 +70,14 @@ export function DraftCenterHome() {
                 <Download size={13} /> Import {store.localCount} local
               </Button>
             )}
+            <Button
+              size="sm" variant="outline" disabled={store.teams.length < 2}
+              title={store.teams.length < 2 ? 'Needs two teams' : 'Compare your two most recently edited teams'}
+              onClick={() => {
+                const [x, y] = [...store.teams].sort((p, q) => q.updatedAt.localeCompare(p.updatedAt));
+                nav(`/draft-center/compare?a=${x.id}&b=${y.id}`);
+              }}
+            ><ArrowLeftRight size={13} /> Compare</Button>
             <Button size="sm" onClick={() => setCreating(true)}><Plus size={13} /> New team</Button>
           </div>
         </div>
