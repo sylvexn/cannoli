@@ -27,6 +27,7 @@ import {
   sanitizeRoster, sanitizeName, MAX_TEAMS_PER_USER, type DcMon,
 } from '../lib/draft-center/types';
 import { resolveTeamRuleset, validateForRuleset } from '../lib/draft-center/rules';
+import { rowToRuleset, rulesetUsage } from '../lib/rulesets';
 import { cachedCardPng, xmlEscape } from '../lib/draft-center/og-image';
 
 type Row = typeof schema.draftCenterTeams.$inferSelect;
@@ -131,6 +132,23 @@ const authed = ({ user, set }: Ctx): number | null => {
 const notFound = (set: Ctx['set']) => { set.status = 404; return { error: 'Team not found' }; };
 
 export const draftCenterRoutes = new Elysia()
+
+  // Public: rulesets a planner may pick — live templates plus the instances
+  // used by leagues in unarchived seasons (no auth; rules aren't private).
+  .get('/api/draft-center/rulesets', () => {
+    const active = new Set(db.select({ id: schema.leagues.rulesetId }).from(schema.leagues)
+      .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
+      .where(eq(schema.seasons.archived, false)).all().map(r => r.id).filter((id): id is number => id != null));
+    return db.select().from(schema.rulesets).where(eq(schema.rulesets.archived, false)).all()
+      .filter(r => r.isTemplate || active.has(r.id))
+      .map(r => {
+        const usage = r.isTemplate ? null : rulesetUsage(r.id);
+        return {
+          ...rowToRuleset(r), description: r.description, isTemplate: r.isTemplate, archived: r.archived,
+          frozen: usage?.frozen ?? false, usedBy: usage?.leagueIds ?? [],
+        };
+      });
+  })
 
   .get('/api/draft-center/teams', (ctx) => {
     const uid = authed(ctx);

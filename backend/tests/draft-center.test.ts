@@ -179,6 +179,23 @@ describe('draft-center routes', () => {
     for (const t of [a, bad, lgTeam]) await hit('DELETE', `/api/draft-center/teams/${t.id}`, ownerCookie);
   });
 
+  test('public ruleset list: live templates, never archived ones', async () => {
+    const live = db.insert(schema.rulesets).values({
+      name: `${tag}-pub`, isTemplate: true, costFormat: 'natdex', pointCap: 90, rosterSize: 10,
+      teraCaptainSlots: 2, teraMarkup: JSON.stringify({ 9: 12 }),
+    }).returning().get();
+    const gone = db.insert(schema.rulesets).values({
+      name: `${tag}-old`, isTemplate: true, costFormat: 'natdex', pointCap: 90, rosterSize: 10,
+      teraCaptainSlots: 2, teraMarkup: JSON.stringify({ 9: 12 }), archived: true,
+    }).returning().get();
+    rulesetIds.push(live.id, gone.id);
+    const res = await hit('GET', '/api/draft-center/rulesets');
+    expect(res.status).toBe(200);
+    const list = await res.json() as any[];
+    expect(list.find(r => r.id === live.id)).toMatchObject({ pointCap: 90, isTemplate: true });
+    expect(list.some(r => r.id === gone.id)).toBe(false);
+  });
+
   test('requires auth', async () => {
     expect((await hit('GET', '/api/draft-center/teams')).status).toBe(401);
     expect((await hit('POST', '/api/draft-center/teams', undefined, {})).status).toBe(401);
