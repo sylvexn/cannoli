@@ -9,8 +9,7 @@ import { useAuth } from '@/lib/auth-context';
 import { orderLeaguesForUser } from './league-order';
 import { CustomTeamBuilder } from './custom-team-builder';
 import { useDraftCenterTeams } from '@/lib/draft-center/store';
-import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
-import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { teamToRoster } from '@/lib/draft-center/roster';
 import {
   Select,
@@ -35,7 +34,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
   const [showCustom, setShowCustom] = useState(false);
   const { teams: dcTeams } = useDraftCenterTeams();
-  const { leagues: allLeagues } = useAllLeagues();
+  const { resolve: resolveDc } = useRulesetCatalog(dcTeams);
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -74,7 +73,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
     if (val.startsWith('dc:')) {
       const dc = dcTeams.find(t => t.id === val.slice(3));
       if (dc) {
-        onSelect(teamToRoster(dc.roster, resolveRuleset(dc.leagueId, allLeagues)), {
+        onSelect(teamToRoster(dc.roster, resolveDc(dc)), {
           type: 'draft-center', teamId: dc.id, label: `${dc.name} (Draft Center)`,
         });
       }

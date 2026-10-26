@@ -6,9 +6,8 @@ import { Button } from '@/components/ui/button';
 import { CoachLink } from '@/components/coach-link';
 import { api } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
-import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { useDraftCenter } from '@/lib/draft-center/store';
-import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
 import type { DcSharedTeam } from '@/lib/draft-center/types';
 import { ReadOnlyView } from './read-only-view';
 
@@ -17,7 +16,6 @@ export function SharedTeamPage() {
   const { token = '' } = useParams();
   const nav = useNavigate();
   const store = useDraftCenter();
-  const { leagues, loading: leaguesLoading } = useAllLeagues();
   const [team, setTeam] = useState<DcSharedTeam | null | undefined>(undefined);
 
   useEffect(() => {
@@ -28,9 +26,10 @@ export function SharedTeamPage() {
     return () => { cancelled = true; };
   }, [token]);
 
-  const ruleset = useMemo(() => resolveRuleset(team?.leagueId ?? null, leagues), [team?.leagueId, leagues]);
+  const { resolve, loading: rulesetsLoading } = useRulesetCatalog(team ? [team] : []);
+  const ruleset = useMemo(() => resolve({ rulesetId: team?.rulesetId, leagueId: team?.leagueId }), [resolve, team?.rulesetId, team?.leagueId]);
 
-  if (team === undefined || leaguesLoading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
+  if (team === undefined || rulesetsLoading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
   if (!team) {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
@@ -42,7 +41,7 @@ export function SharedTeamPage() {
 
   async function clone() {
     try {
-      const t = await store.createTeam({ name: `${team!.name} (copy)`.slice(0, 60), leagueId: team!.leagueId, roster: structuredClone(team!.roster) });
+      const t = await store.createTeam({ name: `${team!.name} (copy)`.slice(0, 60), rulesetId: ruleset.id ?? team!.rulesetId ?? null, leagueId: team!.leagueId, roster: structuredClone(team!.roster) });
       toast.success('Copied to your teams');
       nav(`/draft-center/team/${t.id}`);
     } catch (e) { toast.error(getErrorMessage(e)); }

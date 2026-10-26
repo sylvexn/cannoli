@@ -4,10 +4,11 @@
  * (kept in step by tests on both sides) so the live editor and the server's
  * summary agree.
  */
-import { getBanned, getEffectiveCost, getTierEntry, type CostFormat } from '@/data/tier-list';
+import { captainEligible, markupCost, megaLimit } from '@cannoli/rules';
+import { getBanned, getTierEntry, type CostFormat } from '@/data/tier-list';
 import { getBaseFormName, isMegaForm } from '@/lib/draft-rules';
-import type { Ruleset } from './ruleset';
-import { MAX_CAPTAIN_TIER, type DcMon, type DcValidation, type DcViolation } from './types';
+import { rosterSizeOf, type Ruleset } from './ruleset';
+import type { DcMon, DcValidation, DcViolation } from './types';
 
 const bannedSets = new Map<CostFormat, Set<string>>();
 function isBanned(name: string, format: CostFormat): boolean {
@@ -16,9 +17,10 @@ function isBanned(name: string, format: CostFormat): boolean {
   return s.has(name);
 }
 
-/** Points a mon contributes (captain markup applied). Unknown species cost 0. */
-export function monCost(m: Pick<DcMon, 'name' | 'captain'>, format: CostFormat): number {
-  return getEffectiveCost(m.name, m.captain, format);
+/** Points a mon contributes (captain markup from the ruleset). Unknown species cost 0. */
+export function monCost(m: Pick<DcMon, 'name' | 'captain'>, rs: Ruleset): number {
+  const t = baseTier(m.name, rs.costFormat);
+  return t == null ? 0 : markupCost(rs, t, m.captain);
 }
 
 /** Base tier cost (no markup), or null when the species has no price. */
@@ -26,12 +28,13 @@ export function baseTier(name: string, format: CostFormat): number | null {
   return getTierEntry(name, format)?.tier ?? null;
 }
 
-/** Can this mon be designated a captain under the ruleset's format? */
-export function captainEligibility(name: string, format: CostFormat): { ok: boolean; reason?: string } {
-  const e = getTierEntry(name, format);
+/** Can this mon be designated a captain under the ruleset? (tier in its markup table, not tera-banned) */
+export function captainEligibility(name: string, rs: Ruleset): { ok: boolean; reason?: string } {
+  const e = getTierEntry(name, rs.costFormat);
   if (!e) return { ok: false, reason: 'No price in this format' };
+  if (!rs.teraEnabled) return { ok: false, reason: 'Tera captains are disabled in this ruleset' };
   if (e.teraBanned) return { ok: false, reason: 'Tera-banned' };
-  if (e.tier > MAX_CAPTAIN_TIER) return { ok: false, reason: `Tier ${e.tier} — captains must be tier ${MAX_CAPTAIN_TIER} or below` };
+  if (!captainEligible(rs, e)) return { ok: false, reason: `Tier ${e.tier} is not captain-eligible in this ruleset` };
   return { ok: true };
 }
 
@@ -41,6 +44,7 @@ export function validateTeam(roster: DcMon[], rs: Ruleset): DcValidation {
   const seen = new Map<string, string>();
   const megas: string[] = [];
   const fmt = rs.costFormat;
+  const size = rosterSizeOf(rs);
 
   for (const m of roster) {
     const e = getTierEntry(m.name, fmt);
@@ -50,7 +54,7 @@ export function validateTeam(roster: DcMon[], rs: Ruleset): DcValidation {
     } else if (!e) {
       v.push({ code: 'unknown_pokemon', severity: 'warn', pokemon: m.name, message: `${m.name} has no price in this format` });
     }
-    used += monCost(m, fmt);
+    used += monCost(m, rs);
 
     const base = getBaseFormName(m.name);
     const prev = seen.get(base);
@@ -60,29 +64,37 @@ export function validateTeam(roster: DcMon[], rs: Ruleset): DcValidation {
     if (isMegaForm(m.name)) megas.push(m.name);
 
     if (m.captain) {
-      if (e && e.tier > MAX_CAPTAIN_TIER) {
-        v.push({ code: 'captain_tier', severity: 'warn', pokemon: m.name, message: `${m.name} is tier ${e.tier}; captains must be tier ${MAX_CAPTAIN_TIER} or below` });
-      }
-      if (e?.teraBanned) {
+      if (!rs.teraEnabled) {
+        v.push({ code: 'tera_disabled', severity: 'warn', pokemon: m.name, message: `${m.name} is a captain but Tera is disabled in this ruleset` });
+      } else if (e?.teraBanned) {
         v.push({ code: 'captain_tera_banned', severity: 'warn', pokemon: m.name, message: `${m.name} is tera-banned and cannot be a captain` });
+      } else if (e && !captainEligible(rs, e)) {
+        v.push({ code: 'captain_tier', severity: 'warn', pokemon: m.name, message: `${m.name} is tier ${e.tier}; that tier cannot be a captain in this ruleset` });
       }
-      if (m.teraTypes.length > rs.teraTypesPerCaptain) {
-        v.push({ code: 'tera_types_over', severity: 'warn', pokemon: m.name, message: `${m.name} has more than ${rs.teraTypesPerCaptain} tera types` });
-      } else if (m.teraTypes.length < rs.teraTypesPerCaptain) {
-        v.push({ code: 'captain_no_tera', severity: 'info', pokemon: m.name, message: `${m.name} has ${m.teraTypes.length}/${rs.teraTypesPerCaptain} tera types picked` });
+      if (rs.teraEnabled) {
+        if (m.teraTypes.length > rs.teraTypesPerCaptain) {
+          v.push({ code: 'tera_types_over', severity: 'warn', pokemon: m.name, message: `${m.name} has more than ${rs.teraTypesPerCaptain} tera types` });
+        } else if (m.teraTypes.length < rs.teraTypesPerCaptain) {
+          v.push({ code: 'captain_no_tera', severity: 'info', pokemon: m.name, message: `${m.name} has ${m.teraTypes.length}/${rs.teraTypesPerCaptain} tera types picked` });
+        }
       }
     }
   }
 
   const captains = roster.filter(m => m.captain).length;
-  if (megas.length > 1) {
-    v.push({ code: 'multi_mega', severity: 'warn', message: `${megas.length} Megas (${megas.join(', ')}); max 1 per team` });
+  if (megas.length > megaLimit(rs)) {
+    v.push({
+      code: 'multi_mega', severity: 'warn',
+      message: rs.megaCap === 0
+        ? `${megas.length} Mega${megas.length === 1 ? '' : 's'} (${megas.join(', ')}); Megas are not allowed in this ruleset`
+        : `${megas.length} Megas (${megas.join(', ')}); max ${rs.megaCap} per team`,
+    });
   }
-  if (captains > rs.teraCaptainSlots) {
+  if (rs.teraEnabled && captains > rs.teraCaptainSlots) {
     v.push({ code: 'captain_count', severity: 'warn', message: `${captains} captains; this ruleset allows ${rs.teraCaptainSlots}` });
   }
-  if (roster.length > rs.rosterSize) {
-    v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${rs.rosterSize}` });
+  if (roster.length > size) {
+    v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${size}` });
   }
   if (used > rs.pointCap) {
     v.push({ code: 'over_budget', severity: 'warn', message: `${used} points used; budget is ${rs.pointCap}` });
@@ -90,7 +102,7 @@ export function validateTeam(roster: DcMon[], rs: Ruleset): DcValidation {
 
   return {
     used, budget: rs.pointCap, remaining: rs.pointCap - used,
-    rosterSize: rs.rosterSize, count: roster.length, violations: v,
+    rosterSize: size, count: roster.length, violations: v,
   };
 }
 

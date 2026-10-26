@@ -28,7 +28,7 @@ export function BudgetMeter({ v, roster, ruleset }: { v: DcValidation; roster: D
       </div>
       <div className="flex items-center gap-3 text-[11px] font-mono text-text-muted">
         <Counter label="Roster" value={`${v.count}/${v.rosterSize}`} bad={v.count > v.rosterSize} hint="Pokemon on the team / roster size" />
-        <Counter label="Captains" value={`${captains}/${ruleset.teraCaptainSlots}`} bad={captains > ruleset.teraCaptainSlots} hint="Tera captains / slots allowed" />
+        <Counter label="Captains" value={ruleset.teraEnabled ? `${captains}/${ruleset.teraCaptainSlots}` : "off"} bad={captains > (ruleset.teraEnabled ? ruleset.teraCaptainSlots : 0)} hint="Tera captains / slots allowed" />
         <span className="ml-auto truncate min-w-0" title={ruleset.label}>{ruleset.label}</span>
       </div>
     </div>

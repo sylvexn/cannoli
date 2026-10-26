@@ -7,8 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { getErrorMessage } from '@/lib/errors';
 import { useDraftCenter } from '@/lib/draft-center/store';
-import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
-import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { validateTeam } from '@/lib/draft-center/rules';
 import type { DcMon } from '@/lib/draft-center/types';
 import { preloadSprites } from '@/components/pokemon-sprite';
@@ -23,17 +22,17 @@ export function TeamEditorPage() {
   const { id = '' } = useParams();
   const nav = useNavigate();
   const store = useDraftCenter();
-  const { leagues, loading: leaguesLoading } = useAllLeagues();
   const team = store.getTeam(id);
+  const { rulesets, resolve, loading: rulesetsLoading } = useRulesetCatalog(team ? [team] : []);
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 
-  const ruleset = useMemo(() => resolveRuleset(team?.leagueId ?? null, leagues), [team?.leagueId, leagues]);
+  const ruleset = useMemo(() => resolve({ rulesetId: team?.rulesetId, leagueId: team?.leagueId }), [resolve, team?.rulesetId, team?.leagueId]);
   const roster = team?.roster;
   const validation = useMemo(() => validateTeam(roster ?? [], ruleset), [roster, ruleset]);
 
-  if (store.loading || leaguesLoading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
+  if (store.loading || rulesetsLoading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
   if (!team) {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
@@ -75,9 +74,9 @@ export function TeamEditorPage() {
           className="h-9 flex-1 basis-48 min-w-0 max-w-sm font-mono font-semibold text-base"
         />
         <RulesetSelect
-          leagues={leagues}
-          value={team.leagueId}
-          onChange={leagueId => store.updateTeam(team.id, { leagueId })}
+          rulesets={rulesets}
+          current={ruleset}
+          onChange={rulesetId => store.updateTeam(team.id, { rulesetId, leagueId: null })}
           className="max-w-full min-w-0 basis-56"
         />
         <span className="text-[11px] font-mono text-text-muted min-w-16" aria-live="polite">
