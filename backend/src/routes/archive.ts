@@ -411,6 +411,8 @@ export const archiveDeepRoutes = new Elysia()
 
   // All-time aggregates
   .get('/api/archive/all-time', ({ user }) => {
+    // Live-season results are unrevealed: non-staff aggregate archived seasons only.
+    const archivedOnly = isStaff(user) ? undefined : eq(schema.seasons.archived, true);
     // Champions per (season, league) — finals winner. Single query, then
     // fold in-memory.
     const finalsRows = db.select({
@@ -482,6 +484,8 @@ export const archiveDeepRoutes = new Elysia()
       .from(schema.matchPokemon)
       .innerJoin(schema.matches, eq(schema.matches.id, schema.matchPokemon.matchId))
       .innerJoin(schema.leagues, eq(schema.leagues.id, schema.matches.leagueId))
+      .innerJoin(schema.seasons, eq(schema.seasons.id, schema.leagues.seasonId))
+      .where(archivedOnly)
       .groupBy(schema.matchPokemon.pokemonName)
       .orderBy(sql`SUM(${schema.matchPokemon.kills}) DESC`)
       .limit(50)
@@ -498,7 +502,9 @@ export const archiveDeepRoutes = new Elysia()
     })
       .from(schema.matchPokemon)
       .innerJoin(schema.teams, eq(schema.teams.id, schema.matchPokemon.teamId))
-      .where(sql`${schema.teams.userId} IS NOT NULL`)
+      .innerJoin(schema.leagues, eq(schema.leagues.id, schema.teams.leagueId))
+      .innerJoin(schema.seasons, eq(schema.seasons.id, schema.leagues.seasonId))
+      .where(and(sql`${schema.teams.userId} IS NOT NULL`, archivedOnly))
       .groupBy(schema.teams.userId, schema.teams.coachName)
       .all();
 
@@ -527,7 +533,8 @@ export const archiveDeepRoutes = new Elysia()
     })
       .from(schema.teams)
       .innerJoin(schema.leagues, eq(schema.leagues.id, schema.teams.leagueId))
-      .where(sql`${schema.teams.userId} IS NOT NULL`)
+      .innerJoin(schema.seasons, eq(schema.seasons.id, schema.leagues.seasonId))
+      .where(and(sql`${schema.teams.userId} IS NOT NULL`, archivedOnly))
       .all();
     const tenureByUser = new Map<number, Set<number>>();
     for (const t of tenureRows) {
