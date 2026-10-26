@@ -16,7 +16,8 @@ const COLORS = {
 
 /** Compact bar for sidebars, popovers, standings rows */
 export function PointCapBar({ used, total: totalProp, className }: PointCapBarProps) {
-  const total = totalProp ?? getLeagueRuleset(useLeagueOptional()).pointCap;
+  const league = useLeagueOptional();
+  const total = totalProp ?? getLeagueRuleset(league).pointCap;
   const pct = Math.min((used / total) * 100, 100);
   const remaining = total - used;
   const palette = pct > 95 ? COLORS.crit : pct > 80 ? COLORS.warn : COLORS.neon;
@@ -44,7 +45,8 @@ export function PointCapBar({ used, total: totalProp, className }: PointCapBarPr
 
 /** Large featured bar for team profile page */
 export function PointCapBarLarge({ used, total: totalProp, className }: PointCapBarProps) {
-  const total = totalProp ?? getLeagueRuleset(useLeagueOptional()).pointCap;
+  const league = useLeagueOptional();
+  const total = totalProp ?? getLeagueRuleset(league).pointCap;
   const pct = Math.min((used / total) * 100, 100);
   const remaining = total - used;
   const palette = pct > 95 ? COLORS.crit : pct > 80 ? COLORS.warn : COLORS.neon;
