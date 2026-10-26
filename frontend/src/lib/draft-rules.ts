@@ -7,7 +7,8 @@
  * The backend remains authoritative — these helpers exist for UX, not security.
  */
 
-import { getEffectiveCost, getTeraBanned, type CostFormat } from '@/data/tier-list';
+import { DEFAULT_RULESET, captainHeadroomNeeded as sharedHeadroom, megaLimit, type Ruleset } from '@cannoli/rules';
+import { getTeraBanned, type CostFormat } from '@/data/tier-list';
 
 export type FormCategory = 'base' | 'mega' | 'regional' | 'other';
 
@@ -87,7 +88,7 @@ export const MIN_PICK_COST = 1;
  */
 export type ConflictReason =
   | { kind: 'duplicate-species'; conflictsWith: string }
-  | { kind: 'mega-cap'; conflictsWith: string }
+  | { kind: 'mega-cap'; conflictsWith: string; limit: number }
   | { kind: 'over-budget'; cost: number; budget: number }
   /** Fits raw budget but leaves <(picksLeft - 1) × MIN_PICK_COST for remaining slots */
   | { kind: 'roster-reserve'; cost: number; maxAffordable: number; picksLeft: number }
@@ -143,7 +144,9 @@ export function findPickConflict(
   tier: number,
   roster: ConflictInputRoster,
   pointCap: number,
+  rules: Pick<Ruleset, 'megaCap'> = DEFAULT_RULESET,
 ): ConflictReason | null {
+  const limit = megaLimit(rules);
   const incomingBase = getBaseFormName(name);
   const incomingIsMega = isMegaForm(name);
 
@@ -154,9 +157,9 @@ export function findPickConflict(
     }
     if (isMegaForm(existing)) megaCount++;
   }
-  if (incomingIsMega && megaCount >= 1) {
+  if (incomingIsMega && megaCount >= limit) {
     const offender = roster.pokemonNames.find(isMegaForm);
-    return { kind: 'mega-cap', conflictsWith: offender ?? '' };
+    return { kind: 'mega-cap', conflictsWith: offender ?? '', limit };
   }
   const remaining = pointCap - roster.pointsUsed;
   if (tier > remaining) {
@@ -202,7 +205,7 @@ export function findPickWarning(
 export function describeConflict(c: ConflictReason): string {
   switch (c.kind) {
     case 'duplicate-species': return `Already have ${c.conflictsWith} — same species`;
-    case 'mega-cap':          return `Already have a Mega (${c.conflictsWith}) — max 1 per team`;
+    case 'mega-cap':          return c.limit === 0 ? 'Megas are not allowed in this league' : `Already have a Mega (${c.conflictsWith}) — max ${c.limit} per team`;
     case 'over-budget':       return `${c.cost}pt costs more than ${c.budget}pt remaining`;
     case 'roster-reserve':    return `${c.cost}pt would leave too little for ${c.picksLeft - 1} more pick${c.picksLeft - 1 === 1 ? '' : 's'} (max ${c.maxAffordable}pt now)`;
     case 'banned':            return 'Banned';
@@ -219,24 +222,20 @@ export function describeWarning(w: PickWarning): string {
 // Captain-budget headroom
 
 /**
- * Worst-case extra points a team would need to designate `slots` captains
- * from their roster. Tier 9→12, 8→10, 7→9, 6→8, 5→6, 4→5, 3→4, 2→2, 1→1.
- * Worst case = picking the captain-eligible mons whose markup is highest.
- *
- * Only tier-≤9 mons can be captains, and we ignore tera-banned mons.
+ * Worst-case extra points a team would need to designate `slots` captains from
+ * their roster, under the ruleset's markup table (shared captainHeadroomNeeded).
+ * Tera-banned mons (per cost format) are ignored.
  */
 export function captainHeadroomNeeded(
   roster: { name: string; tier: number }[],
   slots: number,
   format?: CostFormat,
+  rs: Pick<Ruleset, 'teraEnabled' | 'teraMarkup'> = DEFAULT_RULESET,
 ): number {
-  if (slots <= 0) return 0;
-  const teraBanned = getTeraBanned(format);
-  const eligible = roster
-    .filter(r => r.tier <= 9 && r.tier >= 1 && !teraBanned.includes(r.name))
-    .map(r => Math.max(0, getEffectiveCost(r.name, true, format) - r.tier))
-    .sort((a, b) => b - a);
-  let total = 0;
-  for (let i = 0; i < Math.min(slots, eligible.length); i++) total += eligible[i];
-  return total;
+  const teraBanned = new Set(getTeraBanned(format));
+  return sharedHeadroom(
+    { ...rs, teraCaptainSlots: slots },
+    roster.map(r => ({ tier: r.tier, teraBanned: teraBanned.has(r.name) })),
+    slots,
+  );
 }

@@ -3,8 +3,7 @@ import { db, schema } from '../../db';
 import { eq, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
-import { runAutoAwards } from '../../lib/pins/auto-award';
-import { mintArchivePins, type ArchiveMintSummary } from '../../lib/pins/archive-mint';
+import { createInstance } from '../../lib/ruleset-instances';
 
 export const seasonRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -17,6 +16,8 @@ export const seasonRoutes = new Elysia()
       totalWeeks = 11,
       pointCap = 110,
       teraCaptainSlots = 2,
+      rulesetId: seasonRulesetId = null,
+      costFormat: seasonCostFormat,
       tradeDeadlineWeek = 7,
       rosterSize = 10,
       minRosterSize = null,
@@ -31,6 +32,10 @@ export const seasonRoutes = new Elysia()
       totalWeeks?: number;
       pointCap?: number;
       teraCaptainSlots?: number;
+      /** Season-level ruleset (template or instance); prefills every league without its own. */
+      rulesetId?: number | null;
+      /** Legacy path only (no rulesetId): cost format for the generated rulesets. */
+      costFormat?: string;
       tradeDeadlineWeek?: number;
       rosterSize?: number;
       minRosterSize?: number | null;
@@ -43,6 +48,9 @@ export const seasonRoutes = new Elysia()
         name: string;
         color: string;
         draftDate?: string | null;
+        /** Per-league ruleset; overrides the season-level one. */
+        rulesetId?: number | null;
+        costFormat?: string;
         teams?: {
           coachName?: string;
           teamName: string;
@@ -81,6 +89,12 @@ export const seasonRoutes = new Elysia()
       };
     }
 
+    // Every referenced ruleset must exist and be unarchived (400, not a rolled-back 500).
+    for (const rid of new Set([seasonRulesetId, ...leaguePayloads.map(l => l.rulesetId)].filter((x): x is number => x != null))) {
+      const r = db.select({ id: schema.rulesets.id, archived: schema.rulesets.archived }).from(schema.rulesets).where(eq(schema.rulesets.id, rid)).get();
+      if (!r || r.archived) { set.status = 400; return { error: `Ruleset ${rid} not found or archived` }; }
+    }
+
     // Pre-resolve manager usernames -> userIds (avoid resolving inside tx)
     const managerLookup = new Map<string, number>();
     for (const lg of leaguePayloads) {
@@ -98,15 +112,26 @@ export const seasonRoutes = new Elysia()
     const weekDatesJson = weekDates ? JSON.stringify(weekDates) : null;
 
     let teamsCreated = 0;
+    const leagueResults: { id: string; rulesetId: number; costFormat: string }[] = [];
     try {
       const seasonId = tx(() => {
+        // One private ruleset instance per league (copied from the chosen ruleset, or
+        // built from the legacy wizard fields). The league's cost_format comes from it.
+        const instances = leaguePayloads.map(lg => createInstance(`S${seasonNumber} ${lg.name}`, {
+          sourceId: lg.rulesetId ?? seasonRulesetId,
+          legacy: { costFormat: lg.costFormat ?? seasonCostFormat, pointCap, teraCaptainSlots, rosterSize, rosterMin: minRosterSize, rosterMax: maxRosterSize },
+          userId: parseInt(user.id),
+        }));
+        // seasons.point_cap / tera_captain_slots are deprecated mirrors (first league's rules).
         const row = db.insert(schema.seasons).values({
           seasonNumber,
-          pointCap,
-          teraCaptainSlots,
+          pointCap: instances[0]?.pointCap ?? pointCap,
+          teraCaptainSlots: instances[0]?.teraCaptainSlots ?? teraCaptainSlots,
         }).returning().get();
 
-        for (const lg of leaguePayloads) {
+        for (const [i, lg] of leaguePayloads.entries()) {
+          const inst = instances[i]!;
+          leagueResults.push({ id: lg.id, rulesetId: inst.id, costFormat: inst.costFormat });
           db.insert(schema.leagues).values({
             id: lg.id,
             name: lg.name,
@@ -121,9 +146,11 @@ export const seasonRoutes = new Elysia()
             totalWeeks,
             weekDates: weekDatesJson,
             tradeDeadlineWeek,
-            rosterSize,
-            minRosterSize,
-            maxRosterSize,
+            rosterSize: inst.rosterSize,
+            minRosterSize: inst.rosterMin,
+            maxRosterSize: inst.rosterMax,
+            rulesetId: inst.id,
+            costFormat: inst.costFormat,
             forfeitPolicy,
             format,
           }).run();
@@ -168,8 +195,7 @@ export const seasonRoutes = new Elysia()
           metadata: JSON.stringify({
             seasonNumber,
             leagues: leaguePayloads.map(l => l.id),
-            pointCap,
-            teraCaptainSlots,
+            rulesets: leagueResults,
             teamsCreated,
             overlapOverride,
           }),
@@ -182,6 +208,7 @@ export const seasonRoutes = new Elysia()
         id: seasonId,
         seasonNumber,
         teamsCreated,
+        leagues: leagueResults,
         unresolvedManagers: Array.from(
           new Set(
             leaguePayloads.flatMap(l =>
@@ -238,12 +265,9 @@ export const seasonRoutes = new Elysia()
   //   1. Set seasons.archived = 1 (writes now require ?force=1).
   //   2. Force every league in the season to phase=offseason. Once a season
   //      is archived no league should still report itself as in-progress.
-  //   3. Mint the season-end auto-award pins (existing garchomp/cannoli/cynthia
-  //      via runAutoAwards, plus the four new pins via mintArchivePins).
   //
-  // Idempotent: re-running on an already-archived season simply re-runs the
-  // pin minters (which themselves are INSERT OR IGNORE + scoped DELETE),
-  // useful when stats are corrected post-archive and you want to recompute.
+  // Awards are NOT minted here: they are admin-curated through the Awards
+  // Sheet (suggest -> save drafts -> publish). Idempotent.
   .post('/api/admin/seasons/:seasonId/archive', ({ params, user, set }) => {
     const seasonId = parseInt(params.seasonId);
     if (!Number.isFinite(seasonId)) { set.status = 400; return { error: 'Invalid seasonId' }; }
@@ -251,10 +275,6 @@ export const seasonRoutes = new Elysia()
     if (!season) { set.status = 404; return { error: 'Season not found' }; }
 
     const leagues = db.select().from(schema.leagues).where(eq(schema.leagues.seasonId, seasonId)).all();
-    const awardedBy = user?.id ? parseInt(user.id) : null;
-
-    const existingAwards: { leagueId: string; awarded: number; skipped: number }[] = [];
-    const newAwards: ArchiveMintSummary[] = [];
 
     tx(() => {
       db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
@@ -262,10 +282,6 @@ export const seasonRoutes = new Elysia()
         if (l.phase !== 'offseason') {
           db.update(schema.leagues).set({ phase: 'offseason' }).where(eq(schema.leagues.id, l.id)).run();
         }
-        const existing = runAutoAwards(l.id, { trigger: 'season-end', awardedBy });
-        existingAwards.push({ leagueId: l.id, awarded: existing.awarded.length, skipped: existing.skipped });
-        const archive = mintArchivePins(l.id, { awardedBy });
-        newAwards.push(archive);
       }
       db.insert(schema.activityLog).values({
         type: 'season_archived',
@@ -276,12 +292,6 @@ export const seasonRoutes = new Elysia()
         metadata: JSON.stringify({
           seasonId,
           seasonNumber: season.seasonNumber,
-          existingAwards,
-          newAwards: newAwards.map(a => ({
-            leagueId: a.leagueId,
-            awarded: a.awarded.length,
-            skipped: a.skipped,
-          })),
         }),
       }).run();
     });
@@ -291,12 +301,6 @@ export const seasonRoutes = new Elysia()
       seasonId,
       seasonNumber: season.seasonNumber,
       leagues: leagues.length,
-      existingAwards,
-      newAwards: newAwards.map(a => ({
-        leagueId: a.leagueId,
-        awarded: a.awarded,
-        skipped: a.skipped,
-      })),
     };
   })
 

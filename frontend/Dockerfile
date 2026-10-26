@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
+COPY shared/ shared/
 
 # Install from workspace root so root-level deps (cinzel font) are available
 RUN bun install --frozen-lockfile

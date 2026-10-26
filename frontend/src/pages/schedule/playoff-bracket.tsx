@@ -62,8 +62,10 @@ export function PlayoffBracket() {
 
   if (playoffMatches.length === 0) {
     return (
-      <div className="text-center py-12 text-text-muted">
-        Playoff bracket not yet available
+      <div className="flex flex-col items-center gap-2 py-12 text-text-muted">
+        <Trophy size={20} className="text-pink/60" />
+        <div className="text-sm text-text-secondary">Playoff bracket coming soon</div>
+        <div className="text-xs">Seeding is being finalized - check back once it is published.</div>
       </div>
     );
   }

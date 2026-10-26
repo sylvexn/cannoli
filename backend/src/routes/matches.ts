@@ -4,14 +4,13 @@ import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
-import { advancePlayoffWinner, buildPlayoffMatchups } from '../lib/playoff-advance';
+import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings, matchWinner } from '../lib/standings';
-import { runAutoAwards } from '../lib/pins/auto-award';
 import { getLeague, isMatchRevealed } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
-import { extendWeekDatesForPlayoffs } from '../lib/deadline';
+import { writePlayoffBracket } from '../lib/playoff-publish';
 
 export const matchRoutes = new Elysia()
 
@@ -451,12 +450,12 @@ export const matchRoutes = new Elysia()
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { homeScore, awayScore, replayUrl, pokemonData, warnings } =
+    const { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy } =
       body as RecordResultInput;
 
     const outcome = recordMatchResult(
       params.matchId,
-      { homeScore, awayScore, replayUrl, pokemonData, warnings },
+      { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy },
       user.username,
     );
     if (!outcome.ok) {
@@ -525,16 +524,6 @@ export const matchRoutes = new Elysia()
 
       return { success: true };
     });
-
-    // Auto-award per-match pins — AFTER the match write commits, not inside
-    // its transaction. A throw here must never unwind the status flip above.
-    if (flippedToCompleted) {
-      try {
-        runAutoAwards(match.leagueId, { trigger: 'match', matchId: params.matchId });
-      } catch (err) {
-        console.error(`[dismiss-warnings] runAutoAwards failed for ${params.matchId}:`, err);
-      }
-    }
 
     return outcome;
   })
@@ -651,15 +640,8 @@ export const matchRoutes = new Elysia()
         }
       }
 
-      // Clear per-match auto-pins (kingslayer, flawless). Re-record will
-      // re-mint via runAutoAwards. Scoped by metadata.matchId (set by both
-      // awarders) and awarded_by IS NULL (only auto pins).
-      db.run(sql`
-        DELETE FROM pins
-        WHERE awarded_by IS NULL
-          AND pin_def_id IN ('kingslayer', 'flawless')
-          AND json_extract(metadata, '$.matchId') = ${params.matchId}
-      `);
+      // Drop per-match pins earned by the voided result.
+      db.run(sql`DELETE FROM pins WHERE match_id = ${params.matchId}`);
 
       db.insert(schema.activityLog).values({
         type: 'match_voided',
@@ -943,7 +925,7 @@ export const matchRoutes = new Elysia()
     const seedCount = requested;
 
     // Sort using shared standings hierarchy (wins → H2H → diff → kills → id)
-    const teamRecords = computeStandings(params.leagueId, { phase: 'regular' });
+    const teamRecords = computeStandings(params.leagueId);
     if (seedCount > teamRecords.length) {
       set.status = 400;
       return {
@@ -1012,73 +994,11 @@ export const matchRoutes = new Elysia()
     }
 
     return tx(() => {
-    // Clear existing playoff matches. match_ready_log has a plain FK onto
-    // matches.id (no ON DELETE), so under PRAGMA foreign_keys=ON a single
-    // ready-up on any bracket match made this DELETE throw — and playoff
-    // matches ARE arena-playable, so that's the common case, not the edge.
-    // Dropping the log rows first also stops stale ready-ups from re-attaching
-    // to the rebuilt row, whose id is deterministic and therefore reused.
-    // (match_pokemon already cascades — migration 0025.)
-    const staleIds = existing.map(m => m.id);
-    if (staleIds.length > 0) {
-      db.delete(schema.matchReadyLog)
-        .where(inArray(schema.matchReadyLog.matchId, staleIds))
-        .run();
-    }
-    db.delete(schema.matches)
-      .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'playoffs')))
-      .run();
-
-    // Get max week from regular season
-    const maxWeek = db.select({ max: sql<number>`MAX(week)` })
-      .from(schema.matches)
-      .where(and(eq(schema.matches.leagueId, params.leagueId), eq(schema.matches.phase, 'regular')))
-      .get()?.max || 0;
-
-    // Bracket layout is shared with the simulator via buildPlayoffMatchups.
-    const matchups = buildPlayoffMatchups(seedCount, maxWeek);
-
-    // Playoff weeks sit PAST the regular schedule, so weekDates had no entry for
-    // them, scheduleDeadline() returned null, and runAutoForfeit skipped every
-    // playoff match forever — the whole decidePlayoffForfeit path was dead in
-    // production. Continue the league's own weekly cadence onto the bracket
-    // weeks so playoff deadlines resolve exactly like regular-season ones.
-    const weekDates: Record<string, string> = league.weekDates ? JSON.parse(league.weekDates) : {};
-    const extended = extendWeekDatesForPlayoffs(weekDates, maxWeek, matchups.map(m => m.week));
-    if (extended !== weekDates) {
-      db.update(schema.leagues)
-        .set({ weekDates: JSON.stringify(extended) })
-        .where(eq(schema.leagues.id, params.leagueId))
-        .run();
-    }
-
-    let matchNum = 0;
-    for (const m of matchups) {
-      matchNum++;
-      const homeTeam = m.homeSeed > 0 ? seeded[m.homeSeed - 1]?.id : null;
-      const awayTeam = m.awaySeed > 0 ? seeded[m.awaySeed - 1]?.id : null;
-
-      db.insert(schema.matches).values({
-        id: `${params.leagueId}-p${m.round}${matchNum}`,
-        leagueId: params.leagueId,
-        week: m.week,
-        homeTeamId: homeTeam ?? null,
-        awayTeamId: awayTeam ?? null,
-        phase: 'playoffs',
-        playoffRound: m.round,
-        homeSeed: m.homeSeed || null,
-        awaySeed: m.awaySeed || null,
-        status: 'scheduled',
-      }).run();
-    }
-
-    // Update team ranks based on seeding
-    for (let i = 0; i < teamRecords.length; i++) {
-      db.update(schema.teams)
-        .set({ rank: i + 1 })
-        .where(eq(schema.teams.id, teamRecords[i].id))
-        .run();
-    }
+    // One shared writer (also used by the draft publish): clears stale matches +
+    // ready-log rows, extends weekDates over the playoff weeks, writes the bracket
+    // and the standings rank.
+    const { matchups } = writePlayoffBracket(
+      params.leagueId, seeded.map(s => s.id), teamRecords.map(t => t.id));
 
     // Activity log
     db.insert(schema.activityLog).values({

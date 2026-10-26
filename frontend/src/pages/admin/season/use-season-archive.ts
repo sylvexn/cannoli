@@ -53,10 +53,8 @@ export function useSeasonArchive(refreshLeagues?: () => void) {
   const archiveCeremony = useCallback(async (seasonId: number) => {
     try {
       const result = await api.archiveSeasonCeremony(seasonId);
-      const totalNew = result.newAwards.reduce((s, l) => s + l.awarded.length, 0);
-      const totalExisting = result.existingAwards.reduce((s, l) => s + l.awarded, 0);
       toast.success(
-        `Season ${result.seasonNumber} archived — ${totalExisting + totalNew} pins minted across ${result.leagues} league${result.leagues === 1 ? '' : 's'}`,
+        `Season ${result.seasonNumber} archived across ${result.leagues} league${result.leagues === 1 ? '' : 's'} — award it from Admin > Pins`,
       );
       refreshSeasons();
       // Also refresh app-wide league data so league pages immediately reflect

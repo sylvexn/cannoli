@@ -35,7 +35,7 @@ export function StatsTab({ teamA, teamB }: StatsTabProps) {
   );
 }
 
-function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) {
+export function StatsTable({ team, side }: { team: RosterPokemon[]; side: 'a' | 'b' }) {
   const [sortKey, setSortKey] = useState<StatKey>('spe');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const { openSideCard } = usePokemonSideCard();

@@ -113,7 +113,7 @@ export function SpeedTab({ teamA, teamB, slots, onAddSlot, onRemoveSlot, onUpdat
   );
 }
 
-function SpeedCalcCard({
+export function SpeedCalcCard({
   slot, allPokemon, onUpdate, onRemove,
 }: {
   slot: SpeedCalcSlot;

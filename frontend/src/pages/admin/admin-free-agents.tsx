@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, type ApiFaRequest } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { toast } from 'sonner';
@@ -62,7 +63,16 @@ export function AdminFreeAgents() {
       .catch(() => { /* non-fatal */ });
   }
   useEffect(() => { if (selectedLeague) fetchFaReqs(selectedLeague); }, [selectedLeague]);
-  const pendingReqs = useMemo(() => faReqs.filter(r => r.status === 'pending'), [faReqs]);
+  // ?lane=tera (dashboard / nav deep link): show only pending tera-change requests and scroll to them.
+  const teraLane = useSearchParams()[0].get('lane') === 'tera';
+  const pendingReqs = useMemo(
+    () => faReqs.filter(r => r.status === 'pending' && (!teraLane || r.requestType === 'tera_change')),
+    [faReqs, teraLane],
+  );
+  const pendingRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (teraLane && pendingReqs.length > 0) pendingRef.current?.scrollIntoView({ block: 'start' });
+  }, [teraLane, pendingReqs.length > 0]);
   const teamName = (id: string) => teams.find(t => t.id === id)?.teamAbbrev ?? id;
 
   // Effective-week picker per pending request. Defaults to the week AFTER the
@@ -252,11 +262,11 @@ export function AdminFreeAgents() {
 
       {/* Pending approval queue (feedback #42) */}
       {pendingReqs.length > 0 && (
-        <div className="rounded-lg border border-draw/40 bg-draw/[0.04] overflow-hidden">
+        <div ref={pendingRef} className="rounded-lg border border-draw/40 bg-draw/[0.04] overflow-hidden scroll-mt-4">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-draw/20 bg-draw/10">
             <UserPlus size={14} className="text-draw shrink-0" />
             <span className="text-xs font-heading font-semibold uppercase tracking-wider text-text-primary">
-              Pending FA &amp; tera requests
+              {teraLane ? 'Pending tera requests' : 'Pending FA & tera requests'}
             </span>
             <span className="text-[11px] px-1.5 py-0 rounded bg-draw/15 text-draw font-mono">
               {pendingReqs.length}

@@ -4,13 +4,16 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
-import { runAutoAwards } from '../../lib/pins/auto-award';
-import { mintArchivePins } from '../../lib/pins/archive-mint';
 import { assignFinishPositions } from '../../../scripts/import-xlsx';
 import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
 import { scheduleDeadline } from '../../lib/deadline';
 import { applyDueTransactions } from '../../lib/scheduled-transactions';
+import { createInstance, editLeagueRules, type RuleEdit } from '../../lib/ruleset-instances';
+import { getLeagueRuleset, getRuleset, rulesetUsage } from '../../lib/rulesets';
+
+class RuleEditError extends Error {}
+const rulesetUsageFrozen = (id: number) => !!getRuleset(id) && rulesetUsage(id).frozen;
 
 export const leagueAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -25,8 +28,19 @@ export const leagueAdminRoutes = new Elysia()
     const season = db.select().from(schema.seasons).orderBy(desc(schema.seasons.seasonNumber)).get();
     if (!season) { set.status = 400; return { error: 'No active season' }; }
 
-    db.insert(schema.leagues).values({ id, name: name.trim(), color: color || '#888888', seasonId: season.id }).run();
-    return { id };
+    // New league plays under a private copy of a sibling's ruleset (else the defaults),
+    // and takes its cost format from it.
+    const sibling = db.select().from(schema.leagues).where(eq(schema.leagues.seasonId, season.id)).get();
+    const inst = tx(() => {
+      const r = createInstance(`${name.trim()} rules`, { sourceId: sibling?.rulesetId, userId: parseInt(user.id) });
+      db.insert(schema.leagues).values({
+        id, name: name.trim(), color: color || '#888888', seasonId: season.id,
+        rulesetId: r.id, costFormat: r.costFormat, rosterSize: r.rosterSize,
+        minRosterSize: r.rosterMin, maxRosterSize: r.rosterMax,
+      }).run();
+      return r;
+    });
+    return { id, rulesetId: inst.id };
   })
 
   .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
@@ -139,12 +153,39 @@ export const leagueAdminRoutes = new Elysia()
       }
     }
 
-    // pointCap and teraCaptainSlots remain season-wide settings.
-    const seasonUpdates: Record<string, unknown> = {};
-    if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
-    if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
-
-    tx(() => {
+    // pointCap / teraCaptainSlots are RULESET fields, edited for this league only
+    // (never the season row). Unchanged values are no-ops so full-form PUTs stay valid.
+    const cur = getLeagueRuleset(params.leagueId);
+    const ruleEdit: RuleEdit = {};
+    if (pointCap !== undefined && pointCap !== cur.pointCap) {
+      if (!Number.isInteger(pointCap) || (pointCap as number) < 1) { set.status = 400; return { error: 'pointCap must be a positive integer' }; }
+      ruleEdit.pointCap = pointCap as number;
+    }
+    if (teraCaptainSlots !== undefined && teraCaptainSlots !== cur.teraCaptainSlots) {
+      if (!Number.isInteger(teraCaptainSlots) || (teraCaptainSlots as number) < 0) { set.status = 400; return { error: 'teraCaptainSlots must be a non-negative integer' }; }
+      ruleEdit.teraCaptainSlots = teraCaptainSlots as number;
+    }
+    // Roster size is enforced from the ruleset; the league column stays as a mirror.
+    if (leagueUpdates.rosterSize !== undefined && leagueUpdates.rosterSize !== cur.rosterSize) {
+      ruleEdit.rosterSize = leagueUpdates.rosterSize as number;
+    }
+    const hasRuleEdit = Object.keys(ruleEdit).length > 0;
+    if (hasRuleEdit && league.rulesetId != null && rulesetUsageFrozen(league.rulesetId)) {
+      set.status = 409;
+      return {
+        error: 'Ruleset is frozen for this league',
+        code: 'RULESET_FROZEN',
+        rulesetId: league.rulesetId,
+        fields: Object.keys(ruleEdit),
+        hint: `Fork it for this league: POST /api/admin/rulesets/${league.rulesetId}/fork {"leagueId":"${league.id}","changes":{...}} (predraft/draft only)`,
+      };
+    }
+    try { tx(() => {
+      if (hasRuleEdit) {
+        const r = editLeagueRules(league, ruleEdit, parseInt(user.id));
+        if ('error' in r) throw new RuleEditError(r.error);
+        if (r.frozen) throw new RuleEditError('Ruleset is frozen for this league');
+      }
       if (Object.keys(leagueUpdates).length > 0) {
         db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
       }
@@ -174,20 +215,20 @@ export const leagueAdminRoutes = new Elysia()
         }
       }
 
-      if (Object.keys(seasonUpdates).length > 0) {
-        db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
-      }
-      if (Object.keys(leagueUpdates).length > 0 || Object.keys(seasonUpdates).length > 0) {
+      if (Object.keys(leagueUpdates).length > 0 || hasRuleEdit) {
         db.insert(schema.activityLog).values({
           type: 'league_config_updated',
           category: 'config',
           actor: user.username,
           leagueId: params.leagueId,
           description: `Updated config for ${league.name}`,
-          metadata: JSON.stringify({ leagueUpdates, seasonUpdates }),
+          metadata: JSON.stringify({ leagueUpdates, ruleEdit }),
         }).run();
       }
-    });
+    }); } catch (e) {
+      if (e instanceof RuleEditError) { set.status = e.message.includes('frozen') ? 409 : 400; return { error: e.message }; }
+      throw e;
+    }
 
     return { success: true };
   })
@@ -363,7 +404,6 @@ export const leagueAdminRoutes = new Elysia()
     }
 
     let scheduleGenerated = false;
-    let pinsAwarded = 0;
     tx(() => {
       const leagueUpdates: Record<string, unknown> = { phase };
       if (phase === 'regular' && previousPhase !== 'regular') {
@@ -377,28 +417,14 @@ export const leagueAdminRoutes = new Elysia()
         scheduleGenerated = result.success;
       }
 
-      // Season finalization → run auto-award pass (idempotent).
+      // Season finalization → stamp finish positions.
       // We treat any *transition into* offseason as the trigger, even from
       // playoffs→offseason that's the normal path or regular→offseason for
       // leagues that skip playoffs. Re-runs from another phase change won't
       // dupe.
       if (phase === 'offseason' && previousPhase !== 'offseason') {
-        // Match the finalize-season CLI ordering (scripts/finalize-season.ts):
-        // stamp finish positions FIRST (champion/runner-up/SF/QF/regular), then
-        // mint the archive pins (champion / high-score / steal-of-the-draft /
-        // sweeper) which depend on those positions, and only then run the
-        // generic season-end auto-awards. Previously the UI route ran ONLY
-        // runAutoAwards, leaving NULL finish positions + missing champion
-        // pins when an admin advanced via the panel instead of the CLI.
+        // Finish positions only: awards are admin-curated (Awards Sheet), never minted here.
         assignFinishPositions(sqlite, [params.leagueId]);
-        const archive = mintArchivePins(params.leagueId, {
-          awardedBy: user.id ? parseInt(user.id) : null,
-        });
-        const summary = runAutoAwards(params.leagueId, {
-          trigger: 'season-end',
-          awardedBy: user.id ? parseInt(user.id) : null,
-        });
-        pinsAwarded = summary.awarded.length + archive.awarded.length;
       }
 
       const isBackward = toRank < fromRank;
@@ -410,11 +436,11 @@ export const leagueAdminRoutes = new Elysia()
         description: isBackward
           ? `REVERTED phase: ${previousPhase} → ${phase} (override)`
           : `Phase: ${previousPhase} → ${phase}${override ? ' (override)' : ''}`,
-        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated, pinsAwarded }),
+        metadata: JSON.stringify({ from: previousPhase, to: phase, override: !!override, backward: isBackward, scheduleGenerated }),
       }).run();
     });
 
-    return { success: true, scheduleGenerated, pinsAwarded };
+    return { success: true, scheduleGenerated };
   })
 
   .post('/api/leagues/:leagueId/week', ({ params, query, user, set }) => {

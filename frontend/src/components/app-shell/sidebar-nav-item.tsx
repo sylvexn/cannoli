@@ -11,6 +11,8 @@ interface SidebarNavItemProps {
   end?: boolean;
   /** Active-state classes (bg tint + text color). Defaults to neon. */
   activeClass?: string;
+  /** Unread count; renders a pill (expanded) or dot (rail) when > 0. */
+  badge?: number;
 }
 
 const INACTIVE = 'text-text-secondary hover:bg-surface-overlay hover:text-text-primary';
@@ -24,6 +26,7 @@ const INACTIVE = 'text-text-secondary hover:bg-surface-overlay hover:text-text-p
 export function SidebarNavItem({
   to, icon: Icon, label, collapsed, end,
   activeClass = 'bg-neon/10 text-neon',
+  badge = 0,
 }: SidebarNavItemProps) {
   return (
     <NavLink
@@ -37,8 +40,18 @@ export function SidebarNavItem({
         isActive ? activeClass : INACTIVE,
       )}
     >
-      <Icon size={16} className="shrink-0" />
-      {!collapsed && <span className="truncate">{label}</span>}
+      <span className="relative inline-flex shrink-0">
+        <Icon size={16} />
+        {collapsed && badge > 0 && (
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-neon ring-2 ring-surface-raised" />
+        )}
+      </span>
+      {!collapsed && <span className="min-w-0 truncate">{label}</span>}
+      {!collapsed && badge > 0 && (
+        <span className="ml-auto inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-neon/20 px-1 text-[9px] font-bold tabular-nums text-neon">
+          {badge}
+        </span>
+      )}
     </NavLink>
   );
 }

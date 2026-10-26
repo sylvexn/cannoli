@@ -210,7 +210,7 @@ describe('queue-aware auto-pick', () => {
     executePick(f.leagueId, first, f.teamIds[1], 'seed', { skipTurnCheck: true });
     setDraftQueue(f.leagueId, f.teamIds[0], [first, second]);
 
-    const pick = getAutoPick(f.teamIds[0], f.leagueId, f.pointCap);
+    const pick = getAutoPick(f.teamIds[0], f.leagueId);
     expect(pick?.name).toBe(second); // skipped the drafted `first`
   });
 

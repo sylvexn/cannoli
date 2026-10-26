@@ -22,6 +22,8 @@ export interface PokemonMatchStats {
   teraType: string | null;
   brought: boolean; // appeared in the team of 6 (from |poke| lines)
   appeared: boolean; // actually entered battle (from |switch|/|drag|)
+  /** Additive: kills split by cause ('direct' | 'hazard' | 'status' | 'destinybond' | 'other'). */
+  killCauses?: Record<string, number>;
 }
 
 export interface ParsedMatchResult {
@@ -153,6 +155,14 @@ export class ReplayParser {
   // Lethal-hit attribution staged from |-damage| and consumed by |faint|.
   // Keyed by target nick → killer nick.
   private pendingKiller = new Map<string, string>();
+  private pendingCause = new Map<string, string>();
+  // Mons that switched in since the last |move|/|turn| (Toxic Spikes poison
+  // arrives tag-less right after the switch-in).
+  private justSwitched = new Set<string>();
+  // Baneful Bunker user whose contact-poison is about to land (cleared on next |move|).
+  private bunkerUser: string | null = null;
+  // Destiny Bond user whose bond just triggered; consumed by the next opposing faint.
+  private pendingBond: string | null = null;
 
   /**
    * Parse a complete battle log (post-match).
@@ -201,6 +211,9 @@ export class ReplayParser {
       case 'win': return this.handleWin(parts);
       case 'tie': return this.handleTie();
       case '-sidestart': return this.handleSideStart(parts);
+      case '-activate': return this.handleActivate(parts);
+      case '-anim':
+      case '-prepare': return this.handleCharge(parts);
       default: return false;
     }
   }
@@ -394,6 +407,8 @@ export class ReplayParser {
     const slot = nick.substring(0, 3); // "p1a" or "p2a"
     this.activeSlot.set(slot, nick);
 
+    this.justSwitched.add(nick);
+
     const stats = this.getOrCreateStats(side, species);
     stats.appeared = true;
     // Also mark as brought in case |poke| lines were missing
@@ -551,6 +566,11 @@ export class ReplayParser {
     const target = parts[4];
     if (!attacker) return false;
 
+    // A new action ends the switch-in window and any one-shot bunker/bond context.
+    this.justSwitched.clear();
+    this.bunkerUser = null;
+    this.pendingBond = null;
+
     // Track last attacker for direct KO attribution
     if (target && !target.startsWith('[')) {
       this.lastAttacker.set(target, attacker);
@@ -594,6 +614,7 @@ export class ReplayParser {
   private handleStatus(parts: string[]): boolean {
     const target = parts[2];
     if (!target) return false;
+    const status = parts[3];
 
     const fromTag = this.findTag(parts, 'from');
     const ofTag = this.findTag(parts, 'of');
@@ -604,6 +625,14 @@ export class ReplayParser {
     } else if (fromTag && (fromTag.startsWith('item:') || fromTag.startsWith('ability:'))) {
       // Self-inflicted from own item/ability (Flame Orb, Toxic Orb) — no credit.
       inflictor = null;
+    } else if ((status === 'psn' || status === 'tox') && this.bunkerUser
+        && this.parseSide(this.bunkerUser) !== this.parseSide(target)) {
+      // Baneful Bunker contact poison — credit the bunker user.
+      inflictor = this.bunkerUser;
+    } else if ((status === 'psn' || status === 'tox') && !fromTag
+        && this.justSwitched.has(target) && this.toxicSpikesSetter(target)) {
+      // Toxic Spikes on switch-in — credit whoever laid them.
+      inflictor = this.toxicSpikesSetter(target);
     } else {
       // Move-inflicted (Scald, Flamethrower, Toxic, …) — the attacker whose move
       // just landed on the target. lastAttacker is set by the preceding |move|.
@@ -631,6 +660,7 @@ export class ReplayParser {
     const ofTag = this.findTag(parts, 'of');
 
     let killerNick: string | null = null;
+    let cause = 'other';
 
     if (fromTag) {
       // Indirect damage source
@@ -652,6 +682,7 @@ export class ReplayParser {
       } else if (this.isHazard(fromTag)) {
         // Hazard damage — credit whoever set the hazard
         killerNick = this.getHazardSetter(target, fromTag);
+        cause = 'hazard';
       } else if (fromTag === 'psn' || fromTag === 'tox' || fromTag === 'brn') {
         // Residual status damage — credit whoever INFLICTED the status (the mon
         // whose Scald/Toxic/Flamethrower/Flame-Body applied it), not whoever last
@@ -662,6 +693,7 @@ export class ReplayParser {
         killerNick = this.statusInflictor.has(target)
           ? this.statusInflictor.get(target) ?? null
           : this.lastAttacker.get(target) ?? null;
+        cause = 'status';
       } else if (fromTag.startsWith('move:')) {
         // Residual move damage (e.g., Leech Seed)
         if (ofTag) {
@@ -676,6 +708,7 @@ export class ReplayParser {
     } else {
       // Direct damage — credit last attacker
       killerNick = this.lastAttacker.get(target) ?? null;
+      cause = 'direct';
     }
 
     // Store the killer decision on the target for when |faint| fires.
@@ -685,6 +718,7 @@ export class ReplayParser {
     // recoil/confusion self-faint after a prior exchange would fall back
     // to the (now-fainted) opponent.
     this.pendingKiller.set(target, killerNick);
+    this.pendingCause.set(target, cause);
 
     return false;
   }
@@ -704,9 +738,18 @@ export class ReplayParser {
     // Apply kill credit. If handleDamage explicitly recorded a decision
     // (including "null = no credit") use that; otherwise fall back to
     // lastAttacker (covers faint-without-prior-damage-line scenarios).
-    const killerNick = this.pendingKiller.has(faintedNick)
+    let killerNick = this.pendingKiller.has(faintedNick)
       ? this.pendingKiller.get(faintedNick) ?? null
       : this.lastAttacker.get(faintedNick) ?? null;
+    let cause = this.pendingCause.get(faintedNick) ?? 'direct';
+
+    // Destiny Bond: the bonder takes the victim down with it, regardless of
+    // who the victim last attacked.
+    if (this.pendingBond && this.parseSide(this.pendingBond) !== side) {
+      killerNick = this.pendingBond;
+      cause = 'destinybond';
+      this.pendingBond = null;
+    }
 
     if (killerNick) {
       const killerSide = this.nickToSide.get(killerNick);
@@ -714,11 +757,14 @@ export class ReplayParser {
       if (killerSide && killerSpecies && killerSide !== side) {
         const killerStats = this.getOrCreateStats(killerSide, killerSpecies);
         killerStats.kills += 1;
+        killerStats.killCauses ??= {};
+        killerStats.killCauses[cause] = (killerStats.killCauses[cause] ?? 0) + 1;
       }
     }
 
     // Clean up pending killer
     this.pendingKiller.delete(faintedNick);
+    this.pendingCause.delete(faintedNick);
 
     return true;
   }
@@ -781,6 +827,29 @@ export class ReplayParser {
     }
 
     return false;
+  }
+
+  /** |-activate|p1a: Nick|move: Baneful Bunker / move: Destiny Bond */
+  private handleActivate(parts: string[]): boolean {
+    const nick = parts[2];
+    const what = parts[3] ?? '';
+    if (!nick) return false;
+    if (what.endsWith('Baneful Bunker')) this.bunkerUser = nick;
+    else if (what.endsWith('Destiny Bond')) this.pendingBond = nick;
+    return false;
+  }
+
+  /** |-anim|p1a: X|Electro Shot|p2a: Y and |-prepare|p1a: X|Solar Beam|p2a: Y —
+   *  charge moves log `[still]` with no target on |move|; the real target shows here. */
+  private handleCharge(parts: string[]): boolean {
+    const attacker = parts[2];
+    const target = parts[4];
+    if (attacker && target && !target.startsWith('[')) this.lastAttacker.set(target, attacker);
+    return false;
+  }
+
+  private toxicSpikesSetter(target: string): string | null {
+    return this.hazardSetters.get(this.parseSide(target))?.get('Toxic Spikes') ?? null;
   }
 
   // Helpers

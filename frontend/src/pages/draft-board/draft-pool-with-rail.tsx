@@ -36,6 +36,8 @@ interface DraftPoolWithRailProps {
   animatingPokemonName?: string | null;
   /** Match reasons keyed by Pokemon name — threaded through to DraftPoolGrid */
   matchReasons?: Map<string, MatchReason>;
+  /** Format-banned names — rendered as a "0 cost" section below tier 1. */
+  bannedNames?: string[];
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;

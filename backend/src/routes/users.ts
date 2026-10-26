@@ -15,6 +15,7 @@ import { unlinkSync } from 'fs';
 import { db, schema } from '../db';
 import { eq, and, sql, ne } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
+import { matchWinner, computePlayoffRecords } from '../lib/standings';
 import { writeUpload, uploadsPath } from '../lib/uploads';
 import { isR2Configured, r2Delete } from '../lib/r2';
 import { toUserid } from '../lib/ps-login';
@@ -656,6 +657,7 @@ export const userRoutes = new Elysia()
             homeScore: schema.matches.homeScore,
             awayScore: schema.matches.awayScore,
             status: schema.matches.status,
+            winnerTeamId: schema.matches.winnerTeamId,
           })
             .from(schema.matches)
             .where(and(
@@ -670,9 +672,7 @@ export const userRoutes = new Elysia()
             const isHome = finals.homeTeamId === t.teamId;
             const isAway = finals.awayTeamId === t.teamId;
             if (isHome || isAway) {
-              const myScore = isHome ? finals.homeScore : finals.awayScore;
-              const oppScore = isHome ? finals.awayScore : finals.homeScore;
-              if (myScore > oppScore) finish = { position: 1, label: 'Champion' };
+              if (matchWinner(finals) === t.teamId) finish = { position: 1, label: 'Champion' };
               else finish = { position: 2, label: 'Runner-up' };
             }
           }
@@ -810,6 +810,7 @@ export function computeLifetimeStats(userId: number) {
     teamId: string;
     teamName: string;
     record: { wins: number; losses: number };
+    playoffRecord: { wins: number; losses: number };
     finish: string | null;
     isChampion: boolean;
   }> = [];
@@ -825,6 +826,7 @@ export function computeLifetimeStats(userId: number) {
       phase: schema.matches.phase,
       playoffRound: schema.matches.playoffRound,
       status: schema.matches.status,
+      winnerTeamId: schema.matches.winnerTeamId,
     }).from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, ut.leagueId),
@@ -836,13 +838,13 @@ export function computeLifetimeStats(userId: number) {
     for (const m of matches) {
       if (m.status !== 'completed') continue;
       if (m.homeScore == null || m.awayScore == null) continue;
+      // Regular-season record only; playoffs are reported as playoffRecord.
+      if (m.phase !== 'regular') continue;
       // Results-reveal gate: skip matches whose week is unpublished for this
       // league (NULL gate counts everything).
       if (!weekAllowed(ut.leagueId, m.week)) continue;
-      const isHome = m.homeTeamId === ut.teamId;
-      const myScore = isHome ? m.homeScore : m.awayScore;
-      const oppScore = isHome ? m.awayScore : m.homeScore;
-      if (myScore > oppScore) wins++; else if (oppScore > myScore) losses++;
+      const winner = matchWinner(m);
+      if (winner === ut.teamId) wins++; else if (winner != null) losses++;
     }
     totalWins += wins;
     totalLosses += losses;
@@ -851,10 +853,7 @@ export function computeLifetimeStats(userId: number) {
     let finish: string | null = null;
     let isChampion = false;
     if (final && final.homeScore != null && final.awayScore != null) {
-      const isHome = final.homeTeamId === ut.teamId;
-      const myScore = isHome ? final.homeScore : final.awayScore;
-      const oppScore = isHome ? final.awayScore : final.homeScore;
-      if (myScore > oppScore) { finish = 'champion'; isChampion = true; championships++; }
+      if (matchWinner(final) === ut.teamId) { finish = 'champion'; isChampion = true; championships++; }
       else { finish = 'finalist'; }
     }
 
@@ -863,6 +862,10 @@ export function computeLifetimeStats(userId: number) {
       teamId: ut.teamId,
       teamName: ut.teamName,
       record: { wins, losses },
+      playoffRecord: (() => {
+        const pr = computePlayoffRecords(ut.leagueId, gateByLeague.get(ut.leagueId) ?? null).get(ut.teamId);
+        return { wins: pr?.wins ?? 0, losses: pr?.losses ?? 0 };
+      })(),
       finish,
       isChampion,
     });

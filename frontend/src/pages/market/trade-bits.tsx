@@ -15,6 +15,7 @@ import { usePokemonSideCard } from '@/components/pokemon-side-card-context';
 import { useLeague } from '@/lib/league-context';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import type { Player, Trade } from '@/lib/types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import {
   isTradeDeadlinePassed,
   pointDelta,
@@ -218,14 +219,15 @@ export function LegalityMeter({
   // honor an explicit `rosterSize` prop override as the max.
   const effMax = rosterSize ?? league.season.maxRosterSize ?? league.season.rosterSize;
   const effMin = league.season.minRosterSize ?? league.season.rosterSize;
-  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, maxRosterSize: effMax, minRosterSize: effMin, pending });
-  const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap, pending);
+  const ruleset = getLeagueRuleset(league);
+  const issues = validateTrade({ proposer, recipient, offering, requesting, pointCap, ruleset, maxRosterSize: effMax, minRosterSize: effMin, pending });
+  const pts = tradePointSummary(proposer, recipient, offering, requesting, pointCap, pending, ruleset);
   const hasSelections = offering.size > 0 && requesting.size > 0;
   const isLegal = hasSelections && issues.length === 0;
 
   // Give/get point totals for unequal-swap awareness
-  const givePts = pointDelta(proposer, offering, pending);
-  const getPts = pointDelta(recipient, requesting, pending);
+  const givePts = pointDelta(proposer, offering, pending, ruleset);
+  const getPts = pointDelta(recipient, requesting, pending, ruleset);
   const isUnequal = offering.size !== requesting.size;
 
   // Scheduled moves already baked into the totals above — say so, or the cap

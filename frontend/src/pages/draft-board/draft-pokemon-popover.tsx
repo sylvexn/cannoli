@@ -8,6 +8,7 @@ import { StatBar } from '@/components/stat-bar';
 import { AbilityChip } from '@/components/ability-chip';
 import { TeamLink } from '@/components/team-link';
 import { useLeague } from '@/lib/league-context';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -91,7 +92,7 @@ export function DraftPokemonPopover({
   isQueued,
   queueFull,
   userConflictRoster,
-  pointCap = 110,
+  pointCap: pointCapProp,
   animatingPokemonName,
   format,
   onClose,
@@ -106,6 +107,8 @@ export function DraftPokemonPopover({
   // context tunnels through portals — useLeague resolves against the
   // LeagueLayout that wraps the draft board route.
   const league = useLeague();
+  const rules = getLeagueRuleset(league);
+  const pointCap = pointCapProp ?? rules.pointCap;
 
   // Close on Escape
   useEffect(() => {
@@ -170,7 +173,7 @@ export function DraftPokemonPopover({
 
   // Pre-flight: hard conflicts (block) and soft warnings (notify).
   const conflict = mode !== 'preview' && tierEntry && userConflictRoster
-    ? findPickConflict(name, tierEntry.tier, userConflictRoster, pointCap)
+    ? findPickConflict(name, tierEntry.tier, userConflictRoster, pointCap, rules)
     : null;
   const warning = !conflict && mode !== 'preview' && tierEntry && userConflictRoster
     ? findPickWarning(name, tierEntry.tier, userConflictRoster, pointCap)

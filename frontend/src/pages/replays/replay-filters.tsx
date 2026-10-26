@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { League } from '@/lib/types';
 import type { TimeFilter } from './replay-types';
 import { TIME_FILTERS } from './replay-types';
@@ -29,6 +30,10 @@ interface ReplayFiltersProps {
   seasons: SeasonOption[];
   seasonFilter: number | 'all';
   onSeasonChange: (s: number | 'all') => void;
+  /** Exact-week dropdown: 'all' or a week number as string. */
+  weekFilter: string;
+  weekOptions: { value: string; label: string }[];
+  onWeekChange: (w: string) => void;
 }
 
 /**
@@ -48,6 +53,9 @@ export function ReplayFilters({
   seasons,
   seasonFilter,
   onSeasonChange,
+  weekFilter,
+  weekOptions,
+  onWeekChange,
 }: ReplayFiltersProps) {
   return (
     <>
@@ -82,6 +90,17 @@ export function ReplayFilters({
             {f.label}
           </button>
         ))}
+        <Select value={weekFilter} onValueChange={v => onWeekChange(v ?? 'all')}>
+          <SelectTrigger className="w-[170px] h-7 text-xs bg-surface-overlay">
+            <SelectValue placeholder="All weeks" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs">All weeks</SelectItem>
+            {weekOptions.map(o => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-4">

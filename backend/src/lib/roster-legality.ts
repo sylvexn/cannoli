@@ -1,5 +1,5 @@
 import { getBaseFormName } from './pokedex';
-import { effectiveCost } from './tera-cost';
+import { DEFAULT_RULESET, markupCost, megaLimit, type Ruleset } from '@cannoli/rules';
 
 /**
  * Single source of truth for whole-roster legality.
@@ -15,7 +15,7 @@ import { effectiveCost } from './tera-cost';
  * Callers resolve `cost` themselves because the right price depends on context
  * (draft = raw tier, trade/FA = frozen `costAtDraft` snapshot falling back to
  * the league format cost). This function only applies the captain markup via
- * `effectiveCost` and sums.
+ * the ruleset's `markupCost` and sums.
  *
  * It validates the FULL projected post-action roster. The draft engine keeps its
  * own incremental roster-reserve / captain-headroom checks on top — those are
@@ -51,27 +51,35 @@ export type RosterViolation = {
  *
  * @param roster      the full projected roster after the action
  * @param pokeByName  name -> { formCategory, nationalDexNumber } metadata lookup
- * @param opts.pointCap  league/season point cap (effective, captain-marked-up sum must be <=)
- * @param opts.megaCap   max megas allowed (default 1)
+ * @param opts.ruleset   the league's ruleset (markup table, default point/mega caps)
+ * @param opts.pointCap  override of ruleset.pointCap (admin passes Infinity to isolate checks)
+ * @param opts.megaCap   override of ruleset.megaCap (null = unlimited)
  * @param opts.label     optional prefix for messages, e.g. a team name / side
  */
 export function validateRosterLegality(
   roster: RosterEntry[],
   pokeByName: Map<string, PokeMeta>,
-  opts: { pointCap: number; megaCap?: number; label?: string },
+  opts: {
+    ruleset?: Pick<Ruleset, 'teraEnabled' | 'teraMarkup' | 'megaCap' | 'pointCap'>;
+    pointCap?: number;
+    megaCap?: number;
+    label?: string;
+  },
 ): RosterViolation | null {
-  const megaCap = opts.megaCap ?? 1;
+  const rs = opts.ruleset ?? DEFAULT_RULESET;
+  const megaCap = opts.megaCap ?? megaLimit(rs);
+  const pointCap = opts.pointCap ?? rs.pointCap;
   const label = opts.label ? `${opts.label} ` : '';
 
   // Point cap — sum effective (captain-marked-up) costs.
   const total = roster.reduce(
-    (sum, r) => sum + effectiveCost(r.cost, !!r.isTeraCaptain),
+    (sum, r) => sum + markupCost(rs, r.cost, !!r.isTeraCaptain),
     0,
   );
-  if (total > opts.pointCap) {
+  if (total > pointCap) {
     return {
       code: 'point_cap',
-      message: `${label}would exceed point cap (${total} > ${opts.pointCap})`,
+      message: `${label}would exceed point cap (${total} > ${pointCap})`,
     };
   }
 

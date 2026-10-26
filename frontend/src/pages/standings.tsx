@@ -52,10 +52,14 @@ export function StandingsPage() {
     currentSeason.phase === 'playoffs' ||
     currentSeason.phase === 'offseason' ||
     currentSeason.archived === true;
+  // In the playoffs phase the bracket view is offered (and led with) even
+  // before any playoff fixture exists — the bracket shows its own empty state —
+  // so the regular-season table never masquerades as the current surface.
+  const showBracket = hasPlayoffs || currentSeason.phase === 'playoffs';
   const [view, setView] = useState<StandingsView>('standings');
   useEffect(() => {
-    if (hasPlayoffs && isPlayoffPhase) setView('playoffs');
-  }, [hasPlayoffs, isPlayoffPhase]);
+    if (showBracket && isPlayoffPhase) setView('playoffs');
+  }, [showBracket, isPlayoffPhase]);
 
   // Find the last completed week and next upcoming week
   const { recentWeek, upcomingWeek } = useMemo(() => {
@@ -141,7 +145,7 @@ export function StandingsPage() {
          *  table otherwise. */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ResultsRevealQuickAction league={league} onRevealed={refresh} />
-          {hasPlayoffs && (
+          {showBracket && (
             <div className="flex rounded-lg border border-border-default overflow-hidden">
               <button
                 onClick={() => setView('standings')}
@@ -172,7 +176,7 @@ export function StandingsPage() {
         </div>
       </div>
 
-      {view === 'playoffs' && hasPlayoffs ? (
+      {view === 'playoffs' && showBracket ? (
         <PlayoffsFinalView />
       ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -410,8 +414,8 @@ function StandingsRow({
   const isPlayoff = rank <= playoffCount;
   const points = useMemo(() => rosterPointsUsed(player.roster), [player.roster]);
   const completedTrades = useMemo(() => getTeamTrades(player.id).filter(t => t.status === 'accepted'), [player.id, getTeamTrades]);
-  const totalKills = player.roster.reduce((s, m) => s + m.seasonStats.kills, 0);
-  const totalDeaths = player.roster.reduce((s, m) => s + m.seasonStats.deaths, 0);
+  const totalKills = [...player.roster, ...(player.departed ?? [])].reduce((s, m) => s + m.seasonStats.kills, 0);
+  const totalDeaths = [...player.roster, ...(player.departed ?? [])].reduce((s, m) => s + m.seasonStats.deaths, 0);
 
   const narrativeChip = useMemo<StandingsChip | null>(() => {
     const teamMatches: Match[] = getTeamMatches(player.id);
@@ -562,6 +566,16 @@ function StandingsRow({
                     <span className="text-win">{mon.seasonStats.kills}</span>
                     <span className="text-text-muted">/</span>
                     <span className="text-loss">{mon.seasonStats.deaths}</span>
+                  </span>
+                </div>
+              ))}
+              {(player.departed ?? []).map(mon => (
+                <div key={`departed-${mon.name}`} title="No longer on roster" className="flex items-center gap-2 py-1.5 border-b border-border-subtle last:border-b-0 px-1 -mx-1 opacity-60">
+                  <PokemonSprite name={mon.name} size="xs" />
+                  <span className="text-xs font-medium truncate min-w-0 flex-1">{mon.name} <span className="text-[9px] text-text-muted italic">(former)</span></span>
+                  <TypeChip types={mon.types} size="xs" />
+                  <span className="shrink-0 w-12 tabular-nums text-[10px] text-right">
+                    <span className="text-win">{mon.seasonStats.kills}</span><span className="text-text-muted">/</span><span className="text-loss">{mon.seasonStats.deaths}</span>
                   </span>
                 </div>
               ))}

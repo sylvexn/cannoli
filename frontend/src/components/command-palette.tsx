@@ -25,7 +25,7 @@ import {
   ArrowLeftRight, Swords, Archive, Shield, Settings,
   Users, CalendarCog, List, ScrollText, MessageSquare,
   Trophy as TrophyIcon, Award, Bot as BotIcon,
-  Film, Gauge, ListTree, Gamepad2,
+  Film, Gauge, ListTree, Gamepad2, ClipboardList,
 } from 'lucide-react';
 
 // Admin tab definitions (mirrored from admin/index.tsx)
@@ -58,13 +58,13 @@ const LEAGUE_PAGES = [
 
 const GLOBAL_PAGES = [
   { path: '/', label: 'League Overview', icon: Globe },
+  { path: '/draft-center', label: 'Draft Center', icon: ClipboardList },
   { path: '/matchup', label: 'Matchup Center', icon: Swords },
   { path: '/showdown', label: 'Showdown', icon: Gamepad2 },
   { path: '/replays', label: 'Replays', icon: Film },
   { path: '/archive', label: 'Season Archive', icon: Archive },
   { path: '/tiers', label: 'Tier List', icon: ListTree },
   { path: '/speed-tiers', label: 'Speed Tiers', icon: Gauge },
-  { path: '/badges', label: 'Badges', icon: Award },
   { path: '/rules', label: 'Rules', icon: ScrollText },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];

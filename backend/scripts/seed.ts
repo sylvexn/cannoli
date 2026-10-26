@@ -15,6 +15,7 @@
  * when S11 becomes the active season.
  */
 
+import { backfillRulesets } from './backfill-rulesets';
 import { Database } from 'bun:sqlite';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { resolve } from 'path';
@@ -125,13 +126,13 @@ function seedSiteSettings() {
 // Seed pin definitions
 //
 // Net-new auto-pin defs added when the archive feature shipped. The earlier
-// award set (garchomp/cannoli/cynthia/kingslayer/flawless + manual pins) lives
+// award set (garchomp/cannoli/cynthia + manual pins) lives
 // in migration 0022_real_awards.sql; that's where the canonical defs come
 // from. These four close the gaps: Champion (was DELETEd in 0022, restored
 // here for finals-winner recognition), High Score (single-game kill record),
 // Steal of the Draft (auto-derived best K/point value, distinct from the
-// manual `best-draft`), and Sweeper (most 6-0 sweeps, distinct from the
-// per-match `flawless`). Mint logic lives in lib/pins/archive-mint.ts.
+// manual `best-draft`), and Sweeper (most 6-0 sweeps)
+// Mint logic lives in lib/pins/archive-mint.ts.
 
 const ARCHIVE_PIN_DEFINITIONS = [
   {
@@ -802,30 +803,6 @@ if (s9Missing.length === 0) {
   const finish = assignFinishPositions(sqlite, s9LeagueIds);
   console.log(`  stamped ${finish.teamsUpdated} team(s) with finish position/label`);
 
-  // Award S9 pins. Two passes:
-  //   1. runAutoAwards(season-end) → garchomp / cannoli / cynthia. S9 has
-  //      no per-match Pokemon kill data (match_pokemon is empty for the
-  //      historical import), so garchomp won't have eligible rows; cannoli
-  //      and cynthia fire from match-level scores alone.
-  //   2. mintArchivePins → champion / high-score / steal-of-the-draft /
-  //      sweeper. The first three (high-score/steal/sweeper) need
-  //      match_pokemon and will mint zero rows for S9, but champion only
-  //      needs finals scores → fires correctly. Mirrors what the admin
-  //      "Archive Season" button does live; we run both at seed time so
-  //      the historical archive surface has the same pin set as a live
-  //      finalize would.
-  console.log('\n── Awarding S9 auto-pins ──');
-  const { runAutoAwards } = await import('../src/lib/pins/auto-award');
-  const { mintArchivePins } = await import('../src/lib/pins/archive-mint');
-  for (const lid of s9LeagueIds) {
-    const auto = runAutoAwards(lid, { trigger: 'season-end' });
-    const archive = mintArchivePins(lid);
-    console.log(
-      `  ${lid}: auto ${auto.awarded.length}+${auto.skipped}, ` +
-      `archive ${archive.awarded.length}+${archive.skipped}`,
-    );
-  }
-
   // Manual pins from the Discord award announcements (Elite-4 / Mix /
   // Player categories). The cannoli/cynthia/garchomp slugs overlap with
   // the auto job above; mintManualPins clears the season's auto rows for
@@ -898,19 +875,7 @@ if (s9Missing.length === 0) {
 // Runs after the finalize block above. Same shape as S9 but the season
 // stays unarchived.
 if (PRIMARY_CONFIG.seasonNumber === 10) {
-  console.log('\n── Awarding S10 auto-pins ──');
-  const { runAutoAwards } = await import('../src/lib/pins/auto-award');
-  const { mintArchivePins } = await import('../src/lib/pins/archive-mint');
   const s10LeagueIds = S10_CONFIG.files.map((f) => f.id);
-  for (const lid of s10LeagueIds) {
-    const auto = runAutoAwards(lid, { trigger: 'season-end' });
-    const archive = mintArchivePins(lid);
-    console.log(
-      `  ${lid}: auto ${auto.awarded.length}+${auto.skipped}, ` +
-      `archive ${archive.awarded.length}+${archive.skipped}`,
-    );
-  }
-
   console.log('\n── Awarding S10 manual pins ──');
   const s10Manual = mintManualPins(sqlite, 10, S10_AWARDS);
   console.log(
@@ -1132,6 +1097,14 @@ if (MODE === 'mock' && PRIMARY_CONFIG.seasonNumber === 10) {
   })();
   const perFmt = Object.entries(fmt.written).map(([f, n]) => `${f}=${n}`).join(' ');
   console.log(`\n  cost formats: format_costs(${perFmt}), ${fmt.leaguesChanged} leagues assigned`);
+}
+
+// Rulesets
+// Snapshot each league's legacy rules into a `rulesets` row and point the
+// league at it, so seeded data exercises the same enforcement path as new leagues.
+{
+  const rep = backfillRulesets(sqlite, true);
+  console.log(`\n  rulesets: ${rep.instances.length} instances, ${rep.templates.length} templates`);
 }
 
 // Final summary

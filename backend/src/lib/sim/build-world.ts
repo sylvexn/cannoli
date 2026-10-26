@@ -22,6 +22,7 @@
  * MOCK-ONLY. The sim core asserts mock mode on every writer; this builder is
  * never run against the live deployment.
  */
+import { DEFAULT_RULESET } from '@cannoli/rules';
 import { db, schema, sqlite } from '../../db';
 import { eq } from 'drizzle-orm';
 import { hashSync } from 'bcryptjs';
@@ -39,8 +40,6 @@ import {
   seedMoveCategories,
 } from '../../../scripts/seed-helpers';
 import { importPokemonOnly, assignFinishPositions } from '../../../scripts/import-xlsx';
-import { runAutoAwards } from '../pins/auto-award';
-import { mintArchivePins } from '../pins/archive-mint';
 import { seedLeagueTrades } from './seed-trades';
 
 // Tunables
@@ -134,6 +133,20 @@ function createFictionalSeason(opts: {
       teraCaptainSlots: TERA_CAPTAIN_SLOTS,
     }).returning().get();
 
+    // One ruleset per simulated season, mirroring the season's legacy knobs, so
+    // mock leagues resolve rules through the same path as real ones.
+    const ruleset = db.insert(schema.rulesets).values({
+      name: `S${seasonNumber} Sim`,
+      costFormat: DEFAULT_RULESET.costFormat,
+      pointCap: POINT_CAP,
+      rosterSize: ROSTER_SIZE,
+      megaCap: DEFAULT_RULESET.megaCap,
+      teraEnabled: DEFAULT_RULESET.teraEnabled,
+      teraCaptainSlots: TERA_CAPTAIN_SLOTS,
+      teraTypesPerCaptain: DEFAULT_RULESET.teraTypesPerCaptain,
+      teraMarkup: JSON.stringify(DEFAULT_RULESET.teraMarkup),
+    }).returning().get();
+
     const leagues: { leagueId: string; teamIds: string[] }[] = [];
 
     for (let gi = 0; gi < GEMS.length; gi++) {
@@ -154,6 +167,7 @@ function createFictionalSeason(opts: {
         currentWeek: 0,
         totalWeeks: TEAMS_PER_LEAGUE - 1,
         rosterSize: ROSTER_SIZE,
+        rulesetId: ruleset.id,
         weekDates: JSON.stringify(weekDates),
         weekDatesAutoFilled: true,
       }).run();
@@ -389,10 +403,6 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
       // Stamp finish positions from the played-out bracket so standings +
       // profile badges render. generatePlayoffBracket set teams.rank.
       assignFinishPositions(sqlite, [leagueId]);
-
-      // Mint season-end + archive pins (champion / sweeper / high-score / …).
-      runAutoAwards(leagueId, { trigger: 'season-end' });
-      mintArchivePins(leagueId);
 
       // Historical trade activity — a finished season has only accepted
       // (completed) trades + trade-block listings, no open proposals.

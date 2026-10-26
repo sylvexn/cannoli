@@ -1,5 +1,5 @@
-import type { RosterPokemon } from '@/lib/types';
-import type { LeagueConfig } from '@/lib/types';
+import type { RosterPokemon, DepartedPokemon } from '@/lib/types';
+import type { RuleConfig } from '@/lib/league-ruleset';
 import { getTermCost } from '@/data/tier-list';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { PokemonSprite } from '@/components/pokemon-sprite';
@@ -21,10 +21,12 @@ import { NicknameEditor } from './nickname-editor';
 type SortKey = 'tier' | 'kills' | 'deaths' | 'kpg' | 'spe';
 
 interface RosterTableProps {
+  /** Mons that played for the team but have left the roster — still counted in the K/D totals. */
+  departed?: DepartedPokemon[];
   activeRoster: RosterPokemon[];
   sortedRoster: { mon: RosterPokemon; originalIndex: number }[];
   swaps: SwapEntry[];
-  config: LeagueConfig;
+  config: RuleConfig;
   theorycraftMode: boolean;
   sortKey: SortKey;
   sortDir: 'asc' | 'desc';
@@ -37,6 +39,7 @@ interface RosterTableProps {
 }
 
 export function RosterTable({
+  departed = [],
   activeRoster,
   sortedRoster,
   swaps,
@@ -51,10 +54,10 @@ export function RosterTable({
   onNicknameSaved,
 }: RosterTableProps) {
   const { openSideCard } = usePokemonSideCard();
-  const pointsUsed = rosterPointsUsed(activeRoster);
+  const pointsUsed = rosterPointsUsed(activeRoster, config.ruleset);
   const captainCount = teraCaptainCount(activeRoster);
-  const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
-  const teamDeaths = activeRoster.reduce((sum, p) => sum + p.seasonStats.deaths, 0);
+  const teamKills = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.kills, 0);
+  const teamDeaths = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.deaths, 0);
 
   const SortIcon = ({ k }: { k: SortKey }) => {
     if (sortKey !== k) return null;
@@ -112,7 +115,7 @@ export function RosterTable({
             <tbody>
               {sortedRoster.map(({ mon, originalIndex }) => {
                 const isSwapped = swaps.some(s => s.index === originalIndex);
-                const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier) : mon.tier;
+                const effectiveCost = mon.isTeraCaptain ? getTermCost(mon.tier, config.ruleset) : mon.tier;
                 const kpg = mon.seasonStats.gp ? (mon.seasonStats.kills / mon.seasonStats.gp).toFixed(1) : '—';
                 const bst = mon.stats.hp + mon.stats.atk + mon.stats.def + mon.stats.spa + mon.stats.spd + mon.stats.spe;
 
@@ -226,6 +229,17 @@ export function RosterTable({
             </tbody>
           </table>
         </div>
+
+        {departed.length > 0 && (
+          <div className="px-4 py-2 border-t border-border-subtle text-[11px] text-text-muted opacity-70">
+            <span className="italic mr-2">No longer on roster</span>
+            {departed.map(d => (
+              <Link key={d.name} to={pokemonRoute(d.name)} className="inline-block mr-3 font-mono hover:text-neon">
+                {d.name} <span className="text-win">{d.seasonStats.kills}</span>/<span className="text-loss">{d.seasonStats.deaths}</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Totals */}
         <div className="px-4 py-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted font-medium">

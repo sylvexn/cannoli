@@ -171,9 +171,7 @@ describe('orderRecords (tiebreaker hierarchy)', () => {
   // producing `WHERE … AND ()` and crashing with `near ")" syntax error`.
   // Just exercise the SQL path — empty/unknown leagueId is fine, we only care
   // that no SQLiteError is thrown.
-  test("regression: computeStandings({ phase: 'all' }) does not crash with SQL syntax error", () => {
-    expect(() => computeStandings('__nonexistent_league__', { phase: 'all' })).not.toThrow();
-    expect(() => computeStandings('__nonexistent_league__', { phase: 'regular' })).not.toThrow();
+  test("regression: computeStandings does not crash with SQL syntax error", () => {
     expect(() => computeStandings('__nonexistent_league__')).not.toThrow();
   });
 

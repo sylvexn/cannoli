@@ -26,6 +26,8 @@ interface AllTimePayload {
     seasonNumber: number;
     pointCap: number;
     teraCaptainSlots: number;
+    /** Season's ruleset snapshot, when the API provides it (wins over the legacy fields). */
+    ruleset?: { pointCap?: number; teraCaptainSlots?: number } | null;
     archived: boolean;
     leagueCount: number;
   }[];
@@ -173,7 +175,7 @@ export function ArchiveHubPage() {
               icon={Skull}
               tint="#ef4444"
               rows={data.allTimeLeaders.mostKills}
-              format={r => `${r.totalKills}K`}
+              format={r => `${r.totalKills} KOs`}
             />
             <LeaderCard
               title="Best K/D"
@@ -221,7 +223,7 @@ export function ArchiveHubPage() {
                     <PokemonSprite name={p.pokemonName} size="xs" />
                     <span className="flex-1 truncate text-text-primary">{p.pokemonName}</span>
                     <span className="font-mono text-text-muted text-[10px]">
-                      {p.totalKills}K · {p.gp}gp
+                      {p.totalKills} KOs · {p.gp}gp
                     </span>
                   </Link>
                 ))}
@@ -271,9 +273,9 @@ export function ArchiveHubPage() {
                       <div className="text-[11px] text-text-muted flex items-center gap-2">
                         <span>{season.leagueCount} leagues</span>
                         <span>·</span>
-                        <span>{season.pointCap}pt cap</span>
+                        <span>{season.ruleset?.pointCap ?? season.pointCap}pt cap</span>
                         <span>·</span>
-                        <span>{season.teraCaptainSlots} captains</span>
+                        <span>{season.ruleset?.teraCaptainSlots ?? season.teraCaptainSlots} captains</span>
                       </div>
 
                       {seasonChampions.length > 0 ? (

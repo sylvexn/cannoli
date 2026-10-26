@@ -2,15 +2,16 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle } from 'lucide-react';
 import { formatShortDate } from './schedule-dates-step';
 import type { LeagueTeamsState } from './provision-teams-step';
+import type { ApiRuleset } from '@/lib/api';
+import { summarize } from '../rulesets/form';
 
 interface ConfirmStepProps {
   seasonNumber: number;
   copyPrevious: boolean;
   totalWeeks: number;
-  pointCap: number;
-  teraCaptainSlots: number;
   maxTeams: number;
-  rosterSize: number;
+  /** Resolved ruleset per included league (null = none chosen, backend default applies). */
+  rulesets: { league: string; ruleset: ApiRuleset | null }[];
   weekDates: Record<string, string>;
   teamsByLeague: LeagueTeamsState[];
   includedLeagues: { id: string; name: string; color: string; isNew: boolean }[];
@@ -18,8 +19,8 @@ interface ConfirmStepProps {
 
 export function ConfirmStep(props: ConfirmStepProps) {
   const {
-    seasonNumber, copyPrevious, totalWeeks, pointCap, teraCaptainSlots, maxTeams,
-    rosterSize, weekDates, teamsByLeague, includedLeagues,
+    seasonNumber, copyPrevious, totalWeeks, maxTeams,
+    rulesets, weekDates, teamsByLeague, includedLeagues,
   } = props;
 
   const totalTeams = teamsByLeague.reduce(
@@ -57,10 +58,18 @@ export function ConfirmStep(props: ConfirmStepProps) {
         </div>
         <div className="border-t border-border-subtle pt-2 mt-2 space-y-1">
           <Row label="Weeks" value={totalWeeks} />
-          <Row label="Point Cap" value={pointCap} />
-          <Row label="Tera Captains" value={teraCaptainSlots} />
           <Row label="Max Teams" value={maxTeams} />
-          <Row label="Roster Size" value={rosterSize} />
+        </div>
+        <div className="border-t border-border-subtle pt-2 mt-2 space-y-1">
+          {rulesets.map(r => (
+            <div key={r.league} className="flex justify-between gap-3 items-baseline">
+              <span className="text-text-muted shrink-0">{r.league}</span>
+              <span className="text-right min-w-0">
+                <span className="block truncate">{r.ruleset?.name ?? 'No ruleset chosen'}</span>
+                {r.ruleset && <span className="block truncate text-[10px] font-mono text-text-muted">{summarize(r.ruleset)}</span>}
+              </span>
+            </div>
+          ))}
         </div>
         {totalTeams > 0 && (
           <div className="border-t border-border-subtle pt-2 mt-2 space-y-1">

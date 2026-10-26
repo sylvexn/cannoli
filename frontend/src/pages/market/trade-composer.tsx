@@ -31,6 +31,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { LegalityMeter } from '@/pages/market/trade-bits';
 import type { Player, Trade } from '@/lib/types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 
 export interface TradeComposerProps {
   open: boolean;
@@ -56,7 +57,8 @@ export function TradeComposer({
 }: TradeComposerProps): React.ReactElement {
   const league = useLeague();
   const { players } = useLeagueData();
-  const pointCap = league.season.pointCap ?? 110;
+  const ruleset = getLeagueRuleset(league);
+  const pointCap = ruleset.pointCap;
 
   const [partnerId, setPartnerId] = useState<string | null>(null);
   const [offering, setOffering] = useState<Set<string>>(new Set());
@@ -120,7 +122,7 @@ export function TradeComposer({
   const effMin = league.season.minRosterSize ?? league.season.rosterSize;
   const issues = partnerTeam
     ? validateTrade({
-        proposer: proposerTeam, recipient: partnerTeam, offering, requesting, pointCap,
+        proposer: proposerTeam, recipient: partnerTeam, offering, requesting, pointCap, ruleset,
         maxRosterSize: effMax, minRosterSize: effMin, pending,
       })
     : [];

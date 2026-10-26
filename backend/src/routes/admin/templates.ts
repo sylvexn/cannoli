@@ -46,8 +46,16 @@ function safeParse<T>(s: string | null, fallback: T): T {
   catch { return fallback; }
 }
 
+/**
+ * DEPRECATED: superseded by ruleset templates (/api/admin/rulesets?kind=template).
+ * Kept working for old clients; every response carries `Deprecation: true`.
+ */
 export const templateAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
+  .onAfterHandle({ as: 'local' }, ({ set }) => {
+    set.headers['deprecation'] = 'true';
+    set.headers['link'] = '</api/admin/rulesets?kind=template>; rel="successor-version"';
+  })
 
   // List templates
   .get('/api/draft-templates', ({ user, set }) => {

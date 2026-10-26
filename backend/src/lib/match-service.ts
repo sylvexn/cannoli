@@ -14,7 +14,6 @@ import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
 import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
-import { runAutoAwards } from './pins/auto-award';
 import { validatePokemonDataForMatch } from './match-validation';
 import { resolveRosterPokemonName } from './pokedex';
 import { matchWinner } from './standings';
@@ -35,6 +34,8 @@ export interface RecordResultInput {
   pokemonData?: PokemonDataEntry[];
   /** Caller-supplied warnings, merged with validation warnings. */
   warnings?: string[];
+  /** Admin walkover: the named side forfeited. Omitted/null = the game was played. */
+  forfeitedBy?: 'home' | 'away' | null;
 }
 
 export interface RecordResultOutcome {
@@ -87,6 +88,7 @@ export function recordMatchResult(
   }
 
   const { homeScore, awayScore, replayUrl, pokemonData, warnings } = input;
+  const forfeitedBy = input.forfeitedBy ?? null;
   if (homeScore === undefined || awayScore === undefined) {
     return { ok: false, status: 400, error: 'homeScore and awayScore required' };
   }
@@ -94,7 +96,7 @@ export function recordMatchResult(
   // back to the home team and assignFinishPositions skips equal-score matches
   // outright — so a tied Final left NOBODY marked champion. Refuse the score
   // instead of corrupting the bracket.
-  if (match.phase === 'playoffs' && homeScore === awayScore) {
+  if (match.phase === 'playoffs' && homeScore === awayScore && !forfeitedBy) {
     return {
       ok: false,
       status: 400,
@@ -135,11 +137,16 @@ export function recordMatchResult(
   // Winner from the entered KO score (the manual recorder enters real scores).
   // Equal → null (tie / no-contest). Stored explicitly so standings never
   // re-derive W/L from the differential.
-  const recordWinnerTeamId = homeScore > awayScore
-    ? match.homeTeamId
-    : awayScore > homeScore
-      ? match.awayTeamId
-      : null;
+  // A forfeit names the survivor regardless of the entered score (mirrors force-result).
+  const recordWinnerTeamId = forfeitedBy === 'home'
+    ? match.awayTeamId
+    : forfeitedBy === 'away'
+      ? match.homeTeamId
+      : homeScore > awayScore
+        ? match.homeTeamId
+        : awayScore > homeScore
+          ? match.awayTeamId
+          : null;
 
   const outcome = tx(() => {
     // Update match
@@ -147,6 +154,7 @@ export function recordMatchResult(
       homeScore,
       awayScore,
       winnerTeamId: recordWinnerTeamId,
+      forfeitedBy,
       replayUrl: replayUrl || match.replayUrl,
       status: newStatus,
       completedAt: new Date().toISOString(),
@@ -195,8 +203,8 @@ export function recordMatchResult(
       category: 'match',
       actor,
       leagueId: match.leagueId,
-      description: `Recorded result for ${match.homeTeamId} vs ${match.awayTeamId}: ${homeScore}-${awayScore}`,
-      metadata: JSON.stringify({ matchId, homeScore, awayScore, warningCount: mergedWarnings.length }),
+      description: `Recorded result for ${match.homeTeamId} vs ${match.awayTeamId}: ${homeScore}-${awayScore}${forfeitedBy ? ` (forfeit: ${forfeitedBy})` : ''}`,
+      metadata: JSON.stringify({ matchId, homeScore, awayScore, forfeitedBy, warningCount: mergedWarnings.length }),
     }).run();
 
     // Playoff auto-advancement
@@ -228,21 +236,6 @@ export function recordMatchResult(
 
     return { ok: true, result: { status: newStatus, warnings: mergedWarnings } };
   });
-
-  // Auto-award per-match pins (Kingslayer, Flawless) — AFTER the match write
-  // commits, not inside its transaction. Idempotent — re-running on a
-  // re-record (after dismiss-warnings) will skip already-awarded rows via the
-  // unique index. Safe to run on disputed-status results too: the helpers
-  // gate on status='completed' internally, so a 'disputed' record waits until
-  // warnings clear. A throw here must never unwind the match/matchPokemon
-  // rows we just committed — best-effort, logged and swallowed.
-  if (newStatus === 'completed') {
-    try {
-      runAutoAwards(match.leagueId, { trigger: 'match', matchId });
-    } catch (err) {
-      console.error(`[match-service] runAutoAwards failed for ${matchId}:`, err);
-    }
-  }
 
   return outcome;
 }

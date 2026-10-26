@@ -12,7 +12,9 @@ import { useAuth } from '@/lib/auth-context';
 import { useLeague } from '@/lib/league-context';
 import { useLeagueData } from '@/lib/league-data-context';
 import { isStaff, isTeamOwner } from '@/lib/permissions';
+import type { Ruleset } from '@cannoli/rules';
 import { getEffectiveCost, DEFAULT_FORMAT } from '@/data/tier-list';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { cn } from '@/lib/utils';
 import type { Player } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,8 +30,8 @@ export function useMarket() {
   return useOutletContext<MarketOutletContext>();
 }
 
-function teamPointsUsed(team: Player, format = DEFAULT_FORMAT): number {
-  return team.roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain, format), 0);
+function teamPointsUsed(team: Player, format = DEFAULT_FORMAT, rs?: Ruleset): number {
+  return team.roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain, format, rs), 0);
 }
 
 export function MarketLayout() {
@@ -41,7 +43,8 @@ export function MarketLayout() {
 
   const currentWeek = league.season.currentWeek;
   const tradeDeadlineWeek = league.season.tradeDeadlineWeek ?? 7;
-  const pointCap = league.season.pointCap ?? 110;
+  const ruleset = getLeagueRuleset(league);
+  const pointCap = ruleset.pointCap;
 
   // The viewer's owned team in this league (if any).
   const ownedTeam = useMemo(
@@ -130,7 +133,7 @@ export function MarketLayout() {
       {/* Budget bar — only when the viewer is acting as a team */}
       {actingTeam && (
         <BudgetBar
-          used={teamPointsUsed(actingTeam, costFormat)}
+          used={teamPointsUsed(actingTeam, costFormat, ruleset)}
           cap={pointCap}
           projected={null}
           teamColor={actingTeam.teamColor}

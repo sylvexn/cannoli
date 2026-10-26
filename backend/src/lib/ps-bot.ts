@@ -19,7 +19,6 @@ import { getLeagueCostFormat } from './league-costs';
 import { db, schema } from '../db';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { getArenaBroadcaster, clearReadyTimerForMatch, handleScrimBattleFailed, broadcastMatchState } from '../routes/arena';
-import { runAutoAwards } from './pins/auto-award';
 import { tx } from './tx';
 import { advancePlayoffWinner } from './playoff-advance';
 import { existsSync, readFileSync, readdirSync } from 'fs';
@@ -1796,22 +1795,6 @@ function handleMatchEnd(battle: MonitoredBattle, winnerUsername: string | null) 
         // result to broadcast and no PS room left to keep watching.
         monitoredBattles.delete(battle.roomId);
         return;
-      }
-
-      // Fix 1 — fire per-match auto-awards (Kingslayer / Flawless), AFTER the
-      // tx above commits, not inside it. The manual record handler does this;
-      // the bot is the primary recording path during a normal season and was
-      // missing the call. Skip when the match is now 'disputed' — dismiss-
-      // warnings will run the awards once an admin clears them. There's no
-      // caller here to retry on failure and the PS battle won't re-emit
-      // |win|, so a throw must never leave the match stuck mid-write —
-      // best-effort, logged and swallowed.
-      if (!hasWarnings) {
-        try {
-          runAutoAwards(match.leagueId, { trigger: 'match', matchId });
-        } catch (err) {
-          console.error(`[PS Bot] runAutoAwards failed for ${matchId}:`, err);
-        }
       }
 
       // Broadcast result to Arena (after commit — clients only learn the result

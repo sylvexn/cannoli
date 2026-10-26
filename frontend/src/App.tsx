@@ -16,8 +16,10 @@ import { LoginPage } from '@/pages/login';
 import { ChangePasswordPage } from '@/pages/change-password';
 import { HomePage } from '@/pages/home';
 import { RulesPage } from '@/pages/rules';
+import { PatchNotesPage } from '@/pages/patch-notes';
+import { AdminTicketsRoute } from '@/pages/admin/tickets';
+import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
-import { BadgesPage } from '@/pages/badges';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
@@ -26,16 +28,16 @@ import { TradeDeskPage } from '@/pages/market/trade-desk';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
+import { SettingsConsole } from '@/pages/admin/console';
+import { AdminDashboard } from '@/pages/admin/dashboard';
+import { AdminRulesetsRoute } from '@/pages/admin/rulesets/route';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminMembershipRoute, AdminLeaguesRoute, AdminSeasonRoute,
-  AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminTierListRoute,
-  AdminTemplatesRoute,
-  AdminMoveCategoriesRoute, AdminSiteSettingsRoute, AdminActivityRoute,
-  AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
+  AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminMoveCategoriesRoute, AdminActivityRoute,
+  AdminApiLogsRoute, AdminBotRoute, AdminPinsRoute,
   AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute, AdminUsageRoute,
   AdminAnnouncementsRoute,
-  AdminRulesRoute,
-} from '@/pages/admin/admin-routes';
+  } from '@/pages/admin/admin-routes';
 import { ArchiveLayout } from '@/pages/archive/layout';
 import { ArchiveHubPage } from '@/pages/archive/hub';
 import { ArchiveSeasonPage } from '@/pages/archive/season';
@@ -51,8 +53,14 @@ import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
 import { NotFoundPage } from '@/pages/not-found';
 
 // Lazy-loaded heavy routes
+const AdminPlayoffs = lazyWithReload(() => import("./pages/admin/playoffs").then(m => ({ default: m.AdminPlayoffs })));
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
 const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
+const DraftCenterLayout = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterLayout })));
+const DraftCenterHome = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.DraftCenterHome })));
+const DraftCenterEditor = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.TeamEditorPage })));
+const DraftCenterPast = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.PastTeamPage })));
+const DraftCenterShared = lazyWithReload(() => import('./pages/draft-center').then(m => ({ default: m.SharedTeamPage })));
 const MatchupCenterPage = lazyWithReload(() => import('./pages/matchup-center').then(m => ({ default: m.MatchupCenterPage })));
 const StatsPage = lazyWithReload(() => import('./pages/stats').then(m => ({ default: m.StatsPage })));
 const SpeedTiersPage = lazyWithReload(() => import('./pages/speed-tiers').then(m => ({ default: m.SpeedTiersPage })));
@@ -68,6 +76,7 @@ function AnalyticsBeacon() {
   usePageviewBeacon();
   return null;
 }
+import { DevConsolePage } from '@/pages/admin/dev-console';
 
 export default function App() {
   return (
@@ -124,6 +133,12 @@ export default function App() {
               <Route path="coach/:username" element={<CoachProfilePage />} />
               <Route path="coach/:username/teams" element={<CoachTeamsIndexPage />} />
               <Route path="matchup" element={<Suspense fallback={<PageLoadingSpinner />}><MatchupCenterPage /></Suspense>} />
+              <Route path="draft-center" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterLayout /></Suspense>}>
+                <Route index element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterHome /></Suspense>} />
+                <Route path="team/:id" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterEditor /></Suspense>} />
+                <Route path="past/:leagueId/:teamId" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterPast /></Suspense>} />
+                <Route path="s/:token" element={<Suspense fallback={<PageLoadingSpinner />}><DraftCenterShared /></Suspense>} />
+              </Route>
               <Route path="replays" element={<ReplaysPage />} />
               <Route path="replay/:matchId" element={<ReplayWatchPage />} />
               <Route path="archive" element={<ArchiveLayout />}>
@@ -133,8 +148,8 @@ export default function App() {
                 <Route path=":seasonId/:leagueId/:teamId" element={<ArchiveTeamPage />} />
               </Route>
               <Route path="rules" element={<RulesPage />} />
+              <Route path="patch-notes" element={<PatchNotesPage />} />
               <Route path="tiers" element={<TierListPage />} />
-              <Route path="badges" element={<BadgesPage />} />
               <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
 
               {/* Protected global routes */}
@@ -143,7 +158,7 @@ export default function App() {
                 <Route path="settings" element={<UserSettingsPage />} />
                 <Route element={<ProtectedRoute requireAdmin />}>
                   <Route path="admin" element={<AdminPage />}>
-                    <Route index element={<AdminUsersRoute />} />
+                    <Route index element={<AdminDashboard />} />
                     <Route path="users" element={<AdminUsersRoute />} />
                     <Route path="teams" element={<AdminTeamsRoute />} />
                     <Route path="membership" element={<AdminMembershipRoute />} />
@@ -152,21 +167,29 @@ export default function App() {
                     <Route path="matches" element={<AdminMatchesRoute />} />
                     <Route path="trades" element={<AdminTradesRoute />} />
                     <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
-                    <Route path="tiers" element={<AdminTierListRoute />} />
-                    <Route path="templates" element={<AdminTemplatesRoute />} />
+                    <Route path="console" element={<SettingsConsole />} />
+                    <Route path="rulesets" element={<AdminRulesetsRoute />} />
+                    <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
+                    <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
+                    <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
                     <Route path="pins" element={<AdminPinsRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
                     <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
                     <Route path="announcements" element={<AdminAnnouncementsRoute />} />
-                    <Route path="rules" element={<AdminRulesRoute />} />
-                    <Route path="settings" element={<AdminSiteSettingsRoute />} />
+                    <Route path="rules" element={<Navigate to="/admin/console#rules" replace />} />
+                    <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
+                    <Route path="playoffs" element={<Suspense fallback={null}><AdminPlayoffs /></Suspense>} />
+                    <Route path="settings" element={<Navigate to="/admin/console#general" replace />} />
                     <Route path="activity" element={<AdminActivityRoute />} />
                     <Route path="api-logs" element={<AdminApiLogsRoute />} />
                     <Route path="observability" element={<AdminObservabilityRoute />} />
+                    <Route path="dev" element={<DevConsolePage />} />
                     <Route path="usage" element={<AdminUsageRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
-                    <Route path="feedback" element={<AdminFeedbackRoute />} />
+                    <Route path="feedback" element={<Navigate to="/admin/tickets" replace />} />
+                    <Route path="tickets" element={<AdminTicketsRoute />} />
+                    <Route path="tickets/:id" element={<AdminTicketsRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
                     <Route path="sim" element={<AdminSimRoute />} />
                   </Route>

@@ -5,7 +5,12 @@ import type { ApiTeam } from '@/lib/api';
 import { rosterFromApi } from '@/lib/roster-from-api';
 import type { RosterPokemon } from '@/lib/types';
 import type { TeamSource } from './use-matchup-state';
+import { useAuth } from '@/lib/auth-context';
+import { orderLeaguesForUser } from './league-order';
 import { CustomTeamBuilder } from './custom-team-builder';
+import { useDraftCenterTeams } from '@/lib/draft-center/store';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
+import { teamToRoster } from '@/lib/draft-center/roster';
 import {
   Select,
   SelectContent,
@@ -25,8 +30,11 @@ interface TeamPickerProps {
 
 export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   const { leagues } = useAppData();
+  const { user } = useAuth();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
   const [showCustom, setShowCustom] = useState(false);
+  const { teams: dcTeams } = useDraftCenterTeams();
+  const { resolve: resolveDc } = useRulesetCatalog(dcTeams);
 
   useEffect(() => {
     if (leagues.length === 0) return;
@@ -38,6 +46,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   }, [leagues]);
 
   const selectValue = source?.type === 'custom' ? '__custom__'
+    : source?.type === 'draft-center' ? `dc:${source.teamId}`
     : source ? `${source.leagueId}:${source.teamId}` : '';
 
   if (showCustom) {
@@ -59,6 +68,15 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
     if (!val) return;
     if (val === '__custom__') {
       setShowCustom(true);
+      return;
+    }
+    if (val.startsWith('dc:')) {
+      const dc = dcTeams.find(t => t.id === val.slice(3));
+      if (dc) {
+        onSelect(teamToRoster(dc.roster, resolveDc(dc)), {
+          type: 'draft-center', teamId: dc.id, label: `${dc.name} (Draft Center)`,
+        });
+      }
       return;
     }
     const [leagueId, teamId] = val.split(':');
@@ -84,12 +102,25 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
       >
         <SelectValue
           placeholder={side === 'a' ? 'Select your team...' : 'Select opponent...'}
-        />
+        >
+          {source?.type === 'draft-center' ? source.label : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent align="start">
         <SelectItem value="__custom__">Custom Team...</SelectItem>
         <SelectSeparator />
-        {leagues.map(league => {
+        {dcTeams.length > 0 && (
+          <>
+            <SelectGroup>
+              <SelectLabel>Draft Center</SelectLabel>
+              {dcTeams.map(t => (
+                <SelectItem key={t.id} value={`dc:${t.id}`}>{t.name} ({t.roster.length})</SelectItem>
+              ))}
+            </SelectGroup>
+            <SelectSeparator />
+          </>
+        )}
+        {orderLeaguesForUser(leagues, teamsPerLeague, user?.id).map(league => {
           const teams = teamsPerLeague[league.id] || [];
           return (
             <SelectGroup key={league.id}>

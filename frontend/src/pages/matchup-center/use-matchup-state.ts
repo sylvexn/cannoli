@@ -1,11 +1,12 @@
-import { useReducer, useMemo } from 'react';
+import { useReducer, useMemo, useEffect } from 'react';
 import type { RosterPokemon } from '@/lib/types';
 
 export interface TeamSource {
   /** 'builder' = live-synced from the Showdown teambuilder (matchup plugin only;
    *  the site never produces it — type-space only from the site's perspective). */
-  type: 'league' | 'custom' | 'builder';
+  type: 'league' | 'custom' | 'builder' | 'draft-center';
   leagueId?: string;
+  /** league team id, or the Draft Center team id when type is 'draft-center'. */
   teamId?: string;
   label?: string;
 }
@@ -40,6 +41,7 @@ type MatchupAction =
   | { type: 'SET_TEAM_B'; roster: RosterPokemon[]; source: TeamSource }
   | { type: 'CLEAR_TEAM_A' }
   | { type: 'CLEAR_TEAM_B' }
+  | { type: 'RESET' }
   | { type: 'TOGGLE_SUB_A'; name: string }
   | { type: 'TOGGLE_SUB_B'; name: string }
   | { type: 'SET_TAB'; tab: MatchupTab }
@@ -69,6 +71,11 @@ function reducer(state: MatchupState, action: MatchupAction): MatchupState {
       return { ...state, teamA: [], teamASource: null, subTeamA: new Set() };
     case 'CLEAR_TEAM_B':
       return { ...state, teamB: [], teamBSource: null, subTeamB: new Set() };
+    case 'RESET':
+      return {
+        ...state, teamA: [], teamB: [], teamASource: null, teamBSource: null,
+        subTeamA: new Set(), subTeamB: new Set(), speedCalcSlots: makeInitialSpeedSlots([], []),
+      };
     case 'TOGGLE_SUB_A':
       return { ...state, subTeamA: toggleInSet(state.subTeamA, action.name, 12) };
     case 'TOGGLE_SUB_B':
@@ -125,22 +132,42 @@ function makeInitialSpeedSlots(teamA: RosterPokemon[], teamB: RosterPokemon[]): 
   return slots;
 }
 
-export function useMatchupState() {
-  // Start empty — team picker handles selection
-  const initialTeamA = useMemo(() => {
-    return { roster: [] as RosterPokemon[], source: null as TeamSource | null };
-  }, []);
+const STORAGE_KEY = 'cannoli.matchup.selection';
 
-  const [state, dispatch] = useReducer(reducer, {
-    teamA: initialTeamA.roster,
-    teamB: [],
-    teamASource: initialTeamA.source,
-    teamBSource: null,
-    subTeamA: new Set<string>(),
-    subTeamB: new Set<string>(),
-    activeTab: 'overview',
-    speedCalcSlots: makeInitialSpeedSlots(initialTeamA.roster, []),
+type Saved = Pick<MatchupState, 'teamA' | 'teamB' | 'teamASource' | 'teamBSource'>;
+
+/** Selection survives navigating to a team/pokemon page and pressing Back. */
+function loadSaved(): Saved | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) as Saved : null;
+  } catch { return null; }
+}
+
+export function useMatchupState() {
+  const [state, dispatch] = useReducer(reducer, undefined, (): MatchupState => {
+    const saved = loadSaved();
+    const teamA = saved?.teamA ?? [];
+    const teamB = saved?.teamB ?? [];
+    return {
+      teamA,
+      teamB,
+      teamASource: saved?.teamASource ?? null,
+      teamBSource: saved?.teamBSource ?? null,
+      subTeamA: new Set<string>(),
+      subTeamB: new Set<string>(),
+      activeTab: 'overview',
+      speedCalcSlots: makeInitialSpeedSlots(teamA, teamB),
+    };
   });
+
+  useEffect(() => {
+    try {
+      const { teamA, teamB, teamASource, teamBSource } = state;
+      if (teamA.length === 0 && teamB.length === 0) sessionStorage.removeItem(STORAGE_KEY);
+      else sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ teamA, teamB, teamASource, teamBSource }));
+    } catch { /* storage unavailable */ }
+  }, [state.teamA, state.teamB, state.teamASource, state.teamBSource]);
 
   // Derived: active rosters (sub-team if selected, otherwise full)
   const activeTeamA = useMemo(

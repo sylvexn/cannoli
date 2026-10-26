@@ -13,7 +13,7 @@ interface TypeChartTabProps {
   teamB: RosterPokemon[];
 }
 
-type ChartMode = 'defensive' | 'offensive';
+export type ChartMode = 'defensive' | 'offensive';
 
 function multLabel(m: number): string {
   if (m === 0) return '0';
@@ -132,11 +132,22 @@ export function TypeChartTab({ teamA, teamB }: TypeChartTabProps) {
   );
 }
 
-function TypeGrid({
+export type TypeGridRow = {
+  name: string;
+  nickname?: string | null;
+  isShiny?: boolean;
+  matchups: { type: PokemonType; multiplier: number }[];
+  /** Distinct React key when one Pokemon appears on several rows (tera forms). */
+  rowKey?: string;
+  /** Replaces the name text in the row label (the name stays in the link title). */
+  label?: string;
+};
+
+export function TypeGrid({
   chart,
   mode,
 }: {
-  chart: { name: string; nickname?: string | null; isShiny?: boolean; matchups: { type: PokemonType; multiplier: number }[] }[];
+  chart: TypeGridRow[];
   mode: ChartMode;
 }) {
   if (chart.length === 0) {
@@ -190,7 +201,7 @@ function TypeGrid({
         </thead>
         <tbody>
           {chart.map(p => (
-            <tr key={p.name} className="group/row">
+            <tr key={p.rowKey ?? p.name} className="group/row">
               <td className="sticky left-0 z-10 bg-surface-raised group-hover/row:bg-surface-overlay/40 px-1.5 py-[3px] border-b border-r border-border-subtle transition-colors">
                 <Link
                   to={pokemonRoute(p.name)}
@@ -198,7 +209,7 @@ function TypeGrid({
                   className="flex items-center gap-1.5 hover:text-text-primary"
                 >
                   <PokemonSprite name={p.name} size="xs" shiny={p.isShiny} className="shrink-0" />
-                  <span className="text-[10px] font-mono truncate">{p.name}</span>
+                  <span className={cn('text-[10px] font-mono truncate', p.label && 'capitalize text-pink-400')}>{p.label ?? p.name}</span>
                 </Link>
               </td>
               {POKEMON_TYPES.map(type => {

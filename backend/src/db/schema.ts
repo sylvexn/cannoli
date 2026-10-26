@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // Users
@@ -51,6 +51,40 @@ export const sessions = sqliteTable('sessions', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   expiresAt: text('expires_at').notNull(),
 });
+
+// Rulesets (see plan/ruleset-design.md). A league points at ONE instance
+// (`is_template = 0`); templates are the editable library the season wizard
+// copies from. Prices/bans stay in `format_costs` (`cost_format` is a pointer).
+export const rulesets = sqliteTable('rulesets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  isTemplate: integer('is_template', { mode: 'boolean' }).notNull().default(false),
+  /** Clone lineage (display only). */
+  sourceRulesetId: integer('source_ruleset_id').references((): AnySQLiteColumn => rulesets.id),
+  costFormat: text('cost_format').notNull(),
+  pointCap: integer('point_cap').notNull().default(110),
+  /** Draft rounds. */
+  rosterSize: integer('roster_size').notNull().default(10),
+  /** NULL = rosterSize. Per-league overrides live on `leagues.min/max_roster_size`. */
+  rosterMin: integer('roster_min'),
+  rosterMax: integer('roster_max'),
+  /** NULL = unlimited, 0 = no megas. */
+  megaCap: integer('mega_cap').default(1),
+  teraEnabled: integer('tera_enabled', { mode: 'boolean' }).notNull().default(true),
+  teraCaptainSlots: integer('tera_captain_slots').notNull().default(2),
+  teraTypesPerCaptain: integer('tera_types_per_captain').notNull().default(3),
+  /** JSON {"9":12,...}: base cost -> captain cost; a key present = captain-eligible. */
+  teraMarkup: text('tera_markup').notNull(),
+  /** Reserved JSON for future policy knobs (tera-change rules etc). */
+  policy: text('policy'),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  createdBy: integer('created_by').references(() => users.id),
+}, (t) => ({
+  templateIdx: index('rulesets_template_idx').on(t.isTemplate),
+}));
 
 // Seasons
 
@@ -137,6 +171,8 @@ export const leagues = sqliteTable('leagues', {
    *  EVERYONE, and standings/records are computed only through week N. 0 hides
    *  every week's results. Set via POST /api/admin/leagues/:id/results-reveal. */
   resultsRevealedThrough: integer('results_revealed_through'),
+  /** Rules this league plays under. NULL until backfilled; lib/rulesets.ts derives one from the legacy columns when NULL. */
+  rulesetId: integer('ruleset_id').references((): AnySQLiteColumn => rulesets.id),
 });
 
 // Format Costs (per-cost-format Pokemon prices / bans)
@@ -713,49 +749,48 @@ export const pinDefinitions = sqliteTable('pin_definitions', {
   }).notNull().default('custom'),
   /** True for seeded pins handed out by the auto-award job. */
   isAuto: integer('is_auto', { mode: 'boolean' }).notNull().default(false),
+  /** How many holders an award slot has: 'league' = one per league-season,
+   *  'season' = one across the whole season, 'team' = one per team per
+   *  league-season (e.g. MVP), 'match' = one per qualifying match. */
+  scope: text('scope', { enum: ['league', 'season', 'team', 'match'] }).notNull().default('league'),
+  /** JSON array of the inputs an award collects: 'pokemon' | 'nickname' | 'match' | 'note'. */
+  metadataFields: text('metadata_fields').notNull().default('[]'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
 });
 
-// Pins (awarded instances — many users × many definitions)
+// Pins (awarded instances — a team holds a definition for a season/league)
 //
-// Identity is (user_id, pin_def_id, season_id, league_id). A single UNIQUE
-// index `pins_identity_idx` enforces it, wrapping the two nullable columns in
-// COALESCE (season → -1, league → '') because SQLite treats every NULL as
-// DISTINCT in a unique index and would otherwise let duplicates through.
-// That one expression index replaces the old composite + partial-lifetime pair
-// (migrations 0019/0041); see migration 0069.
+// Admin-curated: nothing writes pins automatically. The suggest engine
+// (lib/pins/suggest.ts) proposes winners; staff save them as unpublished
+// drafts via the Awards Sheet and then publish the season. Public reads only
+// ever see `published = 1` rows.
 //
-// Scope combinations, all deduped correctly by that index:
-//   season + league  → the normal case ("Champion of Ruby, S11")
-//   season, no league → season-wide award across every league (`ash`, `red`)
-//   neither           → lifetime achievement
+// Identity is team + def + season + league + match, enforced by the single
+// UNIQUE expression index `pins_identity_idx` (nullable columns wrapped in
+// COALESCE because SQLite treats every NULL as DISTINCT). Legacy rows with no
+// team fall back to the user id. See migration 0070.
 //
-// `source` carries recompute semantics and is the ONLY thing the season-end
-// minters key their cleanup on:
-//   'auto'   — owned by the minters; safe to delete and re-derive on a re-run.
-//   'manual' — human-authoritative (hand-awarded OR an admin override of an
-//              auto pick). Minters must never delete it, and must not mint a
-//              competing row for the same (pin_def_id, season_id, league_id).
-// `awarded_by` is pure provenance — who did it, NULL for the job. Do NOT use it
-// to decide what is recomputable; that conflation is what migration 0069 undid.
-//
-// `metadata` is free-form JSON (e.g. `{ pokemon: 'Cinderace' }` for a pin like
-// "Steal of the Draft") — admin authoring may attach context per-award.
-
 export const pins = sqliteTable('pins', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** Legacy / derived holder. The holder is the TEAM (`team_id`); the user is
+   *  derived at read time via teams.user_id. Nullable: unlinked teams hold awards. */
+  userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  teamId: text('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   pinDefId: text('pin_def_id').notNull().references(() => pinDefinitions.id, { onDelete: 'cascade' }),
   /** Season scope. NULL = lifetime / not season-specific. */
   seasonId: integer('season_id').references(() => seasons.id),
   /** League scope. NULL = season-wide (or lifetime) rather than per-league. */
-  leagueId: text('league_id').references(() => leagues.id),
+  leagueId: text('league_id').references(() => leagues.id, { onDelete: 'cascade' }),
+  /** Per-match awards (kingslayer / flawless): the match that earned it. */
+  matchId: text('match_id'),
   awardedAt: text('awarded_at').default(sql`(datetime('now'))`),
-  /** Who awarded it — admin user id, or NULL for the auto job. Provenance only. */
+  /** Who awarded it — admin user id. Provenance only. */
   awardedBy: integer('awarded_by').references(() => users.id),
-  /** 'auto' = minter-owned and recomputable; 'manual' = human-authoritative. */
+  /** Legacy provenance: rows minted by the old auto engine are 'auto'. */
   source: text('source', { enum: ['auto', 'manual'] }).notNull().default('auto'),
-  /** JSON blob — e.g. `{ pokemon: 'Cinderace', context: 'steal' }` */
+  /** 0 = staff-only draft, 1 = public. Flipped by "Publish season awards". */
+  published: integer('published', { mode: 'boolean' }).notNull().default(true),
+  /** JSON blob — e.g. `{ pokemon: 'Cinderace', teamId, leagueId }` */
   metadata: text('metadata'),
 });
 
@@ -929,6 +964,8 @@ export const notifications = sqliteTable('notifications', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   /** ISO timestamp when the user read this item; null = unread. */
   readAt: text('read_at'),
+  /** Bell tab this item files under. */
+  category: text('category', { enum: ['trades', 'matches', 'admin', 'feedback'] }).notNull().default('admin'),
 }, (t) => ({
   userIdx: index('notifications_user_idx').on(t.userId),
   dedupeIdx: uniqueIndex('notifications_user_dedupe_idx').on(t.userId, t.dedupeKey),
@@ -947,7 +984,17 @@ export const changelog = sqliteTable('changelog', {
   date: text('date').notNull(),
   category: text('category', { enum: ['feature', 'improvement', 'fix'] }).notNull(),
   title: text('title').notNull(),
+  /** Legacy dashed list. Kept (unserved) after conversion to `sections`. */
   body: text('body'),
+  /** Semver-ish: '1.3' = planned patch, '1.3.1' = hotfix. */
+  version: text('version'),
+  /** Hotfixes point at their parent patch's id; null = top-level patch. */
+  parentId: text('parent_id'),
+  /** JSON: [{ kind: 'new'|'changes'|'fixes'|'balance', items: string[] }]. */
+  sections: text('sections'),
+  heroUrl: text('hero_url'),
+  /** Drafts are staff-only; publishing stamps `date` = now. */
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('published'),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   updatedAt: text('updated_at').default(sql`(datetime('now'))`),
 }, (t) => ({
@@ -1036,4 +1083,84 @@ export const usageDailyTotals = sqliteTable('usage_daily_totals', {
   views: integer('views').notNull().default(0),
   uniqueUsers: integer('unique_users').notNull().default(0),
   uniqueAnons: integer('unique_anons').notNull().default(0),
+});
+
+// Draft Center (per-user planner teams)
+// Flat list of a user's mock-up teams. `roster` is a JSON array of picks (see
+// lib/draft-center/types.ts); `leagueId` picks the ruleset it is checked
+// against (rulesets are derived from leagues). `shareToken` non-null = readable
+// read-only at an unguessable public link; clearing it revokes the link.
+export const draftCenterTeams = sqliteTable('draft_center_teams', {
+  id: text('id').primaryKey(),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  leagueId: text('league_id'),
+  rulesetId: integer('ruleset_id').references((): AnySQLiteColumn => rulesets.id),
+  roster: text('roster').notNull().default('[]'),
+  shareToken: text('share_token'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+}, (t) => ({
+  userIdx: index('draft_center_teams_user_idx').on(t.userId),
+  shareUq: uniqueIndex('draft_center_teams_share_uq').on(t.shareToken),
+}));
+
+// Tickets (admin issue tracker)
+
+export const TICKET_STATUSES = ['new', 'triaged', 'in_progress', 'fixed', 'wont_fix'] as const;
+export type TicketStatus = typeof TICKET_STATUSES[number];
+
+/** id is the ticket number (CAN-<id>); GitHub imports insert explicit ids. */
+export const tickets = sqliteTable('tickets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  type: text('type', { enum: ['bug', 'idea'] }).notNull().default('bug'),
+  status: text('status', { enum: TICKET_STATUSES }).notNull().default('new'),
+  leagueId: text('league_id').references(() => leagues.id),
+  reporterUserId: integer('reporter_user_id').references(() => users.id),
+  feedbackId: integer('feedback_id').references(() => feedback.id),
+  pageUrl: text('page_url'),
+  screenshotPath: text('screenshot_path'),
+  /** Patch-notes version, e.g. '1.4' (links to /patch-notes#v1.4). */
+  fixedIn: text('fixed_in'),
+  githubIssueNumber: integer('github_issue_number'),
+  githubUrl: text('github_url'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+  closedAt: text('closed_at'),
+}, (t) => ({
+  statusIdx: index('tickets_status_idx').on(t.status),
+  githubUnique: uniqueIndex('tickets_github_unique').on(t.githubIssueNumber),
+}));
+
+export const ticketEvents = sqliteTable('ticket_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  actorUserId: integer('actor_user_id').references(() => users.id),
+  kind: text('kind', { enum: ['created', 'status', 'note', 'import'] }).notNull(),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  text: text('text'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (t) => ({
+  ticketIdx: index('ticket_events_ticket_idx').on(t.ticketId),
+}));
+// Playoff bracket drafts (staff-only until published)
+// One row per league. The draft never touches `matches`; publishing writes the
+// bracket rows and flips status to 'published'. `seedOrder` is the full team
+// order (first `topN` make the bracket). `prePublishWeekDates` is the raw
+// leagues.weekDates before publish extended it, restored on unpublish.
+export const playoffDrafts = sqliteTable('playoff_drafts', {
+  leagueId: text('league_id').primaryKey().references(() => leagues.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['draft', 'published'] }).notNull().default('draft'),
+  topN: integer('top_n').notNull(),
+  seedOrder: text('seed_order').notNull(),
+  prePublishWeekDates: text('pre_publish_week_dates'),
+  createdBy: text('created_by'),
+  updatedBy: text('updated_by'),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  publishedAt: text('published_at'),
+  publishedBy: text('published_by'),
 });

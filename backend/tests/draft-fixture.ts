@@ -16,6 +16,7 @@
 import { db, schema, sqlite } from '../src/db';
 import { eq } from 'drizzle-orm';
 import { ensurePokemonReference } from './pokemon-reference-seed';
+import { invalidateCostCache } from '../src/lib/league-costs';
 
 // The dev DB is a single on-disk SQLite file shared by every test process (and,
 // during launch-prep, by sibling agent worktrees running seeds). Without a busy
@@ -57,6 +58,9 @@ export function buildDraftFixture(opts?: {
   // the highest affordable mon — don't fail with "No valid auto-pick available"
   // purely because of test file order.
   ensurePokemonReference();
+  // Cost maps are cached per format, so a map built while another suite's
+  // fixture mons were in the table would still list them.
+  invalidateCostCache();
 
   const id = ++counter;
   const tag = `dtf-${id}-${Date.now()}`;

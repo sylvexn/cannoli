@@ -63,6 +63,8 @@ export function LeagueDataProvider({ leagueId, children }: { leagueId: string; c
         captainNote: t.captainNote ?? null,
         record: t.record,
         tiebreaker: t.tiebreaker ?? null,
+        playoffRecord: t.playoffRecord,
+        departed: (t.departed ?? []).map(d => ({ ...d, types: d.types as PokemonType[] })),
         roster: t.roster.map(r => ({
           name: r.name,
           nickname: r.nickname ?? null,

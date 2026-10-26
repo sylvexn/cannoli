@@ -183,7 +183,11 @@ export function HeaderStrip({
             <div className="font-mono text-lg font-bold tabular-nums tracking-tight leading-none">
               <RecordDisplay wins={player.record.wins} losses={player.record.losses} differential={player.record.differential} />
             </div>
-            <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">Record</span>
+            <span className="text-[8px] font-semibold text-text-muted uppercase tracking-[0.15em] mt-1.5">
+              Record{player.playoffRecord && (player.playoffRecord.wins + player.playoffRecord.losses) > 0 && (
+                <span className="ml-1.5 text-draw" title="Playoff record (series)">PO {player.playoffRecord.wins}-{player.playoffRecord.losses}</span>
+              )}
+            </span>
           </div>
 
           {/* K/D */}

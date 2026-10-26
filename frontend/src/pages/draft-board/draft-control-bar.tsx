@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useLeague } from '@/lib/league-context';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { generateSnakeSlots } from './use-draft-state';
@@ -100,14 +101,15 @@ export function DraftControlBar({
   const startSimulatorDraft = useCallback(() => {
     if (!state.userTeamId) return;
     const teamIds = draftOrder.map(p => p.id);
-    const rounds = league.season?.rosterSize ?? 10;
+    const rules = getLeagueRuleset(league);
+    const rounds = rules.rosterSize;
     const snakeOrder = generateSnakeSlots(teamIds, rounds);
     dispatch({
       type: 'DRAFT_START',
       snakeOrder,
       userTeamId: state.userTeamId,
       timerDuration: state.timerDuration || 30,
-      pointCap: league.season?.pointCap ?? 110,
+      pointCap: rules.pointCap,
     });
   }, [state.userTeamId, state.timerDuration, draftOrder, dispatch, league.season]);
 

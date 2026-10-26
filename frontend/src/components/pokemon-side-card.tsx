@@ -15,7 +15,8 @@ import { Separator } from '@/components/ui/separator';
 import { Link } from 'react-router-dom';
 import { Swords, Sparkles, X, ExternalLink, UsersRound } from 'lucide-react';
 import { useLeagueOptional } from '@/lib/league-context';
-import { getTierEntry, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { getTierEntry, teraCostFor, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 import { getPokemonData } from '@/data/pokemon-data';
 import { api, type ApiGlobalOwnership } from '@/lib/api';
 import type { Player } from '@/lib/types';
@@ -170,9 +171,9 @@ export function PokemonSideCard({
                       <Badge variant="outline" className="text-[10px] h-4.5 px-1.5 border-border-subtle text-text-muted font-mono">
                         Cost: {tierEntry.tier}pt
                       </Badge>
-                      {tierEntry.teraCost !== tierEntry.tier && (
+                      {teraCostFor(tierEntry, getLeagueRuleset(league)) !== tierEntry.tier && (
                         <Badge variant="outline" className="text-[10px] h-4.5 px-1.5 border-pink/30 text-pink font-mono">
-                          Tera: {tierEntry.teraCost}pt
+                          Tera: {teraCostFor(tierEntry, getLeagueRuleset(league))}pt
                         </Badge>
                       )}
                       {tierEntry.teraBanned && (

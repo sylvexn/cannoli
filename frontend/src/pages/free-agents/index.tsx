@@ -7,6 +7,8 @@ import { api, type ApiFaRequest } from '@/lib/api';
 import { toast } from 'sonner';
 import { getEffectiveCost, DEFAULT_FORMAT, type CostFormat } from '@/data/tier-list';
 import type { RosterPokemon } from '@/lib/types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
+import type { Ruleset } from '@cannoli/rules';
 import type { PokemonType } from '@/lib/pokemon';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,8 +48,8 @@ function bst(s: FreeAgent['stats']) {
   return s.hp + s.atk + s.def + s.spa + s.spd + s.spe;
 }
 
-function teamPointsUsed(roster: RosterPokemon[], format?: CostFormat): number {
-  return roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain, format), 0);
+function teamPointsUsed(roster: RosterPokemon[], format?: CostFormat, rs?: Ruleset): number {
+  return roster.reduce((sum, r) => sum + getEffectiveCost(r.name, r.isTeraCaptain, format, rs), 0);
 }
 
 export function FreeAgentsPage() {
@@ -58,7 +60,8 @@ export function FreeAgentsPage() {
   const { actingTeam: myTeam } = useMarket();
 
   const phase = league.season.phase;
-  const pointCap = league.season.pointCap;
+  const ruleset = getLeagueRuleset(league);
+  const pointCap = ruleset.pointCap;
   const costFormat = league.costFormat ?? DEFAULT_FORMAT;
 
   // Free agents + optional FA budget
@@ -117,18 +120,18 @@ export function FreeAgentsPage() {
     setPendingDrops(new Set());
   }, [myTeam?.id]);
 
-  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster, costFormat) : 0;
+  const pointsUsed = myTeam ? teamPointsUsed(myTeam.roster, costFormat, ruleset) : 0;
 
   // Projected point total after pending pickups + drops
   const projectedAfter = useMemo(() => {
     if (!myTeam) return pointsUsed;
     const dropCost = [...pendingDrops].reduce((sum, name) => {
       const r = myTeam.roster.find(r => r.name === name);
-      return sum + getEffectiveCost(name, !!r?.isTeraCaptain, costFormat);
+      return sum + getEffectiveCost(name, !!r?.isTeraCaptain, costFormat, ruleset);
     }, 0);
     const pickupCost = pendingPickups.reduce((sum, fa) => sum + fa.tier, 0);
     return pointsUsed - dropCost + pickupCost;
-  }, [pendingPickups, pendingDrops, pointsUsed, myTeam, costFormat]);
+  }, [pendingPickups, pendingDrops, pointsUsed, myTeam, costFormat, ruleset]);
 
   // Projected roster size after pending transaction
   const projectedRosterSize = useMemo(() => {
@@ -267,7 +270,7 @@ export function FreeAgentsPage() {
     if (hideUnaffordable && myTeam) {
       const remaining = pointCap - pointsUsed;
       const maxDrop = myTeam.roster.reduce(
-        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain, costFormat)),
+        (m, r) => Math.max(m, getEffectiveCost(r.name, r.isTeraCaptain, costFormat, ruleset)),
         0,
       );
       list = list.filter(p => p.tier <= remaining + maxDrop);
@@ -634,7 +637,7 @@ export function FreeAgentsPage() {
                 {[...myTeam.roster]
                   .sort((a, b) => b.tier - a.tier || a.name.localeCompare(b.name))
                   .map(r => {
-                    const cost = getEffectiveCost(r.name, r.isTeraCaptain, costFormat);
+                    const cost = getEffectiveCost(r.name, r.isTeraCaptain, costFormat, ruleset);
                     const isDrop = pendingDrops.has(r.name);
                     return (
                       <li

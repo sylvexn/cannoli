@@ -1,8 +1,8 @@
 import { NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
-  Swords, Gamepad2,
-  Archive, Film, ScrollText, ListTree, Home, Gauge, Award,
+  Swords, Gamepad2, ClipboardList,
+  Archive, Film, ScrollText, ListTree, Home, Gauge,
   PanelLeftClose, PanelLeftOpen, Menu, X,
 } from 'lucide-react';
 import {
@@ -28,6 +28,7 @@ import { useLocalStorageState } from '@/lib/use-local-storage-state';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { SidebarLeagueNav } from './app-shell/sidebar-league-nav';
 import { SidebarNavItem } from './app-shell/sidebar-nav-item';
+import { PatchNotesNavItem } from './app-shell/patch-notes-nav-item';
 import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
@@ -36,7 +37,7 @@ import { AnnouncementBanners } from './announcement-banners';
 // Routes that need full-width layout (no max-w constraint). The trailing
 // slash on '/replay/' targets the full-bleed replay watch page (/replay/:id)
 // while leaving the scrollable '/replays' gallery on the normal layout.
-const WIDE_ROUTES = ['/draft', '/matchup', '/showdown', '/replay/'];
+const WIDE_ROUTES = ['/draft', '/matchup', '/draft-center', '/showdown', '/replay/'];
 
 export function AppShell() {
   const { pathname } = useLocation();
@@ -394,6 +395,7 @@ export function AppShell() {
 
           <div className="h-px bg-border-subtle mx-2 my-1" />
 
+          <SidebarNavItem to="/draft-center" icon={ClipboardList} label="Draft Center" activeClass="bg-emerald-400/10 text-emerald-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/matchup" icon={Swords} label="Matchup Center" collapsed={collapsedRail} />
           <SidebarNavItem to="/showdown" icon={Gamepad2} label="Showdown" activeClass="bg-orange-400/10 text-orange-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/replays" icon={Film} label="Replays" collapsed={collapsedRail} />
@@ -403,8 +405,8 @@ export function AppShell() {
 
           <SidebarNavItem to="/tiers" icon={ListTree} label="Tier List" collapsed={collapsedRail} />
           <SidebarNavItem to="/speed-tiers" icon={Gauge} label="Speed Tiers" activeClass="bg-cyan-300/10 text-cyan-300" collapsed={collapsedRail} />
-          <SidebarNavItem to="/badges" icon={Award} label="Badges" activeClass="bg-amber-400/10 text-amber-400" collapsed={collapsedRail} />
           <SidebarNavItem to="/rules" icon={ScrollText} label="Rules" activeClass="bg-pink/10 text-pink" collapsed={collapsedRail} />
+          <PatchNotesNavItem collapsed={collapsedRail} />
         </nav>
 
         {/* Collapse toggle — docked mode only (the drawer has its own close). */}

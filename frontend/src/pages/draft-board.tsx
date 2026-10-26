@@ -20,7 +20,7 @@ import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
 import { DraftTopBar } from './draft-board/draft-top-bar';
 import type { CardDensity } from './draft-board/pokemon-compact-card';
-import { getTierList, getTierEntry } from '@/data/tier-list';
+import { getTierList, getTierEntry, getBanned } from '@/data/tier-list';
 import type { DraftSource } from './draft-board/types';
 
 const DENSITY_STORAGE_KEY = 'draft.density';
@@ -123,6 +123,15 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // `isLiveMode` and conflated "the draft is happening" with "we're connected
   // to live". Renamed so its meaning is unambiguous post-refactor.
   const isDraftRunning = state.view === 'active' && state.status === 'running';
+
+  // Format-banned Pokemon appear (marked, undraftable) in both views when no
+  // ownership/type/chip filter would exclude them; free-text matches by name.
+  const bannedNames = useMemo(() => {
+    const f = state.filters;
+    if (f.ownership !== 'all' || f.types.length > 0 || f.searchChips.length > 0) return [];
+    const q = f.search.trim().toLowerCase();
+    return getBanned(format).filter(n => !q || n.toLowerCase().includes(q)).sort();
+  }, [state.filters, format]);
 
   const handleCardClick = useCallback((name: string) => {
     // During an active draft, upgrade the popover into 'quick-draft' mode for
@@ -430,6 +439,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
               animatingPokemonName={animatingPokemonName}
               format={format}
               matchReasons={matchReasons}
+              bannedNames={bannedNames}
               onCardClick={handleCardClick}
               onCardHoverStart={handleCardHoverStart}
               onCardHoverEnd={handleCardHoverEnd}
@@ -448,6 +458,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
                 drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
                 pointCap={state.pointCap}
                 matchReasons={matchReasons}
+                bannedNames={bannedNames}
                 onRowClick={handleCardClick}
               />
             </div>

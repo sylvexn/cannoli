@@ -2,9 +2,10 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
-import { computeStandings, type TeamStandingRow } from '../../lib/standings';
+import { computeStandings, computePlayoffRecords, type TeamStandingRow } from '../../lib/standings';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { revealedMaxWeek } from '../../lib/queries';
+import { pokemonSeasonStats } from '../../lib/pokemon-season-stats';
 
 export const standingsRoutes = new Elysia()
 
@@ -17,9 +18,17 @@ export const standingsRoutes = new Elysia()
     const maxWeek = revealedMaxWeek(params.leagueId);
 
     // Compute standings using the documented tiebreaker hierarchy.
-    // Use 'all' phase here so playoff-era views still render correct W-L; the
-    // playoff-seeding endpoint scopes to 'regular' separately.
-    const standings = computeStandings(params.leagueId, { phase: 'all', maxWeek });
+    // Regular season only ("record is record"); playoffs are reported
+    // separately as `playoffRecord` (series-counted).
+    const standings = computeStandings(params.leagueId, { maxWeek });
+    const playoffRecords = computePlayoffRecords(params.leagueId, maxWeek);
+    // Per-Pokemon stats from match_pokemon (what played), not the current roster.
+    const statsByTeam = new Map<string, ReturnType<typeof pokemonSeasonStats>>();
+    for (const st of pokemonSeasonStats(params.leagueId, maxWeek)) {
+      const a = statsByTeam.get(st.teamId) ?? [];
+      a.push(st);
+      statsByTeam.set(st.teamId, a);
+    }
     const standingsById = new Map<string, TeamStandingRow>(standings.map(s => [s.id, s]));
 
     // Fetch teams keyed by id, then return them in the order standings dictates.
@@ -48,6 +57,8 @@ export const standingsRoutes = new Elysia()
       : [];
     const userById = new Map(userRows.map(u => [u.id, u]));
 
+    const costMap = getLeagueCostMap(params.leagueId);
+
     return orderedTeams.map(team => {
       const standing = standingsById.get(team.id)!;
       const roster = db.select().from(schema.rosters)
@@ -59,24 +70,8 @@ export const standingsRoutes = new Elysia()
       const losses = standing.losses;
       const differential = standing.differential;
 
-      // Results-reveal gate: per-Pokemon seasonStats (K/D/GP) must also freeze
-      // at the revealed week — join to matches so only matchPokemon from weeks
-      // <= maxWeek count (maxWeek null = no gate = every match counts).
-      const pokemonStats = db.select({
-        pokemonName: schema.matchPokemon.pokemonName,
-        kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
-        deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
-        gp: sql<number>`COUNT(*)`,
-      }).from(schema.matchPokemon)
-        .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
-        .where(and(
-          eq(schema.matchPokemon.teamId, team.id),
-          maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
-        ))
-        .groupBy(schema.matchPokemon.pokemonName)
-        .all();
-
-      const statsMap = new Map(pokemonStats.map(s => [s.pokemonName, s]));
+      const teamStats = statsByTeam.get(team.id) ?? [];
+      const statsMap = new Map(teamStats.map(s => [s.pokemonName, s]));
 
       // Batch-fetch all pokemon rows for this roster in a single IN query,
       // then look up from a map — avoids an N+1 per roster slot.
@@ -118,7 +113,29 @@ export const standingsRoutes = new Elysia()
             kills: stats?.kills || 0,
             deaths: stats?.deaths || 0,
             gp: stats?.gp || 0,
+            wins: stats?.wins || 0,
+            losses: stats?.losses || 0,
           },
+        };
+      });
+
+      // Mons that played for this team but are no longer on its roster
+      // (traded / dropped / admin-replaced) — their K/D still counts.
+      const rosterSet = new Set(roster.map(r => r.pokemonName));
+      const departedStats = teamStats.filter(s => !rosterSet.has(s.pokemonName));
+      const departedRows = departedStats.length > 0
+        ? db.select().from(schema.pokemon)
+            .where(inArray(schema.pokemon.name, departedStats.map(s => s.pokemonName)))
+            .all()
+        : [];
+      const departedByName = new Map(departedRows.map(p => [p.name, p]));
+      const departed = departedStats.map(s => {
+        const p = departedByName.get(s.pokemonName);
+        return {
+          name: s.pokemonName,
+          types: p ? [p.type1, p.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
+          tier: costMap.get(s.pokemonName)?.tier ?? 0,
+          seasonStats: { kills: s.kills, deaths: s.deaths, gp: s.gp, wins: s.wins, losses: s.losses },
         };
       });
 
@@ -154,7 +171,9 @@ export const standingsRoutes = new Elysia()
           deaths: standing.deaths,
         },
         tiebreaker: standing.tiebreaker,
+        playoffRecord: playoffRecords.get(team.id) ?? { wins: 0, losses: 0, series: [] },
         roster: enrichedRoster,
+        departed,
       };
     });
   })
@@ -303,28 +322,8 @@ export const standingsRoutes = new Elysia()
     // matchPokemon whose match is in a revealed week (NULL = no gate).
     const maxWeek = revealedMaxWeek(params.leagueId);
 
-    const matchIds = db.select({ id: schema.matches.id })
-      .from(schema.matches)
-      .where(eq(schema.matches.leagueId, params.leagueId))
-      .all()
-      .map(m => m.id);
-
-    if (matchIds.length === 0) return [];
-
-    const stats = db.select({
-      pokemonName: schema.matchPokemon.pokemonName,
-      teamId: schema.matchPokemon.teamId,
-      kills: sql<number>`SUM(${schema.matchPokemon.kills})`,
-      deaths: sql<number>`SUM(${schema.matchPokemon.deaths})`,
-      gp: sql<number>`COUNT(*)`,
-    }).from(schema.matchPokemon)
-      .innerJoin(schema.matches, eq(schema.matchPokemon.matchId, schema.matches.id))
-      .where(and(
-        eq(schema.matches.leagueId, params.leagueId),
-        maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
-      ))
-      .groupBy(schema.matchPokemon.pokemonName, schema.matchPokemon.teamId)
-      .all();
+    const stats = pokemonSeasonStats(params.leagueId, maxWeek);
+    if (stats.length === 0) return [];
 
     // Resolve the league's format cost map once — avoids N per-species lookups
     // and returns the correct per-format tier rather than the global baseline.
@@ -341,6 +340,8 @@ export const standingsRoutes = new Elysia()
         kills: s.kills,
         deaths: s.deaths,
         gp: s.gp,
+        wins: s.wins,
+        losses: s.losses,
         differential: s.kills - s.deaths,
         kpg: s.gp > 0 ? +(s.kills / s.gp).toFixed(2) : 0,
         types: pokemon ? [pokemon.type1, pokemon.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],

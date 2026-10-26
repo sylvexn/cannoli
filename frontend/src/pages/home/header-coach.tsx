@@ -17,6 +17,7 @@ import { ReplayLink } from '@/components/replay-link';
 import { YourMatchesCard } from '@/components/your-matches-card';
 import type { ApiTeam, ApiTrade, ApiSchedule, ApiMatch } from '@/lib/api';
 import type { League } from '@/lib/types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
 
 export interface MyTeamEntry {
   league: League;
@@ -201,7 +202,7 @@ function ActionItemList({
 
       if (phase === 'draft') {
         if (!team.captainsLocked) {
-          const slots = league.season.teraCaptainSlots;
+          const slots = getLeagueRuleset(league).teraCaptainSlots;
           out.push({
             key: `captains-${league.id}`,
             leagueId: league.id,
@@ -511,9 +512,9 @@ function MyTeamCard({ entry, index }: { entry: MyTeamEntry; index: number }) {
                   )}
                 </span>
               ))}
-              {captains.length < league.season.teraCaptainSlots && (
+              {captains.length < getLeagueRuleset(league).teraCaptainSlots && (
                 <span className="text-text-muted font-mono">
-                  {captains.length}/{league.season.teraCaptainSlots}
+                  {captains.length}/{getLeagueRuleset(league).teraCaptainSlots}
                 </span>
               )}
             </div>

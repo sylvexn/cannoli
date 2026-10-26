@@ -5,6 +5,7 @@
 
 import type { ApiError } from './errors';
 import type { RulesContent, LeagueRulesResponse } from './rules-types';
+import type { DcTeamDto, DcTeamInput, DcSharedTeam } from './draft-center/types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -37,13 +38,13 @@ function readCsrfToken(): string | null {
   return m ? decodeURIComponent(m[1]!) : null;
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
+export async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
-async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function mutateJson<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   const csrf = readCsrfToken();
@@ -155,6 +156,8 @@ export interface ApiTeam {
   record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
   tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: ApiRosterPokemon[];
+  departed?: { name: string; types: string[]; tier: number; seasonStats: { kills: number; deaths: number; gp: number; wins: number; losses: number } }[];
+  playoffRecord?: { wins: number; losses: number };
 }
 
 /** One coach row in the admin league-membership view. */
@@ -208,7 +211,7 @@ export interface ApiRosterPokemon {
   acquiredWeek: number | null;
   stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } | null;
   abilities: string[];
-  seasonStats: { kills: number; deaths: number; gp: number };
+  seasonStats: { kills: number; deaths: number; gp: number; wins?: number; losses?: number };
 }
 
 export interface ApiMatch {
@@ -849,15 +852,28 @@ export interface ApiPinDefinition {
   color: string;
   category: PinCategory;
   isAuto: boolean;
+  /** Award slot: one winner-set per league, per season, per team, or per match. */
+  scope: PinScope;
+  /** Inputs an award of this pin collects (declared on the definition). */
+  metadataFields: PinMetadataFieldName[];
   createdAt?: string | null;
 }
+
+export type PinScope = 'league' | 'season' | 'team' | 'match';
+export type PinMetadataFieldName = 'pokemon' | 'nickname' | 'match' | 'note';
 
 export type PinSource = 'auto' | 'manual';
 
 export interface ApiPin {
   id: number;
   pinDefId: string;
+  /** The team that holds the award (the coach is derived from its owner). */
+  teamId: string | null;
   seasonId: number | null;
+  /** Human season number ("S11" -> 11) — seasonId is an internal FK. */
+  seasonNumber: number | null;
+  /** False = staff-only draft. */
+  published: boolean;
   /** League the pin is filed against — null for all-leagues coach awards
    *  (Ash, Red). Drives the clickable team links in the pin tooltip. */
   leagueId: string | null;
@@ -868,31 +884,67 @@ export interface ApiPin {
   definition: ApiPinDefinition;
 }
 
-export interface ApiPinRecent {
+/** A pin row in the Awards Sheet (drafts included). */
+export interface ApiSeasonPin {
   id: number;
-  userId: number;
-  username: string;
   pinDefId: string;
-  defName: string;
-  defIconName: string;
-  defColor: string;
-  seasonId: number | null;
+  teamId: string | null;
   leagueId: string | null;
-  awardedAt: string | null;
-  awardedBy: number | null;
+  matchId: string | null;
+  published: boolean;
   source: PinSource;
+  awardedAt: string | null;
+  username: string | null;
   metadata: Record<string, unknown> | null;
 }
 
-export type ChangelogCategory = 'feature' | 'improvement' | 'fix';
+export interface ApiPinSuggestion {
+  pinDefId: string;
+  leagueId: string;
+  teamId: string;
+  pokemon?: string;
+  matchId?: string;
+  metadata: Record<string, unknown>;
+  reason: string;
+  tie: boolean;
+}
 
-export interface ApiChangelogEntry {
+export interface ApiPinUnresolved {
+  pinDefId: string;
+  leagueId: string;
+  reason: string;
+  detail: string;
+}
+
+export type ApiBulkPinChange =
+  | { op: 'award'; teamId: string; pokemon?: string; nickname?: string; note?: string; matchId?: string; stats?: Record<string, unknown> }
+  | { op: 'revoke'; pinId: number };
+
+// Patch notes
+export type PatchSectionKind = 'new' | 'changes' | 'fixes' | 'balance';
+export interface PatchSection { kind: PatchSectionKind; items: string[] }
+export interface ApiPatchNote {
   id: string;
-  /** ISO 8601 timestamp (UTC). */
+  /** '1.3' = planned patch, '1.3.1' = hotfix; null on unparseable legacy rows. */
+  version: string | null;
+  /** ISO 8601 UTC. Drives ordering + unread. */
   date: string;
-  category: ChangelogCategory;
   title: string;
-  body?: string;
+  heroUrl: string | null;
+  sections: PatchSection[];
+  parentId: string | null;
+  status: 'draft' | 'published';
+}
+export interface ApiPatch extends ApiPatchNote { hotfixes: ApiPatchNote[] }
+export interface ApiAdminPatchNote extends ApiPatchNote { createdAt: string | null; updatedAt: string | null }
+export interface PatchNoteInput {
+  id?: string;
+  version?: string;
+  title?: string;
+  heroUrl?: string;
+  sections?: PatchSection[];
+  parentId?: string | null;
+  status?: 'draft' | 'published';
 }
 
 // Feedback (DB-backed, all 4 categories)
@@ -918,11 +970,12 @@ export interface ApiFeedbackItem {
   createdAt: string;
 }
 
-// Notifications (unified pane: changelog + feedback + announcement + match)
-export type NotificationSource = 'changelog' | 'feedback' | 'announcement' | 'match';
+// Notifications (personal bell: feedback + announcement + match, filed under tab groups)
+export type NotificationSource = 'feedback' | 'announcement' | 'match';
+export type NotificationGroup = 'trades' | 'matches' | 'admin' | 'feedback';
 
 export interface NotificationItem {
-  /** Prefixed composite id, e.g. 'changelog:<entryId>' | 'notif:<rowId>' | 'announcement:<rowId>' | 'match:<matchId>'. */
+  /** Prefixed composite id, e.g. 'notif:<rowId>' | 'announcement:<rowId>' | 'match:<matchId>'. */
   id: string;
   source: NotificationSource;
   title: string;
@@ -931,6 +984,8 @@ export interface NotificationItem {
   link: string | null;
   /** Source-specific category driving icon + accent (changelog/announcement category). */
   category: string | null;
+  /** Bell tab this item files under. */
+  group: NotificationGroup;
   createdAt: string;
   read: boolean;
 }
@@ -938,7 +993,7 @@ export interface NotificationItem {
 export interface NotificationsResponse {
   items: NotificationItem[];
   unreadCount: number;
-  unreadBySource: { changelog: number; feedback: number; announcement: number; match: number };
+  unreadByGroup: Record<NotificationGroup, number>;
 }
 
 export type AnnouncementCategory = 'info' | 'feature' | 'event' | 'maintenance';
@@ -1018,16 +1073,32 @@ export const api = {
     id: string;
     name: string;
     color: string;
+    champion?: string | null;
     teams: {
       id: string;
       coachName: string;
       teamName: string;
       teamAbbrev: string;
       teamColor: string;
+      finishPosition?: number | null;
+      finishLabel?: string | null;
+      record?: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
+      roster?: { name: string; tier: number; types: string[]; isTeraCaptain: boolean }[];
     }[];
   }[]>(`/api/seasons/${seasonId}/leagues`),
 
   getTeams: (leagueId: string) => fetchJson<ApiTeam[]>(`/api/leagues/${leagueId}/teams`),
+
+  // Draft Center (per-user planner teams). DcTeamDto lives in lib/draft-center/types.
+  dcListTeams: () => fetchJson<DcTeamDto[]>('/api/draft-center/teams'),
+  dcCreateTeam: (body: DcTeamInput) => postJson<DcTeamDto>('/api/draft-center/teams', body),
+  dcUpdateTeam: (id: string, body: Partial<DcTeamInput>) => putJson<DcTeamDto>(`/api/draft-center/teams/${id}`, body),
+  dcDeleteTeam: (id: string) => deleteJson<{ success: boolean }>(`/api/draft-center/teams/${id}`),
+  dcDuplicateTeam: (id: string) => postJson<DcTeamDto>(`/api/draft-center/teams/${id}/duplicate`),
+  dcShareTeam: (id: string, enabled: boolean) => postJson<DcTeamDto>(`/api/draft-center/teams/${id}/share`, { enabled }),
+  dcImportTeams: (teams: DcTeamInput[]) =>
+    postJson<{ imported: number; skipped: number; teams: DcTeamDto[] }>('/api/draft-center/import', { teams }),
+  dcGetShared: (token: string) => fetchJson<DcSharedTeam>(`/api/draft-center/shared/${encodeURIComponent(token)}`),
 
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
@@ -1223,9 +1294,8 @@ export const api = {
 
   /**
    * The full archive ceremony: flips the archived flag, sets every league
-   * in the season to phase=offseason, and runs both runAutoAwards
-   * (existing pins) and mintArchivePins (champion / high-score / steal /
-   * sweeper). Idempotent — safe to re-run after a stat correction.
+   * in the season to phase=offseason. Awards are curated separately in the
+   * Awards Sheet. Idempotent.
    */
   archiveSeasonCeremony: (seasonId: number) =>
     postJson<{
@@ -1233,8 +1303,6 @@ export const api = {
       seasonId: number;
       seasonNumber: number;
       leagues: number;
-      existingAwards: { leagueId: string; awarded: number; skipped: number }[];
-      newAwards: { leagueId: string; awarded: { pinDefId: string; userId: number }[]; skipped: number }[];
     }>(`/api/admin/seasons/${seasonId}/archive`),
 
   advanceWeek: (leagueId: string) =>
@@ -1615,7 +1683,7 @@ export const api = {
       const err = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error(err.error || `Failed: ${res.status}`);
     }
-    return res.json() as Promise<{ success: boolean; id: number; issueNumber: number | null; issueUrl: string | null }>;
+    return res.json() as Promise<{ success: boolean; id: number; ticketId: number }>;
   },
 
   // Admin feedback triage (reads from the feedback table)
@@ -1641,18 +1709,30 @@ export const api = {
   syncFeedbackResolutions: () =>
     fetchJson<{ notified: number }>('/api/feedback/notifications'),
 
-  // Changelog ("What's New") — still served standalone; the pane aggregates it.
-  getChangelog: () =>
-    fetchJson<{ entries: ApiChangelogEntry[]; lastSeenAt: string | null }>('/api/changelog'),
+  // Patch notes (public page + sidebar badge)
+  getPatchNotes: () =>
+    fetchJson<{ patches: ApiPatch[]; lastSeenAt: string | null; unreadCount: number | null }>('/api/changelog'),
 
   markChangelogSeen: () =>
     postJson<{ success: boolean; seenAt: string }>('/api/changelog/seen'),
 
-  // Unified notifications pane
+  // Patch notes admin (draft -> preview -> publish)
+  adminListPatchNotes: () => fetchJson<ApiAdminPatchNote[]>('/api/admin/changelog'),
+  adminCreatePatchNote: (input: PatchNoteInput) =>
+    postJson<{ success: boolean; id: string }>('/api/admin/changelog', input),
+  adminUpdatePatchNote: (id: string, input: PatchNoteInput) =>
+    putJson<{ success: boolean }>(`/api/admin/changelog/${encodeURIComponent(id)}`, input),
+  adminPublishPatchNote: (id: string) =>
+    postJson<{ success: boolean; date: string }>(`/api/admin/changelog/${encodeURIComponent(id)}/publish`),
+  adminDeletePatchNote: (id: string) =>
+    deleteJson<{ success: boolean }>(`/api/admin/changelog/${encodeURIComponent(id)}`),
+
+  // Personal bell
   getNotifications: () => fetchJson<NotificationsResponse>('/api/notifications'),
 
-  /** Mark everything seen on pane open (changelog + announcements + all directed rows). */
-  markNotificationsSeen: () => postJson<{ success: boolean }>('/api/notifications/seen'),
+  /** Mark all read (optionally only one tab's group). */
+  markNotificationsSeen: (group?: NotificationGroup) =>
+    postJson<{ success: boolean }>('/api/notifications/seen', group ? { group } : {}),
 
   /** Mark specific directed notifications read (composite ids; non-directed ids ignored). */
   markNotificationsRead: (ids: string[]) =>
@@ -1714,6 +1794,7 @@ export const api = {
     replayUrl?: string;
     pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
     warnings?: string[];
+    forfeitedBy?: 'home' | 'away' | null;
   }) => postJson<{ success: boolean }>(`/api/matches/${matchId}/result`, data),
 
   dismissMatchWarnings: (matchId: string) =>
@@ -1830,10 +1911,9 @@ export const api = {
   getUserPins: (username: string) =>
     fetchJson<ApiPin[]>(`/api/users/${encodeURIComponent(username)}/pins`),
 
-  /** Public badge catalog — every pin definition, no auth required. Powers
-   *  the /badges page. Distinct from getPinDefinitions (staff-only, same
-   *  shape) so the catalog works for signed-out visitors. */
-  getPublicPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/pin-definitions'),
+  /** A team's published pins - works for teams with no linked coach. */
+  getTeamPins: (teamId: string) =>
+    fetchJson<ApiPin[]>(`/api/teams/${encodeURIComponent(teamId)}/pins`),
 
   getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
 
@@ -1844,6 +1924,8 @@ export const api = {
     iconName: string;
     color: string;
     category: PinCategory;
+    scope?: PinScope;
+    metadataFields?: PinMetadataFieldName[];
   }) => postJson<{ success: boolean; id: string }>('/api/admin/pin-definitions', data),
 
   updatePinDefinition: (id: string, data: {
@@ -1852,21 +1934,30 @@ export const api = {
     iconName?: string;
     color?: string;
     category?: PinCategory;
+    scope?: PinScope;
+    metadataFields?: PinMetadataFieldName[];
   }) => mutateJson<{ success: boolean }>('PATCH', `/api/admin/pin-definitions/${encodeURIComponent(id)}`, data),
-
-  awardPin: (data: { userId: number; pinDefId: string; metadata?: Record<string, unknown>; seasonId?: number | null }) =>
-    postJson<{ success: boolean; id: number | null }>('/api/admin/pins/award', data),
 
   revokePin: (id: number) =>
     deleteJson<{ success: boolean }>(`/api/admin/pins/${id}`),
 
-  /** `seasonId` filters server-side so an older season's pins aren't lost
-   *  once the table exceeds `limit` (the Edit affordance on auto pins keys
-   *  off this list, so silently dropping older rows hid a working button). */
-  getRecentPins: (limit = 50, seasonId?: number | null) =>
-    fetchJson<ApiPinRecent[]>(
-      `/api/admin/pins/recent?limit=${limit}${seasonId != null ? `&seasonId=${seasonId}` : ''}`,
-    ),
+  /** Awards Sheet reads: every pin in a season (drafts included) and the
+   *  engine's suggestions (a pure read - nothing is written). */
+  getSeasonPins: (seasonId: number) =>
+    fetchJson<{ seasonId: number; pins: ApiSeasonPin[] }>(`/api/admin/pins/season/${seasonId}`),
+  getPinSuggestions: (seasonId: number) =>
+    fetchJson<{ suggestions: ApiPinSuggestion[]; unresolved: ApiPinUnresolved[] }>(
+      `/api/admin/pins/suggest?seasonId=${seasonId}`),
+
+  /** Transactional save for ONE pin definition. 422 carries per-row errors. */
+  bulkSavePins: (data: { seasonId: number; pinDefId: string; changes: ApiBulkPinChange[] }, force = false) =>
+    postJson<{ success: boolean; created: number; updated: number; revoked: number }>(
+      `/api/admin/pins/bulk${force ? '?force=1' : ''}`, data),
+
+  /** Publish (or unpublish) a season's awards. Sends no notifications. */
+  publishPins: (data: { seasonId: number; leagueId?: string | null; published?: boolean }, force = false) =>
+    postJson<{ success: boolean; published: boolean; count: number }>(
+      `/api/admin/pins/publish${force ? '?force=1' : ''}`, data),
 
   // Bulk-mint wizard: preview then confirm.
   getManualAwards: (season: number) =>
@@ -1882,23 +1973,6 @@ export const api = {
       unresolved: { award: ApiManualAward; reason: string }[];
     }>('/api/admin/pins/mint-season', { season }),
 
-  /** Re-run the season-end auto-award job for every league in a season.
-   *  Used by the Pins admin Mint button (only enabled in offseason / past finals). */
-  runSeasonAutoAwards: (season: number) =>
-    postJson<{
-      success: boolean;
-      season: number;
-      totalAwarded: number;
-      totalSkipped: number;
-      perLeague: { leagueId: string; awarded: number; skipped: number }[];
-      /** Awards the job couldn't resolve to a recipient — e.g. an orphaned
-       *  team ('team-has-no-user'), a manual pin already occupying the slot
-       *  ('manual-pin-present'), or no matches/kills clearing the floor
-       *  ('no-eligible-matches', 'no-pokemon-met-kill-floor'). Surfaced in
-       *  the admin UI instead of being dropped silently — this is how S9
-       *  Ruby's championship went missing with no trace. */
-      unresolved: { pinDefId: string; reason: string; teamId?: string | null; leagueId?: string | null }[];
-    }>('/api/admin/pins/run-auto', { season }),
 
   /** Re-point an existing pin to a different user (used to override an
    *  auto-awarded pin without revoke + re-award). */
@@ -2005,3 +2079,50 @@ export interface ApiManualAward {
   pokemon?: string;
   nickname?: string;
 }
+
+// Rulesets (admin). Shape mirrors backend/src/routes/admin/rulesets.ts `toJson`.
+
+import type { Ruleset as SharedRuleset } from '@cannoli/rules';
+
+export interface ApiRuleset extends SharedRuleset {
+  id: number;
+  description: string | null;
+  isTemplate: boolean;
+  sourceRulesetId: number | null;
+  archived: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  /** True once any league using this instance has left predraft (or its season is archived). */
+  frozen: boolean;
+  usedBy: string[];
+  draftCenterTeams: number;
+}
+
+/** Editable fields (everything optional; frozen instances only accept name/description/archived/band). */
+export type ApiRulesetInput = Partial<Pick<ApiRuleset,
+  'name' | 'description' | 'costFormat' | 'pointCap' | 'rosterSize' | 'rosterMin' | 'rosterMax' | 'megaCap' |
+  'teraEnabled' | 'teraCaptainSlots' | 'teraTypesPerCaptain' | 'teraMarkup' | 'archived'>>;
+
+export const rulesetsApi = {
+  list: (opts?: { kind?: 'template' | 'instance'; archived?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.kind) q.set('kind', opts.kind);
+    if (opts?.archived) q.set('archived', '1');
+    const qs = q.toString();
+    return fetchJson<ApiRuleset[]>(`/api/admin/rulesets${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: number) => fetchJson<ApiRuleset>(`/api/admin/rulesets/${id}`),
+  forLeague: (leagueId: string) =>
+    fetchJson<{ rulesetId: number | null; ruleset: SharedRuleset }>(`/api/admin/rulesets/for-league/${encodeURIComponent(leagueId)}`),
+  create: (body: ApiRulesetInput) => postJson<ApiRuleset>('/api/admin/rulesets', body),
+  update: (id: number, body: ApiRulesetInput) => putJson<ApiRuleset>(`/api/admin/rulesets/${id}`, body),
+  clone: (id: number, body?: { name?: string; asInstance?: boolean }) =>
+    postJson<ApiRuleset>(`/api/admin/rulesets/${id}/clone`, body ?? {}),
+  /** Escape hatch for a frozen instance: private copy (with edits) for ONE league in predraft/draft. */
+  fork: (id: number, body: { leagueId: string; name?: string; changes?: ApiRulesetInput }) =>
+    postJson<ApiRuleset>(`/api/admin/rulesets/${id}/fork`, body),
+  /** Predraft only. A template is copied into a fresh instance for the league. */
+  assign: (id: number, leagueId: string) => postJson<ApiRuleset>(`/api/admin/rulesets/${id}/assign`, { leagueId }),
+  remove: (id: number) => deleteJson<{ success: boolean }>(`/api/admin/rulesets/${id}`),
+};

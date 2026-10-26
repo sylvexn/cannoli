@@ -6,6 +6,7 @@
  */
 import { matchWinner } from '../standings';
 import { breakTieByRank } from './tiebreak';
+import type { PickOpts } from './auto-award-pickers';
 
 export interface ChampionFinalsRow {
   homeTeamId: string | null;
@@ -97,7 +98,7 @@ export interface HighScoreWinner {
  * match id), then the general rank/id fallback (breakTieByRank). Returns []
  * when the top is 0 or input is empty, else exactly one winner.
  */
-export function pickHighScore(rows: HighScoreRow[]): HighScoreWinner[] {
+export function pickHighScore(rows: HighScoreRow[], opts?: PickOpts): HighScoreWinner[] {
   if (rows.length === 0) return [];
   const top = rows.reduce((a, r) => Math.max(a, r.kills ?? 0), 0);
   if (top <= 0) return [];
@@ -106,17 +107,19 @@ export function pickHighScore(rows: HighScoreRow[]): HighScoreWinner[] {
   const minDeaths = Math.min(...tied.map(r => r.deaths ?? 0));
   tied = tied.filter(r => (r.deaths ?? 0) === minDeaths);
 
-  const minWeek = Math.min(...tied.map(r => r.week ?? Number.MAX_SAFE_INTEGER));
-  tied = tied.filter(r => (r.week ?? Number.MAX_SAFE_INTEGER) === minWeek);
+  if (!opts?.keepTies) {
+    const minWeek = Math.min(...tied.map(r => r.week ?? Number.MAX_SAFE_INTEGER));
+    tied = tied.filter(r => (r.week ?? Number.MAX_SAFE_INTEGER) === minWeek);
 
-  const minMatchId = tied.map(r => r.matchId).sort()[0];
-  tied = tied.filter(r => r.matchId === minMatchId);
+    const minMatchId = tied.map(r => r.matchId).sort()[0];
+    tied = tied.filter(r => r.matchId === minMatchId);
+  }
 
-  const winner = breakTieByRank(tied, r => r.teamRank, r => r.teamId);
-  return [{
+  const out = opts?.keepTies ? tied : [breakTieByRank(tied, r => r.teamRank, r => r.teamId)];
+  return out.map(winner => ({
     teamId: winner.teamId, pokemonName: winner.pokemonName, matchId: winner.matchId,
     kills: winner.kills, week: winner.week, phase: winner.phase,
-  }];
+  }));
 }
 
 export interface StealRow {
@@ -149,7 +152,7 @@ export const STEAL_MIN_KILLS = 5;
  * kills, then the general rank/id fallback (breakTieByRank). Returns [] when
  * nobody clears the floor, else exactly one winner.
  */
-export function pickStealOfTheDraft(rows: StealRow[]): StealWinner[] {
+export function pickStealOfTheDraft(rows: StealRow[], opts?: PickOpts): StealWinner[] {
   const candidates = rows
     .filter(r => r.gp >= 1 && (r.cost ?? 0) >= 1 && r.kills >= STEAL_MIN_KILLS)
     .map(r => ({
@@ -165,11 +168,11 @@ export function pickStealOfTheDraft(rows: StealRow[]): StealWinner[] {
   let tied = candidates.filter(r => r.ratio === topRatio);
   const maxKills = Math.max(...tied.map(r => r.kills));
   tied = tied.filter(r => r.kills === maxKills);
-  const winner = breakTieByRank(tied, r => r.teamRank, r => r.teamId);
-  return [{
+  const out = opts?.keepTies ? tied : [breakTieByRank(tied, r => r.teamRank, r => r.teamId)];
+  return out.map(winner => ({
     teamId: winner.teamId, pokemonName: winner.pokemonName, kills: winner.kills,
     cost: winner.cost, ratio: Number(winner.ratio.toFixed(3)),
-  }];
+  }));
 }
 
 export interface SweeperMatchRow {
@@ -193,7 +196,7 @@ export interface SweeperWinner {
  * via the general rank/id fallback (breakTieByRank). Returns [] when nobody
  * swept, else exactly one winner.
  */
-export function pickSweeper(rows: SweeperMatchRow[]): SweeperWinner[] {
+export function pickSweeper(rows: SweeperMatchRow[], opts?: PickOpts): SweeperWinner[] {
   const sweeps = new Map<string, { count: number; teamRank: number | null }>();
   for (const m of rows) {
     if (m.winnerGp <= 0) continue;
@@ -208,6 +211,6 @@ export function pickSweeper(rows: SweeperMatchRow[]): SweeperWinner[] {
   const tied = [...sweeps.entries()]
     .filter(([, v]) => v.count === topCount)
     .map(([teamId, v]) => ({ teamId, sweeps: v.count, teamRank: v.teamRank }));
-  const winner = breakTieByRank(tied, t => t.teamRank, t => t.teamId);
-  return [{ teamId: winner.teamId, sweeps: winner.sweeps }];
+  const out = opts?.keepTies ? tied : [breakTieByRank(tied, t => t.teamRank, t => t.teamId)];
+  return out.map(w => ({ teamId: w.teamId, sweeps: w.sweeps }));
 }

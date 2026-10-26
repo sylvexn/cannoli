@@ -12,11 +12,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowRightLeft, AlertTriangle, Sparkles, Swords } from 'lucide-react';
+import { ArrowRightLeft, AlertTriangle, Ban, Sparkles, Swords } from 'lucide-react';
 import type { TierEntry } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
+import { useLeague } from '@/lib/league-context';
 import { findPickConflict, type ConflictInputRoster } from '@/lib/draft-rules';
 import type { MatchReason } from '@/lib/pool-search';
 
@@ -38,6 +40,8 @@ interface DraftPoolTableProps {
   pointCap?: number;
   /** Match reasons keyed by Pokemon name — surfaces "why matched" tags in rows. */
   matchReasons?: Map<string, MatchReason>;
+  /** Format-banned names, listed after the pool as non-draftable rows. */
+  bannedNames?: string[];
   onRowClick: (name: string) => void;
 }
 
@@ -51,10 +55,13 @@ export function DraftPoolTable({
   userMaxAffordableCost,
   drafterMaxAffordableCost,
   drafterConflictRoster,
-  pointCap = 110,
+  pointCap: pointCapProp,
   matchReasons,
+  bannedNames,
   onRowClick,
 }: DraftPoolTableProps) {
+  const rules = getLeagueRuleset(useLeague());
+  const pointCap = pointCapProp ?? rules.pointCap;
   const affordCap = drafterMaxAffordableCost ?? userMaxAffordableCost;
   return (
     <Table>
@@ -86,7 +93,7 @@ export function DraftPoolTable({
           // grid's conflictKind treatment so both views read the same.
           let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
           if (showTierBadges && !ownership && drafterConflictRoster) {
-            const c = findPickConflict(entry.name, entry.tier, drafterConflictRoster, pointCap);
+            const c = findPickConflict(entry.name, entry.tier, drafterConflictRoster, pointCap, rules);
             if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
               conflictKind = c.kind;
             }
@@ -202,6 +209,35 @@ export function DraftPoolTable({
                   <span className="text-[10px] text-text-muted">FA</span>
                 )}
               </TableCell>
+            </TableRow>
+          );
+        })}
+        {bannedNames?.map(name => {
+          const pokeData = getPokemonData(name);
+          const types = pokeData?.types;
+          const st = pokeData?.stats;
+          return (
+            <TableRow
+              key={`banned-${name}`}
+              aria-disabled
+              title="Banned in this format - not draftable"
+              className="border-b border-border-subtle opacity-50 cursor-not-allowed"
+            >
+              <TableCell className="px-2 py-1"><PokemonSprite name={name} size="xs" /></TableCell>
+              <TableCell className="px-2 py-1">
+                <span className="text-xs font-medium text-text-muted line-through decoration-loss/40">{name}</span>
+              </TableCell>
+              <TableCell className="px-2 py-1 text-center">
+                <span className="inline-flex items-center gap-0.5 px-1 h-4 rounded-sm text-[8px] font-mono font-bold uppercase border border-loss/40 bg-loss/10 text-loss">
+                  <Ban size={8} aria-hidden />Banned
+                </span>
+              </TableCell>
+              <TableCell className="px-2 py-1">{types && <TypeChip types={types} size="xs" />}</TableCell>
+              <TableCell className="px-2 py-1 text-right">
+                {st && <span className="text-xs font-mono tabular-nums text-text-secondary">{st.hp + st.atk + st.def + st.spa + st.spd + st.spe}</span>}
+              </TableCell>
+              <TableCell className="px-2 py-1" />
+              <TableCell className="px-2 py-1"><span className="text-[10px] text-text-muted">N/A</span></TableCell>
             </TableRow>
           );
         })}

@@ -3,7 +3,7 @@ import { db, schema } from '../../db';
 import { eq, and } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { tx } from '../../lib/tx';
-import { effectiveCost } from '../../lib/tera-cost';
+import { getLeagueRuleset } from '../../lib/rulesets';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { generateLeagueSchedule } from '../../lib/schedule-generator';
 import { checkLeagueArchived, checkTeamArchived } from '../../lib/archive-guard';
@@ -49,58 +49,21 @@ export const teamRoutes = new Elysia()
       return { error: 'captains array required' };
     }
 
-    // Get league + season config (phase lives on league; captain slot limit lives on season).
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
-    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+    const maxCaptains = getLeagueRuleset(team.leagueId).teraCaptainSlots;
 
-    // Tera captains (and their 3 tera types) are freely editable at any point in
+    // Tera captains (and their tera types) are freely editable at any point in
     // the season per league rules — not locked when the league enters regular
     // play. The only hard stop is an archived (read-only) team, handled by the
     // checkTeamArchived guard above. The post-draft captain-gate auto-advance
     // (see `willLock` below) still only fires during phase=draft, so editing
     // captains mid-season never advances the phase.
-    const maxCaptains = season?.teraCaptainSlots ?? 2;
-
-    if (captains.length > maxCaptains) {
-      set.status = 400;
-      return { error: `Max ${maxCaptains} tera captains allowed` };
-    }
-
-    // Validate eligibility: not tera-banned, tier ≤ 9 — resolved from THIS
-    // league's cost format so format-specific overrides are respected.
-    const leagueCosts = getLeagueCostMap(team.leagueId);
-    for (const c of captains) {
-      const resolved = leagueCosts.get(c.pokemonName);
-      if (resolved?.teraBanned) {
-        set.status = 400;
-        return { error: `${c.pokemonName} is tera-banned` };
-      }
-      if (resolved && resolved.tier > 9) {
-        set.status = 400;
-        return { error: `${c.pokemonName} is tier ${resolved.tier} — captains must be tier 9 or below` };
-      }
-      if (c.teraTypes.length > 3) {
-        set.status = 400;
-        return { error: `Max 3 tera types per captain` };
-      }
-    }
-
-    // Tera-cost markup point cap check: simulate the new captain assignments
-    // against the team's full roster and verify total ≤ pointCap.
-    const roster = db.select().from(schema.rosters)
-      .where(eq(schema.rosters.teamId, params.teamId))
-      .all();
-    const captainSet = new Set(captains.map(c => c.pokemonName));
-    // Use costAtDraft (snapshot) so admin tier-list edits between draft end and
-    // captain reassignment don't unexpectedly bust the point cap.
-    const totalCost = roster.reduce(
-      (sum, r) => sum + effectiveCost(r.costAtDraft || r.tier, captainSet.has(r.pokemonName)),
-      0,
-    );
-    const cap = season?.pointCap ?? 110;
-    if (totalCost > cap) {
-      set.status = 400;
-      return { error: `Tera captain markup would exceed point cap (${totalCost} > ${cap})`, code: 'POINT_CAP_EXCEEDED' };
+    // Count, eligibility, tera types and point-cap markup: one shared validator
+    // (also used by the FA tera-change approval path).
+    const check = validateTeraCaptains(params.teamId, captains);
+    if (!check.ok) {
+      set.status = check.status;
+      return check.code ? { error: check.error, code: check.code } : { error: check.error };
     }
 
     // Determine whether this save should also LOCK captains (and potentially
@@ -274,6 +237,7 @@ export const teamRoutes = new Elysia()
 
     notifyStaff({
       type: 'system',
+      category: 'trades',
       title: 'Tera change needs approval',
       body: `${team.teamName} requested ${captains.map(c => c.pokemonName).join(', ')}`,
       link: '/admin/free-agents',
@@ -475,6 +439,7 @@ export const teamRoutes = new Elysia()
 
     notifyStaff({
       type: 'system',
+      category: 'trades',
       title: 'Free agent pickup needs approval',
       body: `${team.teamName} requested ${pickupNames.join(', ')}${dropNames.length ? `, dropping ${dropNames.join(', ')}` : ''}`,
       link: '/admin/free-agents',

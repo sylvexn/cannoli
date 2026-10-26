@@ -1,12 +1,17 @@
 import { cn } from '@/lib/utils';
 import { TierBadge } from '@/components/tier-badge';
 import { Badge } from '@/components/ui/badge';
+import { PokemonSprite } from '@/components/pokemon-sprite';
+import { Ban } from 'lucide-react';
 import { PokemonCompactCard, type CardDensity } from './pokemon-compact-card';
 import type { TierEntry, CostFormat } from '@/data/tier-list';
 import { getTeraBanned } from '@/data/tier-list';
 import { getPokemonData } from '@/data/pokemon-data';
 import type { RosterPokemon, Player } from '@/lib/types';
 import type { PoolOwnership } from './types';
+import { getLeagueRuleset } from '@/lib/league-ruleset';
+import { useLeague } from '@/lib/league-context';
+import { captainEligible } from '@cannoli/rules';
 import { findPickConflict, isMegaForm, type ConflictInputRoster } from '@/lib/draft-rules';
 import type { MatchReason } from '@/lib/pool-search';
 
@@ -51,6 +56,8 @@ interface DraftPoolGridProps {
   format?: CostFormat;
   /** Match reasons keyed by Pokemon name — drives "why matched" badges on cards. */
   matchReasons?: Map<string, MatchReason>;
+  /** Format-banned names — rendered as a "0 cost" section below tier 1. */
+  bannedNames?: string[];
   onCardClick: (name: string) => void;
   onCardHoverStart: (name: string, rect: DOMRect) => void;
   onCardHoverEnd: () => void;
@@ -68,17 +75,20 @@ export function DraftPoolGrid({
   userConflictRoster,
   drafterConflictRoster,
   drafterMaxAffordableCost,
-  pointCap = 110,
+  pointCap: pointCapProp,
   draftQueue = [],
   density = 'comfortable',
   animatingPokemonName,
   format,
   matchReasons,
+  bannedNames = [],
   onCardClick,
   onCardHoverStart,
   onCardHoverEnd,
 }: DraftPoolGridProps) {
-  if (poolByTier.length === 0) {
+  const rules = getLeagueRuleset(useLeague());
+  const pointCap = pointCapProp ?? rules.pointCap;
+  if (poolByTier.length === 0 && bannedNames.length === 0) {
     return (
       <div className="flex items-center justify-center h-48 text-text-muted text-sm">
         No Pokemon match your filters
@@ -156,7 +166,7 @@ export function DraftPoolGrid({
                 // Captain reserve is a soft warning shown in the popover, not on cards.
                 let conflictKind: 'duplicate-species' | 'mega-cap' | 'roster-reserve' | null = null;
                 if (showTierBadges && !ownership && conflictRoster) {
-                  const c = findPickConflict(entry.name, entry.tier, conflictRoster, pointCap);
+                  const c = findPickConflict(entry.name, entry.tier, conflictRoster, pointCap, rules);
                   if (c && (c.kind === 'duplicate-species' || c.kind === 'mega-cap' || c.kind === 'roster-reserve')) {
                     conflictKind = c.kind;
                   }
@@ -165,9 +175,9 @@ export function DraftPoolGrid({
                 const isMega = isMegaForm(entry.name);
                 const isTeraBanned = getTeraBanned(format).includes(entry.name);
                 // entry.teraBanned already reflects the format-correct ban list (entries
-                // come from a format-aware pool). The explicit tier range also guards the
-                // rule that only tiers 1–9 are captain-eligible.
-                const isCaptainEligible = entry.tier >= 1 && entry.tier <= 9 && !entry.teraBanned;
+                // come from a format-aware pool). Eligibility otherwise comes from the
+                // ruleset's markup table.
+                const isCaptainEligible = captainEligible(rules, entry);
                 const isAnimating = animatingPokemonName === entry.name;
 
                 return (
@@ -201,6 +211,40 @@ export function DraftPoolGrid({
           </div>
         );
       })}
+
+      {bannedNames.length > 0 && (
+        <div className="group/tier" data-tier="banned">
+          <div className={cn(
+            'sticky top-0 z-10 flex items-center gap-2.5 px-2 py-1.5',
+            'bg-surface/95 backdrop-blur-sm border-b border-border-subtle',
+          )}>
+            <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-sm border border-loss/40 bg-loss/10 text-loss">
+              <Ban size={11} aria-hidden />
+            </span>
+            <span className="text-xs font-heading font-semibold text-text-primary">Banned</span>
+            <span className="text-[10px] text-text-muted">not draftable in this format</span>
+            <Badge variant="outline" className="ml-auto text-[10px] h-4 px-1.5 border-border-subtle text-text-muted font-mono">
+              {bannedNames.length}
+            </Badge>
+          </div>
+          <div
+            className="grid gap-1 pl-5 pr-1 py-1.5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size, 88px), 1fr))' }}
+          >
+            {bannedNames.map(name => (
+              <div
+                key={name}
+                aria-disabled
+                title="Banned in this format - not draftable"
+                className="flex flex-col items-center gap-0.5 rounded-md border border-border-subtle p-1.5 opacity-50 cursor-not-allowed"
+              >
+                <PokemonSprite name={name} size="sm" />
+                <span className="w-full min-w-0 truncate text-center text-[10px] text-text-muted line-through decoration-loss/40">{name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

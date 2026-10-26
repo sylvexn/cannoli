@@ -251,6 +251,7 @@ WORKDIR /cannoli
 COPY package.json bun.lock ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
+COPY shared/ shared/
 RUN bun install --frozen-lockfile
 
 COPY frontend/ frontend/

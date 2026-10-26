@@ -122,8 +122,11 @@ export interface PeakRow {
 export interface SeasonAward {
   pinId: number;
   pinDefId: string;
-  userId: number;
-  username: string;
+  /** Holder team (the user is derived from its owner and may be null). */
+  teamId: string | null;
+  leagueId: string | null;
+  userId: number | null;
+  username: string | null;
   displayName: string | null;
   defName: string;
   defDescription: string;
@@ -133,5 +136,5 @@ export interface SeasonAward {
   defIsAuto: boolean;
   metadata: any;
   awardedAt: string | null;
-  awardedBy: number | null;
+  awardedBy?: number | null;
 }

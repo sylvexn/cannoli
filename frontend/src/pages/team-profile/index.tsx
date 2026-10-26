@@ -5,7 +5,7 @@ import { useLeagueData } from '@/lib/league-data-context';
 import { useLeague } from '@/lib/league-context';
 import { getTermCost, canBeTeraCaptain, DEFAULT_FORMAT } from '@/data/tier-list';
 import type { Player, RosterPokemon } from '@/lib/types';
-import { DEFAULT_LEAGUE_CONFIG } from '@/lib/types';
+import { ruleConfig } from '@/lib/league-ruleset';
 import type { PokemonType } from '@/lib/pokemon';
 import { rosterPointsUsed, teraCaptainCount } from '@/lib/roster';
 import { PokemonSprite, preloadSprites } from '@/components/pokemon-sprite';
@@ -35,7 +35,7 @@ import { TeamProfileSkeleton } from '@/components/skeletons';
 
 // Main Page
 export function TeamProfilePage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, leagueId } = useParams<{ id: string; leagueId: string }>();
   const { players, standings, loading } = useLeagueData();
 
   if (loading) {
@@ -51,7 +51,7 @@ export function TeamProfilePage() {
         title="Team not found."
         subtitle="Maybe it desynced. Or never existed."
         action={
-          <Link to="/" className="text-neon hover:underline text-sm">
+          <Link to={`/league/${leagueId}`} className="text-neon hover:underline text-sm">
             Back to standings
           </Link>
         }
@@ -76,7 +76,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   // from `canManage` (which also includes team owners).
   const isAdmin = isStaff(user);
   const season = league.season;
-  const config = DEFAULT_LEAGUE_CONFIG;
+  const config = useMemo(() => ruleConfig(league), [league]);
+  const rs = config.ruleset;
 
   // Preload sprites for entire roster + free agent pool (theorycraft swaps)
   useEffect(() => {
@@ -154,8 +155,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     const indexed = activeRoster.map((mon, i) => ({ mon, originalIndex: i }));
     indexed.sort((a, b) => {
       let av: number, bv: number;
-      const aCost = a.mon.isTeraCaptain ? getTermCost(a.mon.tier) : a.mon.tier;
-      const bCost = b.mon.isTeraCaptain ? getTermCost(b.mon.tier) : b.mon.tier;
+      const aCost = a.mon.isTeraCaptain ? getTermCost(a.mon.tier, rs) : a.mon.tier;
+      const bCost = b.mon.isTeraCaptain ? getTermCost(b.mon.tier, rs) : b.mon.tier;
       switch (sortKey) {
         case 'tier': av = aCost; bv = bCost; break;
         case 'kills': av = a.mon.seasonStats.kills; bv = b.mon.seasonStats.kills; break;
@@ -172,12 +173,13 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
     return indexed;
   }, [activeRoster, sortKey, sortDir]);
 
-  const pointsUsed = rosterPointsUsed(activeRoster);
-  const originalPoints = rosterPointsUsed(player.roster);
+  const pointsUsed = rosterPointsUsed(activeRoster, rs);
+  const originalPoints = rosterPointsUsed(player.roster, rs);
   const pointsDelta = pointsUsed - originalPoints;
   const captainCount = teraCaptainCount(activeRoster);
-  const teamKills = activeRoster.reduce((sum, p) => sum + p.seasonStats.kills, 0);
-  const teamDeaths = activeRoster.reduce((sum, p) => sum + p.seasonStats.deaths, 0);
+  const departed = player.departed ?? [];
+  const teamKills = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.kills, 0);
+  const teamDeaths = [...activeRoster, ...departed].reduce((sum, p) => sum + p.seasonStats.deaths, 0);
   const typeProfile = useMemo(() => getTeamDefensiveProfile(activeRoster), [activeRoster]);
   const pokemonTypesMap = useMemo(() => new Map(activeRoster.map(m => [m.name, m.types])), [activeRoster]);
 
@@ -279,8 +281,8 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
       setTeraEditingIndex(null);
     } else {
       // Make captain (if valid)
-      if (!canBeTeraCaptain(mon.name, costFormat)) return;
-      const newCost = getTermCost(mon.tier);
+      if (!canBeTeraCaptain(mon.name, costFormat, rs)) return;
+      const newCost = getTermCost(mon.tier, rs);
       const oldCost = mon.tier;
       if (pointsUsed - oldCost + newCost > config.pointCap) return;
       if (captainCount >= config.teraCaptainSlots) return;
@@ -351,7 +353,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
   return (
     <div className="space-y-4">
       {/* Back nav */}
-      <Link to="/" className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted hover:text-neon transition-colors uppercase tracking-widest">
+      <Link to={`/league/${league.id}`} className="inline-flex items-center gap-1 text-[11px] font-medium text-text-muted hover:text-neon transition-colors uppercase tracking-widest">
         <ArrowLeft size={11} /> Standings
       </Link>
 
@@ -458,6 +460,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
         {/* ─── ROSTER TABLE (2 cols) ─── */}
         <div className="xl:col-span-2 flex flex-col gap-4">
           <RosterTable
+            departed={departed}
             activeRoster={activeRoster}
             sortedRoster={sortedRoster}
             swaps={swaps}

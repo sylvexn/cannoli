@@ -15,9 +15,10 @@
     "test": "bun test tests/"
   },
   "dependencies": {
+    "@cannoli/rules": "workspace:*",
     "@elysiajs/cors": "^1.4.1",
+    "@resvg/resvg-wasm": "^2.6.2",
     "bcryptjs": "^3.0.3",
-
     "drizzle-orm": "^0.45.2",
     "elysia": "^1.2.0",
     "octokit": "^5.0.5",
@@ -25,7 +26,6 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
-
     "@types/bun": "^1.2.0",
     "drizzle-kit": "^0.31.10"
   }

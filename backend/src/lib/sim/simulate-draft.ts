@@ -15,7 +15,8 @@
 import { db, schema } from '../../db';
 import { and, eq } from 'drizzle-orm';
 import { tx } from '../tx';
-import { effectiveCost } from '../tera-cost';
+import { captainEligible, markupCost } from '@cannoli/rules';
+import { getLeagueRuleset } from '../rulesets';
 import { getLeagueCostMap } from '../league-costs';
 import {
   startDraft,
@@ -48,10 +49,7 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
     .get();
   if (!league) return { success: false, error: 'League not found', picks: 0, captainsAssigned: 0 };
 
-  const season = db.select().from(schema.seasons)
-    .where(eq(schema.seasons.id, league.seasonId))
-    .get();
-  if (!season) return { success: false, error: 'Season not found', picks: 0, captainsAssigned: 0 };
+  const rs = getLeagueRuleset(leagueId);
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
   if (teamOrder.length < 2) {
@@ -64,7 +62,7 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
     return { success: false, error: started.error, picks: 0, captainsAssigned: 0 };
   }
 
-  const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+  const snakeOrder = generateSnakeOrder(teamOrder, rs.rosterSize);
 
   // Candidate pool: all mons with a real (non-banned, non-zero) tier in the
   // league's cost format, sorted high→low. Costs come from the format map so
@@ -82,7 +80,7 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
   let picksMade = 0;
   for (let i = 0; i < snakeOrder.length; i++) {
     const slot = snakeOrder[i]!;
-    const choice = choosePick(pool, slot.teamId, leagueId, season.pointCap, league.rosterSize, slot.round, rng);
+    const choice = choosePick(pool, slot.teamId, leagueId, rs.rosterSize, slot.round, rng);
     if (!choice) {
       return {
         success: false,
@@ -98,7 +96,7 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
     picksMade++;
   }
 
-  const captainsAssigned = assignCaptains(leagueId, teamOrder, season.teraCaptainSlots, rng);
+  const captainsAssigned = assignCaptains(leagueId, teamOrder, rs.teraCaptainSlots, rng);
   return { success: true, picks: picksMade, captainsAssigned };
 }
 
@@ -110,14 +108,13 @@ function choosePick(
   pool: { name: string; tier: number }[],
   teamId: string,
   leagueId: string,
-  pointCap: number,
   rosterSize: number,
   round: number,
   rng: MockRng,
 ): string | null {
   const legal: { name: string; tier: number }[] = [];
   for (const p of pool) {
-    if (validatePick(p.name, teamId, leagueId, pointCap).valid) {
+    if (validatePick(p.name, teamId, leagueId).valid) {
       legal.push(p);
     }
     // Cap the scan once we have a healthy candidate set — the pool is sorted
@@ -137,7 +134,7 @@ function choosePick(
 }
 
 /**
- * Designate tera captains for every team, choosing eligible mons (tier ≤9, not
+ * Designate tera captains for every team, choosing eligible mons (markup-table tier, not
  * tera-banned) cheap enough that the marked-up roster still fits the point cap.
  * Picks the highest-tier affordable candidates and sets captainsLocked.
  * Returns the total number of captains assigned across the league.
@@ -164,12 +161,8 @@ function assignCaptains(
   const teraBanned = new Set(
     [...costMap.entries()].filter(([, c]) => c.teraBanned).map(([name]) => name),
   );
-  const pointCapRow = db.select().from(schema.leagues)
-    .where(eq(schema.leagues.id, leagueId)).get();
-  const season = pointCapRow
-    ? db.select().from(schema.seasons).where(eq(schema.seasons.id, pointCapRow.seasonId)).get()
-    : null;
-  const pointCap = season?.pointCap ?? 110;
+  const rs = getLeagueRuleset(leagueId);
+  const pointCap = rs.pointCap;
 
   const TERA_TYPES = [
     'Fire', 'Water', 'Grass', 'Electric', 'Dragon', 'Fighting', 'Steel',
@@ -187,17 +180,17 @@ function assignCaptains(
       // Eligible: tier 1..9, not tera-banned. Prefer highest tier — those are
       // the mons a real captain would pick. Greedily add while cap allows.
       const eligible = roster
-        .filter(r => r.tier >= 1 && r.tier <= 9 && !teraBanned.has(r.pokemonName))
+        .filter(r => captainEligible(rs, { tier: r.tier, teraBanned: teraBanned.has(r.pokemonName) }))
         .sort((a, b) => b.tier - a.tier);
 
       let runningCost = baseCost;
       let assigned = 0;
       for (const mon of eligible) {
         if (assigned >= captainSlots) break;
-        const markup = effectiveCost(mon.tier, true) - mon.tier;
+        const markup = markupCost(rs, mon.tier, true) - mon.tier;
         if (runningCost + markup > pointCap) continue;
         runningCost += markup;
-        const teras = rng.shuffle(TERA_TYPES).slice(0, 3);
+        const teras = rng.shuffle(TERA_TYPES).slice(0, rs.teraTypesPerCaptain);
         db.update(schema.rosters).set({
           isTeraCaptain: true,
           teraType1: teras[0],
