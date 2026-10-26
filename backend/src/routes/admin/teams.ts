@@ -10,6 +10,8 @@ import { writeUpload, uploadsPath } from '../../lib/uploads';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { validateRosterLegality, type RosterEntry, type PokeMeta } from '../../lib/roster-legality';
 import { refreshUserMap } from '../../lib/ps-bot';
+import { getLeagueRuleset } from '../../lib/rulesets';
+import { rosterBand, type Ruleset } from '@cannoli/rules';
 
 /**
  * Non-throwing whole-roster legality scan for the admin roster-override tool.
@@ -31,7 +33,7 @@ import { refreshUserMap } from '../../lib/ps-bot';
 function collectRosterLegalityWarnings(
   entries: RosterEntry[],
   pokeByName: Map<string, PokeMeta>,
-  pointCap: number,
+  rs: Ruleset,
 ): string[] {
   if (entries.length === 0) return [];
   const out: string[] = [];
@@ -40,7 +42,7 @@ function collectRosterLegalityWarnings(
 
   // point_cap — empty meta means no mega/dup can preempt; the point-cap check
   // runs first, so a bust surfaces here regardless of anything else.
-  const capV = validateRosterLegality(entries, new Map(), { pointCap, megaCap: INF });
+  const capV = validateRosterLegality(entries, new Map(), { ruleset: rs, megaCap: INF });
   if (capV?.code === 'point_cap') out.push(capV.message);
 
   // mega_cap — synthetic-unique names kill dup_species/dup_natdex; caps ∞ kill
@@ -51,7 +53,7 @@ function collectRosterLegalityWarnings(
   const megaMeta = new Map<string, PokeMeta>(
     entries.map((e, i) => [slot(i), { formCategory: pokeByName.get(e.pokemonName)?.formCategory ?? null, nationalDexNumber: null }]),
   );
-  const megaV = validateRosterLegality(megaEntries, megaMeta, { pointCap: INF, megaCap: 1 });
+  const megaV = validateRosterLegality(megaEntries, megaMeta, { ruleset: rs, pointCap: INF });
   if (megaV?.code === 'mega_cap') out.push(megaV.message);
 
   // dup_species — real names (message names the pair), meta stripped so neither
@@ -59,7 +61,7 @@ function collectRosterLegalityWarnings(
   const speciesMeta = new Map<string, PokeMeta>(
     entries.map((e) => [e.pokemonName, { formCategory: null, nationalDexNumber: null }]),
   );
-  const speciesV = validateRosterLegality(entries, speciesMeta, { pointCap: INF, megaCap: INF });
+  const speciesV = validateRosterLegality(entries, speciesMeta, { ruleset: rs, pointCap: INF, megaCap: INF });
   if (speciesV?.code === 'dup_species') out.push(speciesV.message);
 
   // dup_natdex — real names + real dex numbers, formCategory stripped. A species
@@ -67,7 +69,7 @@ function collectRosterLegalityWarnings(
   const dexMeta = new Map<string, PokeMeta>(
     entries.map((e) => [e.pokemonName, { formCategory: null, nationalDexNumber: pokeByName.get(e.pokemonName)?.nationalDexNumber ?? null }]),
   );
-  const dexV = validateRosterLegality(entries, dexMeta, { pointCap: INF, megaCap: INF });
+  const dexV = validateRosterLegality(entries, dexMeta, { ruleset: rs, pointCap: INF, megaCap: INF });
   if (dexV?.code === 'dup_natdex') out.push(dexV.message);
 
   return out;
@@ -201,9 +203,7 @@ export const teamAdminRoutes = new Elysia()
 
     // League (currentWeek + phase) and the format cost map for tier resolution.
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
-    const season = league
-      ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get()
-      : null;
+    const rs = getLeagueRuleset(team.leagueId);
     const costMap = getLeagueCostMap(team.leagueId);
 
     const result = tx(() => {
@@ -282,8 +282,7 @@ export const teamAdminRoutes = new Elysia()
 
       // Roster size band (effective min/max; NULL columns fall back to rosterSize).
       if (league) {
-        const effMax = league.maxRosterSize ?? league.rosterSize;
-        const effMin = league.minRosterSize ?? league.rosterSize;
+        const { min: effMin, max: effMax } = rosterBand(rs);
         if (finalRoster.length > effMax) {
           warnings.push(`Roster is at ${finalRoster.length} Pokemon (max ${effMax})`);
         }
@@ -299,13 +298,12 @@ export const teamAdminRoutes = new Elysia()
             .where(inArray(schema.pokemon.name, finalRoster.map(r => r.pokemonName))).all()
         : [];
       const pokeByName = new Map<string, PokeMeta>(pokemonRows.map(p => [p.name, p]));
-      const pointCap = season?.pointCap ?? 110;
       const rosterEntries: RosterEntry[] = finalRoster.map(r => ({
         pokemonName: r.pokemonName,
         cost: r.costAtDraft ?? r.tier ?? 0,
         isTeraCaptain: !!r.isTeraCaptain,
       }));
-      warnings.push(...collectRosterLegalityWarnings(rosterEntries, pokeByName, pointCap));
+      warnings.push(...collectRosterLegalityWarnings(rosterEntries, pokeByName, rs));
 
       // Format-illegal ADDED mons.
       for (const name of added) {

@@ -16,7 +16,6 @@
 
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
-import { effectiveCost } from './tera-cost';
 
 export interface ResolvedCost {
   tier: number;
@@ -97,14 +96,6 @@ export function resolveCost(format: string, name: string): ResolvedCost | undefi
 /** Resolve one species' cost in a league's format. */
 export function resolveLeagueCost(leagueId: string, name: string): ResolvedCost | undefined {
   return resolveCost(getLeagueCostFormat(leagueId), name);
-}
-
-/** Point cost a species contributes to a roster in a format, with tera-captain
- *  markup applied. Unknown species cost 0 (mirrors the pre-existing helpers). */
-export function effectiveCostFor(format: string, name: string, isCaptain: boolean): number {
-  const c = getFormatCostMap(format).get(name);
-  if (!c) return 0;
-  return effectiveCost(c.tier, isCaptain);
 }
 
 /** Distinct cost formats present in the DB (format_costs ∪ league assignments),

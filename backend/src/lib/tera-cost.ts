@@ -1,14 +1,17 @@
 /**
- * Tera captain cost markup. Mirrors `frontend/src/data/tier-list.ts`.
- * Tiers 9 and below cost more when designated as captains.
+ * Back-compat shim over `@cannoli/rules`. Enforcement sites take a `Ruleset`
+ * (via getLeagueRuleset); this default-ruleset form remains only for callers
+ * that have no league (draft-center, scripts).
  */
+import { DEFAULT_MARKUP, DEFAULT_RULESET, markupCost, type Ruleset } from '@cannoli/rules';
 
-export const TERA_COST_MAP: Record<number, number> = {
-  9: 12, 8: 10, 7: 9, 6: 8, 5: 6, 4: 5, 3: 4, 2: 2, 1: 1,
-};
+export const TERA_COST_MAP: Record<number, number> = { ...DEFAULT_MARKUP };
 
 /** Cost a Pokemon contributes to its team's point total. */
-export function effectiveCost(tier: number, isCaptain: boolean): number {
-  if (!isCaptain) return tier;
-  return TERA_COST_MAP[tier] ?? tier;
+export function effectiveCost(
+  tier: number,
+  isCaptain: boolean,
+  rs: Pick<Ruleset, 'teraEnabled' | 'teraMarkup'> = DEFAULT_RULESET,
+): number {
+  return markupCost(rs, tier, isCaptain);
 }

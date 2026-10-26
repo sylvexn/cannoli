@@ -143,7 +143,6 @@ export function applyDueTransactions(leagueId?: string): number {
 
   let applied = 0;
   for (const league of leagues) {
-    const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get();
 
     // Trades
     const dueTrades = db.select().from(schema.trades)
@@ -163,10 +162,7 @@ export function applyDueTransactions(leagueId?: string): number {
         proposerId: trade.proposerId,
         recipientId: trade.recipientId,
         offering, requesting,
-        pointCap: season?.pointCap ?? 110,
         leagueId: league.id,
-        minRosterSize: league.minRosterSize ?? league.rosterSize,
-        maxRosterSize: league.maxRosterSize ?? league.rosterSize,
         // This row is itself pending — don't let the projection apply it twice.
         excludeTradeId: trade.id,
       });

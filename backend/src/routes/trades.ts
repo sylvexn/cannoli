@@ -5,7 +5,6 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { getLeague, getTeamRoster, isTradeDeadlinePassed as deadlinePassed } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
-import { effectiveCost } from '../lib/tera-cost';
 import { getLeagueCostMap } from '../lib/league-costs';
 import { validateRosterLegality } from '../lib/roster-legality';
 import { refreshUserMap } from '../lib/ps-bot';
@@ -132,10 +131,7 @@ export const tradeRoutes = new Elysia()
         proposerId: trade.proposerId,
         recipientId: trade.recipientId,
         offering, requesting,
-        pointCap: season?.pointCap ?? 110,
         leagueId: trade.leagueId,
-        minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
-        maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
         excludeTradeId: tradeId,
       });
       if (legalityErr) {
@@ -253,10 +249,7 @@ export const tradeRoutes = new Elysia()
       proposerId: trade.proposerId,
       recipientId: trade.recipientId,
       offering, requesting,
-      pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
-      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
-      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
       excludeTradeId: tradeId,
     });
     if (approveErr) { set.status = 400; return { error: approveErr, code: 'TRADE_INVALID' }; }
@@ -433,7 +426,6 @@ export const tradeRoutes = new Elysia()
     }
 
     const league = getLeague(params.leagueId);
-    const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
     const week = league?.currentWeek || 0;
 
     // Phase gate: trades can only be proposed during the regular season.
@@ -451,10 +443,7 @@ export const tradeRoutes = new Elysia()
     // Roster legality (point cap + mega + dex + roster size)
     const validationErr = validateProposedTrade({
       proposerId, recipientId, offering, requesting,
-      pointCap: season?.pointCap ?? 110,
       leagueId: params.leagueId,
-      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
-      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
@@ -572,10 +561,7 @@ export const tradeRoutes = new Elysia()
       recipientId: newRecipientId,
       offering,
       requesting,
-      pointCap: season?.pointCap ?? 110,
       leagueId: trade.leagueId,
-      minRosterSize: league ? (league.minRosterSize ?? league.rosterSize) : undefined,
-      maxRosterSize: league ? (league.maxRosterSize ?? league.rosterSize) : undefined,
     });
     if (validationErr) { set.status = 400; return { error: validationErr, code: 'TRADE_INVALID' }; }
 
