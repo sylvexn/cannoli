@@ -165,6 +165,10 @@ export const leagueAdminRoutes = new Elysia()
       if (!Number.isInteger(teraCaptainSlots) || (teraCaptainSlots as number) < 0) { set.status = 400; return { error: 'teraCaptainSlots must be a non-negative integer' }; }
       ruleEdit.teraCaptainSlots = teraCaptainSlots as number;
     }
+    // Roster size is enforced from the ruleset; the league column stays as a mirror.
+    if (leagueUpdates.rosterSize !== undefined && leagueUpdates.rosterSize !== cur.rosterSize) {
+      ruleEdit.rosterSize = leagueUpdates.rosterSize as number;
+    }
     const hasRuleEdit = Object.keys(ruleEdit).length > 0;
     if (hasRuleEdit && league.rulesetId != null && rulesetUsageFrozen(league.rulesetId)) {
       set.status = 409;

@@ -7,7 +7,7 @@ import { leagueRoutes } from '../src/routes/leagues';
 import { leagueAdminRoutes } from '../src/routes/admin/leagues';
 import { seasonRoutes } from '../src/routes/admin/seasons';
 import { archiveDeepRoutes as archiveFullRoutes } from '../src/routes/archive';
-import { invalidateRulesetCache } from '../src/lib/rulesets';
+import { getLeagueRuleset, invalidateRulesetCache } from '../src/lib/rulesets';
 
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
@@ -127,6 +127,13 @@ describe('PUT /api/leagues/:id edits the ruleset, not the season', () => {
     expect([after.pointCap, after.teraCaptainSlots]).toEqual([before.pointCap, before.teraCaptainSlots]);
     // unchanged values in a full-form PUT are no-ops
     expect((await call('PUT', `/api/leagues/${a}`, { pointCap: 130, name: `${tag} A` })).status).toBe(200);
+  });
+
+  test('roster size edit reaches the ruleset that enforcement reads', async () => {
+    expect((await call('PUT', `/api/leagues/${a}`, { rosterSize: 11 })).status).toBe(200);
+    invalidateRulesetCache();
+    expect(getLeagueRuleset(a).rosterSize).toBe(11);
+    expect(db.select().from(schema.leagues).where(eq(schema.leagues.id, a)).get()!.rosterSize).toBe(11);
   });
 
   test('instance shared by two leagues is forked, not edited in place', async () => {
