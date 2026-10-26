@@ -1,7 +1,7 @@
 {
   "name": "cannoli",
   "private": true,
-  "workspaces": ["frontend", "backend"],
+  "workspaces": ["frontend", "backend", "shared"],
   "scripts": {
     "dev": "bash scripts/dev-all.sh",
     "dev:frontend": "bun run --cwd frontend dev",
@@ -12,7 +12,7 @@
     "check": "bun run --cwd frontend check",
     "lint": "bun run --cwd frontend lint",
     "test": "bun run --cwd backend test",
-    "test:unit": "bun run --cwd frontend test:unit",
+    "test:unit": "bun run --cwd frontend test:unit && bun run --cwd shared test",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:all": "bun run test && bun run test:unit && bun run test:e2e"

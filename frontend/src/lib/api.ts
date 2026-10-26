@@ -2084,3 +2084,50 @@ export interface ApiManualAward {
   pokemon?: string;
   nickname?: string;
 }
+
+// Rulesets (admin). Shape mirrors backend/src/routes/admin/rulesets.ts `toJson`.
+
+import type { Ruleset as SharedRuleset } from '@cannoli/rules';
+
+export interface ApiRuleset extends SharedRuleset {
+  id: number;
+  description: string | null;
+  isTemplate: boolean;
+  sourceRulesetId: number | null;
+  archived: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  createdBy: number | null;
+  /** True once any league using this instance has left predraft (or its season is archived). */
+  frozen: boolean;
+  usedBy: string[];
+  draftCenterTeams: number;
+}
+
+/** Editable fields (everything optional; frozen instances only accept name/description/archived/band). */
+export type ApiRulesetInput = Partial<Pick<ApiRuleset,
+  'name' | 'description' | 'costFormat' | 'pointCap' | 'rosterSize' | 'rosterMin' | 'rosterMax' | 'megaCap' |
+  'teraEnabled' | 'teraCaptainSlots' | 'teraTypesPerCaptain' | 'teraMarkup' | 'archived'>>;
+
+export const rulesetsApi = {
+  list: (opts?: { kind?: 'template' | 'instance'; archived?: boolean }) => {
+    const q = new URLSearchParams();
+    if (opts?.kind) q.set('kind', opts.kind);
+    if (opts?.archived) q.set('archived', '1');
+    const qs = q.toString();
+    return fetchJson<ApiRuleset[]>(`/api/admin/rulesets${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: number) => fetchJson<ApiRuleset>(`/api/admin/rulesets/${id}`),
+  forLeague: (leagueId: string) =>
+    fetchJson<{ rulesetId: number | null; ruleset: SharedRuleset }>(`/api/admin/rulesets/for-league/${encodeURIComponent(leagueId)}`),
+  create: (body: ApiRulesetInput) => postJson<ApiRuleset>('/api/admin/rulesets', body),
+  update: (id: number, body: ApiRulesetInput) => putJson<ApiRuleset>(`/api/admin/rulesets/${id}`, body),
+  clone: (id: number, body?: { name?: string; asInstance?: boolean }) =>
+    postJson<ApiRuleset>(`/api/admin/rulesets/${id}/clone`, body ?? {}),
+  /** Escape hatch for a frozen instance: private copy (with edits) for ONE league in predraft/draft. */
+  fork: (id: number, body: { leagueId: string; name?: string; changes?: ApiRulesetInput }) =>
+    postJson<ApiRuleset>(`/api/admin/rulesets/${id}/fork`, body),
+  /** Predraft only. A template is copied into a fresh instance for the league. */
+  assign: (id: number, leagueId: string) => postJson<ApiRuleset>(`/api/admin/rulesets/${id}/assign`, { leagueId }),
+  remove: (id: number) => deleteJson<{ success: boolean }>(`/api/admin/rulesets/${id}`),
+};

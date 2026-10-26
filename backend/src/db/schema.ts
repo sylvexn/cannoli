@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey, index, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 // Users
@@ -51,6 +51,40 @@ export const sessions = sqliteTable('sessions', {
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   expiresAt: text('expires_at').notNull(),
 });
+
+// Rulesets (see plan/ruleset-design.md). A league points at ONE instance
+// (`is_template = 0`); templates are the editable library the season wizard
+// copies from. Prices/bans stay in `format_costs` (`cost_format` is a pointer).
+export const rulesets = sqliteTable('rulesets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  isTemplate: integer('is_template', { mode: 'boolean' }).notNull().default(false),
+  /** Clone lineage (display only). */
+  sourceRulesetId: integer('source_ruleset_id').references((): AnySQLiteColumn => rulesets.id),
+  costFormat: text('cost_format').notNull(),
+  pointCap: integer('point_cap').notNull().default(110),
+  /** Draft rounds. */
+  rosterSize: integer('roster_size').notNull().default(10),
+  /** NULL = rosterSize. Per-league overrides live on `leagues.min/max_roster_size`. */
+  rosterMin: integer('roster_min'),
+  rosterMax: integer('roster_max'),
+  /** NULL = unlimited, 0 = no megas. */
+  megaCap: integer('mega_cap').default(1),
+  teraEnabled: integer('tera_enabled', { mode: 'boolean' }).notNull().default(true),
+  teraCaptainSlots: integer('tera_captain_slots').notNull().default(2),
+  teraTypesPerCaptain: integer('tera_types_per_captain').notNull().default(3),
+  /** JSON {"9":12,...}: base cost -> captain cost; a key present = captain-eligible. */
+  teraMarkup: text('tera_markup').notNull(),
+  /** Reserved JSON for future policy knobs (tera-change rules etc). */
+  policy: text('policy'),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  createdAt: text('created_at').default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').default(sql`(datetime('now'))`),
+  createdBy: integer('created_by').references(() => users.id),
+}, (t) => ({
+  templateIdx: index('rulesets_template_idx').on(t.isTemplate),
+}));
 
 // Seasons
 
@@ -137,6 +171,8 @@ export const leagues = sqliteTable('leagues', {
    *  EVERYONE, and standings/records are computed only through week N. 0 hides
    *  every week's results. Set via POST /api/admin/leagues/:id/results-reveal. */
   resultsRevealedThrough: integer('results_revealed_through'),
+  /** Rules this league plays under. NULL until backfilled; lib/rulesets.ts derives one from the legacy columns when NULL. */
+  rulesetId: integer('ruleset_id').references((): AnySQLiteColumn => rulesets.id),
 });
 
 // Format Costs (per-cost-format Pokemon prices / bans)
@@ -1059,6 +1095,7 @@ export const draftCenterTeams = sqliteTable('draft_center_teams', {
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   leagueId: text('league_id'),
+  rulesetId: integer('ruleset_id').references((): AnySQLiteColumn => rulesets.id),
   roster: text('roster').notNull().default('[]'),
   shareToken: text('share_token'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),

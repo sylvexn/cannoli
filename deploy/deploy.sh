@@ -75,8 +75,8 @@ match() { [ "$CHANGED" = "__ALL__" ] && return 0; printf '%s\n' "$CHANGED" | gre
 # Shared deps rebuild everything that runs bun (mirrors Coolify watch_paths).
 deps=false; match '^(package\.json|bun\.lock)$' && deps=true
 
-backend=false;  { $deps || match '^backend/'; }  && backend=true
-frontend=false; { $deps || match '^frontend/'; } && frontend=true
+backend=false;  { $deps || match '^(backend|shared)/'; }  && backend=true
+frontend=false; { $deps || match '^(frontend|shared)/'; } && frontend=true
 psserver=false; match '^(showdown/Dockerfile\.server|ps/)' && psserver=true
 # The matchup plugin (frontend/src/plugins/matchup) is baked INTO the ps-client
 # image (Dockerfile.client runs build:plugin), so plugin changes must rebuild it.
