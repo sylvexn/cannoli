@@ -11,6 +11,7 @@ import { useDraftCenter } from '@/lib/draft-center/store';
 import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { importPrompted, markImportPrompted } from '@/lib/draft-center/local-store';
 import { preloadSprites } from '@/components/pokemon-sprite';
+import type { DcMon } from '@/lib/draft-center/types';
 import { NewTeamDialog } from './new-team-dialog';
 import { PastTeams } from './past-teams';
 import { TeamCard } from './team-card';
@@ -39,9 +40,9 @@ export function DraftCenterHome() {
   const defaultRulesetId = rulesets.find(r => !r.isTemplate)?.id ?? null;
   const defaultName = useMemo(() => `Team ${store.teams.length + 1}`, [store.teams.length]);
 
-  async function create(name: string, rulesetId: number | null) {
+  async function create(name: string, rulesetId: number | null, roster: DcMon[]) {
     try {
-      const t = await store.createTeam({ name, rulesetId, roster: [] });
+      const t = await store.createTeam({ name, rulesetId, roster });
       setCreating(false);
       nav(`/draft-center/team/${t.id}`);
     } catch (e) { toast.error(getErrorMessage(e)); }

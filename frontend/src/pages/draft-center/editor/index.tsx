@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Copy, RotateCcw, Swords, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, Download, RotateCcw, Swords, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,6 +14,8 @@ import { preloadSprites } from '@/components/pokemon-sprite';
 import { AnalysisTabs } from '../analysis/analysis-tabs';
 import { RulesetSelect } from '../ruleset-select';
 import { MonPicker } from './mon-picker';
+import { PasteExportDialog } from './paste-export-dialog';
+import { PasteImportDialog } from './paste-import-dialog';
 import { RosterList } from './roster-list';
 import { SharePopover } from './share-popover';
 import { BudgetMeter, Violations } from './status-bar';
@@ -27,6 +29,7 @@ export function TeamEditorPage() {
   const [picker, setPicker] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [pasteDialog, setPasteDialog] = useState<'import' | 'export' | null>(null);
 
   const ruleset = useMemo(() => resolve({ rulesetId: team?.rulesetId, leagueId: team?.leagueId }), [resolve, team?.rulesetId, team?.leagueId]);
   const roster = team?.roster;
@@ -85,6 +88,8 @@ export function TeamEditorPage() {
         <div className="ml-auto flex items-center gap-1.5 flex-wrap">
           <Button variant="outline" size="sm" nativeButton={false} render={<Link to={`/matchup?dc=${team.id}`} />}><Swords size={13} /> Matchup</Button>
           <SharePopover team={team} onSetShared={enabled => store.setShared(team.id, enabled)} />
+          <Button variant="outline" size="sm" onClick={() => setPasteDialog('import')}><Upload size={13} /> Import</Button>
+          <Button variant="outline" size="sm" onClick={() => setPasteDialog('export')} disabled={team.roster.length === 0}><Download size={13} /> Export</Button>
           <Button variant="outline" size="sm" onClick={duplicate}><Copy size={13} /> Duplicate</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmReset(true)} disabled={team.roster.length === 0}><RotateCcw size={13} /> Reset</Button>
           <Button variant="outline" size="sm" onClick={() => setConfirmDelete(true)} className="text-loss hover:text-loss"><Trash2 size={13} /></Button>
@@ -110,6 +115,9 @@ export function TeamEditorPage() {
         taken={new Set(team.roster.map(m => m.name))} remaining={validation.remaining}
         onPick={addMon}
       />
+
+      <PasteImportDialog open={pasteDialog === 'import'} onOpenChange={o => setPasteDialog(o ? 'import' : null)} roster={team.roster} onApply={setRoster} />
+      <PasteExportDialog open={pasteDialog === 'export'} onOpenChange={o => setPasteDialog(o ? 'export' : null)} roster={team.roster} />
 
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>
         <DialogContent>
