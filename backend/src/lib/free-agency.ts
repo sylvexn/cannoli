@@ -15,7 +15,8 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { tx } from './tx';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
-import { effectiveCost } from './tera-cost';
+import { getLeagueRuleset } from './rulesets';
+import { captainEligible, captainMaxTier, markupCost, rosterBand } from '@cannoli/rules';
 
 export interface FaPickupInput {
   leagueId: string;
@@ -87,7 +88,7 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
   }
 
   const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
-  const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+  const rs = getLeagueRuleset(leagueId);
   const week = league?.currentWeek ?? 0;
   // Ledger stamp week: admin-chosen effective week if given, else the actual
   // current week. Deadline/phase gating below always uses `week` (the real
@@ -184,10 +185,8 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
       // Post-swap roster legality re-check
       const newRoster = db.select().from(schema.rosters).where(eq(schema.rosters.teamId, teamId)).all();
       if (league) {
-        // Effective band: a per-league min/max range. NULL falls back to
-        // rosterSize, so an unbanded league still requires exactly rosterSize.
-        const effMax = league.maxRosterSize ?? league.rosterSize;
-        const effMin = league.minRosterSize ?? league.rosterSize;
+        // Effective band from the league's ruleset (NULL band = exactly rosterSize).
+        const { min: effMin, max: effMax } = rosterBand(rs);
         if (newRoster.length > effMax) {
           throw Object.assign(new Error(`Pickup would put roster at ${newRoster.length} (max ${effMax}) — additional drops are required`), { _status: 400, _code: 'fa_roster_size_exceeded' });
         }
@@ -200,13 +199,12 @@ export function applyFaPickup(input: FaPickupInput): FaPickupResult {
         .where(inArray(schema.pokemon.name, newRoster.map(r => r.pokemonName)))
         .all();
       const pokeByName = new Map(newPokemonRows.map(p => [p.name, p]));
-      const pointCap = season?.pointCap ?? 110;
       const rosterEntries = newRoster.map(r => ({
         pokemonName: r.pokemonName,
         cost: r.costAtDraft ?? r.tier ?? 0,
         isTeraCaptain: !!r.isTeraCaptain,
       }));
-      const violation = validateRosterLegality(rosterEntries, pokeByName, { pointCap });
+      const violation = validateRosterLegality(rosterEntries, pokeByName, { ruleset: rs });
       if (violation) {
         const codeMap: Record<string, string> = {
           point_cap: 'fa_over_cap', mega_cap: 'fa_mega_cap',
@@ -272,8 +270,9 @@ export type TeraValidateResult = { ok: true } | { ok: false; status: number; err
 
 /**
  * Validate a proposed tera-captain set against the team's current roster.
- * Mirrors the rules of the direct PUT: tera-ban, tier ≤ 9, max 3 types per
- * captain, captain-slot limit, and point-cap (using the `costAtDraft` snapshot
+ * The single validator for both the direct PUT and the FA approval path:
+ * tera-ban, ruleset markup-table eligibility, tera types per captain,
+ * captain-slot limit, and point-cap (using the `costAtDraft` snapshot
  * so a later tier-list edit can't retroactively bust a pending request).
  */
 export function validateTeraCaptains(teamId: string, captains: TeraCaptainInput[]): TeraValidateResult {
@@ -284,27 +283,30 @@ export function validateTeraCaptains(teamId: string, captains: TeraCaptainInput[
   const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
   if (!team) return { ok: false, status: 404, error: 'Team not found' };
 
-  const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
-  const season = league ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get() : null;
+  const rs = getLeagueRuleset(team.leagueId);
 
-  const maxCaptains = season?.teraCaptainSlots ?? 2;
+  const maxCaptains = rs.teraCaptainSlots;
   if (captains.length > maxCaptains) {
     return { ok: false, status: 400, error: `Max ${maxCaptains} tera captains allowed` };
   }
 
-  // Eligibility: not tera-banned, tier ≤ 9, ≤ 3 tera types — resolved from THIS
-  // league's cost format so format-specific overrides are respected.
+  // Eligibility: not tera-banned, tier in the ruleset's markup table, ≤ N tera
+  // types — resolved from THIS league's cost format so format-specific
+  // overrides are respected.
   const leagueCosts = getLeagueCostMap(team.leagueId);
   for (const c of captains) {
     const resolved = leagueCosts.get(c.pokemonName);
     if (resolved?.teraBanned) {
       return { ok: false, status: 400, error: `${c.pokemonName} is tera-banned` };
     }
-    if (resolved && resolved.tier > 9) {
-      return { ok: false, status: 400, error: `${c.pokemonName} is tier ${resolved.tier} — captains must be tier 9 or below` };
+    if (resolved && !captainEligible(rs, { tier: resolved.tier })) {
+      const maxTier = captainMaxTier(rs);
+      return { ok: false, status: 400, error: resolved.tier > maxTier
+        ? `${c.pokemonName} is tier ${resolved.tier} — captains must be tier ${maxTier} or below`
+        : `${c.pokemonName} is tier ${resolved.tier} — not captain-eligible` };
     }
-    if (c.teraTypes.length > 3) {
-      return { ok: false, status: 400, error: `Max 3 tera types per captain` };
+    if (c.teraTypes.length > rs.teraTypesPerCaptain) {
+      return { ok: false, status: 400, error: `Max ${rs.teraTypesPerCaptain} tera types per captain` };
     }
   }
 
@@ -321,10 +323,10 @@ export function validateTeraCaptains(teamId: string, captains: TeraCaptainInput[
   // a tier-list edit between request and approval can't invalidate it.
   const captainSet = new Set(captains.map(c => c.pokemonName));
   const totalCost = roster.reduce(
-    (sum, r) => sum + effectiveCost(r.costAtDraft || r.tier, captainSet.has(r.pokemonName)),
+    (sum, r) => sum + markupCost(rs, r.costAtDraft || r.tier, captainSet.has(r.pokemonName)),
     0,
   );
-  const cap = season?.pointCap ?? 110;
+  const cap = rs.pointCap;
   if (totalCost > cap) {
     return { ok: false, status: 400, error: `Tera captain markup would exceed point cap (${totalCost} > ${cap})`, code: 'POINT_CAP_EXCEEDED' };
   }
