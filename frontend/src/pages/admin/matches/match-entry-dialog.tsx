@@ -117,6 +117,7 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
           awayScore,
           replayUrl: replayUrl || undefined,
           pokemonData,
+          forfeitedBy: forceForfeit === 'home' || forceForfeit === 'away' ? forceForfeit : null,
         });
         toast.success('Result recorded');
       }
@@ -204,7 +205,8 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
 
           <div className="text-[10px] text-text-muted">
             Winner: <span className="text-text-primary font-medium">
-              {homeScore === awayScore ? 'Tie' :
+              {forceForfeit === 'home' ? awayName : forceForfeit === 'away' ? homeName : forceForfeit === 'both' ? 'None' :
+                homeScore === awayScore ? 'Tie' :
                 homeScore > awayScore ? homeName : awayName}
             </span>
           </div>
@@ -236,6 +238,20 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
               </div>
             </>
           ) : (
+            <>
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Played or forfeit?</label>
+              <Select value={forceForfeit} onValueChange={(v) => setForceForfeit((v as typeof forceForfeit) ?? 'none')}>
+                <SelectTrigger className="h-8 text-xs bg-surface-overlay">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="text-xs">Played</SelectItem>
+                  <SelectItem value="home" className="text-xs">Forfeit: {homeName} forfeited</SelectItem>
+                  <SelectItem value="away" className="text-xs">Forfeit: {awayName} forfeited</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Replay URL</label>
               <Input
@@ -245,6 +261,7 @@ export function MatchEntryDialog({ match, mode, teamNames, open, onOpenChange, o
                 className="h-8 text-xs bg-surface-overlay"
               />
             </div>
+            </>
           )}
 
           <button

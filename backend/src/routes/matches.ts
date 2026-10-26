@@ -450,12 +450,12 @@ export const matchRoutes = new Elysia()
     const archived = checkMatchArchived(params.matchId, query.force);
     if (archived) { set.status = 409; return archived; }
 
-    const { homeScore, awayScore, replayUrl, pokemonData, warnings } =
+    const { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy } =
       body as RecordResultInput;
 
     const outcome = recordMatchResult(
       params.matchId,
-      { homeScore, awayScore, replayUrl, pokemonData, warnings },
+      { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy },
       user.username,
     );
     if (!outcome.ok) {
