@@ -18,8 +18,7 @@ import { api, type ApiTeam } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 import { rosterFromApi } from '@/lib/roster-from-api';
 import { useDraftCenterTeams } from '@/lib/draft-center/store';
-import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
-import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { teamToRoster } from '@/lib/draft-center/roster';
 import type { League } from '@/lib/types';
 import { sortLeaguesByActivity } from './league-order';
@@ -126,7 +125,7 @@ export function MatchupCenterPage() {
   // Deep link from the Draft Center editor: ?dc=<team id> loads that team as side A.
   const paramDc = searchParams.get('dc');
   const { teams: dcTeams, loading: dcLoading } = useDraftCenterTeams();
-  const { leagues: allLeagues, loading: allLeaguesLoading } = useAllLeagues();
+  const { resolve: resolveDc, loading: allLeaguesLoading } = useRulesetCatalog(dcTeams);
   const dcLoadedRef = useRef(false);
   useEffect(() => {
     if (!paramDc || dcLoadedRef.current || dcLoading || allLeaguesLoading) return;
@@ -135,11 +134,11 @@ export function MatchupCenterPage() {
     if (!dc) return;
     dispatch({
       type: 'SET_TEAM_A',
-      roster: teamToRoster(dc.roster, resolveRuleset(dc.leagueId, allLeagues)),
+      roster: teamToRoster(dc.roster, resolveDc(dc)),
       source: { type: 'draft-center', teamId: dc.id, label: `${dc.name} (Draft Center)` },
     });
     setNoManagedTeam(false);
-  }, [paramDc, dcTeams, dcLoading, allLeagues, allLeaguesLoading, dispatch]);
+  }, [paramDc, dcTeams, dcLoading, resolveDc, allLeaguesLoading, dispatch]);
 
   /** Refresh the opponent gem-grid context whenever the user manually changes
    *  team A via the picker. We re-fetch the league's teams from the matching

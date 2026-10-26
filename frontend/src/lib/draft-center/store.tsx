@@ -145,7 +145,7 @@ export function DraftCenterProvider({ children }: { children: React.ReactNode })
       setTeams(prev => [copy, ...prev]);
       return copy;
     }
-    return createTeam({ name: `${src.name} (copy)`, leagueId: src.leagueId, roster: structuredClone(src.roster) });
+    return createTeam({ name: `${src.name} (copy)`, rulesetId: src.rulesetId, leagueId: src.leagueId, roster: structuredClone(src.roster) });
   }, [user, flush, createTeam]);
 
   const setShared = useCallback(async (id: string, enabled: boolean) => {
@@ -157,7 +157,7 @@ export function DraftCenterProvider({ children }: { children: React.ReactNode })
   const importLocal = useCallback(async (): Promise<number> => {
     const local = readLocalTeams();
     if (local.length === 0 || !user) return 0;
-    const res = await api.dcImportTeams(local.map(({ name, leagueId, roster }) => ({ name, leagueId, roster })));
+    const res = await api.dcImportTeams(local.map(({ name, rulesetId, leagueId, roster }) => ({ name, rulesetId, leagueId, roster })));
     // Only drop the guest copies once the server has them.
     writeLocalTeams([]);
     setLocalCount(0);

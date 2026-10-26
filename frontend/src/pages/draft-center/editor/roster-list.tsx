@@ -12,7 +12,7 @@ import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { getPokemonData } from '@/data/pokemon-data';
 import { pokemonRoute } from '@/lib/pokemon-route';
 import { baseTier, captainEligibility, monCost } from '@/lib/draft-center/rules';
-import type { Ruleset } from '@/lib/draft-center/ruleset';
+import { rosterSizeOf, type Ruleset } from '@/lib/draft-center/ruleset';
 import type { DcMon, DcSet, DcViolation } from '@/lib/draft-center/types';
 import { SetEditor } from './set-editor';
 
@@ -28,7 +28,7 @@ interface Props {
 export function RosterList({ roster, ruleset, violations, onChange, onAdd }: Props) {
   const [open, setOpen] = useState<string | null>(null);
   const patch = (name: string, p: Partial<DcMon>) => onChange(roster.map(m => (m.name === name ? { ...m, ...p } : m)));
-  const emptySlots = Math.max(0, ruleset.rosterSize - roster.length);
+  const emptySlots = Math.max(0, rosterSizeOf(ruleset) - roster.length);
 
   return (
     <div className="flex flex-col gap-1">
@@ -76,8 +76,8 @@ function MonRow({ mon, ruleset, warnings, expanded, onToggleOpen, onCaptain, onT
 }) {
   const data = getPokemonData(mon.name);
   const tier = baseTier(mon.name, ruleset.costFormat);
-  const cost = monCost(mon, ruleset.costFormat);
-  const elig = captainEligibility(mon.name, ruleset.costFormat);
+  const cost = monCost(mon, ruleset);
+  const elig = captainEligibility(mon.name, ruleset);
   const setSummary = mon.set ? [mon.set.item, ...mon.set.moves.filter(Boolean)].filter(Boolean).join(' / ') : '';
 
   return (

@@ -33,7 +33,10 @@ export interface DcMon {
 
 export interface DcTeamInput {
   name: string;
-  leagueId: string | null;
+  /** Ruleset the team is checked against; null/absent = legacy league-keyed team (see resolveTeamRuleset). */
+  rulesetId?: number | null;
+  /** Legacy: pre-ruleset teams were keyed by league. Only a fallback. */
+  leagueId?: string | null;
   roster: DcMon[];
 }
 
@@ -70,7 +73,10 @@ export interface DcTeamDto extends DcTeam {
 
 export interface DcSharedTeam {
   name: string;
-  leagueId: string | null;
+  /** Ruleset the team is checked against; null/absent = legacy league-keyed team (see resolveTeamRuleset). */
+  rulesetId?: number | null;
+  /** Legacy: pre-ruleset teams were keyed by league. Only a fallback. */
+  leagueId?: string | null;
   roster: DcMon[];
   updatedAt: string;
   rulesetLabel: string;
@@ -79,7 +85,5 @@ export interface DcSharedTeam {
 }
 
 export const MAX_TERA_TYPES = 3;
-export const DEFAULT_ROSTER_SIZE = 12;
-export const MAX_CAPTAIN_TIER = 9;
 
 export const emptySpread = (v: number): StatSpread => ({ hp: v, atk: v, def: v, spa: v, spd: v, spe: v });

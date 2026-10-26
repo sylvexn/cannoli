@@ -29,7 +29,7 @@ export function InfoPanel({ roster, ruleset }: { roster: DcMon[]; ruleset: Rules
 function InfoCard({ mon, ruleset }: { mon: DcMon; ruleset: Ruleset }) {
   const data = getPokemonData(mon.name);
   const tier = baseTier(mon.name, ruleset.costFormat);
-  const cost = monCost(mon, ruleset.costFormat);
+  const cost = monCost(mon, ruleset);
   const spe = setSpeed(mon);
   return (
     <div className={cn(

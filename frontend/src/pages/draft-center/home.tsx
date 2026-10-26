@@ -5,11 +5,10 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAppData } from '@/lib/app-data-context';
 import { useAuth } from '@/lib/auth-context';
 import { getErrorMessage } from '@/lib/errors';
 import { useDraftCenter } from '@/lib/draft-center/store';
-import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { importPrompted, markImportPrompted } from '@/lib/draft-center/local-store';
 import { preloadSprites } from '@/components/pokemon-sprite';
 import { NewTeamDialog } from './new-team-dialog';
@@ -20,8 +19,7 @@ export function DraftCenterHome() {
   const nav = useNavigate();
   const { isAuthenticated } = useAuth();
   const store = useDraftCenter();
-  const { leagues: currentLeagues } = useAppData();
-  const { leagues } = useAllLeagues();
+  const { rulesets, resolve } = useRulesetCatalog(store.teams);
   const [creating, setCreating] = useState(false);
   const [askImport, setAskImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -37,12 +35,13 @@ export function DraftCenterHome() {
 
   useEffect(() => { preloadSprites(store.teams.flatMap(t => t.roster.map(m => m.name))); }, [store.teams]);
 
-  const defaultLeagueId = currentLeagues[0]?.id ?? null;
+  // First active-season instance, else the built-in default.
+  const defaultRulesetId = rulesets.find(r => !r.isTemplate)?.id ?? null;
   const defaultName = useMemo(() => `Team ${store.teams.length + 1}`, [store.teams.length]);
 
-  async function create(name: string, leagueId: string | null) {
+  async function create(name: string, rulesetId: number | null) {
     try {
-      const t = await store.createTeam({ name, leagueId, roster: [] });
+      const t = await store.createTeam({ name, rulesetId, roster: [] });
       setCreating(false);
       nav(`/draft-center/team/${t.id}`);
     } catch (e) { toast.error(getErrorMessage(e)); }
@@ -96,7 +95,7 @@ export function DraftCenterHome() {
             <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
               {store.teams.map(t => (
                 <TeamCard
-                  key={t.id} team={t} leagues={leagues}
+                  key={t.id} team={t} ruleset={resolve(t)}
                   onDuplicate={() => store.duplicateTeam(t.id).then(() => toast.success('Duplicated')).catch(e => toast.error(getErrorMessage(e)))}
                   onDelete={() => { if (window.confirm(`Delete "${t.name}"?`)) store.deleteTeam(t.id).catch(e => toast.error(getErrorMessage(e))); }}
                 />
@@ -109,8 +108,8 @@ export function DraftCenterHome() {
       </Tabs>
 
       <NewTeamDialog
-        open={creating} onOpenChange={setCreating} leagues={leagues}
-        defaultLeagueId={defaultLeagueId} defaultName={defaultName} onCreate={create}
+        open={creating} onOpenChange={setCreating} rulesets={rulesets}
+        defaultRulesetId={defaultRulesetId} defaultName={defaultName} onCreate={create}
       />
 
       <Dialog open={askImport} onOpenChange={setAskImport}>

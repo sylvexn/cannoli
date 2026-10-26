@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { CoachLink } from '@/components/coach-link';
 import { api, type ApiTeam } from '@/lib/api';
 import { getErrorMessage } from '@/lib/errors';
-import { resolveRuleset } from '@/lib/draft-center/ruleset';
+import { useRulesetCatalog } from '@/lib/draft-center/use-ruleset-catalog';
 import { picksFromRoster } from '@/lib/draft-center/roster';
 import { useDraftCenter } from '@/lib/draft-center/store';
 import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
@@ -50,10 +50,11 @@ export function PastTeamPage() {
     return () => { cancelled = true; };
   }, [seasonId, leagueId, teamId]);
 
-  const ruleset = useMemo(() => resolveRuleset(leagueId, leagues), [leagueId, leagues]);
+  const { resolve, loading: rulesetsLoading } = useRulesetCatalog([{ leagueId }]);
+  const ruleset = useMemo(() => resolve({ leagueId }), [resolve, leagueId]);
   const roster = useMemo(() => picksFromRoster(team?.roster ?? []), [team]);
 
-  if (team === undefined || leaguesLoading || store.loading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
+  if (team === undefined || leaguesLoading || rulesetsLoading || store.loading) return <div className="p-8 text-sm text-text-muted">Loading...</div>;
   if (!team) {
     return (
       <div className="max-w-md mx-auto p-8 text-center flex flex-col gap-3">
@@ -65,7 +66,7 @@ export function PastTeamPage() {
 
   async function clone() {
     try {
-      const t = await store.createTeam({ name: `${team!.teamName} (${ruleset.label.split(' — ')[0]})`.slice(0, 60), leagueId, roster: structuredClone(roster) });
+      const t = await store.createTeam({ name: `${team!.teamName} (${ruleset.label.split(' — ')[0]})`.slice(0, 60), rulesetId: ruleset.id ?? null, leagueId, roster: structuredClone(roster) });
       toast.success('Cloned to your teams');
       nav(`/draft-center/team/${t.id}`);
     } catch (e) { toast.error(getErrorMessage(e)); }

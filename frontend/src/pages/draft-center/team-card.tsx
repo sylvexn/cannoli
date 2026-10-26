@@ -3,10 +3,9 @@ import { Copy, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PokemonSprite } from '@/components/pokemon-sprite';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { rulesetFromLeague, DEFAULT_RULESET, type Ruleset } from '@/lib/draft-center/ruleset';
+import type { Ruleset } from '@/lib/draft-center/ruleset';
 import { validateTeam, warnCount } from '@/lib/draft-center/rules';
 import type { DcTeam } from '@/lib/draft-center/types';
-import type { League } from '@/lib/types';
 import { useMemo } from 'react';
 
 const fmtDate = (iso: string) => {
@@ -14,13 +13,9 @@ const fmtDate = (iso: string) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-export function TeamCard({ team, leagues, onDuplicate, onDelete }: {
-  team: DcTeam; leagues: League[]; onDuplicate: () => void; onDelete: () => void;
+export function TeamCard({ team, ruleset, onDuplicate, onDelete }: {
+  team: DcTeam; ruleset: Ruleset; onDuplicate: () => void; onDelete: () => void;
 }) {
-  const ruleset: Ruleset = useMemo(() => {
-    const l = team.leagueId ? leagues.find(x => x.id === team.leagueId) : undefined;
-    return l ? rulesetFromLeague(l) : DEFAULT_RULESET;
-  }, [team.leagueId, leagues]);
   const v = useMemo(() => validateTeam(team.roster, ruleset), [team.roster, ruleset]);
   const warns = warnCount(v);
   const captains = team.roster.filter(m => m.captain).length;
