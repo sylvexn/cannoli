@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { playoffsApi } from '@/lib/api-playoffs';
 import { api, type ApiLeague, type ApiMatch, type ApiTeam } from '@/lib/api';
 import { toast } from 'sonner';
 import type { EditableLeague } from './phase-config';
@@ -45,6 +47,7 @@ function byStandings(teams: ApiTeam[]) {
  * what makes a rebuild destructive).
  */
 export function usePlayoffControls(defaultLeagues: ApiLeague[], refreshLeagues?: () => void) {
+  const navigate = useNavigate();
   const [playoffInfo, setPlayoffInfo] = useState<Record<string, PlayoffInfo>>({});
   const [playoffOpen, setPlayoffOpen] = useState(false);
   const [playoffTarget, setPlayoffTarget] = useState<
@@ -80,6 +83,23 @@ export function usePlayoffControls(defaultLeagues: ApiLeague[], refreshLeagues?:
   }, [defaultLeagues]);
 
   const openPlayoffsDialog = useCallback((league: EditableLeague, isRegen: boolean) => {
+    // New brackets go through the approval draft (/admin/playoffs). This dialog
+    // remains for rebuilding a bracket generated outside the draft flow and for
+    // the destructive force-rebuild of a locked one.
+    const toDrafts = () => navigate(`/admin/playoffs?league=${encodeURIComponent(league.id)}`);
+    const hasResults = (playoffInfo[league.id]?.completedCount ?? 0) > 0 || (playoffInfo[league.id]?.liveCount ?? 0) > 0;
+    if (!isRegen) { toDrafts(); return; }
+    if (!hasResults) {
+      // A published draft is managed on the playoffs page; a legacy bracket stays here.
+      playoffsApi.getDraft(league.id)
+        .then(d => { if (d.status === 'published') toDrafts(); else openDialog(league, isRegen); })
+        .catch(() => openDialog(league, isRegen));
+      return;
+    }
+    openDialog(league, isRegen);
+  }, [navigate, playoffInfo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openDialog = useCallback((league: EditableLeague, isRegen: boolean) => {
     const playoffN = (defaultLeagues.find(l => l.id === league.id) as any)?.playoffTeamCount ?? 6;
     setPlayoffTarget({
       id: league.id,
