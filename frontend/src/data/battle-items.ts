@@ -1,24 +1,8 @@
 /**
- * Held items and natures for Draft Center sets. Items are a curated list of the
- * competitively relevant ones (not the full Showdown item dex); the set editor
- * still accepts free text, so a missing item is never a dead end.
+ * Held items and natures for Draft Center sets. Items live in items.ts.
  */
 import type { StatKey } from '@/lib/draft-center/types';
 
-export const ITEMS: string[] = [
-  'Absorb Bulb', 'Air Balloon', 'Assault Vest', 'Big Root', 'Black Belt', 'Black Glasses', 'Black Sludge',
-  'Blunder Policy', 'Booster Energy', 'Cell Battery', 'Charcoal', 'Choice Band', 'Choice Scarf', 'Choice Specs',
-  'Clear Amulet', 'Covert Cloak', 'Custap Berry', 'Damp Rock', 'Dragon Fang', 'Eject Button', 'Eject Pack',
-  'Eviolite', 'Expert Belt', 'Figy Berry', 'Flame Orb', 'Focus Band', 'Focus Sash', 'Grassy Seed', 'Grip Claw',
-  'Hard Stone', 'Heat Rock', 'Heavy-Duty Boots', 'Icy Rock', 'Iron Ball', 'Kee Berry', 'King\'s Rock',
-  'Lagging Tail', 'Leftovers', 'Leppa Berry', 'Life Orb', 'Light Clay', 'Loaded Dice', 'Lum Berry', 'Macho Brace',
-  'Magnet', 'Maranga Berry', 'Mental Herb', 'Metal Coat', 'Metronome', 'Miracle Seed', 'Muscle Band', 'Mystic Water',
-  'Never-Melt Ice', 'Poison Barb', 'Power Herb', 'Protective Pads', 'Punching Glove', 'Quick Claw', 'Razor Fang',
-  'Red Card', 'Ring Target', 'Rocky Helmet', 'Room Service', 'Safety Goggles', 'Salac Berry', 'Scope Lens',
-  'Sharp Beak', 'Shed Shell', 'Shell Bell', 'Silk Scarf', 'Silver Powder', 'Sitrus Berry', 'Smooth Rock',
-  'Soft Sand', 'Spell Tag', 'Terrain Extender', 'Throat Spray', 'Toxic Orb', 'Twisted Spoon', 'Utility Umbrella',
-  'Weakness Policy', 'White Herb', 'Wide Lens', 'Wise Glasses', 'Zoom Lens',
-];
 
 export interface Nature { name: string; plus: StatKey | null; minus: StatKey | null }
 
