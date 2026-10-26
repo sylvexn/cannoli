@@ -1,10 +1,11 @@
-import { useId, useMemo } from 'react';
+import { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ITEMS, NATURES, natureEffect } from '@/data/battle-items';
+import { NATURES, natureEffect } from '@/data/battle-items';
+import { ALL_ITEMS } from '@/data/items';
+import { MOVE_NAMES } from '@/data/move-names';
 import { MOVE_TYPES } from '@/data/move-types';
 import { getPokemonData } from '@/data/pokemon-data';
 import { TYPE_COLORS } from '@/lib/constants';
@@ -12,6 +13,7 @@ import {
   blankSet, calcStat, evTotal, learnableMoves, learnsetIds, moveId, MAX_SINGLE_EV, MAX_TOTAL_EVS,
 } from '@/lib/draft-center/sets';
 import { STAT_KEYS, STAT_LABELS, type DcMon, type DcSet, type StatKey } from '@/lib/draft-center/types';
+import { Combobox } from './combobox';
 import type { Ruleset } from '@/lib/draft-center/ruleset';
 
 /** Moveset / item / ability / nature / EVs / IVs for one Pokemon. Illegal values warn, never block. */
@@ -20,12 +22,15 @@ export function SetEditor({ mon, ruleset, onChange }: {
   ruleset: Ruleset;
   onChange: (set: DcSet) => void;
 }) {
-  const uid = useId();
   const data = getPokemonData(mon.name);
   const set = mon.set ?? blankSet(mon.name);
   const patch = (p: Partial<DcSet>) => onChange({ ...set, ...p });
 
-  const moveOptions = useMemo(() => learnableMoves(mon.name, ruleset.learnsetFormat), [mon.name, ruleset.learnsetFormat]);
+  // No learnset data for this mon -> offer every move rather than an empty list.
+  const moveOptions = useMemo(() => {
+    const l = learnableMoves(mon.name, ruleset.learnsetFormat);
+    return l.length ? l : Object.values(MOVE_NAMES).sort((a, b) => a.localeCompare(b));
+  }, [mon.name, ruleset.learnsetFormat]);
   const ids = useMemo(() => learnsetIds(mon.name, ruleset.learnsetFormat), [mon.name, ruleset.learnsetFormat]);
   const evs = evTotal(set);
   const effect = natureEffect(set.nature);
@@ -43,30 +48,18 @@ export function SetEditor({ mon, ruleset, onChange }: {
         {[0, 1, 2, 3].map(i => {
           const v = set.moves[i] ?? '';
           const type = MOVE_TYPES[v];
-          const illegal = !!v && moveOptions.length > 0 && !ids.has(moveId(v));
+          const illegal = !!v && ids.size > 0 && !ids.has(moveId(v));
           return (
-            <div key={i} className="relative">
-              <span
-                className="absolute left-2 top-1/2 -translate-y-1/2 size-2 rounded-full bg-surface-overlay ring-1 ring-white/10"
-                style={type ? { backgroundColor: TYPE_COLORS[type] } : undefined}
-              />
-              <Input
-                list={`${uid}-moves`}
-                value={v}
-                onChange={e => setMove(i, e.target.value)}
-                placeholder={`Move ${i + 1}`}
-                className={cn('pl-5 h-7 text-xs', illegal && 'border-amber-400/60 pr-7')}
-                aria-label={`Move ${i + 1}`}
-              />
-              {illegal && (
-                <span title={`${mon.name} can't learn this in ${ruleset.label}`} className="absolute right-2 top-1/2 -translate-y-1/2 text-amber-400">
-                  <AlertTriangle size={12} />
-                </span>
-              )}
-            </div>
-          );
+            <Combobox
+              key={i} value={v} options={moveOptions} onChange={x => setMove(i, x)}
+              placeholder={`Move ${i + 1}`} label={`Move ${i + 1}`} invalid={illegal}
+              leading={<>
+                <span className="shrink-0 size-2 rounded-full bg-surface-overlay ring-1 ring-white/10" style={type ? { backgroundColor: TYPE_COLORS[type] } : undefined} />
+                {illegal && <span title={`${mon.name} can't learn this in ${ruleset.label}`} className="shrink-0 text-amber-400"><AlertTriangle size={12} /></span>}
+              </>}
+            />
+        );
         })}
-        <datalist id={`${uid}-moves`}>{moveOptions.map(m => <option key={m} value={m} />)}</datalist>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
@@ -81,8 +74,7 @@ export function SetEditor({ mon, ruleset, onChange }: {
         </label>
         <label className="flex flex-col gap-0.5 min-w-0">
           <span className="text-[9px] font-mono uppercase text-text-muted">Item</span>
-          <Input list={`${uid}-items`} value={set.item} onChange={e => patch({ item: e.target.value })} placeholder="Item" className="h-7 text-xs" />
-          <datalist id={`${uid}-items`}>{ITEMS.map(i => <option key={i} value={i} />)}</datalist>
+          <Combobox value={set.item} options={ALL_ITEMS} onChange={v => patch({ item: v })} placeholder="Item" label="Item" />
         </label>
         <label className="flex flex-col gap-0.5 min-w-0">
           <span className="text-[9px] font-mono uppercase text-text-muted">Nature {effect && <span className="normal-case text-text-secondary">{effect}</span>}</span>
