@@ -54,7 +54,6 @@ import { CoachTeamsIndexPage } from '@/pages/coach-profile/teams-index';
 import { NotFoundPage } from '@/pages/not-found';
 
 // Lazy-loaded heavy routes
-const PlayoffsApprovalMockup = lazyWithReload(() => import("./pages/admin/mockups/playoffs").then(m => ({ default: m.PlayoffsApprovalMockup })));
 const AdminPlayoffs = lazyWithReload(() => import("./pages/admin/playoffs").then(m => ({ default: m.AdminPlayoffs })));
 const DraftBoardPage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftBoardPage })));
 const DraftPracticePage = lazyWithReload(() => import('./pages/draft-board').then(m => ({ default: m.DraftPracticePage })));
@@ -78,7 +77,6 @@ function AnalyticsBeacon() {
   usePageviewBeacon();
   return null;
 }
-import { AdminCenterMockup } from '@/pages/admin/mockups/admin-center';
 import { DevConsolePage } from '@/pages/admin/dev-console';
 
 export default function App() {
@@ -196,8 +194,6 @@ export default function App() {
                     <Route path="tickets/:id" element={<AdminTicketsRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
                     <Route path="sim" element={<AdminSimRoute />} />
-                    <Route path="mockups/playoffs" element={<Suspense fallback={null}><PlayoffsApprovalMockup /></Suspense>} />
-                    <Route path="mockups/admin-center/*" element={<AdminCenterMockup />} />
                   </Route>
                 </Route>
               </Route>
