@@ -71,7 +71,7 @@ export function sanitizeRoster(raw: unknown): DcMon[] {
     const name = str(r.name, MAX_NAME);
     if (!name) continue;
     const teraTypes = Array.isArray(r.teraTypes)
-      ? [...new Set(r.teraTypes.filter((t): t is string => typeof t === 'string'))]
+      ? [...new Set(r.teraTypes.filter((t): t is string => typeof t === 'string').map(t => t.trim().toLowerCase()))]
           .filter(t => (POKEMON_TYPES as readonly string[]).includes(t))
           .slice(0, MAX_TERA_TYPES)
       : [];
