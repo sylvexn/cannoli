@@ -234,6 +234,7 @@ export function applyDueTransactions(leagueId?: string): number {
           actorUsername: actor,
           dryRun: false,
           effectiveWeek: week,
+          actedWeek: req.week,
         });
         if (!result.ok) {
           failScheduled('fa', req.id, league.id, result.error, [req.teamId]);
