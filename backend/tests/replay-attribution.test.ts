@@ -89,7 +89,6 @@ describe('cosmetic forme resolution', () => {
   test.each([
     ['Minior-Indigo', 'Minior'], ['Florges-Blue', 'Florges'], ['Furfrou-Star', 'Furfrou'],
     ['Dudunsparce-Three-Segment', 'Dudunsparce'], ['Sinistcha-Masterpiece', 'Sinistcha'],
-    ['Tauros-Paldea-Combat', 'Tauros-Paldea'],
   ])('%s -> roster %s', (battle, roster) => {
     expect(resolveRosterPokemonName(['Garchomp', roster], battle)).toBe(roster);
   });

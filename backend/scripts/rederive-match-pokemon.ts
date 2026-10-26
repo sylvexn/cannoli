@@ -18,7 +18,9 @@
  *   - Only matches WITH a `replay_log` are touched. Manual admin-form results
  *     carry no log (recordMatchResult never sets replay_log), so hand-entered
  *     K/D is never clobbered.
- *   - S9 leagues are skipped (the XLSX RawKills sheet is their source of truth).
+ *   - S9 and S10 are skipped unless --include-legacy (XLSX is their source of truth).
+ *   - Hand-corrected matches (force-result/overwrite/forfeit in the activity log) are skipped.
+ *   - Stored pokemon names win over the current roster (Megas / dropped mons are not renamed).
  *   - Dry-run by default — prints a per-mon before/after diff. --apply writes.
  *   - Side→team mapping mirrors backfill-match-pokemon.ts (owner PS username,
  *     then |poke| roster overlap); a match that can't be mapped is skipped.
@@ -31,14 +33,16 @@
  *   bun run scripts/rederive-match-pokemon.ts --season s11- --apply
  */
 import { db, schema } from '../src/db';
-import { eq, and } from 'drizzle-orm';
+import { eq, lt } from 'drizzle-orm';
 import { tx } from '../src/lib/tx';
 import { ReplayParser } from '../src/lib/replay-parser';
 import { toUserid } from '../src/lib/ps-login';
-import { resolveRosterPokemonName } from '../src/lib/pokedex';
+import { resolveStoredName, isHandCorrected, diffRows } from '../src/lib/rederive';
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes('--apply');
+// S9/S10 are XLSX-sourced (the sheet is the source of truth); opt in explicitly.
+const INCLUDE_LEGACY = argv.includes('--include-legacy');
 const matchIdx = argv.indexOf('--match');
 const matchId = matchIdx >= 0 ? argv[matchIdx + 1] : null;
 const seasonIdx = argv.indexOf('--season');
@@ -60,12 +64,12 @@ if (seasonIdx >= 0 && !seasonPrefix) {
 console.log(`Mode:  ${APPLY ? 'APPLY (writing)' : 'DRY-RUN (no writes)'}`);
 console.log(`Scope: ${matchId ? `match "${matchId}"` : `matchId prefix "${seasonPrefix}"`}\n`);
 
-// S9 league ids — skipped (historical XLSX is source of truth).
+// S9 (and S10 unless --include-legacy) league ids — skipped (historical XLSX is source of truth).
 const s9LeagueIds = new Set(
   db.select({ id: schema.leagues.id })
     .from(schema.leagues)
     .innerJoin(schema.seasons, eq(schema.leagues.seasonId, schema.seasons.id))
-    .where(eq(schema.seasons.seasonNumber, 9))
+    .where(INCLUDE_LEGACY ? eq(schema.seasons.seasonNumber, 9) : lt(schema.seasons.seasonNumber, 11))
     .all()
     .map(r => r.id),
 );
@@ -77,6 +81,7 @@ const candidates = db.select({
   homeTeamId: schema.matches.homeTeamId,
   awayTeamId: schema.matches.awayTeamId,
   replayLog: schema.matches.replayLog,
+  forfeitedBy: schema.matches.forfeitedBy,
 }).from(schema.matches).all().filter(m =>
   m.replayLog != null &&
   m.homeTeamId != null &&
@@ -84,6 +89,11 @@ const candidates = db.select({
   !s9LeagueIds.has(m.leagueId) &&
   (matchId ? m.id === matchId : m.id.startsWith(seasonPrefix!)),
 );
+
+// Activity-log entries that mark a human-corrected result.
+const correctionLogs = db.select({ type: schema.activityLog.type, metadata: schema.activityLog.metadata })
+  .from(schema.activityLog).all()
+  .filter(l => l.type === 'match_force_result' || l.type === 'match_result_overwritten');
 
 console.log(`Found ${candidates.length} candidate match(es) with a replay_log in scope.\n`);
 
@@ -160,8 +170,16 @@ let rewritten = 0;
 let skippedNoMap = 0;
 let skippedParse = 0;
 let unchanged = 0;
+let skippedCorrected = 0;
+const killDeltaByLeague = new Map<string, { matches: number; kills: number }>();
 
 for (const m of candidates) {
+  if (isHandCorrected(m, correctionLogs)) {
+    console.log(`[skip] ${m.id}: hand-corrected (force-result / overwrite / forfeit) — left untouched`);
+    skippedCorrected++;
+    continue;
+  }
+
   let result;
   try {
     result = ReplayParser.parse(m.replayLog!);
@@ -178,21 +196,7 @@ for (const m of candidates) {
     continue;
   }
 
-  const newRows: NewRow[] = result.pokemon
-    .filter(p => p.appeared)
-    .map(p => {
-      const teamId = p.player === 'p1' ? sides.p1 : sides.p2;
-      return {
-        teamId,
-        pokemonName: resolveRosterPokemonName(rosterNamesFor(teamId), p.species),
-        kills: p.kills,
-        deaths: p.deaths,
-        teraUsed: p.teraUsed,
-        teraType: p.teraType,
-      };
-    });
-
-  // Current rows for the diff.
+  // Stored rows for this match: the diff baseline AND the preferred name source.
   const oldRows = db.select({
     teamId: schema.matchPokemon.teamId,
     pokemonName: schema.matchPokemon.pokemonName,
@@ -202,29 +206,33 @@ for (const m of candidates) {
     teraType: schema.matchPokemon.teraType,
   }).from(schema.matchPokemon).where(eq(schema.matchPokemon.matchId, m.id)).all();
 
-  const key = (r: { teamId: string; pokemonName: string }) => `${r.teamId}|${r.pokemonName}`;
-  const oldByKey = new Map(oldRows.map(r => [key(r), r]));
-  const newByKey = new Map(newRows.map(r => [key(r), r]));
+  const newRows: NewRow[] = result.pokemon
+    .filter(p => p.appeared)
+    .map(p => {
+      const teamId = p.player === 'p1' ? sides.p1 : sides.p2;
+      const stored = oldRows.filter(r => r.teamId === teamId).map(r => r.pokemonName);
+      return {
+        teamId,
+        pokemonName: resolveStoredName(stored, rosterNamesFor(teamId), p.species),
+        kills: p.kills,
+        deaths: p.deaths,
+        teraUsed: p.teraUsed,
+        teraType: p.teraType,
+      };
+    });
 
-  const changeLines: string[] = [];
-  for (const [k, nr] of newByKey) {
-    const or = oldByKey.get(k);
-    if (!or) {
-      changeLines.push(`   + ${nr.pokemonName.padEnd(16)} K=${nr.kills} D=${nr.deaths}  (new)`);
-    } else if (or.kills !== nr.kills || or.deaths !== nr.deaths || or.teraUsed !== nr.teraUsed || (or.teraType ?? null) !== (nr.teraType ?? null)) {
-      changeLines.push(`   ~ ${nr.pokemonName.padEnd(16)} K=${or.kills}→${nr.kills} D=${or.deaths}→${nr.deaths}`);
-    }
-  }
-  for (const [k, or] of oldByKey) {
-    if (!newByKey.has(k)) changeLines.push(`   - ${or.pokemonName.padEnd(16)} K=${or.kills} D=${or.deaths}  (removed)`);
-  }
+  const { lines: changeLines, killDelta } = diffRows(oldRows, newRows);
 
   if (changeLines.length === 0) {
     unchanged++;
     continue;
   }
 
-  console.log(`${m.id}  (${result.players.p1} vs ${result.players.p2})`);
+  const agg = killDeltaByLeague.get(m.leagueId) ?? { matches: 0, kills: 0 };
+  agg.matches++; agg.kills += killDelta;
+  killDeltaByLeague.set(m.leagueId, agg);
+
+  console.log(`${m.id}  (${result.players.p1} vs ${result.players.p2})  net kills ${killDelta >= 0 ? '+' : ''}${killDelta}`);
   changeLines.forEach(l => console.log(l));
   console.log('');
 
@@ -253,9 +261,11 @@ for (const m of candidates) {
 console.log('── Summary ──');
 console.log(`  candidates:         ${candidates.length}`);
 console.log(`  unchanged:          ${unchanged}`);
-console.log(`  ${APPLY ? 'rewritten:          ' : 'would rewrite:      '}${APPLY ? rewritten : candidates.length - unchanged - skippedNoMap - skippedParse}`);
+console.log(`  ${APPLY ? 'rewritten:          ' : 'would rewrite:      '}${APPLY ? rewritten : candidates.length - unchanged - skippedNoMap - skippedParse - skippedCorrected}`);
+console.log(`  skipped (corrected):${skippedCorrected}`);
 console.log(`  skipped (no map):   ${skippedNoMap}`);
 console.log(`  skipped (parse):    ${skippedParse}`);
-if (!APPLY && candidates.length - unchanged - skippedNoMap - skippedParse > 0) {
+for (const [lg, a] of killDeltaByLeague) console.log(`  ${lg}: ${a.matches} match(es) differ, net kills ${a.kills >= 0 ? '+' : ''}${a.kills}`);
+if (!APPLY && candidates.length - unchanged - skippedNoMap - skippedParse - skippedCorrected > 0) {
   console.log('\nRe-run with --apply to write these changes.');
 }
