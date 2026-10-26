@@ -3,7 +3,7 @@
  *  - per-mon stats come from match_pokemon, so departed mons keep their kills
  *    (and cosmetic-forme names fold onto the roster name)
  *  - a 0-0 forfeit is a W/L (winner_team_id), never a draw
- *  - playoff matches never touch standings ("record is record")
+ *  - playoff matches never touch standings or per-mon stats ("record is record")
  *  - a playoff series counts as ONE win/loss however many games it took
  */
 import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
@@ -65,6 +65,7 @@ beforeAll(() => {
       winnerTeamId: w, status: 'completed',
     }).run();
   }
+  mp(`${tag}-p1`, A, 'Garchomp', 5, 1);
 });
 
 afterAll(() => {
@@ -91,6 +92,11 @@ describe('per-Pokemon stats come from match_pokemon', () => {
     const names = stats().map(s => s.pokemonName);
     expect(names).toContain('Furfrou');
     expect(names).not.toContain('Furfrou-Star');
+  });
+
+  test('playoff games stay out of per-mon season stats', () => {
+    const chomp = stats().find(s => s.pokemonName === 'Garchomp')!;
+    expect(chomp).toMatchObject({ kills: 3, deaths: 0, gp: 1 });
   });
 
   test('reveal gate: weeks past maxWeek are excluded', () => {
