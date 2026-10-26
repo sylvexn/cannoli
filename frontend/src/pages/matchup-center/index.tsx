@@ -22,32 +22,23 @@ import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
 import { resolveRuleset } from '@/lib/draft-center/ruleset';
 import { teamToRoster } from '@/lib/draft-center/roster';
 import type { League } from '@/lib/types';
+import { sortLeaguesByActivity } from './league-order';
 import {
   LayoutDashboard, Grid3X3, BarChart3, Gauge, Swords, RotateCcw,
 } from 'lucide-react';
 import type { MatchupTab } from './use-matchup-state';
 
-/** Phase priority used when picking a default "your team" — drafting > regular >
- *  playoffs > predraft > offseason. Higher = more urgent / interesting. */
-const PHASE_PRIORITY: Record<string, number> = {
-  draft: 5,
-  regular: 4,
-  playoffs: 3,
-  predraft: 2,
-  offseason: 1,
-};
-
-function phaseRank(league: League): number {
-  return PHASE_PRIORITY[league.season.phase] ?? 0;
-}
-
 export function MatchupCenterPage() {
   const { state, dispatch, activeTeamA, activeTeamB } = useMatchupState();
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const speedInitRef = useRef(false);
   const { user } = useAuth();
   const { leagues } = useAppData();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initRef = useRef(false);
+  /** Bumped by Reset to re-run the default-team resolution. */
+  const [resetKey, setResetKey] = useState(0);
 
   /** League + teams roster of the user's pre-populated "your team" — drives
    *  the opponent gem grid. Cleared/replaced when team A changes. */
@@ -66,6 +57,10 @@ export function MatchupCenterPage() {
     const paramLeagueId = searchParams.get('leagueId');
     const paramTeamA = searchParams.get('teamA');
     const paramTeamB = searchParams.get('teamB');
+
+    // A selection restored from the session (Back navigation) wins over the default.
+    const deepLinked = !!(paramLeagueId && (paramTeamA || paramTeamB)) || !!searchParams.get('dc');
+    if (stateRef.current.teamA.length > 0 && !deepLinked) return;
 
     (async () => {
       // Resolve team A
@@ -89,7 +84,7 @@ export function MatchupCenterPage() {
       // Fallback: find user's own team in any league, prioritising the
       // most-active league (drafting > regular > playoffs > predraft > offseason).
       if (!teamAResolved && user && !searchParams.get('dc')) {
-        const sortedLeagues = [...leagues].sort((a, b) => phaseRank(b) - phaseRank(a));
+        const sortedLeagues = sortLeaguesByActivity(leagues);
         for (const league of sortedLeagues) {
           const teams = await api.getTeams(league.id).catch(() => []);
           const team = teams.find(t => t.userId != null && String(t.userId) === user.id);
@@ -126,7 +121,7 @@ export function MatchupCenterPage() {
         }
       }
     })();
-  }, [leagues, searchParams, user, dispatch]);
+  }, [leagues, searchParams, user, dispatch, resetKey]);
 
   // Deep link from the Draft Center editor: ?dc=<team id> loads that team as side A.
   const paramDc = searchParams.get('dc');
@@ -194,6 +189,17 @@ export function MatchupCenterPage() {
     }
   }, [state.teamA, state.teamB, dispatch]);
 
+  function resetAll() {
+    dispatch({ type: 'RESET' });
+    setOpponentContext(null);
+    setNoManagedTeam(false);
+    speedInitRef.current = false;
+    // Drop deep-link params so the default (your own team) resolves again.
+    setSearchParams({}, { replace: true });
+    initRef.current = false;
+    setResetKey(k => k + 1);
+  }
+
   const hasSubTeam = state.subTeamA.size > 0 || state.subTeamB.size > 0;
 
   return (
@@ -225,6 +231,15 @@ export function MatchupCenterPage() {
             side="b"
           />
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={resetAll}
+          disabled={!state.teamASource && !state.teamBSource}
+          title="Clear both teams back to your default"
+        >
+          <RotateCcw size={13} /> Reset
+        </Button>
       </div>
 
       {/* Roster Strip — always visible */}

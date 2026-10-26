@@ -5,6 +5,8 @@ import type { ApiTeam } from '@/lib/api';
 import { rosterFromApi } from '@/lib/roster-from-api';
 import type { RosterPokemon } from '@/lib/types';
 import type { TeamSource } from './use-matchup-state';
+import { useAuth } from '@/lib/auth-context';
+import { orderLeaguesForUser } from './league-order';
 import { CustomTeamBuilder } from './custom-team-builder';
 import { useDraftCenterTeams } from '@/lib/draft-center/store';
 import { useAllLeagues } from '@/lib/draft-center/use-all-leagues';
@@ -29,6 +31,7 @@ interface TeamPickerProps {
 
 export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
   const { leagues } = useAppData();
+  const { user } = useAuth();
   const [teamsPerLeague, setTeamsPerLeague] = useState<Record<string, ApiTeam[]>>({});
   const [showCustom, setShowCustom] = useState(false);
   const { teams: dcTeams } = useDraftCenterTeams();
@@ -118,7 +121,7 @@ export function TeamPicker({ source, onSelect, side }: TeamPickerProps) {
             <SelectSeparator />
           </>
         )}
-        {leagues.map(league => {
+        {orderLeaguesForUser(leagues, teamsPerLeague, user?.id).map(league => {
           const teams = teamsPerLeague[league.id] || [];
           return (
             <SelectGroup key={league.id}>
