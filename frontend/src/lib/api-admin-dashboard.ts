@@ -9,7 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export interface QueueItem { id: number; leagueId: string; leagueName: string; what: string; at: string | null }
 export interface Queue { count: number; top: QueueItem[] }
-export interface TicketRow { id: string | number; title: string; type?: string; status?: string; created?: string }
+export interface TicketRow { id: string | number; title: string; type?: string; status?: string; created?: string; createdAt?: string }
 export interface TicketsSummary { open: number; byStatus: Record<string, number>; top: TicketRow[] }
 export interface AdminQueues {
   trades: Queue; fa: Queue; tera: Queue;
@@ -32,7 +32,7 @@ function toTickets(raw: any): TicketsSummary | null {
   const src = raw.byStatus ?? raw.counts ?? raw;
   const byStatus: Record<string, number> = {};
   for (const [k, v] of Object.entries(src)) if (typeof v === 'number') byStatus[k] = v;
-  const open = (byStatus.new ?? 0) + (byStatus.triaged ?? 0);
+  const open = (byStatus.new ?? 0) + (byStatus.triaged ?? 0) + (byStatus.in_progress ?? 0);
   const top = Array.isArray(raw.top) ? raw.top : Array.isArray(raw.recent) ? raw.recent : [];
   return { open, byStatus, top };
 }

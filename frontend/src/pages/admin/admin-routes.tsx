@@ -24,7 +24,6 @@ import { AdminFreeAgents } from './admin-free-agents';
 import { AdminMoveCategories } from './admin-move-categories';
 import { AdminActivityLog } from './admin-activity-log';
 import { AdminApiLogs } from './admin-api-logs';
-import { AdminFeedback } from './admin-feedback';
 import { Observability } from './observability';
 import { AdminAnalytics } from './analytics';
 import { AdminBot } from './admin-bot';
@@ -34,7 +33,7 @@ import { AdminAnnouncements } from './announcements';
 import { getErrorMessage } from '@/lib/errors';
 import {
   Users, Globe, ArrowLeftRight, ScrollText, Swords,
-  CalendarCog, Shield, MessageSquare,
+  CalendarCog, Shield,
   Trophy, UserPlus, Award, Bot, FlaskConical, Activity, Gauge,
   UsersRound, Megaphone, BarChart3,
 } from 'lucide-react';
@@ -96,9 +95,6 @@ export const AdminApiLogsRoute = () => (
       <AdminApiLogs />
     </AdminSection>
   </DevOnly>
-);
-export const AdminFeedbackRoute = () => (
-  <AdminSection icon={MessageSquare} title="Feedback"><AdminFeedback /></AdminSection>
 );
 export const AdminObservabilityRoute = () => {
   // Mark the dev's observability view as "seen" on mount so the nav unread

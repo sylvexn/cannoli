@@ -79,7 +79,7 @@ export function AdminDashboard() {
 
   const t = q?.tickets;
   const tickets: Row[] = (t?.top ?? []).map(r => ({
-    primary: r.title, secondary: String(r.id), meta: ago(r.created ?? null),
+    primary: r.title, secondary: `CAN-${r.id}`, meta: ago(r.createdAt ?? r.created ?? null),
     tag: r.type, tone: r.type === 'bug' ? 'border-loss/40 text-loss' : 'border-neon/40 text-neon',
     to: `/admin/tickets/${r.id}`,
   }));
