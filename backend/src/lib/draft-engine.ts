@@ -7,7 +7,8 @@ import { db, schema } from '../db';
 import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { tx } from './tx';
 import { getBaseFormName } from './pokedex';
-import { effectiveCost } from './tera-cost';
+import { captainHeadroomNeeded as sharedHeadroom, megaLimit } from '@cannoli/rules';
+import { getLeagueRuleset } from './rulesets';
 import { getLeagueCostMap } from './league-costs';
 import { validateRosterLegality } from './roster-legality';
 
@@ -95,9 +96,9 @@ const MIN_PICK_COST = 1;
 
 /**
  * Worst-case extra points needed to designate `slots` captains from a roster
- * of {name, tier} entries. Tier 9→12, 8→10, 7→9, 6→8, 5→6, 4→5, 3→4, 2→2, 1→1.
- * Mirrors frontend draft-rules.captainHeadroomNeeded: only tier-≤9 mons are
- * eligible, tera-banned mons are excluded, and we sum the highest markups.
+ * of {name, tier} entries, using the league ruleset's markup table: only
+ * markup-table tiers are eligible, tera-banned mons are excluded, and we sum
+ * the highest markups.
  *
  * `leagueId` is used to resolve tera-banned status from the league's cost format
  * rather than the global pokemon table.
@@ -113,13 +114,11 @@ export function captainHeadroomNeeded(
   const teraBannedNames = new Set(
     roster.map(r => r.name).filter(name => costs.get(name)?.teraBanned),
   );
-  const markups = roster
-    .filter(r => r.tier >= 1 && r.tier <= 9 && !teraBannedNames.has(r.name))
-    .map(r => Math.max(0, effectiveCost(r.tier, true) - r.tier))
-    .sort((a, b) => b - a);
-  let total = 0;
-  for (let i = 0; i < Math.min(slots, markups.length); i++) total += markups[i];
-  return total;
+  return sharedHeadroom(
+    getLeagueRuleset(leagueId),
+    roster.map(r => ({ tier: r.tier, teraBanned: teraBannedNames.has(r.name) })),
+    slots,
+  );
 }
 
 /**
@@ -130,8 +129,9 @@ export function validatePick(
   pokemonName: string,
   teamId: string,
   leagueId: string,
-  pointCap: number,
 ): PickValidation {
+  const rs = getLeagueRuleset(leagueId);
+  const pointCap = rs.pointCap;
   // 1. Pokemon exists and isn't banned
   const poke = db.select().from(schema.pokemon)
     .where(eq(schema.pokemon.name, pokemonName))
@@ -190,7 +190,7 @@ export function validatePick(
     nationalDexNumber: poke.nationalDexNumber,
   });
 
-  const rosterViolation = validateRosterLegality(projectedRosterEntries, pokeByName, { pointCap });
+  const rosterViolation = validateRosterLegality(projectedRosterEntries, pokeByName, { ruleset: rs });
   if (rosterViolation) {
     // Map shared violation codes back to the PickErrorCode wire values the frontend expects,
     // preserving the existing message style exactly.
@@ -203,7 +203,7 @@ export function validatePick(
       };
     }
     if (rosterViolation.code === 'mega_cap') {
-      return { valid: false, code: 'mega_cap', error: `Max 1 Mega per team — already have one` };
+      return { valid: false, code: 'mega_cap', error: `Max ${megaLimit(rs)} Mega per team — already have ${megaLimit(rs) === 1 ? 'one' : 'them'}` };
     }
     if (rosterViolation.code === 'dup_natdex') {
       // Find the existing team mon that caused the collision.
@@ -240,13 +240,10 @@ export function validatePick(
   const league = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
     .get();
-  const season = league
-    ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get()
-    : null;
 
   if (state && state.status === 'in_progress' && league?.draftOrder) {
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+    const snakeOrder = generateSnakeOrder(teamOrder, rs.rosterSize);
     const futureSlots = snakeOrder
       .slice(state.currentPickIndex + 1)
       .filter(s => s.teamId === teamId).length;
@@ -265,7 +262,7 @@ export function validatePick(
     // to designate the configured # of captains at marked-up cost. We compute the
     // worst-case markup over the *projected post-pick roster* (current picks +
     // this incoming mon), and require remainingAfter ≥ reserve + futureSlots×MIN.
-    const captainSlots = season?.teraCaptainSlots ?? 0;
+    const captainSlots = rs.teraCaptainSlots;
     if (captainSlots > 0) {
       const projectedRoster = [
         ...teamPicks.map(p => ({ name: p.pokemonName, tier: p.tier })),
@@ -304,8 +301,9 @@ export function validatePick(
 export function getAutoPick(
   teamId: string,
   leagueId: string,
-  pointCap: number,
 ): { name: string; tier: number } | null {
+  const rs = getLeagueRuleset(leagueId);
+  const pointCap = rs.pointCap;
   // Get points already used + same-species set for this team
   const teamPicks = db.select().from(schema.draftPicks)
     .where(and(
@@ -324,7 +322,7 @@ export function getAutoPick(
   const rosterMons = rosterNames.length
     ? db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, rosterNames)).all()
     : [];
-  const teamHasMega = rosterMons.some(m => m.formCategory === 'mega');
+  const teamAtMegaCap = rosterMons.filter(m => m.formCategory === 'mega').length >= megaLimit(rs);
 
   // Get all already-drafted pokemon names in this league
   const allPicks = db.select({ name: schema.draftPicks.pokemonName })
@@ -341,20 +339,17 @@ export function getAutoPick(
   const league = db.select().from(schema.leagues)
     .where(eq(schema.leagues.id, leagueId))
     .get();
-  const season = league
-    ? db.select().from(schema.seasons).where(eq(schema.seasons.id, league.seasonId)).get()
-    : null;
   // Load the league's cost map once — used for banned/tier/teraBanned resolution.
   const costMap = getLeagueCostMap(leagueId);
 
   let maxAffordable = remaining;
   if (state && state.status === 'in_progress' && league?.draftOrder) {
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+    const snakeOrder = generateSnakeOrder(teamOrder, rs.rosterSize);
     const futureSlots = snakeOrder
       .slice(state.currentPickIndex + 1)
       .filter(s => s.teamId === teamId).length;
-    const captainSlots = season?.teraCaptainSlots ?? 0;
+    const captainSlots = rs.teraCaptainSlots;
     const captainReserve = captainSlots > 0
       ? captainHeadroomNeeded(teamPicks.map(p => ({ name: p.pokemonName, tier: p.tier })), captainSlots, leagueId)
       : 0;
@@ -381,7 +376,7 @@ export function getAutoPick(
     if (effectiveTier <= 0 || effectiveTier > maxAffordable) return false;
     if (teamSpecies.has(getBaseFormName(p.name))) return false;
     if (p.nationalDexNumber != null && teamDex.has(p.nationalDexNumber)) return false;
-    if (teamHasMega && p.formCategory === 'mega') return false;
+    if (teamAtMegaCap && p.formCategory === 'mega') return false;
     return true;
   };
 
@@ -481,7 +476,8 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
   if (!season) return null;
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const rounds = league.rosterSize;
+  const rs = getLeagueRuleset(leagueId);
+  const rounds = rs.rosterSize;
 
   const snakeOrder = generateSnakeOrder(teamOrder, rounds);
 
@@ -520,9 +516,9 @@ export function getDraftSnapshot(leagueId: string): DraftStateSnapshot | null {
     picks,
     snakeOrder,
     teamPoints,
-    pointCap: season.pointCap,
-    rosterSize: league.rosterSize,
-    teraCaptainSlots: season.teraCaptainSlots,
+    pointCap: rs.pointCap,
+    rosterSize: rs.rosterSize,
+    teraCaptainSlots: rs.teraCaptainSlots,
   };
 }
 
@@ -565,7 +561,8 @@ function _executePickUnlocked(
     if (!season) return { success: false as const, error: 'Season not found', code: 'season_not_found' as const };
 
     const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+    const rs = getLeagueRuleset(leagueId);
+    const snakeOrder = generateSnakeOrder(teamOrder, rs.rosterSize);
 
     // Check it's the right team's turn (skipped for staff-override force-picks)
     const currentSlot = snakeOrder[state.currentPickIndex];
@@ -577,7 +574,7 @@ function _executePickUnlocked(
     }
 
     // Validate the pick
-    const validation = validatePick(pokemonName, teamId, leagueId, season.pointCap);
+    const validation = validatePick(pokemonName, teamId, leagueId);
     if (!validation.valid) {
       return { success: false as const, error: validation.error!, code: validation.code };
     }
@@ -779,7 +776,7 @@ export function handleTimerExpiry(leagueId: string): { paused: true; teamId: str
   if (!league) return null;
 
   const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-  const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+  const snakeOrder = generateSnakeOrder(teamOrder, getLeagueRuleset(leagueId).rosterSize);
   const currentSlot = snakeOrder[state.currentPickIndex];
   if (!currentSlot) return null;
 
@@ -818,7 +815,7 @@ export function executeAutoPick(leagueId: string, actor?: string): ReturnType<ty
       timerStartedAt: new Date().toISOString(),
     }).where(eq(schema.draftState.leagueId, leagueId)).run();
 
-    const autoPick = getAutoPick(state.timerExpiredForTeam!, leagueId, season.pointCap);
+    const autoPick = getAutoPick(state.timerExpiredForTeam!, leagueId);
     if (!autoPick) {
       throw new Error('No valid auto-pick available');
     }
@@ -859,7 +856,7 @@ export function skipPick(
     if (!league) return { success: false as const, error: 'League not found' };
 
     const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
-    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+    const snakeOrder = generateSnakeOrder(teamOrder, getLeagueRuleset(leagueId).rosterSize);
 
     const currentSlot = snakeOrder[state.currentPickIndex];
     const skippedTeam = state.timerExpiredForTeam ?? currentSlot?.teamId ?? 'unknown';

@@ -12,6 +12,7 @@ import { getLeague } from '../lib/queries';
 import { checkLeagueArchived } from '../lib/archive-guard';
 import { logServerFault } from '../lib/request-log';
 import { registerBroadcastServer, publishWs } from '../lib/ws-broadcast';
+import { getLeagueRuleset } from '../lib/rulesets';
 
 /**
  * Stable identity for an Elysia WS handler arg. Elysia 1.4 builds a NEW
@@ -146,7 +147,7 @@ function tickTimers() {
     const league = getLeague(s.leagueId);
     if (!league?.draftOrder) continue;
     const teamOrder: string[] = JSON.parse(league.draftOrder);
-    const snakeOrder = generateSnakeOrder(teamOrder, league.rosterSize);
+    const snakeOrder = generateSnakeOrder(teamOrder, getLeagueRuleset(s.leagueId).rosterSize);
     const slot = snakeOrder[s.currentPickIndex];
     if (!slot) continue;
 

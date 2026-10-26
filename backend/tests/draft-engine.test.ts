@@ -34,7 +34,7 @@ describe('validatePick', () => {
   // are covered without needing a fixture harness. Skipped automatically if
   // the dev DB hasn't been seeded.
   test('unknown Pokemon → not_found', () => {
-    const result = validatePick('Definitely Not A Pokemon', 'sapphire-pow', 'sapphire', 110);
+    const result = validatePick('Definitely Not A Pokemon', 'sapphire-pow', 'sapphire');
     // Either the pokemon lookup fails (not_found) or the league/team lookups
     // upstream throw — both are acceptable as "rejected"; we just want to
     // confirm validatePick doesn't return { valid: true } here.
