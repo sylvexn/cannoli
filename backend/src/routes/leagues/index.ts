@@ -8,6 +8,7 @@ import { faRequestRoutes } from './fa-requests';
 import { pokemonRoutes } from './pokemon';
 import { archiveRoutes } from './archive';
 import { speedTierRoutes } from './speed-tiers';
+import { getLeagueRuleset } from '../../lib/rulesets';
 
 export const leagueRoutes = new Elysia()
 
@@ -45,6 +46,7 @@ export const leagueRoutes = new Elysia()
     );
     return leagues.map(l => {
       const season = seasonsById.get(l.seasonId) ?? null;
+      const ruleset = getLeagueRuleset(l.id);
       return ({
       id: l.id,
       name: l.name,
@@ -57,6 +59,10 @@ export const leagueRoutes = new Elysia()
       // league's pool is drafted/valued against. Drives the frontend's cost
       // display + the backend draft/FA/trade cost math (see lib/league-costs.ts).
       costFormat: l.costFormat,
+      // Resolved ruleset (source of truth for cap/tera/roster/mega rules). The
+      // season.* fields below are compat aliases derived from it, per league.
+      rulesetId: l.rulesetId ?? null,
+      ruleset,
       // Canonical deadline-cutoff timezone for this league. The auto-forfeit
       // job anchors end-of-day to this zone; the frontend (sweep 3c) labels
       // each user's local rendering against it.
@@ -77,8 +83,8 @@ export const leagueRoutes = new Elysia()
         phase: l.phase,
         currentWeek: l.currentWeek,
         totalWeeks: l.totalWeeks,
-        pointCap: season.pointCap,
-        teraCaptainSlots: season.teraCaptainSlots,
+        pointCap: ruleset.pointCap,
+        teraCaptainSlots: ruleset.teraCaptainSlots,
         tradeDeadlineWeek: l.tradeDeadlineWeek,
         rosterSize: l.rosterSize,
         minRosterSize: l.minRosterSize,

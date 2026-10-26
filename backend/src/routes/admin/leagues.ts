@@ -9,6 +9,11 @@ import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
 import { scheduleDeadline } from '../../lib/deadline';
 import { applyDueTransactions } from '../../lib/scheduled-transactions';
+import { createInstance, editLeagueRules, type RuleEdit } from '../../lib/ruleset-instances';
+import { getLeagueRuleset, getRuleset, rulesetUsage } from '../../lib/rulesets';
+
+class RuleEditError extends Error {}
+const rulesetUsageFrozen = (id: number) => !!getRuleset(id) && rulesetUsage(id).frozen;
 
 export const leagueAdminRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -23,8 +28,19 @@ export const leagueAdminRoutes = new Elysia()
     const season = db.select().from(schema.seasons).orderBy(desc(schema.seasons.seasonNumber)).get();
     if (!season) { set.status = 400; return { error: 'No active season' }; }
 
-    db.insert(schema.leagues).values({ id, name: name.trim(), color: color || '#888888', seasonId: season.id }).run();
-    return { id };
+    // New league plays under a private copy of a sibling's ruleset (else the defaults),
+    // and takes its cost format from it.
+    const sibling = db.select().from(schema.leagues).where(eq(schema.leagues.seasonId, season.id)).get();
+    const inst = tx(() => {
+      const r = createInstance(`${name.trim()} rules`, { sourceId: sibling?.rulesetId, userId: parseInt(user.id) });
+      db.insert(schema.leagues).values({
+        id, name: name.trim(), color: color || '#888888', seasonId: season.id,
+        rulesetId: r.id, costFormat: r.costFormat, rosterSize: r.rosterSize,
+        minRosterSize: r.rosterMin, maxRosterSize: r.rosterMax,
+      }).run();
+      return r;
+    });
+    return { id, rulesetId: inst.id };
   })
 
   .put('/api/leagues/:leagueId', ({ params, query, body, user, set }) => {
@@ -137,12 +153,35 @@ export const leagueAdminRoutes = new Elysia()
       }
     }
 
-    // pointCap and teraCaptainSlots remain season-wide settings.
-    const seasonUpdates: Record<string, unknown> = {};
-    if (pointCap !== undefined) seasonUpdates.pointCap = pointCap;
-    if (teraCaptainSlots !== undefined) seasonUpdates.teraCaptainSlots = teraCaptainSlots;
-
-    tx(() => {
+    // pointCap / teraCaptainSlots are RULESET fields, edited for this league only
+    // (never the season row). Unchanged values are no-ops so full-form PUTs stay valid.
+    const cur = getLeagueRuleset(params.leagueId);
+    const ruleEdit: RuleEdit = {};
+    if (pointCap !== undefined && pointCap !== cur.pointCap) {
+      if (!Number.isInteger(pointCap) || (pointCap as number) < 1) { set.status = 400; return { error: 'pointCap must be a positive integer' }; }
+      ruleEdit.pointCap = pointCap as number;
+    }
+    if (teraCaptainSlots !== undefined && teraCaptainSlots !== cur.teraCaptainSlots) {
+      if (!Number.isInteger(teraCaptainSlots) || (teraCaptainSlots as number) < 0) { set.status = 400; return { error: 'teraCaptainSlots must be a non-negative integer' }; }
+      ruleEdit.teraCaptainSlots = teraCaptainSlots as number;
+    }
+    const hasRuleEdit = Object.keys(ruleEdit).length > 0;
+    if (hasRuleEdit && league.rulesetId != null && rulesetUsageFrozen(league.rulesetId)) {
+      set.status = 409;
+      return {
+        error: 'Ruleset is frozen for this league',
+        code: 'RULESET_FROZEN',
+        rulesetId: league.rulesetId,
+        fields: Object.keys(ruleEdit),
+        hint: `Fork it for this league: POST /api/admin/rulesets/${league.rulesetId}/fork {"leagueId":"${league.id}","changes":{...}} (predraft/draft only)`,
+      };
+    }
+    try { tx(() => {
+      if (hasRuleEdit) {
+        const r = editLeagueRules(league, ruleEdit, parseInt(user.id));
+        if ('error' in r) throw new RuleEditError(r.error);
+        if (r.frozen) throw new RuleEditError('Ruleset is frozen for this league');
+      }
       if (Object.keys(leagueUpdates).length > 0) {
         db.update(schema.leagues).set(leagueUpdates).where(eq(schema.leagues.id, params.leagueId)).run();
       }
@@ -172,20 +211,20 @@ export const leagueAdminRoutes = new Elysia()
         }
       }
 
-      if (Object.keys(seasonUpdates).length > 0) {
-        db.update(schema.seasons).set(seasonUpdates).where(eq(schema.seasons.id, league.seasonId)).run();
-      }
-      if (Object.keys(leagueUpdates).length > 0 || Object.keys(seasonUpdates).length > 0) {
+      if (Object.keys(leagueUpdates).length > 0 || hasRuleEdit) {
         db.insert(schema.activityLog).values({
           type: 'league_config_updated',
           category: 'config',
           actor: user.username,
           leagueId: params.leagueId,
           description: `Updated config for ${league.name}`,
-          metadata: JSON.stringify({ leagueUpdates, seasonUpdates }),
+          metadata: JSON.stringify({ leagueUpdates, ruleEdit }),
         }).run();
       }
-    });
+    }); } catch (e) {
+      if (e instanceof RuleEditError) { set.status = e.message.includes('frozen') ? 409 : 400; return { error: e.message }; }
+      throw e;
+    }
 
     return { success: true };
   })

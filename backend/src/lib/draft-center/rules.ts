@@ -1,74 +1,49 @@
 /**
  * Draft Center rulesets + roster validator.
  *
- * A "ruleset" is DERIVED from an existing league (cost format, budget, roster
- * size, tera config). `resolveRuleset` is the single seam: when a real rulesets
- * table ever exists, only this function changes.
+ * Teams attach to a real `rulesets` row (draft_center_teams.ruleset_id); legacy
+ * league-keyed teams resolve to their league's ruleset.
  *
  * Validation WARNS, it never blocks — callers store illegal teams as-is and the
  * UI renders the violations. The validator is pure (cost lookup injected) so it
  * is unit-testable without a DB; `validateForRuleset` wires the real cost map.
  */
 
-import { db, schema } from '../../db';
 import { eq } from 'drizzle-orm';
-import { COST_FORMAT_LABELS, DEFAULT_COST_FORMAT, getFormatCostMap, type ResolvedCost } from '../league-costs';
-import { effectiveCost } from '../tera-cost';
+import { DEFAULT_RULESET as BASE_RULESET, captainEligible, markupCost, megaLimit, rosterBand, type Ruleset as SharedRuleset } from '@cannoli/rules';
+import { db, schema } from '../../db';
+import { COST_FORMAT_LABELS, getFormatCostMap, type ResolvedCost } from '../league-costs';
+import { getLeagueRuleset, getRuleset } from '../rulesets';
 import { getBaseFormName, getFormCategory } from '../pokedex';
-import { MAX_TERA_TYPES, type DcMon } from './types';
+import type { DcMon } from './types';
 
-export interface Ruleset {
-  id: string;
-  label: string;
-  leagueId: string | null;
-  costFormat: string;
-  pointCap: number;
-  rosterSize: number;
-  teraCaptainSlots: number;
-  teraTypesPerCaptain: number;
-}
+/** The shared ruleset plus display bits. Roster cap for DC is `rosterMax ?? rosterSize`. */
+export type Ruleset = SharedRuleset & { label: string; leagueId: string | null };
 
-/** Highest tier that may be designated a tera captain. */
-export const MAX_CAPTAIN_TIER = 9;
-export const DEFAULT_ROSTER_SIZE = 12;
-
-/** Fallback when a team has no league (or its league was deleted). */
+/** Fallback when a team has no ruleset/league. Band 10-12 keeps DC's historic 12-mon cap. */
 export const DEFAULT_RULESET: Ruleset = {
-  id: 'default',
-  label: `Default — ${COST_FORMAT_LABELS[DEFAULT_COST_FORMAT] ?? DEFAULT_COST_FORMAT}`,
+  ...BASE_RULESET,
+  rosterMax: 12,
+  label: BASE_RULESET.name,
   leagueId: null,
-  costFormat: DEFAULT_COST_FORMAT,
-  pointCap: 110,
-  rosterSize: DEFAULT_ROSTER_SIZE,
-  teraCaptainSlots: 2,
-  teraTypesPerCaptain: MAX_TERA_TYPES,
 };
 
-/** league → ruleset. Null league id (or an unknown one) → DEFAULT_RULESET. */
+const labelFor = (r: SharedRuleset) => r.name || `${COST_FORMAT_LABELS[r.costFormat] ?? r.costFormat}`;
+
+/** league -> its ruleset (compat). Null/unknown league -> DEFAULT_RULESET. */
 export function resolveRuleset(leagueId: string | null | undefined): Ruleset {
   if (!leagueId) return DEFAULT_RULESET;
-  const row = db.select({
-    id: schema.leagues.id,
-    name: schema.leagues.name,
-    costFormat: schema.leagues.costFormat,
-    rosterSize: schema.leagues.rosterSize,
-    seasonNumber: schema.seasons.seasonNumber,
-    pointCap: schema.seasons.pointCap,
-    teraCaptainSlots: schema.seasons.teraCaptainSlots,
-  }).from(schema.leagues)
-    .innerJoin(schema.seasons, eq(schema.seasons.id, schema.leagues.seasonId))
-    .where(eq(schema.leagues.id, leagueId)).get();
-  if (!row) return DEFAULT_RULESET;
-  return {
-    id: `league:${row.id}`,
-    label: `S${row.seasonNumber} ${row.name.replace(/ League$/, '')} — ${COST_FORMAT_LABELS[row.costFormat] ?? row.costFormat}`,
-    leagueId: row.id,
-    costFormat: row.costFormat,
-    pointCap: row.pointCap,
-    rosterSize: row.rosterSize,
-    teraCaptainSlots: row.teraCaptainSlots,
-    teraTypesPerCaptain: MAX_TERA_TYPES,
-  };
+  const exists = db.select({ id: schema.leagues.id }).from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
+  if (!exists) return DEFAULT_RULESET;
+  const rs = getLeagueRuleset(leagueId);
+  return { ...rs, label: labelFor(rs), leagueId };
+}
+
+/** A team's ruleset: its own ruleset_id, else its league's, else the default. */
+export function resolveTeamRuleset(t: { rulesetId: number | null; leagueId: string | null }): Ruleset {
+  const rs = t.rulesetId != null ? getRuleset(t.rulesetId) : undefined;
+  if (rs) return { ...rs, label: labelFor(rs), leagueId: t.leagueId };
+  return resolveRuleset(t.leagueId);
 }
 
 export type ViolationCode =
@@ -106,7 +81,7 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
     if (!c) {
       v.push({ code: 'unknown_pokemon', severity: 'warn', pokemon: m.name, message: `${m.name} has no price in this format` });
     } else {
-      used += effectiveCost(c.tier, m.captain);
+      used += markupCost(rs, c.tier, m.captain);
       if (c.banned) v.push({ code: 'banned', severity: 'warn', pokemon: m.name, message: `${m.name} is banned in this format` });
     }
 
@@ -116,10 +91,11 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
     else seen.set(base, m.name);
 
     if (getFormCategory(m.name) === 'mega') megas.push(m.name);
+    // ponytail: shared mega cap counts only Mega-category forms here (primals not detected by getFormCategory).
 
     if (m.captain) {
-      if (c && c.tier > MAX_CAPTAIN_TIER) {
-        v.push({ code: 'captain_tier', severity: 'warn', pokemon: m.name, message: `${m.name} is tier ${c.tier}; captains must be tier ${MAX_CAPTAIN_TIER} or below` });
+      if (c && !captainEligible(rs, { tier: c.tier })) {
+        v.push({ code: 'captain_tier', severity: 'warn', pokemon: m.name, message: `${m.name} is tier ${c.tier}, which cannot be a tera captain under this ruleset` });
       }
       if (c?.teraBanned) {
         v.push({ code: 'captain_tera_banned', severity: 'warn', pokemon: m.name, message: `${m.name} is tera-banned and cannot be a captain` });
@@ -132,20 +108,21 @@ export function validateRoster(roster: DcMon[], rs: Ruleset, cost: CostLookup): 
     }
   }
 
-  if (megas.length > 1) {
-    v.push({ code: 'multi_mega', severity: 'warn', message: `${megas.length} Megas (${megas.join(', ')}); max 1 per team` });
+  if (megas.length > megaLimit(rs)) {
+    v.push({ code: 'multi_mega', severity: 'warn', message: `${megas.length} Megas (${megas.join(', ')}); max ${megaLimit(rs)} per team` });
   }
   if (captains.length > rs.teraCaptainSlots) {
     v.push({ code: 'captain_count', severity: 'warn', message: `${captains.length} captains; this league allows ${rs.teraCaptainSlots}` });
   }
-  if (roster.length > rs.rosterSize) {
-    v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${rs.rosterSize}` });
+  const { max: rosterCap } = rosterBand(rs);
+  if (roster.length > rosterCap) {
+    v.push({ code: 'roster_over', severity: 'warn', message: `${roster.length} Pokemon; roster size is ${rosterCap}` });
   }
   if (used > rs.pointCap) {
     v.push({ code: 'over_budget', severity: 'warn', message: `${used} points used; budget is ${rs.pointCap}` });
   }
 
-  return { used, budget: rs.pointCap, remaining: rs.pointCap - used, rosterSize: rs.rosterSize, count: roster.length, violations: v };
+  return { used, budget: rs.pointCap, remaining: rs.pointCap - used, rosterSize: rosterCap, count: roster.length, violations: v };
 }
 
 /** Validate against a ruleset's real (DB-backed) per-format cost map. */

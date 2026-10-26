@@ -26,7 +26,7 @@ import { and, eq, desc, sql } from 'drizzle-orm';
 import {
   sanitizeRoster, sanitizeName, MAX_TEAMS_PER_USER, type DcMon,
 } from '../lib/draft-center/types';
-import { resolveRuleset, validateForRuleset } from '../lib/draft-center/rules';
+import { resolveTeamRuleset, validateForRuleset } from '../lib/draft-center/rules';
 import { cachedCardPng, xmlEscape } from '../lib/draft-center/og-image';
 
 type Row = typeof schema.draftCenterTeams.$inferSelect;
@@ -35,6 +35,15 @@ const parseRoster = (raw: string): DcMon[] => {
   try { return sanitizeRoster(JSON.parse(raw)); } catch { return []; }
 };
 
+const knownRuleset = (id: unknown): number | null =>
+  Number.isInteger(id) && db.select({ id: schema.rulesets.id }).from(schema.rulesets).where(eq(schema.rulesets.id, id as number)).get()
+    ? id as number : null;
+
+/** rulesetId wins; a bare leagueId (legacy clients) attaches that league's ruleset. */
+const rulesetFor = (rulesetId: unknown, leagueId: string | null): number | null =>
+  knownRuleset(rulesetId)
+  ?? (leagueId ? db.select({ r: schema.leagues.rulesetId }).from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get()?.r ?? null : null);
+
 const knownLeague = (id: unknown): string | null =>
   typeof id === 'string' && id
     && db.select({ id: schema.leagues.id }).from(schema.leagues).where(eq(schema.leagues.id, id)).get()
@@ -42,11 +51,13 @@ const knownLeague = (id: unknown): string | null =>
 
 function toDto(row: Row) {
   const roster = parseRoster(row.roster);
-  const rs = resolveRuleset(row.leagueId);
+  const rs = resolveTeamRuleset(row);
   return {
     id: row.id,
     name: row.name,
     leagueId: row.leagueId,
+    rulesetId: row.rulesetId ?? null,
+    ruleset: rs,
     roster,
     shareToken: row.shareToken,
     createdAt: row.createdAt,
@@ -80,9 +91,9 @@ const teamCount = (userId: number): number =>
   db.select({ n: sql<number>`COUNT(*)` }).from(schema.draftCenterTeams)
     .where(eq(schema.draftCenterTeams.userId, userId)).get()?.n ?? 0;
 
-function insertTeam(userId: number, name: string, leagueId: string | null, roster: DcMon[]): Row {
+function insertTeam(userId: number, name: string, leagueId: string | null, rulesetId: number | null, roster: DcMon[]): Row {
   return db.insert(schema.draftCenterTeams).values({
-    id: randomUUID(), userId, name, leagueId, roster: JSON.stringify(roster),
+    id: randomUUID(), userId, name, leagueId, rulesetId, roster: JSON.stringify(roster),
   }).returning().get();
 }
 
@@ -137,7 +148,8 @@ export const draftCenterRoutes = new Elysia()
       ctx.set.status = 400;
       return { error: `Team limit reached (${MAX_TEAMS_PER_USER})` };
     }
-    return toDto(insertTeam(uid, sanitizeName(b.name), knownLeague(b.leagueId), sanitizeRoster(b.roster)));
+    const lg = knownLeague(b.leagueId);
+    return toDto(insertTeam(uid, sanitizeName(b.name), lg, rulesetFor(b.rulesetId, lg), sanitizeRoster(b.roster)));
   })
 
   .get('/api/draft-center/teams/:id', (ctx) => {
@@ -156,6 +168,9 @@ export const draftCenterRoutes = new Elysia()
     const patch: Partial<Row> = {};
     if (b.name !== undefined) patch.name = sanitizeName(b.name, row.name);
     if ('leagueId' in b) patch.leagueId = knownLeague(b.leagueId);
+    if ('rulesetId' in b || 'leagueId' in b) {
+      patch.rulesetId = rulesetFor(b.rulesetId, patch.leagueId ?? row.leagueId);
+    }
     if (b.roster !== undefined) patch.roster = JSON.stringify(sanitizeRoster(b.roster));
     const updated = db.update(schema.draftCenterTeams)
       .set({ ...patch, updatedAt: touch })
@@ -182,7 +197,7 @@ export const draftCenterRoutes = new Elysia()
       return { error: `Team limit reached (${MAX_TEAMS_PER_USER})` };
     }
     // Copy is private and unshared: a fresh row never inherits the share token.
-    return toDto(insertTeam(uid, sanitizeName(`${row.name} (copy)`), row.leagueId, parseRoster(row.roster)));
+    return toDto(insertTeam(uid, sanitizeName(`${row.name} (copy)`), row.leagueId, row.rulesetId, parseRoster(row.roster)));
   })
 
   .post('/api/draft-center/teams/:id/share', (ctx) => {
@@ -207,7 +222,8 @@ export const draftCenterRoutes = new Elysia()
     const room = Math.max(0, MAX_TEAMS_PER_USER - teamCount(uid));
     const created = incoming.slice(0, room).map(t => {
       const r = (t ?? {}) as Record<string, unknown>;
-      return toDto(insertTeam(uid, sanitizeName(r.name), knownLeague(r.leagueId), sanitizeRoster(r.roster)));
+      const lg = knownLeague(r.leagueId);
+      return toDto(insertTeam(uid, sanitizeName(r.name), lg, rulesetFor(r.rulesetId, lg), sanitizeRoster(r.roster)));
     });
     return { imported: created.length, skipped: incoming.length - created.length, teams: created };
   })
@@ -219,7 +235,7 @@ export const draftCenterRoutes = new Elysia()
     if (!row) { set.status = 404; return { error: 'Not found' }; }
     const dto = toDto(row);
     return {
-      name: dto.name, leagueId: dto.leagueId, roster: dto.roster, updatedAt: dto.updatedAt,
+      name: dto.name, leagueId: dto.leagueId, rulesetId: dto.rulesetId, ruleset: dto.ruleset, roster: dto.roster, updatedAt: dto.updatedAt,
       rulesetLabel: dto.rulesetLabel, validation: dto.validation, owner: ownerOf(row.userId),
     };
   })
