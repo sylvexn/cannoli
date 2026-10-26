@@ -84,9 +84,7 @@ export function FeedbackDialog() {
         errorRef: errorRef ?? undefined,
         screenshot,
       });
-      toast.success(res.issueNumber
-        ? `Feedback submitted (#${res.issueNumber})`
-        : 'Feedback submitted');
+      toast.success(`Feedback submitted (CAN-${res.ticketId})`);
       handleClose();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, 'Failed to submit feedback'));

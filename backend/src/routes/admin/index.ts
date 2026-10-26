@@ -14,6 +14,7 @@ import { announcementsRoutes } from './announcements';
 import { adminNotificationsRoutes } from './notifications';
 import { devConsoleRoutes } from './dev-console';
 import { dashboardRoutes } from './dashboard';
+import { ticketRoutes } from './tickets';
 // Simulator control API. `simRoutesGated` is the real sim route group when
 // CANNOLI_MODE=mock, and an empty Elysia otherwise — so the `/api/admin/sim/*`
 // routes are physically absent from the live deployment's route tree
@@ -36,4 +37,5 @@ export const adminRoutes = new Elysia()
   .use(adminNotificationsRoutes)
   .use(devConsoleRoutes)
   .use(dashboardRoutes)
+  .use(ticketRoutes)
   .use(simRoutesGated);

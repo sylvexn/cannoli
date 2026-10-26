@@ -17,6 +17,7 @@ import { ChangePasswordPage } from '@/pages/change-password';
 import { HomePage } from '@/pages/home';
 import { RulesPage } from '@/pages/rules';
 import { PatchNotesPage } from '@/pages/patch-notes';
+import { AdminTicketsRoute } from '@/pages/admin/tickets';
 import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
 import { BadgesPage } from '@/pages/badges';
@@ -33,7 +34,7 @@ import { AdminDashboard } from '@/pages/admin/dashboard';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminMembershipRoute, AdminLeaguesRoute, AdminSeasonRoute,
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminMoveCategoriesRoute, AdminActivityRoute,
-  AdminApiLogsRoute, AdminFeedbackRoute, AdminBotRoute, AdminPinsRoute,
+  AdminApiLogsRoute, AdminBotRoute, AdminPinsRoute,
   AdminPinsLegacyRedirect, AdminSimRoute, AdminObservabilityRoute, AdminUsageRoute,
   AdminAnnouncementsRoute,
   } from '@/pages/admin/admin-routes';
@@ -185,7 +186,9 @@ export default function App() {
                     <Route path="dev" element={<DevConsolePage />} />
                     <Route path="usage" element={<AdminUsageRoute />} />
                     <Route path="bot" element={<AdminBotRoute />} />
-                    <Route path="feedback" element={<AdminFeedbackRoute />} />
+                    <Route path="feedback" element={<Navigate to="/admin/tickets" replace />} />
+                    <Route path="tickets" element={<AdminTicketsRoute />} />
+                    <Route path="tickets/:id" element={<AdminTicketsRoute />} />
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
                     <Route path="sim" element={<AdminSimRoute />} />
                     <Route path="mockups/playoffs" element={<Suspense fallback={null}><PlayoffsApprovalMockup /></Suspense>} />

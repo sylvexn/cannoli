@@ -1067,3 +1067,45 @@ export const draftCenterTeams = sqliteTable('draft_center_teams', {
   userIdx: index('draft_center_teams_user_idx').on(t.userId),
   shareUq: uniqueIndex('draft_center_teams_share_uq').on(t.shareToken),
 }));
+
+// Tickets (admin issue tracker)
+
+export const TICKET_STATUSES = ['new', 'triaged', 'in_progress', 'fixed', 'wont_fix'] as const;
+export type TicketStatus = typeof TICKET_STATUSES[number];
+
+/** id is the ticket number (CAN-<id>); GitHub imports insert explicit ids. */
+export const tickets = sqliteTable('tickets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  body: text('body').notNull(),
+  type: text('type', { enum: ['bug', 'idea'] }).notNull().default('bug'),
+  status: text('status', { enum: TICKET_STATUSES }).notNull().default('new'),
+  leagueId: text('league_id').references(() => leagues.id),
+  reporterUserId: integer('reporter_user_id').references(() => users.id),
+  feedbackId: integer('feedback_id').references(() => feedback.id),
+  pageUrl: text('page_url'),
+  screenshotPath: text('screenshot_path'),
+  /** Patch-notes version, e.g. '1.4' (links to /patch-notes#v1.4). */
+  fixedIn: text('fixed_in'),
+  githubIssueNumber: integer('github_issue_number'),
+  githubUrl: text('github_url'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+  updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
+  closedAt: text('closed_at'),
+}, (t) => ({
+  statusIdx: index('tickets_status_idx').on(t.status),
+  githubUnique: uniqueIndex('tickets_github_unique').on(t.githubIssueNumber),
+}));
+
+export const ticketEvents = sqliteTable('ticket_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  actorUserId: integer('actor_user_id').references(() => users.id),
+  kind: text('kind', { enum: ['created', 'status', 'note', 'import'] }).notNull(),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  text: text('text'),
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+}, (t) => ({
+  ticketIdx: index('ticket_events_ticket_idx').on(t.ticketId),
+}));
