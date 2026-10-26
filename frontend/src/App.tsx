@@ -31,6 +31,7 @@ import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
 import { SettingsConsole } from '@/pages/admin/console';
 import { AdminDashboard } from '@/pages/admin/dashboard';
+import { AdminRulesetsRoute } from '@/pages/admin/rulesets/route';
 import {
   AdminUsersRoute, AdminTeamsRoute, AdminMembershipRoute, AdminLeaguesRoute, AdminSeasonRoute,
   AdminMatchesRoute, AdminTradesRoute, AdminFreeAgentsRoute, AdminMoveCategoriesRoute, AdminActivityRoute,
@@ -171,6 +172,8 @@ export default function App() {
                     <Route path="trades" element={<AdminTradesRoute />} />
                     <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
                     <Route path="console" element={<SettingsConsole />} />
+                    <Route path="rulesets" element={<AdminRulesetsRoute />} />
+                    <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
                     <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
                     <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />

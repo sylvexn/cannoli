@@ -18,6 +18,7 @@ import {
 import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
 import { getErrorMessage } from '@/lib/errors';
 import { ScheduleDatesStep } from './season/schedule-dates-step';
+import { LeagueRuleset } from './rulesets/league-ruleset';
 
 interface LeagueSettings {
   pointCap: number;
@@ -253,6 +254,7 @@ export function AdminLeagues() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                <LeagueRuleset leagueId={league.id} phase={league.season.phase} />
                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                   <SettingField
                     label="Point Cap"

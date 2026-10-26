@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { NumberInput } from '@/components/ui/number-input';
 import { toast } from 'sonner';
-import { Sparkles, Plus, X, Check, Layers } from 'lucide-react';
-import type { ApiDraftTemplate } from '@/lib/api';
+import { Sparkles, Plus, X, Check } from 'lucide-react';
+import { WizardRulesets, useRulesetTemplates } from '../rulesets/pickers';
+import { prefillLeagueRulesets, rulesetIdsPayload } from '../rulesets/form';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -30,9 +31,10 @@ interface WizardLeague {
 
 interface NewSeasonConfig {
   copyPrevious: boolean;
-  /** When set, the wizard was seeded from this template — informational only,
-   *  the user can still tweak any field before submitting. */
-  fromTemplateId: number | null;
+  /** Season-level ruleset template; prefills every league without an explicit pick. */
+  seasonRulesetId: number | null;
+  /** Explicit per-league picks (null/missing = follow the season-level choice). */
+  rulesetByLeague: Record<string, number | null>;
   seasonNumber: number;
   totalWeeks: number;
   leagues: WizardLeague[];
@@ -55,7 +57,8 @@ interface NewSeasonConfig {
 function makeInitialConfig(ls: EditableLeague[]): NewSeasonConfig {
   return {
     copyPrevious: true,
-    fromTemplateId: null,
+    seasonRulesetId: null,
+    rulesetByLeague: {},
     seasonNumber: 11,
     totalWeeks: 11,
     leagues: ls.map(l => ({ ...l, included: true })),
@@ -121,25 +124,17 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState('#9333ea');
 
-  // Templates — loaded lazily when the wizard opens. Empty array is a valid
-  // state (no templates configured yet); we just don't render the picker.
-  const [templates, setTemplates] = useState<ApiDraftTemplate[]>([]);
-  useEffect(() => {
-    if (!open) return;
-    api.listDraftTemplates().then(setTemplates).catch(() => setTemplates([]));
-  }, [open]);
+  const rulesetTemplates = useRulesetTemplates(open);
 
-  function applyTemplate(t: ApiDraftTemplate) {
+  // Old payload fields mirror the season-level ruleset so the wizard works with or without per-league rulesetIds on the backend.
+  function pickSeasonRuleset(id: number | null) {
+    const rs = rulesetTemplates.find(t => t.id === id);
     setConfig(prev => ({
       ...prev,
-      copyPrevious: false,
-      fromTemplateId: t.id,
-      pointCap: t.pointCap,
-      teraCaptainSlots: t.captainCount,
-      rosterSize: t.rosterSize,
-      format: t.format,
+      seasonRulesetId: id,
+      rulesetByLeague: {},
+      ...(rs ? { pointCap: rs.pointCap, teraCaptainSlots: rs.teraCaptainSlots, rosterSize: rs.rosterSize } : {}),
     }));
-    toast.success(`Seeded from "${t.name}" — tweak any field before creating.`);
   }
 
   // Overlap-season confirmation
@@ -166,6 +161,11 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       tradeDeadlineWeek: config.tradeDeadlineWeek,
       forfeitPolicy: config.forfeitPolicy,
       format: config.format,
+      // Per-league rulesets (template ids; the backend copies each into a league instance).
+      rulesetIds: rulesetIdsPayload(
+        prefillLeagueRulesets(includedList.map(l => l.id), config.seasonRulesetId, config.rulesetByLeague),
+        includedList.map(l => l.id),
+      ),
       weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
       overlapOverride,
       leagues: includedList.map(l => {
@@ -287,6 +287,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   }
 
   const allLeagues = [...config.leagues, ...config.newLeagues];
+  const includedLeagueList = allLeagues.filter(l => l.included).map(l => ({ id: l.id, name: l.name, color: l.color }));
   const selectedCount = allLeagues.filter(l => l.included).length;
 
   const steps: WizardStep[] = ['source', 'leagues', 'settings', 'teams', 'schedule', 'confirm'];
@@ -331,7 +332,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             <p className="text-sm text-text-secondary">Start from previous season settings or configure from scratch?</p>
             <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => setConfig(p => ({ ...p, copyPrevious: true, fromTemplateId: null }))}
+                onClick={() => setConfig(p => ({ ...p, copyPrevious: true }))}
                 className={`p-4 rounded-lg border text-left transition-colors ${
                   config.copyPrevious
                     ? 'border-pink bg-pink/10 text-text-primary'
@@ -342,9 +343,9 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 <div className="text-xs text-text-muted">Use Season 10 settings as base</div>
               </button>
               <button
-                onClick={() => setConfig(p => ({ ...p, copyPrevious: false, fromTemplateId: null }))}
+                onClick={() => setConfig(p => ({ ...p, copyPrevious: false }))}
                 className={`p-4 rounded-lg border text-left transition-colors ${
-                  !config.copyPrevious && config.fromTemplateId == null
+                  !config.copyPrevious
                     ? 'border-pink bg-pink/10 text-text-primary'
                     : 'border-border hover:border-border-default text-text-secondary'
                 }`}
@@ -353,44 +354,6 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 <div className="text-xs text-text-muted">Configure everything from scratch</div>
               </button>
             </div>
-
-            {/* Template picker — when at least one is configured. Selecting a
-             *  template seeds format + captain count + cap/roster + name into
-             *  the wizard state so the admin doesn't retype them. Tweakable
-             *  after seeding. */}
-            {templates.length > 0 && (
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                  <Layers size={11} />
-                  <span>Or start from a saved template:</span>
-                </div>
-                <div className="space-y-1.5">
-                  {templates.map(t => {
-                    const active = config.fromTemplateId === t.id;
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => applyTemplate(t)}
-                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg border text-left transition-colors ${
-                          active
-                            ? 'border-neon bg-neon/10 text-text-primary'
-                            : 'border-border hover:border-border-default text-text-secondary'
-                        }`}
-                      >
-                        <Layers size={14} className={active ? 'text-neon' : 'text-text-muted'} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{t.name}</div>
-                          <div className="text-[10px] text-text-muted truncate">
-                            {t.format} · {t.captainCount} captains · {t.pointCap} pts · {t.rosterSize} roster
-                          </div>
-                        </div>
-                        {active && <Check size={14} className="text-neon shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             <div className="space-y-1 pt-2">
               <label className="text-xs text-text-muted">Season Number</label>
@@ -535,10 +498,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             <div className="grid grid-cols-2 gap-3">
               {([
                 ['totalWeeks', 'Total Weeks', 1, 20],
-                ['pointCap', 'Point Cap', 50, 200],
-                ['teraCaptainSlots', 'Tera Captains', 0, 6],
                 ['maxTeams', 'Max Teams', 2, 20],
-                ['rosterSize', 'Roster Size', 6, 20],
                 ['tradeDeadlineWeek', 'Trade Deadline (week)', 1, 20],
               ] as const).map(([key, label, min, max]) => (
                 <div key={key} className="space-y-1">
@@ -552,6 +512,15 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
                 </div>
               ))}
             </div>
+
+            <WizardRulesets
+              templates={rulesetTemplates}
+              seasonRulesetId={config.seasonRulesetId}
+              byLeague={prefillLeagueRulesets(includedLeagueList.map(l => l.id), config.seasonRulesetId, config.rulesetByLeague)}
+              leagues={includedLeagueList}
+              onSeason={pickSeasonRuleset}
+              onLeague={(id, rid) => setConfig(p => ({ ...p, rulesetByLeague: { ...p.rulesetByLeague, [id]: rid } }))}
+            />
 
             {/* Forfeit policy */}
             <div className="space-y-1">
@@ -607,10 +576,11 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
             seasonNumber={config.seasonNumber}
             copyPrevious={config.copyPrevious}
             totalWeeks={config.totalWeeks}
-            pointCap={config.pointCap}
-            teraCaptainSlots={config.teraCaptainSlots}
             maxTeams={config.maxTeams}
-            rosterSize={config.rosterSize}
+            rulesets={includedLeagueList.map(l => ({
+              league: l.name.replace(' League', ''),
+              ruleset: rulesetTemplates.find(t => t.id === (prefillLeagueRulesets(includedLeagueList.map(x => x.id), config.seasonRulesetId, config.rulesetByLeague)[l.id] ?? -1)) ?? null,
+            }))}
             weekDates={config.weekDates}
             teamsByLeague={config.teamsByLeague}
             includedLeagues={allLeagues.filter(l => l.included).map(l => ({
