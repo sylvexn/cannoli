@@ -74,6 +74,7 @@ function AnalyticsBeacon() {
   usePageviewBeacon();
   return null;
 }
+import { AdminCenterMockup } from '@/pages/admin/mockups/admin-center';
 
 export default function App() {
   return (
@@ -182,6 +183,7 @@ export default function App() {
                     {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
                     <Route path="sim" element={<AdminSimRoute />} />
                     <Route path="mockups/playoffs" element={<Suspense fallback={null}><PlayoffsApprovalMockup /></Suspense>} />
+                    <Route path="mockups/admin-center/*" element={<AdminCenterMockup />} />
                   </Route>
                 </Route>
               </Route>
