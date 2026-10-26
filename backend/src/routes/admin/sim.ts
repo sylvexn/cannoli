@@ -20,6 +20,7 @@
  * `seed-fresh` script and the match `void` route run. Only the orchestration
  * is new here.
  */
+import { getLeagueRuleset } from '../../lib/rulesets';
 import { Elysia } from 'elysia';
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { resolve } from 'path';
@@ -156,6 +157,9 @@ export const simRoutes = new Elysia()
           currentWeek: lg.currentWeek,
           totalWeeks: lg.totalWeeks,
           paused: lg.paused,
+          rulesetId: lg.rulesetId ?? null,
+          pointCap: getLeagueRuleset(lg.id).pointCap,
+          teraCaptainSlots: getLeagueRuleset(lg.id).teraCaptainSlots,
           regular: { completed: regular.filter(done).length, total: regular.length },
           playoffs: { completed: playoffs.filter(done).length, total: playoffs.length },
         };

@@ -15,6 +15,7 @@
  * ~150 matches, ~150 transactions per season), every endpoint completes in
  * under ~10 SQL round-trips regardless of season size.
  */
+import { getLeagueRuleset } from '../lib/rulesets';
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { isStaff } from '../lib/auth';
@@ -191,6 +192,9 @@ export const archiveDeepRoutes = new Elysia()
         minRosterSize: league.minRosterSize,
         maxRosterSize: league.maxRosterSize,
         playoffTeamCount: league.playoffTeamCount,
+        // Additive: the ruleset this league played under.
+        rulesetId: league.rulesetId ?? null,
+        ruleset: getLeagueRuleset(league.id),
       },
       teams,
       schedule,
