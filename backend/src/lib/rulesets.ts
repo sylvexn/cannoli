@@ -47,6 +47,19 @@ export function getRuleset(id: number): Ruleset | undefined {
   return rs;
 }
 
+/**
+ * Copy a ruleset's mirrored columns onto the leagues that use it. Pricing reads
+ * `leagues.cost_format` and older readers use the roster columns, so they must
+ * follow the ruleset after an assign, fork or edit.
+ */
+export function syncLeagueMirrors(rulesetId: number): void {
+  const r = db.select().from(schema.rulesets).where(eq(schema.rulesets.id, rulesetId)).get();
+  if (!r) return;
+  db.update(schema.leagues).set({
+    costFormat: r.costFormat, rosterSize: r.rosterSize, minRosterSize: r.rosterMin, maxRosterSize: r.rosterMax,
+  }).where(eq(schema.leagues.rulesetId, rulesetId)).run();
+}
+
 /** The ruleset a league plays under (never undefined). */
 export function getLeagueRuleset(leagueId: string): Ruleset {
   const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, leagueId)).get();
