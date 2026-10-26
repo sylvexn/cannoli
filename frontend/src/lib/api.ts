@@ -1763,6 +1763,7 @@ export const api = {
     replayUrl?: string;
     pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
     warnings?: string[];
+    forfeitedBy?: 'home' | 'away' | null;
   }) => postJson<{ success: boolean }>(`/api/matches/${matchId}/result`, data),
 
   dismissMatchWarnings: (matchId: string) =>
