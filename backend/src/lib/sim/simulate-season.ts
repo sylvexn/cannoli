@@ -281,7 +281,7 @@ function generatePlayoffBracket(leagueId: string): { success: boolean; error?: s
     return { success: false, error: `Invalid playoffTeamCount ${seedCount}` };
   }
 
-  const teamRecords = computeStandings(leagueId, { phase: 'regular' });
+  const teamRecords = computeStandings(leagueId);
   if (teamRecords.length < seedCount) {
     return { success: false, error: `Need ≥${seedCount} teams, have ${teamRecords.length}` };
   }

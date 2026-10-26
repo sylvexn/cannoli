@@ -925,7 +925,7 @@ export const matchRoutes = new Elysia()
     const seedCount = requested;
 
     // Sort using shared standings hierarchy (wins → H2H → diff → kills → id)
-    const teamRecords = computeStandings(params.leagueId, { phase: 'regular' });
+    const teamRecords = computeStandings(params.leagueId);
     if (seedCount > teamRecords.length) {
       set.status = 400;
       return {

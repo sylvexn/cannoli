@@ -66,6 +66,17 @@ export interface Player {
   /** Set when this player is in a tied wins-bucket — describes which rule resolved their order. */
   tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: RosterPokemon[];
+  /** Mons that played for this team but are no longer on its roster (traded/dropped/replaced). */
+  departed?: DepartedPokemon[];
+  /** Playoff record, counted in series (a best-of series is one W or L). Regular-season `record` excludes playoffs. */
+  playoffRecord?: { wins: number; losses: number };
+}
+
+export interface DepartedPokemon {
+  name: string;
+  types: PokemonType[];
+  tier: number;
+  seasonStats: { kills: number; deaths: number; gp: number; wins: number; losses: number };
 }
 
 export interface RosterPokemon {
@@ -84,7 +95,7 @@ export interface RosterPokemon {
   };
   abilities: string[];
   seasonStats: {
-    kills: number; deaths: number; gp: number;
+    kills: number; deaths: number; gp: number; wins?: number; losses?: number;
   };
   isShiny?: boolean;
 }

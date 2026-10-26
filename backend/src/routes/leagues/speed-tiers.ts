@@ -2,6 +2,8 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, inArray, desc, sql, and } from 'drizzle-orm';
 import { getLeagueCostMap } from '../../lib/league-costs';
+import { isMatchRevealed } from '../../lib/queries';
+import { matchWinner } from '../../lib/standings';
 
 /**
  * Ownership entry for a single Pokemon — one per (league, team) it's rostered
@@ -247,7 +249,7 @@ export const speedTierRoutes = new Elysia()
    * Pokemon detail page's "Recent Battles" strip — only matches that have a
    * replayUrl are surfaced.
    */
-  .get('/api/pokemon/:name/recent-battles', ({ params, query }) => {
+  .get('/api/pokemon/:name/recent-battles', ({ params, query, user }) => {
     const limit = Math.min(parseInt(query.limit as string) || 10, 25);
     const ids = getActiveLeagueIds();
     if (ids.length === 0) return [];
@@ -270,6 +272,7 @@ export const speedTierRoutes = new Elysia()
       awayTeamId: schema.matches.awayTeamId,
       homeScore: schema.matches.homeScore,
       awayScore: schema.matches.awayScore,
+      winnerTeamId: schema.matches.winnerTeamId,
       replayUrl: schema.matches.replayUrl,
       completedAt: schema.matches.completedAt,
     })
@@ -282,8 +285,11 @@ export const speedTierRoutes = new Elysia()
         sql`${schema.matches.replayUrl} IS NOT NULL`,
       ))
       .orderBy(desc(schema.matches.completedAt))
-      .limit(limit)
-      .all();
+      .all()
+      // Reveal gate (after the query so the limit counts only visible rows):
+      // unrevealed weeks must not leak scores/results via this strip.
+      .filter(r => isMatchRevealed(r, user))
+      .slice(0, limit);
 
     if (rows.length === 0) return [];
 
@@ -325,11 +331,12 @@ export const speedTierRoutes = new Elysia()
       const opponent = isHome ? away : home;
       const teamScore = isHome ? r.homeScore : r.awayScore;
       const oppScore = isHome ? r.awayScore : r.homeScore;
+      // winner_team_id first (a 0-0 forfeit is still a W/L, not a draw).
+      const winner = matchWinner(r);
       const result: 'W' | 'L' | 'T' | null =
         teamScore == null || oppScore == null ? null
-          : teamScore > oppScore ? 'W'
-          : teamScore < oppScore ? 'L'
-          : 'T';
+          : winner == null ? 'T'
+          : winner === r.teamId ? 'W' : 'L';
 
       return {
         matchId: r.matchId,

@@ -43,6 +43,7 @@ const BATTLE_ONLY_SUFFIXES = new Set([
   'Star', 'Dandy', 'Debutante', 'Diamond', 'Heart', 'Kabuki', 'La Reine', 'Matron', 'Pharaoh', // Furfrou trims
   'Three', 'Segment', 'Four',                                     // Dudunsparce / Maushold
   'Masterpiece', 'Unremarkable', 'Artisan',                       // Sinistcha / Poltchageist
+  'Combat',                                                       // Tauros-Paldea-Combat (default breed; Blaze/Aqua stay distinct)
 ]);
 
 function stripTeraSuffix(name: string): string {

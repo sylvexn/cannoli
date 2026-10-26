@@ -163,20 +163,16 @@ export function matchWinner(m: { winnerTeamId: string | null; homeTeamId: string
 
 /**
  * Compute raw W/L/PF/PA for every team in a league, using regular-season completed
- * matches only. The winner is taken from `winnerTeamId` when present (score
+ * matches only ("record is record": playoff matches never touch W/L or
+ * differential — see computePlayoffRecords for those). The winner is taken from `winnerTeamId` when present (score
  * comparison fallback) so forfeits scored e.g. 2-2 credit the right side; PF/PA
  * remain the raw KO totals.
  */
-function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all'; maxWeek?: number | null } = {}): RawRecord[] {
-  const phase = opts.phase ?? 'regular';
+function rawRecords(leagueId: string, opts: { maxWeek?: number | null } = {}): RawRecord[] {
   const maxWeek = opts.maxWeek;
   const teams = db.select().from(schema.teams)
     .where(eq(schema.teams.leagueId, leagueId))
     .all();
-
-  const phaseClause = phase === 'regular'
-    ? eq(schema.matches.phase, 'regular')
-    : undefined;
 
   // Results-reveal gate: when maxWeek is set, only count matches up through that
   // week so standings/records don't move until an admin reveals later weeks.
@@ -189,7 +185,7 @@ function rawRecords(leagueId: string, opts: { phase?: 'regular' | 'all'; maxWeek
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.status, 'completed'),
       sql`home_score IS NOT NULL`,
-      phaseClause,
+      eq(schema.matches.phase, 'regular'),
       weekClause,
     ))
     .all();
@@ -274,8 +270,70 @@ function headToHeadWins(leagueId: string, tiedIds: string[], maxWeek?: number | 
  */
 export function computeStandings(
   leagueId: string,
-  opts: { phase?: 'regular' | 'all'; maxWeek?: number | null } = {},
+  opts: { maxWeek?: number | null } = {},
 ): TeamStandingRow[] {
   const records = rawRecords(leagueId, opts);
   return orderRecords(records, tiedIds => headToHeadWins(leagueId, tiedIds, opts.maxWeek));
+}
+
+export interface PlayoffSeriesResult {
+  round: string | null;
+  opponentId: string;
+  won: boolean;
+  /** The match row(s) that made up the series. */
+  matchIds: string[];
+}
+
+export interface PlayoffRecord {
+  wins: number;
+  losses: number;
+  series: PlayoffSeriesResult[];
+}
+
+/**
+ * Playoff record per team, counted in SERIES: however many games (match rows)
+ * a series took, it is exactly one win or loss. Rows are grouped by
+ * (round, team pair); the series winner is the side with more game wins
+ * (matchWinner per row), and an undecided/tied series counts for nobody.
+ * Playoffs never feed standings — this is the separate playoff line.
+ */
+export function computePlayoffRecords(leagueId: string, maxWeek?: number | null): Map<string, PlayoffRecord> {
+  const rows = db.select().from(schema.matches)
+    .where(and(
+      eq(schema.matches.leagueId, leagueId),
+      eq(schema.matches.phase, 'playoffs'),
+      eq(schema.matches.status, 'completed'),
+      sql`home_score IS NOT NULL`,
+      maxWeek != null ? sql`${schema.matches.week} <= ${maxWeek}` : undefined,
+    ))
+    .all();
+
+  const seriesMap = new Map<string, { round: string | null; a: string; b: string; aWins: number; bWins: number; ids: string[] }>();
+  for (const m of rows) {
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
+    const [a, b] = [m.homeTeamId, m.awayTeamId].sort();
+    const key = `${m.playoffRound ?? ''}|${a}|${b}`;
+    const s = seriesMap.get(key) ?? { round: m.playoffRound, a, b, aWins: 0, bWins: 0, ids: [] };
+    const w = matchWinner(m);
+    if (w === a) s.aWins++;
+    else if (w === b) s.bWins++;
+    s.ids.push(m.id);
+    seriesMap.set(key, s);
+  }
+
+  const out = new Map<string, PlayoffRecord>();
+  const rec = (id: string) => {
+    let r = out.get(id);
+    if (!r) out.set(id, r = { wins: 0, losses: 0, series: [] });
+    return r;
+  };
+  for (const s of seriesMap.values()) {
+    if (s.aWins === s.bWins) continue;
+    const [winner, loser] = s.aWins > s.bWins ? [s.a, s.b] : [s.b, s.a];
+    rec(winner).wins++;
+    rec(winner).series.push({ round: s.round, opponentId: loser, won: true, matchIds: s.ids });
+    rec(loser).losses++;
+    rec(loser).series.push({ round: s.round, opponentId: winner, won: false, matchIds: s.ids });
+  }
+  return out;
 }

@@ -19,7 +19,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../db';
 import { isStaff } from '../lib/auth';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
-import { computeStandings } from '../lib/standings';
+import { computeStandings, matchWinner } from '../lib/standings';
 
 export const archiveDeepRoutes = new Elysia()
 
@@ -38,7 +38,7 @@ export const archiveDeepRoutes = new Elysia()
       .all();
     const teamMap = new Map(teamRows.map(t => [t.id, t]));
 
-    const standings = computeStandings(league.id, { phase: 'all' });
+    const standings = computeStandings(league.id);
     const standingsMap = new Map(standings.map(s => [s.id, s]));
 
     // Roster bulk join — every team's full roster in one query.
@@ -258,7 +258,8 @@ export const archiveDeepRoutes = new Elysia()
       const oppScore = isHome ? m.awayScore : m.homeScore;
       let result: 'W' | 'L' | 'T' | null = null;
       if (myScore != null && oppScore != null) {
-        result = myScore > oppScore ? 'W' : myScore < oppScore ? 'L' : 'T';
+        const w = matchWinner(m);
+        result = w == null ? 'T' : w === team.id ? 'W' : 'L';
       }
       return {
         matchId: m.id,

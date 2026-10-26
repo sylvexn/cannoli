@@ -156,6 +156,8 @@ export interface ApiTeam {
   record: { wins: number; losses: number; differential: number; kills?: number; deaths?: number };
   tiebreaker?: { rule: 'h2h' | 'diff' | 'kills' | 'id'; value: number | string } | null;
   roster: ApiRosterPokemon[];
+  departed?: { name: string; types: string[]; tier: number; seasonStats: { kills: number; deaths: number; gp: number; wins: number; losses: number } }[];
+  playoffRecord?: { wins: number; losses: number };
 }
 
 /** One coach row in the admin league-membership view. */
@@ -209,7 +211,7 @@ export interface ApiRosterPokemon {
   acquiredWeek: number | null;
   stats: { hp: number; atk: number; def: number; spa: number; spd: number; spe: number } | null;
   abilities: string[];
-  seasonStats: { kills: number; deaths: number; gp: number };
+  seasonStats: { kills: number; deaths: number; gp: number; wins?: number; losses?: number };
 }
 
 export interface ApiMatch {
