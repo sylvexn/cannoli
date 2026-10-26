@@ -20,7 +20,6 @@ import { PatchNotesPage } from '@/pages/patch-notes';
 import { AdminTicketsRoute } from '@/pages/admin/tickets';
 import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
-import { BadgesPage } from '@/pages/badges';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
 import { SchedulePage } from '@/pages/schedule';
@@ -151,7 +150,6 @@ export default function App() {
               <Route path="rules" element={<RulesPage />} />
               <Route path="patch-notes" element={<PatchNotesPage />} />
               <Route path="tiers" element={<TierListPage />} />
-              <Route path="badges" element={<BadgesPage />} />
               <Route path="speed-tiers" element={<Suspense fallback={<PageLoadingSpinner />}><SpeedTiersPage /></Suspense>} />
 
               {/* Protected global routes */}
