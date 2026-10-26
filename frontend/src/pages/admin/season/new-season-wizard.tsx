@@ -149,6 +149,11 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   }
 
   function buildPayload(includedList: WizardLeague[], overlapOverride: boolean) {
+    // Per-league rulesets (template ids; the backend copies each into a league instance).
+    const rulesetIds = rulesetIdsPayload(
+      prefillLeagueRulesets(includedList.map(l => l.id), config.seasonRulesetId, config.rulesetByLeague),
+      includedList.map(l => l.id),
+    );
     const filledWeekDates = Object.fromEntries(
       Object.entries(config.weekDates).filter(([, v]) => !!v)
     );
@@ -161,11 +166,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
       tradeDeadlineWeek: config.tradeDeadlineWeek,
       forfeitPolicy: config.forfeitPolicy,
       format: config.format,
-      // Per-league rulesets (template ids; the backend copies each into a league instance).
-      rulesetIds: rulesetIdsPayload(
-        prefillLeagueRulesets(includedList.map(l => l.id), config.seasonRulesetId, config.rulesetByLeague),
-        includedList.map(l => l.id),
-      ),
+      rulesetId: config.seasonRulesetId ?? undefined,
       weekDates: Object.keys(filledWeekDates).length > 0 ? filledWeekDates : null,
       overlapOverride,
       leagues: includedList.map(l => {
@@ -185,6 +186,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
           name: l.name,
           color: l.color,
           draftDate: draftDate ? new Date(draftDate).toISOString() : null,
+          rulesetId: rulesetIds[l.id],
           teams,
         };
       }),
