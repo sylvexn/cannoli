@@ -161,6 +161,8 @@ export class ReplayParser {
   private justSwitched = new Set<string>();
   // Baneful Bunker user whose contact-poison is about to land (cleared on next |move|).
   private bunkerUser: string | null = null;
+  // Mon that used Baneful Bunker this turn (the server logs its block as `move: Protect`).
+  private bunkerMon: string | null = null;
   // Destiny Bond user whose bond just triggered; consumed by the next opposing faint.
   private pendingBond: string | null = null;
 
@@ -570,6 +572,7 @@ export class ReplayParser {
     this.justSwitched.clear();
     this.bunkerUser = null;
     this.pendingBond = null;
+    if (parts[3] === 'Baneful Bunker') this.bunkerMon = attacker;
 
     // Track last attacker for direct KO attribution
     if (target && !target.startsWith('[')) {
@@ -788,6 +791,7 @@ export class ReplayParser {
   /** |turn|N */
   private handleTurn(parts: string[]): boolean {
     this.turn = parseInt(parts[2], 10) || 0;
+    this.bunkerMon = null;
     return true;
   }
 
@@ -829,12 +833,12 @@ export class ReplayParser {
     return false;
   }
 
-  /** |-activate|p1a: Nick|move: Baneful Bunker / move: Destiny Bond */
+  /** |-activate|p1a: Nick|move: Protect (Baneful Bunker block) / move: Destiny Bond */
   private handleActivate(parts: string[]): boolean {
     const nick = parts[2];
     const what = parts[3] ?? '';
     if (!nick) return false;
-    if (what.endsWith('Baneful Bunker')) this.bunkerUser = nick;
+    if (what.endsWith('Baneful Bunker') || (what.endsWith('Protect') && nick === this.bunkerMon)) this.bunkerUser = nick;
     else if (what.endsWith('Destiny Bond')) this.pendingBond = nick;
     return false;
   }

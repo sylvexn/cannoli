@@ -4,6 +4,7 @@ import { eq, inArray, desc, sql, and } from 'drizzle-orm';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { isMatchRevealed } from '../../lib/queries';
 import { matchWinner } from '../../lib/standings';
+import { getBaseFormName } from '../../lib/pokedex';
 
 /**
  * Ownership entry for a single Pokemon — one per (league, team) it's rostered
@@ -257,6 +258,11 @@ export const speedTierRoutes = new Elysia()
     // Pull every match-pokemon row for this name in active leagues, joined to
     // the parent match and team. We only care about completed matches with a
     // replay url — anything else has nothing to surface yet.
+    // Stored names may be cosmetic formes of the requested species (Minior-Indigo).
+    const want = getBaseFormName(params.name).toLowerCase();
+    const names = db.selectDistinct({ n: schema.matchPokemon.pokemonName }).from(schema.matchPokemon).all()
+      .map(r => r.n).filter(n => n === params.name || getBaseFormName(n).toLowerCase() === want);
+    if (names.length === 0) return [];
     const rows = db.select({
       matchId: schema.matchPokemon.matchId,
       teamId: schema.matchPokemon.teamId,
@@ -279,7 +285,7 @@ export const speedTierRoutes = new Elysia()
       .from(schema.matchPokemon)
       .innerJoin(schema.matches, eq(schema.matches.id, schema.matchPokemon.matchId))
       .where(and(
-        eq(schema.matchPokemon.pokemonName, params.name),
+        inArray(schema.matchPokemon.pokemonName, names),
         inArray(schema.matches.leagueId, ids),
         eq(schema.matches.status, 'completed'),
         sql`${schema.matches.replayUrl} IS NOT NULL`,

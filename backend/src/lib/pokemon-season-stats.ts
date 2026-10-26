@@ -26,6 +26,7 @@ export interface PokemonSeasonStat {
 
 export function pokemonSeasonStats(leagueId: string, maxWeek: number | null): PokemonSeasonStat[] {
   const rows = db.select({
+    matchId: schema.matchPokemon.matchId,
     teamId: schema.matchPokemon.teamId,
     pokemonName: schema.matchPokemon.pokemonName,
     kills: schema.matchPokemon.kills,
@@ -55,15 +56,21 @@ export function pokemonSeasonStats(leagueId: string, maxWeek: number | null): Po
   }
 
   const out = new Map<string, PokemonSeasonStat>();
+  const seen = new Set<string>();
   for (const r of rows) {
     const name = resolveRosterPokemonName(rosterByTeam.get(r.teamId) ?? [], r.pokemonName);
     const key = `${r.teamId}\u0000${name}`;
     const s = out.get(key) ?? { teamId: r.teamId, pokemonName: name, kills: 0, deaths: 0, gp: 0, wins: 0, losses: 0 };
-    s.kills += r.kills; s.deaths += r.deaths; s.gp++;
+    s.kills += r.kills; s.deaths += r.deaths;
+    out.set(key, s);
+    // Two stored names folding to one roster name in a match count one GP/result.
+    const seenKey = `${r.matchId}\u0000${key}`;
+    if (seen.has(seenKey)) continue;
+    seen.add(seenKey);
+    s.gp++;
     const w = matchWinner(r);
     if (w === r.teamId) s.wins++;
     else if (w != null) s.losses++;
-    out.set(key, s);
   }
   return [...out.values()];
 }
