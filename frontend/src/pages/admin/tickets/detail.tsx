@@ -94,7 +94,7 @@ export function TicketDetail({ id }: { id: number }) {
             {([
               ['Reporter', t.reporter ?? 'unknown'],
               ['Opened', formatDateTime(t.createdAt)],
-              ['Page', t.pageUrl ? <Link key="p" to={t.pageUrl} className="text-neon hover:underline break-all font-mono text-[11px]">{t.pageUrl}</Link> : '-'],
+              ['Page', t.pageUrl?.startsWith('/') && !t.pageUrl.startsWith('//') && !t.pageUrl.startsWith('/\\') ? <Link key="p" to={t.pageUrl} className="text-neon hover:underline break-all font-mono text-[11px]">{t.pageUrl}</Link> : (t.pageUrl ?? '-')],
               ['Feedback', t.feedback ? <span key="f" className="font-mono">#{t.feedback.id}{t.feedback.errorRef ? ` / ${t.feedback.errorRef}` : ''}</span> : '-'],
             ] as const).map(([k, v]) => (
               <div key={k} className="flex items-baseline justify-between gap-3 px-3 py-1.5"><dt className="text-text-muted shrink-0">{k}</dt><dd className="text-right min-w-0">{v}</dd></div>
