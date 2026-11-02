@@ -169,7 +169,7 @@ function clearReadyTimer(matchId: string) {
  */
 function revertReadyMatch(
   m: { id: string; leagueId: string; homeTeamId: string | null; awayTeamId: string | null; psRoomId: string | null },
-  opts: { logEvent: 'timeout' | null; activityType: string; activityDescription: string; keepReadyFlags?: boolean },
+  opts: { logEvent: 'timeout' | null; activityType: string; activityDescription: string; keepReadyFlags?: boolean; skipActivityLog?: boolean },
 ) {
   // A readied match always has both teams resolved (not a NULL bracket slot).
   if (m.homeTeamId == null || m.awayTeamId == null) return;
@@ -197,6 +197,7 @@ function revertReadyMatch(
     db.insert(schema.matchReadyLog).values({ matchId: m.id, teamId: m.awayTeamId, event: opts.logEvent }).run();
   }
 
+  if (opts.skipActivityLog) return;
   db.insert(schema.activityLog).values({
     type: opts.activityType,
     category: 'match',
@@ -207,32 +208,55 @@ function revertReadyMatch(
   }).run();
 }
 
-function scheduleReadyTimeout(matchId: string) {
+function expireReadyMatch(matchId: string) {
+  const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
+  // Only revert if still ready (the battle never started — i.e. at least one
+  // player never picked a team / accepted the invite).
+  if (!m || m.status !== 'ready') return;
+
+  revertReadyMatch(m, {
+    logEvent: 'timeout',
+    activityType: 'match_ready_timeout',
+    activityDescription: `Team selection timed out for ${matchId} — a player did not pick a team within ${INVITE_TIMEOUT_MS / 1000}s`,
+  });
+
+  publishWs(`arena:match:${matchId}`, JSON.stringify({
+    type: 'match_timeout',
+    matchId,
+    message: 'Team selection timed out — try again',
+  }));
+  broadcastMatchState(matchId);
+
+  console.log(`[arena] team-selection timeout: ${matchId}`);
+}
+
+function scheduleReadyTimeout(matchId: string, delayMs = INVITE_TIMEOUT_MS) {
   clearReadyTimer(matchId);
   const handle = setTimeout(() => {
     readyTimers.delete(matchId);
-    const m = db.select().from(schema.matches).where(eq(schema.matches.id, matchId)).get();
-    // Only revert if still ready (the battle never started — i.e. at least one
-    // player never picked a team / accepted the invite).
-    if (!m || m.status !== 'ready') return;
-
-    revertReadyMatch(m, {
-      logEvent: 'timeout',
-      activityType: 'match_ready_timeout',
-      activityDescription: `Team selection timed out for ${matchId} — a player did not pick a team within ${INVITE_TIMEOUT_MS / 1000}s`,
-    });
-
-    publishWs(`arena:match:${matchId}`, JSON.stringify({
-      type: 'match_timeout',
-      matchId,
-      message: 'Team selection timed out — try again',
-    }));
-    broadcastMatchState(matchId);
-
-    console.log(`[arena] team-selection timeout: ${matchId}`);
-  }, INVITE_TIMEOUT_MS);
+    expireReadyMatch(matchId);
+  }, delayMs);
   readyTimers.set(matchId, handle);
 }
+
+/**
+ * Boot recovery: the ready timers are in-memory only, so a restart strands
+ * 'ready' matches. Revert the expired ones, re-arm the rest with the time left.
+ */
+function recoverReadyTimers() {
+  const rows = db.select().from(schema.matches).where(eq(schema.matches.status, 'ready')).all();
+  for (const m of rows) {
+    const age = m.startedAt ? Date.now() - new Date(m.startedAt).getTime() : Infinity;
+    if (!(age < INVITE_TIMEOUT_MS)) expireReadyMatch(m.id);
+    else scheduleReadyTimeout(m.id, INVITE_TIMEOUT_MS - age);
+  }
+}
+
+/** Per-match cooldown between battle start attempts (Retry start spam guard). */
+const START_COOLDOWN_MS = 15_000;
+const lastStartAttempt = new Map<string, number>();
+/** Last logged battle-create failure per match, so identical repeats don't spam the activity log. */
+const lastFailLogged = new Map<string, { reason: string; at: number }>();
 
 /** Called by ps-bot when it picks up a battle for a match (transitions to in_progress). */
 export function clearReadyTimerForMatch(matchId: string) {
@@ -352,7 +376,11 @@ export function handleScrimBattleFailed(p1: string, p2: string, reason: string) 
   const officialMatch = findReadyMatchForFailedPair(p1, p2);
   if (officialMatch) {
     clearReadyTimer(officialMatch.id);
+    const prev = lastFailLogged.get(officialMatch.id);
+    const repeat = !!prev && prev.reason === reason && Date.now() - prev.at < 5 * 60_000;
+    if (!repeat) lastFailLogged.set(officialMatch.id, { reason, at: Date.now() });
     revertReadyMatch(officialMatch, {
+      skipActivityLog: repeat,
       logEvent: null,
       keepReadyFlags: true,
       activityType: 'match_battle_create_failed',
@@ -489,7 +517,11 @@ function broadcastScrimList(senderWs?: { send: (data: string) => void }) {
 // Route
 
 export const arenaRoutes = new Elysia()
-  .onStart((app) => { registerBroadcastServer((app as any).server); registerBotConnectionListener(); })
+  .onStart((app) => {
+    registerBroadcastServer((app as any).server);
+    registerBotConnectionListener();
+    try { recoverReadyTimers(); } catch (err) { console.error('[arena] ready-timer recovery failed:', err); }
+  })
 
   // Active players for scrim invite picker (public, lightweight)
   .get('/api/arena/players', () => {
@@ -671,7 +703,14 @@ export const arenaRoutes = new Elysia()
 
             // Check if both are now ready
             const updated = db.select().from(schema.matches).where(eq(schema.matches.id, match.id)).get()!;
-            if (updated.readyHome && updated.readyAway) {
+            if (updated.readyHome && updated.readyAway && updated.status === 'scheduled'
+              && Date.now() - (lastStartAttempt.get(match.id) ?? 0) < START_COOLDOWN_MS) {
+              ws.send(JSON.stringify({
+                type: 'match_error',
+                matchId: match.id,
+                message: 'Start was just attempted — wait a few seconds before retrying.',
+              }));
+            } else if (updated.readyHome && updated.readyAway) {
               if (isBotConnected()) {
                 // Bot online — flip to 'ready', stamp start, arm the timeout,
                 // and instruct the bot to create the PS battle. All of this is
@@ -693,6 +732,7 @@ export const arenaRoutes = new Elysia()
                   )).run();
 
                 if (res.changes > 0) {
+                  lastStartAttempt.set(match.id, Date.now());
                   scheduleReadyTimeout(match.id);
 
                   db.insert(schema.activityLog).values({
