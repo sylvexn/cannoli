@@ -28,8 +28,13 @@ const FIELDS = [
 
 function toJson(r: Row) {
   const usage = r.isTemplate ? { frozen: false, leagueIds: [] as string[], draftCenterTeams: 0 } : rulesetUsage(r.id);
+  const phases = usage.leagueIds.map(id => db.select({ phase: schema.leagues.phase, n: schema.seasons.seasonNumber })
+    .from(schema.leagues).innerJoin(schema.seasons, eq(schema.seasons.id, schema.leagues.seasonId))
+    .where(eq(schema.leagues.id, id)).get());
   return {
     ...rowToRuleset(r),
+    forkable: phases.some(p => p?.phase === 'predraft' || p?.phase === 'draft'),
+    seasonNumber: phases[0]?.n ?? null,
     description: r.description,
     isTemplate: r.isTemplate,
     sourceRulesetId: r.sourceRulesetId,

@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, inArray } from 'drizzle-orm';
 import { hashPassword } from '../../lib/auth';
 import { destroyPsSessionsFor, getPsUserid } from '../../lib/ps-login';
 import { clearRateLimitForUser } from '../auth';
@@ -9,6 +9,15 @@ import { requireStaff, canActOnRole } from '../../lib/auth-guards';
 
 export const userRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
+
+  // Which of these usernames exist (wizard manager check)
+  .post('/api/admin/users/resolve', ({ body }) => {
+    const names = Array.isArray((body as any)?.usernames)
+      ? [...new Set<string>((body as any).usernames.filter((u: unknown) => typeof u === 'string').map((u: string) => u.trim().toLowerCase()).filter(Boolean))]
+      : [];
+    if (!names.length) return { found: [] };
+    return { found: db.select({ u: schema.users.username }).from(schema.users).where(inArray(schema.users.username, names)).all().map(r => r.u.toLowerCase()) };
+  })
 
   // Users (admin read)
 
