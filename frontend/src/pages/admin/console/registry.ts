@@ -1,6 +1,6 @@
-import { Settings, Zap, CalendarClock, ScrollText, Layers, List, CalendarCog, Lock, type LucideIcon } from 'lucide-react';
+import { Settings, Zap, CalendarClock, ScrollText, List, CalendarCog, type LucideIcon } from 'lucide-react';
 
-export type SectionId = 'general' | 'draft' | 'deadlines' | 'league' | 'rules' | 'templates' | 'tiers' | 'rulesets';
+export type SectionId = 'general' | 'draft' | 'deadlines' | 'league' | 'rules' | 'tiers';
 
 export interface SectionDef { id: SectionId; label: string; icon: LucideIcon; from: string }
 
@@ -10,13 +10,11 @@ export const SECTIONS: SectionDef[] = [
   { id: 'deadlines', label: 'Deadlines', icon: CalendarClock, from: 'Site Settings + leagues' },
   { id: 'league', label: 'League & season', icon: CalendarCog, from: 'Seasons & Leagues' },
   { id: 'rules', label: 'Rules text', icon: ScrollText, from: 'Rules tab' },
-  { id: 'templates', label: 'Templates', icon: Layers, from: 'Templates tab' },
   { id: 'tiers', label: 'Tier list', icon: List, from: 'Tier List tab' },
-  { id: 'rulesets', label: 'Rulesets', icon: Lock, from: 'rule bundles' },
 ];
 
 /** `field` = a real form field in the console (highlight + scroll). Otherwise the hit just opens the section. */
-export interface SettingDef { id: string; label: string; section: SectionId; keywords?: string; field?: boolean }
+export interface SettingDef { id: string; label: string; section: SectionId; keywords?: string; field?: boolean; href?: string }
 
 export const SETTINGS: SettingDef[] = [
   { id: 'defaultUserPassword', label: 'Default user password', section: 'general', keywords: 'reset account login', field: true },
@@ -33,9 +31,8 @@ export const SETTINGS: SettingDef[] = [
   { id: 'format', label: 'Battle format', section: 'league', keywords: 'gen9 natdex ou' },
   { id: 'schedule', label: 'Schedule dates', section: 'league', keywords: 'week start calendar' },
   { id: 'rulesAll', label: 'Draft, battle rules, clauses, bans', section: 'rules', keywords: 'clause ban ability item move tera notes' },
-  { id: 'templates', label: 'League templates', section: 'templates', keywords: 'preset banlist new season' },
   { id: 'tiers', label: 'Tier list and costs', section: 'tiers', keywords: 'pokemon cost tier format lock' },
-  { id: 'rulesets', label: 'Rulesets', section: 'rulesets', keywords: 'ruleset point cap tera markup mega roster' },
+  { id: 'rulesets', label: 'Rulesets and templates', section: 'league', href: '/admin/rulesets', keywords: 'ruleset template preset banlist point cap tera markup mega roster' },
 ];
 
 /** Every whitespace-separated term must appear in label, section label or keywords. */

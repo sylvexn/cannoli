@@ -80,10 +80,10 @@ export function RulesetEditor({ ruleset, onSaved, onCancel }: {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-draw/30 bg-draw/5 p-2.5 text-xs text-text-secondary">
           <Lock size={14} className="text-draw shrink-0" />
           <span className="min-w-0 flex-1 basis-60">
-            Frozen: used by {ruleset!.usedBy.join(', ')}. Rules are read-only; name, description and roster band stay editable.
-            Fork to change rules for one league.
+            Frozen: used by {ruleset!.usedBy.join(', ')}. Rules are read-only for this season; name, description and roster band stay editable.
+            {ruleset!.forkable && ' Fork to change rules for one league.'}
           </span>
-          {ruleset!.usedBy.length > 0 && (
+          {ruleset!.forkable && ruleset!.usedBy.length > 0 && (
             <>
               <Select value={forkLeague} onValueChange={v => setForkLeague(v ?? '')}>
                 <SelectTrigger className="h-7 w-36 text-xs"><SelectValue /></SelectTrigger>

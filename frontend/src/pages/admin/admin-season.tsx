@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAppData } from '@/lib/app-data-context';
 // WIP: useAppData exposes League[] (in-memory), but season hooks/cards expect ApiLeague[]
 // (wire format). Cast at boundary until the types are unified.
-import type { ApiLeague } from '@/lib/api';
+import { api, type ApiLeague } from '@/lib/api';
 import { Sparkles, Plus } from 'lucide-react';
 import { type EditableLeague } from './season/phase-config';
 import { LeagueEditDialog } from './season/league-edit-dialog';
-import { NewSeasonWizard } from './season/new-season-wizard';
 import { DraftOrderEditor } from './season/draft-order-editor';
 import { SeasonLeagueCard } from './season/season-league-card';
 import { SeasonScheduleDates } from './season/season-schedule-dates';
@@ -21,8 +23,34 @@ import { usePhaseControls } from './season/use-phase-controls';
 import { usePlayoffControls } from './season/use-playoff-controls';
 import { useLeagueMutations } from './season/use-league-mutations';
 
+type SLeague = ApiLeague & { season: NonNullable<ApiLeague['season']> };
+const PHASE_ORDER = ['predraft', 'draft', 'regular', 'playoffs'] as const;
+
+/** All offseason -> "finished"; else the earliest non-offseason phase. */
+function seasonPhase(ls: SLeague[]): string {
+  const live = PHASE_ORDER.find(p => ls.some(l => l.season.phase === p));
+  return live ?? 'finished';
+}
+
 export function AdminSeason() {
-  const { leagues: defaultLeagues, refreshLeagues } = useAppData();
+  const { refreshLeagues: refreshApp } = useAppData();
+  const navigate = useNavigate();
+  // /api/leagues only returns the latest season; ?all=1 lets an older, still-running season stay reachable.
+  const [allLeagues, setAllLeagues] = useState<SLeague[]>([]);
+  const [picked, setPicked] = useState<number | null>(null);
+  const loadAll = useCallback(() => { api.getLeagues(true).then(ls => setAllLeagues(ls.filter((l): l is SLeague => !!l.season))).catch(() => {}); }, []);
+  useEffect(loadAll, [loadAll]);
+  const refreshLeagues = useCallback(() => { refreshApp(); loadAll(); }, [refreshApp, loadAll]);
+
+  const seasonNums = useMemo(
+    () => [...new Set(allLeagues.map(l => l.season.seasonNumber))].sort((a, b) => b - a), [allLeagues]);
+  const selected = picked ?? seasonNums[0] ?? null;
+  const defaultLeagues = useMemo(
+    () => allLeagues.filter(l => l.season.seasonNumber === selected), [allLeagues, selected]);
+  const label = (n: number) => {
+    const ls = allLeagues.filter(l => l.season.seasonNumber === n);
+    return `Season ${n} · ${seasonPhase(ls)} · ${ls.length} league${ls.length === 1 ? '' : 's'}`;
+  };
 
   const [leagueList, setLeagueList] = useState<EditableLeague[]>(
     defaultLeagues.map(l => ({ id: l.id, name: l.name, color: l.color }))
@@ -33,16 +61,13 @@ export function AdminSeason() {
   );
 
   // Draft state per league + start/pause/resume actions
-  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues as unknown as ApiLeague[]);
+  const { draftStates, handleStartDraft, handlePauseDraft, handleResumeDraft } = useDraftStates(defaultLeagues);
 
   // Sync when defaultLeagues changes
   useEffect(() => {
     setLeagueList(defaultLeagues.map(l => ({ id: l.id, name: l.name, color: l.color })));
     setLeagueStates(Object.fromEntries(defaultLeagues.map(l => [l.id, { ...l.season }])));
   }, [defaultLeagues]);
-
-  // New season wizard
-  const [wizardOpen, setWizardOpen] = useState(false);
 
   // League CRUD + force-regen flows
   const mut = useLeagueMutations({ leagueList, leagueStates, refreshLeagues });
@@ -51,7 +76,7 @@ export function AdminSeason() {
   const phase = usePhaseControls({ leagueList, leagueStates, refreshLeagues });
 
   // Playoff bracket detection + generate/regenerate flow
-  const playoff = usePlayoffControls(defaultLeagues as unknown as ApiLeague[], refreshLeagues);
+  const playoff = usePlayoffControls(defaultLeagues, refreshLeagues);
 
   // Season archive list (read-only, with toggle + full ceremony).
   // Pass refreshLeagues so a successful ceremony also refreshes the app-wide
@@ -63,12 +88,14 @@ export function AdminSeason() {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-4 text-sm">
-        <div className="flex items-center gap-1.5">
-          <span className="text-text-muted">Current Season:</span>
-          <span className="text-text-primary font-medium font-mono">
-            {defaultLeagues[0]?.season?.seasonNumber ?? '—'}
-          </span>
-        </div>
+        <Select value={selected != null ? String(selected) : ''} onValueChange={v => setPicked(Number(v))}>
+          <SelectTrigger className="h-8 w-full max-w-[280px] text-xs font-mono">
+            <SelectValue placeholder="Season">{selected != null ? label(selected) : 'Season'}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {seasonNums.map(n => <SelectItem key={n} value={String(n)} className="text-xs">{label(n)}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-1.5">
           <span className="text-text-muted">Leagues:</span>
           <span className="text-text-primary font-medium font-mono">{leagueList.length}</span>
@@ -78,11 +105,23 @@ export function AdminSeason() {
             <Plus size={14} />
             Add League
           </Button>
-          <Button size="sm" onClick={() => setWizardOpen(true)} className="bg-pink text-surface-base hover:bg-pink/90">
+          <Button size="sm" onClick={() => navigate('/admin/season/new')} className="bg-pink text-surface-base hover:bg-pink/90">
             <Sparkles size={14} />
-            New Season
+            Set up Season {(seasonNums[0] ?? 0) + 1}
           </Button>
         </div>
+      </div>
+
+      {/* Selected-season summary */}
+      <div className="flex flex-wrap gap-2">
+        {defaultLeagues.map(l => (
+          <div key={l.id} className="flex items-center gap-1.5 rounded-md border border-border-subtle px-2 py-1 text-xs min-w-0">
+            <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
+            <span className="truncate min-w-0 text-text-primary">{l.name}</span>
+            <Badge variant="outline" className="text-[10px] shrink-0">{l.season.phase}</Badge>
+            <span className="font-mono text-text-muted shrink-0">{l.playerCount ?? 0} teams</span>
+          </div>
+        ))}
       </div>
 
       {/* League phase cards */}
@@ -96,7 +135,7 @@ export function AdminSeason() {
               league={league}
               state={state}
               draftState={draftStates[league.id]}
-              apiLeague={defaultLeagues.find(l => l.id === league.id) as unknown as ApiLeague | undefined}
+              apiLeague={defaultLeagues.find(l => l.id === league.id)}
               playoffInfo={playoff.playoffInfo[league.id]}
               onEditLeague={mut.openEditLeague}
               onDeleteLeague={mut.confirmDeleteLeague}
@@ -140,7 +179,7 @@ export function AdminSeason() {
       <SeasonScheduleDates
         leagueList={leagueList}
         leagueStates={leagueStates as Record<string, { totalWeeks: number; weekDates?: Record<string, string>; weekDatesAutoFilled?: boolean } & Record<string, unknown>>}
-        defaultLeagues={defaultLeagues as unknown as ApiLeague[]}
+        defaultLeagues={defaultLeagues}
         refreshLeagues={refreshLeagues}
       />
 
@@ -212,9 +251,6 @@ export function AdminSeason() {
         setBackwardConfirmText={phase.setBackwardConfirmText}
         onExecuteBackward={phase.executeBackward}
       />
-
-      {/* New Season Wizard */}
-      <NewSeasonWizard open={wizardOpen} onClose={() => setWizardOpen(false)} leagues={leagueList} />
     </div>
   );
 }

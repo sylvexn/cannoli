@@ -2112,6 +2112,10 @@ export interface ApiRuleset extends SharedRuleset {
   frozen: boolean;
   usedBy: string[];
   draftCenterTeams: number;
+  /** True when forking is allowed (frozen by a running/finished league while another predraft target exists). */
+  forkable: boolean;
+  /** Season this instance belongs to (null for templates). */
+  seasonNumber: number | null;
 }
 
 /** Editable fields (everything optional; frozen instances only accept name/description/archived/band). */
