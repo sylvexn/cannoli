@@ -14,6 +14,12 @@ export const configRoutes = new Elysia()
 
   // Site Settings
 
+  // Staff-only read of the secret-bearing field (the public GET omits it).
+  .get('/api/admin/site-settings', () => {
+    const row = db.select({ defaultUserPassword: schema.siteSettings.defaultUserPassword }).from(schema.siteSettings).get();
+    return { defaultUserPassword: row?.defaultUserPassword ?? null };
+  })
+
   // Partial update: only the keys sent are written, so a form that edits a
   // few settings never resets the rest to defaults.
   .put('/api/site-settings', ({ body, set }) => {

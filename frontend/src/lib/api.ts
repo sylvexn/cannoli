@@ -637,7 +637,6 @@ export interface ApiAnalyticsLiveEntry {
 }
 
 export interface ApiSiteSettings {
-  defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
   faDeadlineWeek?: number;
@@ -1176,6 +1175,7 @@ export const api = {
   reportClientError: (input: { page: string; message: string; name?: string; stack?: string; kind?: string; breadcrumbs?: unknown[]; version?: string }) =>
     postJson<{ errorId: string }>('/api/client-errors', input),
 
+  getAdminSiteSettings: () => fetchJson<{ defaultUserPassword: string | null }>('/api/admin/site-settings'),
   getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
 
   getMoveCategories: () => fetchJson<ApiMoveCategory[]>('/api/move-categories'),
