@@ -1,86 +1,16 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import {
   hashPassword, verifyPassword,
   createSession, deleteSession,
   sessionCookieString, clearSessionCookieString,
   csrfTokenForSession, csrfCookieString, clearCsrfCookieString,
 } from '../lib/auth';
-import { createPsSession, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie, parsePsSid, validatePsSid } from '../lib/ps-login';
+import { clientIp, checkLockout, recordFailure, clearAttempts, clearRateLimitForUser } from '../lib/login-limiter';
+import { createPsSession, destroyPsSessionsFor, getPsUserid, psSidCookieString, clearPsSidCookieString, deletePsSessionFromCookie, parsePsSid, validatePsSid } from '../lib/ps-login';
 
-// Login rate limiter
-// In-memory, per-IP. Max 5 failed attempts per 15-minute window; once
-// exceeded, the IP is locked out for 15 minutes. Successful login resets
-// the counter for that IP. No external deps.
-
-const RL_WINDOW_MS = 15 * 60 * 1000;
-const RL_MAX_FAILS = 5;
-const RL_LOCKOUT_MS = 15 * 60 * 1000;
-
-interface RateLimitEntry {
-  fails: number;
-  firstFailAt: number;
-  lockedUntil: number;
-  usernames: Set<string>; // usernames attempted from this IP during the window
-}
-
-const loginAttempts = new Map<string, RateLimitEntry>();
-
-function clientIp(request: Request): string {
-  const fwd = request.headers.get('x-forwarded-for');
-  if (fwd) return fwd.split(',')[0]!.trim();
-  const real = request.headers.get('x-real-ip');
-  if (real) return real.trim();
-  return '127.0.0.1';
-}
-
-/** Returns seconds remaining if locked out, else 0. Side-effect: prunes expired entries. */
-function checkLockout(ip: string): number {
-  const entry = loginAttempts.get(ip);
-  if (!entry) return 0;
-  const now = Date.now();
-  if (entry.lockedUntil > now) {
-    return Math.ceil((entry.lockedUntil - now) / 1000);
-  }
-  // Window expired with no lockout — clear it.
-  if (entry.lockedUntil <= now && now - entry.firstFailAt > RL_WINDOW_MS) {
-    loginAttempts.delete(ip);
-  }
-  return 0;
-}
-
-function recordFailure(ip: string, username: string) {
-  const key = username.toLowerCase().trim();
-  const now = Date.now();
-  const entry = loginAttempts.get(ip);
-  if (!entry || now - entry.firstFailAt > RL_WINDOW_MS) {
-    loginAttempts.set(ip, { fails: 1, firstFailAt: now, lockedUntil: 0, usernames: new Set([key]) });
-    return;
-  }
-  entry.fails += 1;
-  entry.usernames.add(key);
-  if (entry.fails >= RL_MAX_FAILS) {
-    entry.lockedUntil = now + RL_LOCKOUT_MS;
-  }
-}
-
-function clearAttempts(ip: string) {
-  loginAttempts.delete(ip);
-}
-
-/**
- * Clear any rate-limit lockout tied to a username. The limiter is keyed by IP,
- * so we drop every tracked IP that attempted this username during its window.
- * Called when an admin resets a user's password so a locked-out user who forgot
- * their password can log in immediately with the new temp password.
- */
-export function clearRateLimitForUser(username: string) {
-  const key = username.toLowerCase().trim();
-  for (const [ip, entry] of loginAttempts) {
-    if (entry.usernames.has(key)) loginAttempts.delete(ip);
-  }
-}
+export { clearRateLimitForUser };
 
 export const authRoutes = new Elysia()
 
@@ -276,7 +206,7 @@ export const authRoutes = new Elysia()
     }), { headers });
   })
 
-  .post('/api/auth/change-password', ({ body, user, set }) => {
+  .post('/api/auth/change-password', ({ body, user, sessionToken, request, set }) => {
     const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
 
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
@@ -284,15 +214,23 @@ export const authRoutes = new Elysia()
       set.status = 400;
       return { error: 'Current and new password required' };
     }
-    if (newPassword.length < 4) {
+    if (newPassword.length < 8) {
       set.status = 400;
-      return { error: 'Password must be at least 4 characters' };
+      return { error: 'Password must be at least 8 characters' };
+    }
+    const ip = clientIp(request);
+    const lockoutSec = checkLockout(ip);
+    if (lockoutSec > 0) {
+      set.status = 429;
+      set.headers['retry-after'] = String(lockoutSec);
+      return { error: 'Too many failed attempts. Try again later.', retryAfter: lockoutSec };
     }
 
     const dbUser = db.select().from(schema.users)
       .where(eq(schema.users.id, parseInt(user.id)))
       .get();
     if (!dbUser || !verifyPassword(currentPassword, dbUser.passwordHash)) {
+      recordFailure(ip, user.username);
       set.status = 403;
       return { error: 'Current password is incorrect' };
     }
@@ -301,6 +239,12 @@ export const authRoutes = new Elysia()
       .set({ passwordHash: hashPassword(newPassword), mustChangePassword: false })
       .where(eq(schema.users.id, dbUser.id))
       .run();
+
+    // Revoke every other login (keep this one) and all PS sessions.
+    db.delete(schema.sessions)
+      .where(and(eq(schema.sessions.userId, dbUser.id), ne(schema.sessions.id, sessionToken ?? '')))
+      .run();
+    destroyPsSessionsFor(dbUser.username, getPsUserid(dbUser));
 
     return { success: true };
   });

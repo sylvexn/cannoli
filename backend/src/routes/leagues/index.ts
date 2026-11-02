@@ -185,7 +185,6 @@ export const leagueRoutes = new Elysia()
       faPickupsPerSeason: 6,
     };
     return {
-      defaultUserPassword: row.defaultUserPassword,
       draftTimerEnabled: row.draftTimerEnabled ?? true,
       draftDemoVisible: row.draftDemoVisible ?? isMock,
       faDeadlineWeek: row.faDeadlineWeek ?? 7,

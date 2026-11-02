@@ -20,7 +20,7 @@ export function ChangePasswordPage() {
 
   const isForced = user?.mustChangePassword;
   const mismatch = confirmPassword !== '' && newPassword !== confirmPassword;
-  const tooShort = newPassword !== '' && newPassword.length < 6;
+  const tooShort = newPassword !== '' && newPassword.length < 8;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,8 +28,8 @@ export function ChangePasswordPage() {
       setError('Passwords do not match');
       return;
     }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     setError('');
@@ -90,7 +90,7 @@ export function ChangePasswordPage() {
               aria-invalid={tooShort || undefined}
             />
             {tooShort && (
-              <p className="text-xs text-loss">At least 6 characters</p>
+              <p className="text-xs text-loss">At least 8 characters</p>
             )}
           </div>
 

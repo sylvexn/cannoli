@@ -9,6 +9,7 @@ import { CoachLink } from '@/components/coach-link';
 import { cn } from '@/lib/utils';
 import type { ApiPinDefinition, ApiPinSuggestion, ApiPinUnresolved, ApiSeasonPin } from '@/lib/api';
 import { RosterPicker } from './roster-picker';
+import { MatchPicker } from './match-picker';
 import {
   rowFromSuggestion, rowKey, sameRow, rowFromPin,
   type SheetLeague, type SheetRow, type SheetTeam,
@@ -109,6 +110,7 @@ function TeamRow({
   const first = sugg[0];
   const wantsMon = fields.includes('pokemon');
   const wantsNick = fields.includes('nickname');
+  const wantsMatch = fields.includes('match') && def.scope !== 'match';
   // Team-scoped pins with a Pokemon: the picker IS the control (empty = no award).
   const pickerMode = def.scope === 'team' && wantsMon;
 
@@ -152,7 +154,15 @@ function TeamRow({
           value={row?.pokemon}
           clearable={pickerMode}
           invalid={!!missingInput && !row?.pokemon}
-          onChange={mon => (mon == null ? clear() : patch({ pokemon: mon }))}
+          onChange={mon => (mon == null ? clear() : patch({ pokemon: mon, matchId: mon === row?.pokemon ? row?.matchId : undefined }))}
+        />
+      )}
+      {wantsMatch && row && (
+        <MatchPicker
+          teamId={team.id}
+          pokemon={row.pokemon}
+          value={row.matchId}
+          onChange={matchId => patch({ matchId })}
         />
       )}
       {wantsNick && row && (

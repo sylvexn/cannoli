@@ -8,6 +8,7 @@
  * unapproved bracket.
  */
 import { db, schema } from '../db';
+import { matchListCols } from './queries';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { tx } from './tx';
 import { buildPlayoffMatchups, type PlayoffMatchup } from './playoff-advance';
@@ -22,7 +23,7 @@ export interface PlayoffFail { status: number; error: string; code: string }
 const fail = (status: number, code: string, error: string): PlayoffFail => ({ status, code, error });
 
 export function playoffMatches(leagueId: string): Row[] {
-  return db.select().from(schema.matches)
+  return db.select(matchListCols).from(schema.matches)
     .where(and(eq(schema.matches.leagueId, leagueId), eq(schema.matches.phase, 'playoffs')))
     .all();
 }
@@ -110,7 +111,7 @@ export function validateSeeding(leagueId: string, order: string[], topN: number)
   const r1: [number, number][] = topN === 8 ? [[1, 8], [4, 5], [2, 7], [3, 6]]
     : topN === 6 ? [[3, 6], [4, 5]] : topN === 4 ? [[1, 4], [2, 3]] : [[1, 2]];
   const met = new Map<string, number>();
-  for (const m of db.select().from(schema.matches)
+  for (const m of db.select(matchListCols).from(schema.matches)
     .where(and(eq(schema.matches.leagueId, leagueId), eq(schema.matches.phase, 'regular'))).all()) {
     if (!m.homeTeamId || !m.awayTeamId) continue;
     const k = [m.homeTeamId, m.awayTeamId].sort().join('|');

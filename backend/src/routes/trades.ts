@@ -97,7 +97,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, proposerTeam, recipientTeam, season } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
 
@@ -192,7 +192,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Which league week this trade takes effect in. Default = NEXT week, so
@@ -289,8 +289,13 @@ export const tradeRoutes = new Elysia()
         }).run();
       });
     } catch (e) {
-      set.status = 400;
-      return { error: (e as Error).message };
+      // Only the expected domain error (executeRosterSwap's "Trade invalid: …")
+      // is a client error; anything else surfaces as a generic 500 via onError.
+      if (e instanceof Error && e.message.startsWith('Trade invalid:')) {
+        set.status = 400;
+        return { error: e.message };
+      }
+      throw e;
     }
 
     notifyTradeScheduled({
@@ -303,7 +308,7 @@ export const tradeRoutes = new Elysia()
 
     // Best-effort: refresh the PS bot's user→team map so it stays current.
     // Never let this fail the request.
-    try { refreshUserMap(); } catch {}
+    try { refreshUserMap(); } catch (err) { console.warn('[ps-bot] refreshUserMap failed:', err); }
 
     return { success: true, effectiveWeek, scheduled: deferred };
   })
@@ -316,7 +321,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
@@ -347,7 +352,7 @@ export const tradeRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/trade-block', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
@@ -358,8 +363,15 @@ export const tradeRoutes = new Elysia()
       body as { pokemonName: string; note?: string; teamId?: string };
     const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
+    const teamInLeague = db.select({ id: schema.teams.id }).from(schema.teams)
+      .where(and(eq(schema.teams.id, teamId), eq(schema.teams.leagueId, params.leagueId))).get();
+    if (!teamInLeague) { set.status = 400; return { error: 'Team does not belong to this league' }; }
 
     if (!pokemonName?.trim()) { set.status = 400; return { error: 'Pokemon name required' }; }
+    if (note && note.length > 500) { set.status = 400; return { error: 'Note must be at most 500 characters' }; }
+    const onRoster = db.select({ id: schema.rosters.id }).from(schema.rosters)
+      .where(and(eq(schema.rosters.teamId, teamId), eq(schema.rosters.pokemonName, pokemonName.trim()))).get();
+    if (!onRoster) { set.status = 400; return { error: 'Pokemon is not on this team\'s roster' }; }
 
     const result = db.insert(schema.tradeBlockListings).values({
       leagueId: params.leagueId,
@@ -379,7 +391,7 @@ export const tradeRoutes = new Elysia()
       .get();
     if (!listing) { set.status = 404; return { error: 'Listing not found' }; }
 
-    const archived = checkLeagueArchived(listing.leagueId, query.force);
+    const archived = checkLeagueArchived(listing.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (!isStaff(user)) {
@@ -397,7 +409,7 @@ export const tradeRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/trades/propose', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
@@ -481,7 +493,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, proposerTeam } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
@@ -527,7 +539,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season, recipientTeam } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending') {

@@ -1,15 +1,15 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
+import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { generateLeagueSchedule } from '../lib/schedule-generator';
 import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings, matchWinner } from '../lib/standings';
-import { getLeague, isMatchRevealed } from '../lib/queries';
+import { getLeague, isMatchRevealed, matchListCols } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
-import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
+import { replaySummaryForMatch, replaySummariesForLeague } from '../lib/replay-summary';
 import { writePlayoffBracket, getDraft } from '../lib/playoff-publish';
 
 export const matchRoutes = new Elysia()
@@ -21,7 +21,7 @@ export const matchRoutes = new Elysia()
   // replay-row glance line and post-roll mini-card on the stream cockpit.
 
   .get('/api/matches/:matchId/replay-summary', ({ params, user }) => {
-    const match = db.select().from(schema.matches)
+    const match = db.select(matchListCols).from(schema.matches)
       .where(eq(schema.matches.id, params.matchId))
       .get();
     if (!match) return null;
@@ -29,222 +29,23 @@ export const matchRoutes = new Elysia()
     // row, so serving it for an unrevealed week hands out the exact score the
     // schedule endpoint withholds. Same null shape as "no such match".
     if (!isMatchRevealed(match, user)) return null;
-
-    // LEFT JOIN to rosters (team_id, pokemon_name) so each replay row can
-    // surface the team's chosen nickname + shiny flag for that mon. match_pokemon
-    // rows for traded-out mons may not match a current roster — those just get
-    // null nickname / false isShiny.
-    const entries = db.select({
-      id: schema.matchPokemon.id,
-      matchId: schema.matchPokemon.matchId,
-      teamId: schema.matchPokemon.teamId,
-      pokemonName: schema.matchPokemon.pokemonName,
-      kills: schema.matchPokemon.kills,
-      deaths: schema.matchPokemon.deaths,
-      teraUsed: schema.matchPokemon.teraUsed,
-      teraType: schema.matchPokemon.teraType,
-      nickname: schema.rosters.nickname,
-      isShiny: schema.rosters.isShiny,
-    }).from(schema.matchPokemon)
-      .leftJoin(
-        schema.rosters,
-        and(
-          eq(schema.rosters.teamId, schema.matchPokemon.teamId),
-          eq(schema.rosters.pokemonName, schema.matchPokemon.pokemonName),
-        ),
-      )
-      .where(eq(schema.matchPokemon.matchId, params.matchId))
-      .all();
-
-    const homeMons = entries.filter(e => e.teamId === match.homeTeamId);
-    const awayMons = entries.filter(e => e.teamId === match.awayTeamId);
-
-    // MVP — top kill-getter across both teams, ties broken by lower deaths
-    const allMons = [...homeMons, ...awayMons];
-    const mvpEntry = allMons.length > 0
-      ? allMons.reduce((best, m) => {
-          if (m.kills > best.kills) return m;
-          if (m.kills === best.kills && m.deaths < best.deaths) return m;
-          return best;
-        })
-      : null;
-    const mvp = mvpEntry ? {
-      name: mvpEntry.pokemonName,
-      nickname: mvpEntry.nickname ?? null,
-      isShiny: !!mvpEntry.isShiny,
-      kills: mvpEntry.kills,
-      deaths: mvpEntry.deaths,
-      teamId: mvpEntry.teamId,
-    } : null;
-
-    const homeScore = match.homeScore ?? 0;
-    const awayScore = match.awayScore ?? 0;
-    const isComplete = match.homeScore != null && match.awayScore != null;
-
-    const teraCount = entries.filter(e => e.teraUsed).length;
-    const sweep = isComplete && (
-      (homeScore === 6 && awayScore === 0) ||
-      (awayScore === 6 && homeScore === 0)
-    );
-
-    // Full 12-mon grid: merge brought team-of-6 (incl. benched mons) with
-    // the real appeared K/D from match_pokemon. The K/D / MVP / teraCount /
-    // sweep above stay sourced purely from match_pokemon (appeared-only) —
-    // only the returned display arrays gain the benched slots.
-    type DisplayMon = {
-      name: string;
-      nickname: string | null;
-      isShiny: boolean;
-      kills: number;
-      deaths: number;
-      teraUsed: boolean;
-      teraType: string | null;
-    };
-
-    const fallbackHome: DisplayMon[] = homeMons.map(m => ({
-      name: m.pokemonName,
-      nickname: m.nickname ?? null,
-      isShiny: !!m.isShiny,
-      kills: m.kills,
-      deaths: m.deaths,
-      teraUsed: m.teraUsed,
-      teraType: m.teraType,
-    }));
-    const fallbackAway: DisplayMon[] = awayMons.map(m => ({
-      name: m.pokemonName,
-      nickname: m.nickname ?? null,
-      isShiny: !!m.isShiny,
-      kills: m.kills,
-      deaths: m.deaths,
-      teraUsed: m.teraUsed,
-      teraType: m.teraType,
-    }));
-
-    // Resolve the brought sides: cached column → lazy re-parse of replayLog
-    // (self-healing the cache) → null (legacy/sim rows fall back below).
-    let brought: BroughtSides | null = null;
-    if (match.broughtPreview) {
-      try {
-        const parsed = JSON.parse(match.broughtPreview);
-        if (parsed && Array.isArray(parsed.home) && Array.isArray(parsed.away)) {
-          brought = parsed as BroughtSides;
-        }
-      } catch { /* malformed cache → recompute below if a log exists */ }
-    }
-    if (!brought && match.replayLog) {
-      const homeRoster = db.select({ name: schema.rosters.pokemonName })
-        .from(schema.rosters)
-        .where(eq(schema.rosters.teamId, match.homeTeamId ?? ''))
-        .all().map(r => r.name);
-      const awayRoster = db.select({ name: schema.rosters.pokemonName })
-        .from(schema.rosters)
-        .where(eq(schema.rosters.teamId, match.awayTeamId ?? ''))
-        .all().map(r => r.name);
-      const computed = computeBroughtPreviewFromLog(match.replayLog, {
-        recorded: entries.map(e => ({ teamId: e.teamId, pokemonName: e.pokemonName })),
-        homeTeamId: match.homeTeamId,
-        awayTeamId: match.awayTeamId,
-        homeRoster,
-        awayRoster,
-      });
-      if (computed) {
-        brought = computed;
-        // Persist back so the next read skips the parse. A write failure must
-        // never break the read.
-        try {
-          db.update(schema.matches)
-            .set({ broughtPreview: JSON.stringify(computed) })
-            .where(eq(schema.matches.id, match.id))
-            .run();
-        } catch { /* self-heal best-effort */ }
-      }
-    }
-
-    let home: DisplayMon[];
-    let away: DisplayMon[];
-
-    if (brought) {
-      // K/D lookup keyed by lowercased Cannoli species, per team.
-      const kdByTeam = new Map<string, Map<string, typeof entries[number]>>();
-      for (const e of entries) {
-        let m = kdByTeam.get(e.teamId);
-        if (!m) { m = new Map(); kdByTeam.set(e.teamId, m); }
-        m.set(e.pokemonName.toLowerCase(), e);
-      }
-
-      // Roster lookup (nickname / shiny) keyed by lowercased species, per team.
-      const rosterRows = (teamId: string | null) => teamId
-        ? db.select({
-            pokemonName: schema.rosters.pokemonName,
-            nickname: schema.rosters.nickname,
-            isShiny: schema.rosters.isShiny,
-          }).from(schema.rosters)
-            .where(eq(schema.rosters.teamId, teamId))
-            .all()
-        : [];
-      const rosterMap = (teamId: string | null) => {
-        const map = new Map<string, { nickname: string | null; isShiny: boolean }>();
-        for (const r of rosterRows(teamId)) {
-          map.set(r.pokemonName.toLowerCase(), {
-            nickname: r.nickname ?? null,
-            isShiny: !!r.isShiny,
-          });
-        }
-        return map;
-      };
-      const homeRosterMap = rosterMap(match.homeTeamId);
-      const awayRosterMap = rosterMap(match.awayTeamId);
-
-      const buildSide = (
-        species: string[],
-        kd: Map<string, typeof entries[number]> | undefined,
-        roster: Map<string, { nickname: string | null; isShiny: boolean }>,
-      ): DisplayMon[] => species.map(name => {
-        const key = name.toLowerCase();
-        const k = kd?.get(key);
-        const r = roster.get(key);
-        return {
-          name,
-          nickname: r?.nickname ?? null,
-          isShiny: r?.isShiny ?? false,
-          kills: k?.kills ?? 0,
-          deaths: k?.deaths ?? 0,
-          teraUsed: k?.teraUsed ?? false,
-          teraType: k?.teraType ?? null,
-        };
-      });
-
-      home = buildSide(
-        brought.home,
-        match.homeTeamId ? kdByTeam.get(match.homeTeamId) : undefined,
-        homeRosterMap,
-      );
-      away = buildSide(
-        brought.away,
-        match.awayTeamId ? kdByTeam.get(match.awayTeamId) : undefined,
-        awayRosterMap,
-      );
-    } else {
-      // Legacy / sim / undecidable: keep current behavior (appeared-only).
-      home = fallbackHome;
-      away = fallbackAway;
-    }
-
-    return {
-      matchId: match.id,
-      isComplete,
-      mvp,
-      teraCount,
-      sweep,
-      // Margin of victory; useful for "blowout" / "nailbiter" classification
-      margin: Math.abs(homeScore - awayScore),
-      scoreLine: isComplete ? `${homeScore}-${awayScore}` : null,
-      // pokemon entries returned so the row's MVP popover doesn't need a
-      // second round-trip to /pokemon
-      home,
-      away,
-    };
+    return replaySummaryForMatch(match);
   })
+
+  // In-progress matches across all leagues (app-shell live indicator).
+  .get('/api/matches/live', () =>
+    db.select({
+      id: schema.matches.id, leagueId: schema.matches.leagueId,
+      homePlayer: schema.matches.homeTeamId, awayPlayer: schema.matches.awayTeamId,
+      week: schema.matches.week, phase: schema.matches.phase, playoffRound: schema.matches.playoffRound,
+    }).from(schema.matches)
+      .where(eq(schema.matches.status, 'in_progress'))
+      .all())
+
+  // Bulk replay summaries for a league: { [matchId]: summary } for completed,
+  // revealed matches. Replaces one /replay-summary request per replay card.
+  .get('/api/leagues/:leagueId/replay-summaries', ({ params, user }) =>
+    replaySummariesForLeague(params.leagueId, m => isMatchRevealed(m, user)))
 
   // Replay payload (PS-format JSON for the in-site replay viewer)
   //
@@ -447,7 +248,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/result', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy } =
@@ -470,7 +271,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/dismiss-warnings', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -532,7 +333,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/void', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -577,7 +378,7 @@ export const matchRoutes = new Elysia()
           downstreamToClear = [];
         } else {
 
-        const downstream = db.select().from(schema.matches)
+        const downstream = db.select(matchListCols).from(schema.matches)
           .where(and(
             eq(schema.matches.leagueId, match.leagueId),
             eq(schema.matches.phase, 'playoffs'),
@@ -668,7 +469,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/dispute', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { reason } = body as { reason: string };
     if (!reason || typeof reason !== 'string') { set.status = 400; return { error: 'reason required' }; }
@@ -703,7 +504,7 @@ export const matchRoutes = new Elysia()
 
   .patch('/api/matches/:matchId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -753,7 +554,7 @@ export const matchRoutes = new Elysia()
 
   .delete('/api/matches/:matchId', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -777,7 +578,7 @@ export const matchRoutes = new Elysia()
           homeScore: match.homeScore,
           awayScore: match.awayScore,
         });
-        const downstream = winnerId ? db.select().from(schema.matches)
+        const downstream = winnerId ? db.select(matchListCols).from(schema.matches)
           .where(and(
             eq(schema.matches.leagueId, match.leagueId),
             eq(schema.matches.phase, 'playoffs'),
@@ -828,7 +629,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/schedule/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { force, confirmName } = (body || {}) as { force?: boolean; confirmName?: string };
@@ -906,7 +707,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/playoffs/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { topN, force, confirmName, seedOrder } = (body || {}) as {
@@ -960,7 +761,7 @@ export const matchRoutes = new Elysia()
     // scratch. Once results exist that destroys completed games (and orphans
     // the pins that reference their match ids), so require the same
     // force+confirmName handshake schedule/generate uses.
-    const existing = db.select().from(schema.matches)
+    const existing = db.select(matchListCols).from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, params.leagueId),
         eq(schema.matches.phase, 'playoffs'),
@@ -1017,112 +818,4 @@ export const matchRoutes = new Elysia()
 
     return { success: true, matchCount: matchups.length, seedings: seeded.map((s, i) => ({ seed: i + 1, teamId: s.id })) };
     });
-  })
-
-  // Scrims
-
-  .get('/api/scrims', ({ query }) => {
-    let rows = db.select().from(schema.scrims)
-      .orderBy(desc(schema.scrims.playedAt))
-      .all();
-
-    const leagueId = query.leagueId as string | undefined;
-    if (leagueId) {
-      rows = rows.filter(s => s.leagueId === leagueId);
-    }
-
-    return rows.map(s => ({
-      id: s.id,
-      leagueId: s.leagueId,
-      homeTeamId: s.homeTeamId,
-      awayTeamId: s.awayTeamId,
-      homeScore: s.homeScore,
-      awayScore: s.awayScore,
-      replayUrl: s.replayUrl,
-      psRoomId: s.psRoomId,
-      playedAt: s.playedAt,
-    }));
-  })
-
-  .post('/api/scrims', ({ body, user, set }) => {
-    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-
-    const { leagueId, homeTeamId, awayTeamId, homeScore, awayScore, replayUrl, psRoomId, pokemonData } = body as {
-      leagueId?: string;
-      homeTeamId: string;
-      awayTeamId: string;
-      homeScore: number;
-      awayScore: number;
-      replayUrl?: string;
-      psRoomId?: string;
-      pokemonData?: { teamId: string; pokemonName: string; kills: number; deaths: number; teraUsed?: boolean; teraType?: string }[];
-    };
-
-    if (!homeTeamId || !awayTeamId) { set.status = 400; return { error: 'homeTeamId and awayTeamId required' }; }
-
-    const result = db.insert(schema.scrims).values({
-      leagueId: leagueId || null,
-      homeTeamId,
-      awayTeamId,
-      homeScore: homeScore ?? null,
-      awayScore: awayScore ?? null,
-      replayUrl: replayUrl || null,
-      psRoomId: psRoomId || null,
-    }).returning().get();
-
-    // Insert per-pokemon data if provided
-    if (pokemonData?.length) {
-      for (const p of pokemonData) {
-        db.insert(schema.scrimPokemon).values({
-          scrimId: result.id,
-          teamId: p.teamId,
-          pokemonName: p.pokemonName,
-          kills: p.kills,
-          deaths: p.deaths,
-          teraUsed: p.teraUsed ?? false,
-          teraType: p.teraType ?? null,
-        }).run();
-      }
-    }
-
-    // Activity log
-    db.insert(schema.activityLog).values({
-      type: 'scrim_played',
-      category: 'scrim',
-      actor: user.username,
-      leagueId: leagueId || null,
-      description: `Scrim: ${homeTeamId} vs ${awayTeamId} (${homeScore}-${awayScore})`,
-      metadata: JSON.stringify({ scrimId: result.id }),
-    }).run();
-
-    return { id: result.id };
-  })
-
-  .get('/api/scrims/:scrimId/pokemon', ({ params }) => {
-    const entries = db.select().from(schema.scrimPokemon)
-      .where(eq(schema.scrimPokemon.scrimId, parseInt(params.scrimId)))
-      .all();
-
-    const scrim = db.select().from(schema.scrims)
-      .where(eq(schema.scrims.id, parseInt(params.scrimId)))
-      .get();
-
-    if (!scrim) return { home: [], away: [] };
-
-    return {
-      home: entries.filter(e => e.teamId === scrim.homeTeamId).map(e => ({
-        name: e.pokemonName,
-        kills: e.kills,
-        deaths: e.deaths,
-        teraUsed: e.teraUsed,
-        teraType: e.teraType,
-      })),
-      away: entries.filter(e => e.teamId === scrim.awayTeamId).map(e => ({
-        name: e.pokemonName,
-        kills: e.kills,
-        deaths: e.deaths,
-        teraUsed: e.teraUsed,
-        teraType: e.teraType,
-      })),
-    };
   });

@@ -43,3 +43,11 @@ export function requireDev({ user, set }: { user: { role: string } | null | unde
     return { error: 'Forbidden' };
   }
 }
+
+const ROLE_RANK: Record<string, number> = { user: 0, admin: 1, bot: 2, dev: 3 };
+
+/** Dev may act on anyone; everyone else only on strictly lower-ranked roles. */
+export function canActOnRole(caller: { role: string }, targetRole: string): boolean {
+  if (caller.role === 'dev') return true;
+  return (ROLE_RANK[caller.role] ?? 0) > (ROLE_RANK[targetRole] ?? 0);
+}

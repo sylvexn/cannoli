@@ -637,7 +637,6 @@ export interface ApiAnalyticsLiveEntry {
 }
 
 export interface ApiSiteSettings {
-  defaultUserPassword: string | null;
   draftTimerEnabled: boolean;
   draftDemoVisible: boolean;
   faDeadlineWeek?: number;
@@ -860,6 +859,10 @@ export interface ApiPinDefinition {
 }
 
 export type PinScope = 'league' | 'season' | 'team' | 'match';
+export interface ApiPokemonMatch {
+  id: string; week: number; opponent: string; score: string | null; kills: number; deaths: number;
+}
+
 export type PinMetadataFieldName = 'pokemon' | 'nickname' | 'match' | 'note';
 
 export type PinSource = 'auto' | 'manual';
@@ -1100,9 +1103,15 @@ export const api = {
     postJson<{ imported: number; skipped: number; teams: DcTeamDto[] }>('/api/draft-center/import', { teams }),
   dcGetShared: (token: string) => fetchJson<DcSharedTeam>(`/api/draft-center/shared/${encodeURIComponent(token)}`),
 
+  getMyTeams: () => fetchJson<{
+    teams: { leagueId: string; teamId: string; teamAbbrev: string; teamName: string }[];
+    pendingByLeague: Record<string, number>;
+  }>('/api/users/me/teams'),
+  getLiveMatches: () => fetchJson<{ id: string; leagueId: string; homePlayer: string | null; awayPlayer: string | null; week: number; phase: string; playoffRound: string | null }[]>('/api/matches/live'),
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
   getMatchPokemon: (matchId: string) => fetchJson<{ home: ApiMatchPokemon[]; away: ApiMatchPokemon[] }>(`/api/matches/${matchId}/pokemon`),
+  getReplaySummaries: (leagueId: string) => fetchJson<Record<string, ApiReplaySummary>>(`/api/leagues/${leagueId}/replay-summaries`),
   getReplaySummary: (matchId: string) => fetchJson<ApiReplaySummary | null>(`/api/matches/${matchId}/replay-summary`),
 
   getTransactions: (leagueId: string) => fetchJson<ApiTransaction[]>(`/api/leagues/${leagueId}/transactions`),
@@ -1176,6 +1185,7 @@ export const api = {
   reportClientError: (input: { page: string; message: string; name?: string; stack?: string; kind?: string; breadcrumbs?: unknown[]; version?: string }) =>
     postJson<{ errorId: string }>('/api/client-errors', input),
 
+  getAdminSiteSettings: () => fetchJson<{ defaultUserPassword: string | null }>('/api/admin/site-settings'),
   getSiteSettings: () => fetchJson<ApiSiteSettings>('/api/site-settings'),
 
   getMoveCategories: () => fetchJson<ApiMoveCategory[]>('/api/move-categories'),
@@ -1914,6 +1924,10 @@ export const api = {
   /** A team's published pins - works for teams with no linked coach. */
   getTeamPins: (teamId: string) =>
     fetchJson<ApiPin[]>(`/api/teams/${encodeURIComponent(teamId)}/pins`),
+
+  getPokemonMatches: (teamId: string, pokemon: string) =>
+    fetchJson<ApiPokemonMatch[]>(
+      `/api/admin/pins/pokemon-matches?teamId=${encodeURIComponent(teamId)}&pokemon=${encodeURIComponent(pokemon)}`),
 
   getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
 

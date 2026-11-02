@@ -76,42 +76,20 @@ export function AppShell() {
       return;
     }
     let cancelled = false;
-    (async () => {
-      const teamLists = await Promise.all(leagues.map(l => api.getTeams(l.id).catch(() => [])));
+    api.getMyTeams().then(({ teams, pendingByLeague: byLeague }) => {
       if (cancelled) return;
-      const found: typeof myTeams = [];
-      const myTeamIds = new Set<string>();
-      for (let i = 0; i < leagues.length; i++) {
-        const league = leagues[i];
-        if (!league) continue;
-        const teams = teamLists[i] ?? [];
-        const team = teams.find(t => t.userId != null && String(t.userId) === user.id);
-        if (team) {
-          found.push({ leagueId: league.id, teamId: team.id, teamAbbrev: team.teamAbbrev, teamName: team.teamName });
-          myTeamIds.add(team.id);
-        }
-      }
+      // only leagues the shell knows about, in league order
+      const found = leagues.flatMap(l => {
+        const t = teams.find(x => x.leagueId === l.id);
+        return t ? [t] : [];
+      });
       setMyTeams(found);
-
-      // Pending trades — only fetch trade lists for leagues where the user has a team
-      const tradeLists = await Promise.all(
-        found.map(t => api.getTrades(t.leagueId).catch(() => [])),
-      );
-      if (cancelled) return;
-      const byLeague: Record<string, number> = {};
       let total = 0;
-      for (let i = 0; i < found.length; i++) {
-        const f = found[i]!;
-        const trades = tradeLists[i] ?? [];
-        const count = trades.filter(tr =>
-          myTeamIds.has(tr.recipientId) && (tr.status === 'pending' || tr.status === 'awaiting_admin'),
-        ).length;
-        byLeague[f.leagueId] = count;
-        total += count;
-      }
-      setPendingByLeague(byLeague);
+      const pending: Record<string, number> = {};
+      for (const f of found) { pending[f.leagueId] = byLeague[f.leagueId] ?? 0; total += pending[f.leagueId]; }
+      setPendingByLeague(pending);
       setPendingTradeCount(total);
-    })();
+    }).catch(() => { /* keep previous */ });
     return () => { cancelled = true; };
   }, [user, leagues]);
 
@@ -121,15 +99,8 @@ export function AppShell() {
   useEffect(() => {
     async function checkLive() {
       try {
-        const allMatches: typeof liveMatches = [];
-        for (const league of leagues) {
-          const schedule = await api.getSchedule(league.id);
-          const live = schedule.matches.filter(m => m.status === 'in_progress' && (m.phase === 'regular' || m.phase === 'playoffs'));
-          for (const m of live) {
-            allMatches.push({ id: m.id, leagueId: league.id, homePlayer: m.homePlayer, awayPlayer: m.awayPlayer, week: m.week, phase: m.phase, playoffRound: m.playoffRound });
-          }
-        }
-        setLiveMatches(allMatches);
+        const live = await api.getLiveMatches();
+        setLiveMatches(live.map(m => ({ ...m, homePlayer: m.homePlayer ?? '', awayPlayer: m.awayPlayer ?? '' })));
       } catch { /* ignore */ }
     }
     if (leagues.length > 0) checkLive();

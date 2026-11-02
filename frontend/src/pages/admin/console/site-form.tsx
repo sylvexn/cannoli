@@ -34,10 +34,10 @@ export function useSiteSettings() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.getSiteSettings()
-      .then(s => {
+    Promise.all([api.getSiteSettings(), api.getAdminSiteSettings()])
+      .then(([s, a]) => {
         const v = {
-          defaultUserPassword: s.defaultUserPassword ?? DEFAULTS.defaultUserPassword,
+          defaultUserPassword: a.defaultUserPassword ?? DEFAULTS.defaultUserPassword,
           draftTimerEnabled: s.draftTimerEnabled ?? true,
           draftDemoVisible: s.draftDemoVisible ?? true,
           faDeadlineWeek: s.faDeadlineWeek ?? DEFAULTS.faDeadlineWeek,

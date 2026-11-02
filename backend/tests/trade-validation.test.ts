@@ -353,13 +353,13 @@ describe('trade deadline + phase enforcement at propose time', () => {
     expect(json.code).toBe('TRADE_WRONG_PHASE');
   });
 
-  test('rejects propose when trade deadline has passed (currentWeek >= deadline)', async () => {
+  test('rejects propose when trade deadline has passed (currentWeek > deadline, deadline week is inclusive)', async () => {
     if (!host) { expect(true).toBe(true); return; }
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, host.id)).get()!;
     const savedWeek = league.currentWeek;
     try {
       db.update(schema.leagues)
-        .set({ currentWeek: Math.max(league.tradeDeadlineWeek, 1) })
+        .set({ currentWeek: Math.max(league.tradeDeadlineWeek, 1) + 1 })
         .where(eq(schema.leagues.id, host.id)).run();
       ensurePokemon(`${PFX}d1`, { tier: 5, dex: 9801 });
       ensurePokemon(`${PFX}d2`, { tier: 5, dex: 9802 });

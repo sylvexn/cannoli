@@ -30,6 +30,7 @@ let _started = false;
 
 /** Handle returned by setInterval so we can clear it on shutdown. */
 let _intervalHandle: NodeJS.Timeout | null = null;
+let _firstSweepHandle: NodeJS.Timeout | null = null;
 
 /**
  * Tracks the last known status per probe name.
@@ -37,6 +38,11 @@ let _intervalHandle: NodeJS.Timeout | null = null;
  * Undefined = probe has never been seen this process lifetime.
  */
 const _prevStatus = new Map<string, 'ok' | 'degraded' | 'down'>();
+/** Candidate new status awaiting a second consecutive confirmation. */
+const _pending = new Map<string, { status: 'ok' | 'degraded' | 'down'; n: number }>();
+
+/** Delay before the first sweep so a deploy's boot-time blips don't alert. */
+const FIRST_SWEEP_DELAY_MS = 45_000;
 
 // Types
 
@@ -144,27 +150,30 @@ function upsertProbe(result: ProbeResult): void {
  * alertHealthFlip if a real transition occurred.
  *
  * Alert rules:
- *   - First sweep into 'ok'       → silent (no prior, no regression to report)
- *   - First sweep into non-ok     → alert immediately (probe started degraded)
- *   - Any subsequent change       → alert (covers ok→down, down→ok, etc.)
+ *   - First sweep into 'ok'       → silent
+ *   - Any change from the confirmed status (first observation counts as 'ok')
+ *     → alert only after 2 consecutive identical results
  */
 function maybeAlert(result: ProbeResult): void {
   const prev = _prevStatus.get(result.name);
   const curr = result.status;
 
-  if (prev === undefined) {
-    // First observation this process lifetime.
-    if (curr !== 'ok') {
-      // Already unhealthy on startup — alert.
-      alertHealthFlip({ name: result.name, status: curr, detail: result.detail });
-    }
-    // First-sweep 'ok' → silent.
-  } else if (curr !== prev) {
-    // Status flipped — always alert.
-    alertHealthFlip({ name: result.name, status: curr, detail: result.detail });
+  // Debounce: a status change is only acted on after 2 consecutive identical
+  // results, so a single blip (e.g. the bot reconnecting mid-deploy) is silent.
+  if (curr === (prev ?? 'ok')) {
+    _pending.delete(result.name);
+    _prevStatus.set(result.name, curr);
+    return;
   }
-
+  const p = _pending.get(result.name);
+  const n = p && p.status === curr ? p.n + 1 : 1;
+  if (n < 2) {
+    _pending.set(result.name, { status: curr, n });
+    return;
+  }
+  _pending.delete(result.name);
   _prevStatus.set(result.name, curr);
+  alertHealthFlip({ name: result.name, status: curr, detail: result.detail });
 }
 
 // Sweep
@@ -202,17 +211,17 @@ function runSweep(): void {
  * Start the background heartbeat sweep. Idempotent — safe to call multiple
  * times (only the first call takes effect).
  *
- * Runs an immediate sweep on startup so the health table is populated before
- * the first scheduled tick arrives.
+ * The first sweep runs after FIRST_SWEEP_DELAY_MS, then every INTERVAL_MS.
  */
 export function startHeartbeat(): void {
   if (_started) return;
   _started = true;
 
-  // Immediate sweep so the table has data right away.
-  runSweep();
-
-  _intervalHandle = setInterval(runSweep, INTERVAL_MS);
+  // ponytail: first check is delayed (boot noise); health table is empty until then.
+  _firstSweepHandle = setTimeout(() => {
+    runSweep();
+    _intervalHandle = setInterval(runSweep, INTERVAL_MS);
+  }, FIRST_SWEEP_DELAY_MS);
 }
 
 /**
@@ -220,6 +229,10 @@ export function startHeartbeat(): void {
  * Safe to call if startHeartbeat() was never called or already stopped.
  */
 export function stopHeartbeat(): void {
+  if (_firstSweepHandle !== null) {
+    clearTimeout(_firstSweepHandle);
+    _firstSweepHandle = null;
+  }
   if (_intervalHandle !== null) {
     clearInterval(_intervalHandle);
     _intervalHandle = null;

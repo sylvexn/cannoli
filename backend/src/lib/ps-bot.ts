@@ -262,8 +262,9 @@ export function startBot() {
 export function stopBot() {
   clearTimeout(reconnectTimer);
   stopStalenessTimer();
-  ws?.close();
-  ws = null;
+  const old = ws;
+  ws = null; // handlers on the old socket now no-op (ws !== sock)
+  old?.close();
   connected = false;
 }
 
@@ -346,16 +347,20 @@ export function handleMessageForTest(raw: string) {
 function connect() {
   if (ws?.readyState === WebSocket.OPEN) return;
 
+  let sock: WebSocket;
   try {
-    ws = new WebSocket(PS_SERVER_URL);
+    sock = new WebSocket(PS_SERVER_URL);
   } catch (err) {
     console.error('[PS Bot] Failed to create WebSocket:', err);
     scheduleReconnect();
     return;
   }
+  ws = sock;
 
-  ws.onopen = () => {
+  sock.onopen = () => {
+    if (ws !== sock) return;
     console.log('[PS Bot] Connected to PS server');
+    startStalenessTimer();
     lastInboundAt = Date.now();
     const wasConnected = connected;
     connected = true;
@@ -367,14 +372,16 @@ function connect() {
     flushSendQueue();
   };
 
-  ws.onmessage = (event) => {
+  sock.onmessage = (event) => {
+    if (ws !== sock) return;
     const data = typeof event.data === 'string' ? event.data : '';
     lastInboundAt = Date.now();
     bump();
     handleMessage(data);
   };
 
-  ws.onclose = () => {
+  sock.onclose = () => {
+    if (ws !== sock) return; // superseded/stopped socket
     console.log('[PS Bot] Disconnected');
     const wasConnected = connected;
     connected = false;
@@ -386,9 +393,10 @@ function connect() {
     scheduleReconnect();
   };
 
-  ws.onerror = () => {
+  sock.onerror = () => {
+    if (ws !== sock) return;
     recordError('WebSocket error');
-    ws?.close();
+    sock.close();
   };
 }
 

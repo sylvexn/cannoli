@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
+import { matchListCols } from '../../lib/queries';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings, type TeamStandingRow } from '../../lib/standings';
 
@@ -83,7 +84,7 @@ export const archiveRoutes = new Elysia()
       rostersByTeam.get(r.teamId)!.push(r);
     }
 
-    const allPlayoffs = db.select().from(schema.matches)
+    const allPlayoffs = db.select(matchListCols).from(schema.matches)
       .where(and(
         inArray(schema.matches.leagueId, leagueIds),
         eq(schema.matches.phase, 'playoffs'),

@@ -21,7 +21,7 @@ export const teamRoutes = new Elysia()
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Check authorization: team owner or staff (admin/dev can override any team)
@@ -186,7 +186,7 @@ export const teamRoutes = new Elysia()
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Owner or staff may file the request.
@@ -255,7 +255,7 @@ export const teamRoutes = new Elysia()
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
@@ -363,7 +363,7 @@ export const teamRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/free-agents/pickup', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Accept both legacy single-mon shape and new multi-mon shape.
@@ -456,7 +456,7 @@ export const teamRoutes = new Elysia()
   // gating as pickup. Used by the team-profile "Release" button.
   .post('/api/leagues/:leagueId/free-agents/release', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { teamId, pokemonName } = body as { teamId: string; pokemonName: string };
@@ -537,7 +537,7 @@ export const teamRoutes = new Elysia()
     });
 
     // Best-effort: refresh the PS bot's user→team map after roster change.
-    try { refreshUserMap(); } catch {}
+    try { refreshUserMap(); } catch (err) { console.warn('[ps-bot] refreshUserMap failed:', err); }
 
     return { success: true };
   });

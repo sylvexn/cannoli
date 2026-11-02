@@ -58,7 +58,7 @@ export function deleteTeamCascade(teamId: string, leagueId: string): void {
   db.delete(schema.matchPokemon).where(eq(schema.matchPokemon.teamId, teamId)).run();
   db.delete(schema.draftPicks).where(eq(schema.draftPicks.teamId, teamId)).run();
   db.delete(schema.draftQueue).where(eq(schema.draftQueue.teamId, teamId)).run();
-  db.delete(schema.matchReadyLog).where(eq(schema.matchReadyLog.teamId, teamId)).run();
+  db.delete(schema.faRequests).where(eq(schema.faRequests.teamId, teamId)).run();
   db.delete(schema.playerAvailability).where(eq(schema.playerAvailability.teamId, teamId)).run();
   db.delete(schema.byeWeeks).where(eq(schema.byeWeeks.teamId, teamId)).run();
   db.delete(schema.tradeBlockListings).where(eq(schema.tradeBlockListings.teamId, teamId)).run();
@@ -72,6 +72,10 @@ export function deleteTeamCascade(teamId: string, leagueId: string): void {
   // Matches / transactions / trades mentioning this team. Dropping shared
   // matches removes them from the opponent's record too — necessary for a clean
   // delete (mirrors the original inline behaviour).
+  // match_ready_log has an FK to matches with no cascade: clear ALL rows (both
+  // teams') for the matches about to go, plus this team's own rows.
+  db.delete(schema.matchReadyLog).where(sql`${schema.matchReadyLog.teamId} = ${teamId} OR ${schema.matchReadyLog.matchId} IN (
+    SELECT id FROM matches WHERE home_team_id = ${teamId} OR away_team_id = ${teamId})`).run();
   db.delete(schema.matches)
     .where(sql`${schema.matches.homeTeamId} = ${teamId} OR ${schema.matches.awayTeamId} = ${teamId}`).run();
   db.delete(schema.transactions)

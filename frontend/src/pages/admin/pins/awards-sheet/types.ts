@@ -64,4 +64,4 @@ export function rowFromSuggestion(s: ApiPinSuggestion): SheetRow {
 
 export const sameRow = (a: SheetRow, b: SheetRow) =>
   (a.pokemon ?? '') === (b.pokemon ?? '') && (a.nickname ?? '') === (b.nickname ?? '')
-  && (a.note ?? '') === (b.note ?? '');
+  && (a.note ?? '') === (b.note ?? '') && (a.matchId ?? '') === (b.matchId ?? '');

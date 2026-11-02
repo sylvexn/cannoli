@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Radio } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
@@ -48,6 +48,7 @@ export function ReplaysPage() {
   const [viewingReplay, setViewingReplay] = useState<ReplayEntry | null>(null);
   const [theater, setTheater] = useState(false);
   const [summaries, setSummaries] = useState<Map<string, ApiReplaySummary>>(new Map());
+  const fetchedLeagues = useRef(new Set<string>());
 
   useEffect(() => {
     api.getLeagues(true)
@@ -238,23 +239,21 @@ export function ReplaysPage() {
   useEffect(() => {
     if (entries.length === 0) return;
     let cancelled = false;
-    const missing = entries.filter(e => !summaries.has(e.match.id));
-    if (missing.length === 0) return;
-    Promise.all(
-      missing.map(e => api.getReplaySummary(e.match.id).catch(() => null)),
-    ).then(results => {
-      if (cancelled) return;
-      setSummaries(prev => {
-        const next = new Map(prev);
-        for (let i = 0; i < missing.length; i++) {
-          const r = results[i];
-          if (r) next.set(missing[i].match.id, r);
-        }
-        return next;
+    // One bulk request per league (not per match); each league is fetched once.
+    const todo = [...new Set(entries.map(e => e.league.id))].filter(id => !fetchedLeagues.current.has(id));
+    if (todo.length === 0) return;
+    todo.forEach(id => fetchedLeagues.current.add(id));
+    Promise.all(todo.map(id => api.getReplaySummaries(id).catch(() => ({} as Record<string, ApiReplaySummary>))))
+      .then(results => {
+        if (cancelled) { todo.forEach(id => fetchedLeagues.current.delete(id)); return; }
+        setSummaries(prev => {
+          const next = new Map(prev);
+          for (const r of results) for (const [id, v] of Object.entries(r)) next.set(id, v);
+          return next;
+        });
       });
-    });
     return () => { cancelled = true; };
-  }, [entries, summaries]);
+  }, [entries]);
 
   // Open a specific replay if ?match=ID is in the URL — for share links and
   // deep-links from other pages (pokemon detail, profiles). Re-syncs whenever

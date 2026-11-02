@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { db, schema, sqlite } from '../../db';
-import { eq, desc, and, gte, lt, like, or, type SQL } from 'drizzle-orm';
+import { eq, desc, and, gte, lt, like, or, sql, inArray, type SQL } from 'drizzle-orm';
 import { tx } from '../../lib/tx';
 import { getBotStatus, restartBot, importBattleForMatch, importBattleFromReplay } from '../../lib/ps-bot';
 import { runOnce } from '../../lib/scheduler';
@@ -71,7 +71,7 @@ export const miscRoutes = new Elysia()
   // Force match result (admin override for forfeits / disputes)
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { homeScore, awayScore, forfeitedBy, note, pokemonData, homeTeamId, awayTeamId } = body as {
       homeScore: number; awayScore: number;
@@ -229,7 +229,7 @@ export const miscRoutes = new Elysia()
   // unplayed and completed matches — the result stays semantically identical.
 
   .post('/api/admin/matches/:matchId/swap-sides', ({ params, query, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
@@ -276,7 +276,7 @@ export const miscRoutes = new Elysia()
   // and the app sets no custom maxBody, so no special config is needed.
 
   .post('/api/admin/matches/:matchId/import-battle', ({ params, query, body, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { roomId, replay, sideOverride } = (body ?? {}) as {
@@ -351,9 +351,40 @@ export const miscRoutes = new Elysia()
   // Activity Log
 
   .get('/api/activity-log', ({ query }) => {
-    const baseRows = db.select().from(schema.activityLog)
-      .orderBy(desc(schema.activityLog.timestamp))
-      .all();
+    const SCORE_TYPES = new Set([
+      'match_result', 'match_result_overwritten', 'battle_imported', 'match_force_result',
+    ]);
+    // Filters + ordering + paging run in SQL. Search is the exception: it must
+    // match the POST-redaction text, so SQL only pre-filters (raw text contains
+    // the term, or the row is a score type that redaction may rewrite) and the
+    // exact match + paging happen in JS over that small superset.
+    const category = query.category as string | undefined;
+    const leagueId = query.leagueId as string | undefined;
+    const actor = query.actor as string | undefined;
+    const search = (query.search as string || '').toLowerCase();
+    const limit = Math.min(Math.max(parseInt(query.limit as string) || 50, 1), 200);
+    const offset = Math.max(parseInt(query.offset as string) || 0, 0);
+
+    const conds: SQL[] = [];
+    if (category && category !== 'all') conds.push(eq(schema.activityLog.category, category as typeof schema.activityLog.$inferSelect.category));
+    if (leagueId && leagueId !== 'all') conds.push(eq(schema.activityLog.leagueId, leagueId));
+    if (actor && actor !== 'all') conds.push(eq(schema.activityLog.actor, actor));
+    if (search) {
+      conds.push(or(
+        sql`instr(lower(${schema.activityLog.description} || ' ' || ${schema.activityLog.actor} || ' ' || ${schema.activityLog.type} || ' ' || coalesce(${schema.activityLog.metadata}, '')), ${search}) > 0`,
+        inArray(schema.activityLog.type, [...SCORE_TYPES]),
+      )!);
+    }
+    const where = conds.length ? and(...conds) : undefined;
+    const sqlPaged = !search;
+
+    let q = db.select().from(schema.activityLog).where(where)
+      .orderBy(desc(schema.activityLog.timestamp), desc(schema.activityLog.id)).$dynamic();
+    if (sqlPaged) q = q.limit(limit).offset(offset);
+    const baseRows = q.all();
+    const sqlTotal = sqlPaged
+      ? (db.select({ n: sql<number>`count(*)` }).from(schema.activityLog).where(where).get()?.n ?? 0)
+      : 0;
 
     // Results-reveal gate: redact unpublished match scores
     // Score-bearing match entries leak the result through their description
@@ -364,9 +395,6 @@ export const miscRoutes = new Elysia()
     // a league with NULL gate (archived/ungated) is never redacted. Redaction
     // happens BEFORE the search filter so a score query can't correlate hidden
     // matches by their raw text.
-    const SCORE_TYPES = new Set([
-      'match_result', 'match_result_overwritten', 'battle_imported', 'match_force_result',
-    ]);
     // Cache league gates + match weeks across the page to avoid per-row lookups.
     const gateCache = new Map<string, number | null>();
     const leagueGate = (leagueId: string | null): number | null => {
@@ -378,15 +406,24 @@ export const miscRoutes = new Elysia()
       gateCache.set(leagueId, gate);
       return gate;
     };
+    // Batch-resolve match weeks for every score-bearing row in one query.
     const weekCache = new Map<string, number | null>();
-    const matchWeek = (matchId: string): number | null => {
-      if (weekCache.has(matchId)) return weekCache.get(matchId)!;
-      const mr = db.select({ week: schema.matches.week })
-        .from(schema.matches).where(eq(schema.matches.id, matchId)).get();
-      const week = mr?.week ?? null;
-      weekCache.set(matchId, week);
-      return week;
-    };
+    const wantedMatchIds = new Set<string>();
+    for (const r of baseRows) {
+      if (!SCORE_TYPES.has(r.type) || !r.metadata) continue;
+      try {
+        const m = JSON.parse(r.metadata);
+        if (typeof m?.matchId === 'string') wantedMatchIds.add(m.matchId);
+      } catch { /* ignore */ }
+    }
+    const wantedList = [...wantedMatchIds];
+    for (let i = 0; i < wantedList.length; i += 500) {
+      for (const m of db.select({ id: schema.matches.id, week: schema.matches.week }).from(schema.matches)
+        .where(inArray(schema.matches.id, wantedList.slice(i, i + 500))).all()) {
+        weekCache.set(m.id, m.week);
+      }
+    }
+    const matchWeek = (matchId: string): number | null => weekCache.get(matchId) ?? null;
     const isUnpublishedResult = (r: typeof baseRows[number]): boolean => {
       if (!SCORE_TYPES.has(r.type)) return false;
       const gate = leagueGate(r.leagueId);
@@ -420,32 +457,9 @@ export const miscRoutes = new Elysia()
       };
     });
 
-    let filtered = rows;
-
-    const category = query.category as string | undefined;
-    if (category && category !== 'all') {
-      filtered = filtered.filter(r => r.category === category);
-    }
-
-    const leagueId = query.leagueId as string | undefined;
-    if (leagueId && leagueId !== 'all') {
-      filtered = filtered.filter(r => r.leagueId === leagueId);
-    }
-
-    const actor = query.actor as string | undefined;
-    if (actor && actor !== 'all') {
-      filtered = filtered.filter(r => r.actor === actor);
-    }
-
-    const search = (query.search as string || '').toLowerCase();
-    if (search) {
-      filtered = filtered.filter(r => r._search.includes(search));
-    }
-
-    const limit = parseInt(query.limit as string) || 50;
-    const offset = parseInt(query.offset as string) || 0;
-    const total = filtered.length;
-    const page = filtered.slice(offset, offset + limit);
+    const filtered = search ? rows.filter(r => r._search.includes(search)) : rows;
+    const total = sqlPaged ? sqlTotal : filtered.length;
+    const page = sqlPaged ? filtered : filtered.slice(offset, offset + limit);
 
     return {
       events: page.map(({ _search, ...e }) => e),
@@ -503,8 +517,8 @@ export const miscRoutes = new Elysia()
       .all();
 
     // Filtered total (for pagination): count rows matching the same predicate.
-    const filteredTotal = db.select({ id: schema.requestLogs.id })
-      .from(schema.requestLogs).where(where).all().length;
+    const filteredTotal = db.select({ n: sql<number>`count(*)` })
+      .from(schema.requestLogs).where(where).get()?.n ?? 0;
 
     // Overview stats across the whole table (not the filtered view).
     const stats = sqlite.query<{

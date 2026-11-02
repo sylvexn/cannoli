@@ -50,7 +50,9 @@ export const sessions = sqliteTable('sessions', {
   userId: integer('user_id').notNull().references(() => users.id),
   createdAt: text('created_at').default(sql`(datetime('now'))`),
   expiresAt: text('expires_at').notNull(),
-});
+}, (t) => ({
+  userIdx: index('sessions_user_idx').on(t.userId),
+}));
 
 // Rulesets (see plan/ruleset-design.md). A league points at ONE instance
 // (`is_template = 0`); templates are the editable library the season wizard
@@ -267,6 +269,7 @@ export const teams = sqliteTable('teams', {
   finishLabel: text('finish_label'),
 }, (t) => ({
   leagueIdx: index('teams_league_idx').on(t.leagueId),
+  userIdx: index('teams_user_idx').on(t.userId),
 }));
 
 // Pokemon (reference table — full national dex)
@@ -400,6 +403,7 @@ export const matches = sqliteTable('matches', {
 }, (t) => ({
   leagueWeekIdx: index('matches_league_week_idx').on(t.leagueId, t.week),
   statusIdx: index('matches_status_idx').on(t.status),
+  leagueStatusPhaseWeekIdx: index('matches_league_status_phase_week_idx').on(t.leagueId, t.status, t.phase, t.week),
 }));
 
 // Bye Weeks (one row per team-week sit-out for odd-team leagues)
@@ -427,6 +431,8 @@ export const matchPokemon = sqliteTable('match_pokemon', {
   teraType: text('tera_type'),
 }, (t) => ({
   matchIdx: index('match_pokemon_match_idx').on(t.matchId),
+  teamIdx: index('match_pokemon_team_idx').on(t.teamId),
+  nameIdx: index('match_pokemon_name_idx').on(t.pokemonName),
 }));
 
 // Move Categories (admin-configurable, for matchup analysis)
@@ -493,7 +499,9 @@ export const trades = sqliteTable('trades', {
    *  null appliedAt = approved but scheduled for a later week; the
    *  apply-scheduled sweep runs it once league.currentWeek >= effectiveWeek. */
   appliedAt: text('applied_at'),
-});
+}, (t) => ({
+  leagueIdx: index('trades_league_idx').on(t.leagueId),
+}));
 
 // Free-Agency Requests (admin approval queue)
 // Non-staff FA pickups land here as `pending` instead of mutating rosters
@@ -630,7 +638,9 @@ export const activityLog = sqliteTable('activity_log', {
   /** JSON blob for event-specific data */
   metadata: text('metadata'),
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
-});
+}, (t) => ({
+  timestampIdx: index('activity_log_timestamp_idx').on(t.timestamp),
+}));
 
 // Match Ready Log (audit trail for ready-up events)
 
@@ -640,7 +650,9 @@ export const matchReadyLog = sqliteTable('match_ready_log', {
   teamId: text('team_id').notNull().references(() => teams.id),
   event: text('event', { enum: ['ready', 'unready', 'timeout', 'disconnect'] }).notNull(),
   timestamp: text('timestamp').default(sql`(datetime('now'))`),
-});
+}, (t) => ({
+  matchIdx: index('match_ready_log_match_idx').on(t.matchId),
+}));
 
 // Scrims (unofficial practice matches — tracked but not in standings)
 
@@ -722,7 +734,9 @@ export const playerAvailability = sqliteTable('player_availability', {
   day: text('day').notNull(),
   status: text('status', { enum: ['available', 'unavailable', 'maybe'] }).notNull().default('available'),
   note: text('note'),
-});
+}, (t) => ({
+  leagueIdx: index('player_availability_league_idx').on(t.leagueId),
+}));
 
 // Pin Definitions (catalog of awardable pins/achievements)
 //

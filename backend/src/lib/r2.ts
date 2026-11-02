@@ -40,6 +40,7 @@ export async function r2Put(
       'Content-Type': contentType,
     },
     body: body as BodyInit,
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -53,6 +54,7 @@ export async function r2Delete(key: string): Promise<void> {
   const res = await fetch(url, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${TOKEN}` },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok && res.status !== 404) {
     const text = await res.text().catch(() => '');

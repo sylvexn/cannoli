@@ -9,7 +9,7 @@ import {
 } from '@/lib/api';
 import { getErrorMessage, type ApiError } from '@/lib/errors';
 import {
-  rowFromPin, rowFromSuggestion, rowKey, sameRow,
+  rowFromPin, rowFromSuggestion, rowKey as baseKey, sameRow,
   type SheetLeague, type SheetRow,
 } from './types';
 
@@ -19,7 +19,9 @@ export interface SheetDiff {
   revokes: ApiSeasonPin[];
 }
 
-export function useAwardsSheet(seasonId: number, defId: string | null) {
+export function useAwardsSheet(seasonId: number, defId: string | null, perMatch = false) {
+  // Only per-match pins are identified by their match; elsewhere it is just a field on the row.
+  const rowKey = useCallback((teamId: string, matchId?: string | null) => baseKey(teamId, perMatch ? matchId : null), [perMatch]);
   const [leagues, setLeagues] = useState<SheetLeague[]>([]);
   const [pins, setPins] = useState<ApiSeasonPin[]>([]);
   const [suggestions, setSuggestions] = useState<ApiPinSuggestion[]>([]);
@@ -68,7 +70,7 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
   const defPins = useMemo(() => pins.filter(p => p.pinDefId === defId && p.teamId), [pins, defId]);
   const existing = useMemo(
     () => new Map(defPins.map(p => [rowKey(p.teamId!, p.matchId), p])),
-    [defPins],
+    [defPins, rowKey],
   );
   const defSuggestions = useMemo(
     () => suggestions.filter(s => s.pinDefId === defId),
@@ -83,7 +85,7 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
   const rows = useMemo(() => {
     if (!defId) return new Map<string, SheetRow>();
     return edits[defId] ?? new Map(defPins.map(p => [rowKey(p.teamId!, p.matchId), rowFromPin(p)]));
-  }, [edits, defId, defPins]);
+  }, [edits, defId, defPins, rowKey]);
 
   const setRows = useCallback((fn: (m: Map<string, SheetRow>) => void) => {
     if (!defId) return;
@@ -93,7 +95,7 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
       return { ...prev, [defId]: next };
     });
     setRowErrors({});
-  }, [defId, defPins]);
+  }, [defId, defPins, rowKey]);
 
   const diff: SheetDiff = useMemo(() => {
     const adds: SheetRow[] = [], updates: SheetRow[] = [];
@@ -115,7 +117,7 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
         if (!s.tie && !m.has(k)) m.set(k, rowFromSuggestion(s));
       }
     });
-  }, [defSuggestions, setRows]);
+  }, [defSuggestions, setRows, rowKey]);
 
   const revert = useCallback(() => {
     if (!defId) return;
@@ -150,13 +152,13 @@ export function useAwardsSheet(seasonId: number, defId: string | null) {
     } finally {
       setSaving(false);
     }
-  }, [defId, diff, seasonId, load]);
+  }, [defId, diff, seasonId, load, rowKey]);
 
   const draftCount = pins.filter(p => !p.published).length;
   const publishedCount = pins.length - draftCount;
 
   return {
     leagues, pins, loading, error, load, existing, defSuggestions, defUnresolved, rows, setRows,
-    diff, changeCount, acceptAll, revert, save, saving, rowErrors, draftCount, publishedCount,
+    diff, changeCount, rowKey, acceptAll, revert, save, saving, rowErrors, draftCount, publishedCount,
   };
 }

@@ -231,7 +231,7 @@ export const pinRoutes = new Elysia()
     if (!existing) { set.status = 404; return { error: 'Pin not found' }; }
 
     if (existing.seasonId != null) {
-      const archived = checkSeasonArchived(existing.seasonId, query.force);
+      const archived = checkSeasonArchived(existing.seasonId, query.force, user);
       if (archived) { set.status = 409; return archived; }
     }
 
@@ -336,7 +336,7 @@ export const pinRoutes = new Elysia()
     const seasonRow = db.select({ id: schema.seasons.id }).from(schema.seasons)
       .where(eq(schema.seasons.seasonNumber, b.season)).get();
     if (seasonRow) {
-      const archived = checkSeasonArchived(seasonRow.id, query.force);
+      const archived = checkSeasonArchived(seasonRow.id, query.force, user);
       if (archived) { set.status = 409; return archived; }
     }
 

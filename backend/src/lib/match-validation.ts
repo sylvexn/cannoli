@@ -63,6 +63,17 @@ export function validatePokemonData(
   const allowedTeamIds = new Set([homeTeamId, awayTeamId]);
 
   entries.forEach((entry, index) => {
+    for (const f of ['kills', 'deaths'] as const) {
+      const v = entry[f];
+      if (v != null && !(Number.isInteger(v) && v >= 0)) {
+        errors.push({
+          index,
+          teamId: entry.teamId,
+          pokemonName: entry.pokemonName,
+          reason: `${f} must be a non-negative integer`,
+        });
+      }
+    }
     if (!allowedTeamIds.has(entry.teamId)) {
       errors.push({
         index,

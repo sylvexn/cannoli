@@ -12,8 +12,13 @@
  */
 
 import { db, schema } from '../db';
-import { eq } from 'drizzle-orm';
+import { eq, getTableColumns } from 'drizzle-orm';
 import { isStaff } from './auth';
+
+/** Every matches column EXCEPT replay_log (10-70KB/row). Use for list reads:
+ *  `db.select(matchListCols).from(schema.matches)`. */
+const { replayLog: _omitReplayLog, ...matchListCols } = getTableColumns(schema.matches);
+export { matchListCols };
 
 export type LeagueRow = typeof schema.leagues.$inferSelect;
 export type TeamRow = typeof schema.teams.$inferSelect;

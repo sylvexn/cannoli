@@ -20,6 +20,7 @@ mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const sqlite = new Database(DB_PATH);
 sqlite.exec('PRAGMA journal_mode = WAL');
+sqlite.exec('PRAGMA busy_timeout = 5000');
 sqlite.exec('PRAGMA foreign_keys = ON');
 
 export const db = drizzle(sqlite, { schema });
@@ -39,5 +40,8 @@ try {
     process.exit(1);
   }
 }
+
+// Refresh planner stats once after migrations (cheap; picks up the new indexes).
+try { sqlite.exec('PRAGMA optimize'); } catch { /* non-fatal */ }
 
 export { schema };

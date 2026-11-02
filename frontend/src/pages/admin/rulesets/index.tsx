@@ -54,7 +54,7 @@ export function RulesetsAdmin({ basePath }: { basePath?: string }) {
   }, []);
   useEffect(load, [load]);
 
-  const routeId = params.id ? Number(params.id) : null;
+  const routeId = params.id === 'new' ? 'new' : params.id ? Number(params.id) : null;
   const editing = routeId ?? inlineId;
   const current = typeof editing === 'number' ? (all?.find(r => r.id === editing) ?? null) : null;
 

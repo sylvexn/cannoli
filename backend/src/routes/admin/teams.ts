@@ -81,7 +81,7 @@ export const teamAdminRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/teams', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { id, coachName, teamName, teamAbbrev, teamColor, userId } = body as {
       id?: string;
@@ -127,7 +127,7 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const staff = isStaff(user);
 
@@ -187,7 +187,7 @@ export const teamAdminRoutes = new Elysia()
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const raw = (body ?? {}) as {
@@ -346,7 +346,7 @@ export const teamAdminRoutes = new Elysia()
     });
 
     // Best-effort: refresh the PS bot's user→team map after roster change.
-    try { refreshUserMap(); } catch {}
+    try { refreshUserMap(); } catch (err) { console.warn('[ps-bot] refreshUserMap failed:', err); }
 
     return result;
   })
@@ -355,7 +355,7 @@ export const teamAdminRoutes = new Elysia()
 
   .put('/api/teams/:teamId/rosters/:rosterId/nickname', ({ params, query, body, user, set }) => {
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const rosterId = parseInt(params.rosterId);
     if (!Number.isFinite(rosterId)) { set.status = 400; return { error: 'Invalid rosterId' }; }
@@ -399,7 +399,7 @@ export const teamAdminRoutes = new Elysia()
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
 
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const force = query.force === '1' || query.force === 'true';
@@ -448,7 +448,7 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const form = await request.formData().catch(() => null);
@@ -458,7 +458,7 @@ export const teamAdminRoutes = new Elysia()
     if (file.size > 2 * 1024 * 1024) { set.status = 400; return { error: 'File must be ≤ 2MB' }; }
 
     const ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) ? ext : 'png';
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? ext : 'png';
     const filename = `${params.teamId}.${safeExt}`;
     const key = `team-logos/${filename}`;
 
@@ -491,7 +491,7 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     db.update(schema.teams).set({ logoPath: null }).where(eq(schema.teams.id, params.teamId)).run();
@@ -513,7 +513,7 @@ export const teamAdminRoutes = new Elysia()
     if (!isStaffOrTeamOwner(user, params.teamId)) { set.status = 403; return { error: 'Forbidden' }; }
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, params.teamId)).get();
     if (!team) { set.status = 404; return { error: 'Team not found' }; }
-    const archived = checkTeamArchived(params.teamId, query.force);
+    const archived = checkTeamArchived(params.teamId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const form = await request.formData().catch(() => null);
@@ -552,7 +552,8 @@ export const teamAdminRoutes = new Elysia()
     const path = uploadsPath(`${params.dir}/${params.file}`);
     const f = Bun.file(path);
     if (!(await f.exists())) { set.status = 404; return 'Not found'; }
-    return new Response(f);
+    // nosniff + sandbox CSP: legacy SVGs can't run script from our origin.
+    return new Response(f, { headers: { 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': 'sandbox' } });
   })
 
 ;
