@@ -4,7 +4,7 @@ import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
 import { computeStandings, computePlayoffRecords, type TeamStandingRow } from '../../lib/standings';
 import { getLeagueCostMap } from '../../lib/league-costs';
-import { revealedMaxWeek } from '../../lib/queries';
+import { revealedMaxWeek, matchListCols } from '../../lib/queries';
 import { pokemonSeasonStats } from '../../lib/pokemon-season-stats';
 
 export const standingsRoutes = new Elysia()
@@ -59,11 +59,32 @@ export const standingsRoutes = new Elysia()
 
     const costMap = getLeagueCostMap(params.leagueId);
 
+    // Batch rosters + pokemon rows for the whole league (one query each), then
+    // group in memory — replaces per-team roster/pokemon/departed lookups.
+    const teamIds = orderedTeams.map(t => t.id);
+    const rosterByTeam = new Map<string, (typeof schema.rosters.$inferSelect)[]>();
+    if (teamIds.length > 0) {
+      for (const r of db.select().from(schema.rosters).where(inArray(schema.rosters.teamId, teamIds)).all()) {
+        const a = rosterByTeam.get(r.teamId) ?? [];
+        a.push(r);
+        rosterByTeam.set(r.teamId, a);
+      }
+    }
+    const allNames = new Set<string>();
+    for (const rs of rosterByTeam.values()) for (const r of rs) allNames.add(r.pokemonName);
+    for (const sts of statsByTeam.values()) for (const st of sts) allNames.add(st.pokemonName);
+    const pokemonByName = new Map<string, typeof schema.pokemon.$inferSelect>();
+    const nameList = [...allNames];
+    // chunked to stay under SQLite's bound-variable limit
+    for (let i = 0; i < nameList.length; i += 500) {
+      for (const p of db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, nameList.slice(i, i + 500))).all()) {
+        pokemonByName.set(p.name, p);
+      }
+    }
+
     return orderedTeams.map(team => {
       const standing = standingsById.get(team.id)!;
-      const roster = db.select().from(schema.rosters)
-        .where(eq(schema.rosters.teamId, team.id))
-        .all();
+      const roster = rosterByTeam.get(team.id) ?? [];
       const owner = team.userId != null ? userById.get(team.userId) : undefined;
 
       const wins = standing.wins;
@@ -72,16 +93,6 @@ export const standingsRoutes = new Elysia()
 
       const teamStats = statsByTeam.get(team.id) ?? [];
       const statsMap = new Map(teamStats.map(s => [s.pokemonName, s]));
-
-      // Batch-fetch all pokemon rows for this roster in a single IN query,
-      // then look up from a map — avoids an N+1 per roster slot.
-      const rosterNames = roster.map(r => r.pokemonName);
-      const pokemonRows = rosterNames.length > 0
-        ? db.select().from(schema.pokemon)
-            .where(inArray(schema.pokemon.name, rosterNames))
-            .all()
-        : [];
-      const pokemonByName = new Map(pokemonRows.map(p => [p.name, p]));
 
       const enrichedRoster = roster.map(r => {
         const pokemon = pokemonByName.get(r.pokemonName);
@@ -123,14 +134,8 @@ export const standingsRoutes = new Elysia()
       // (traded / dropped / admin-replaced) — their K/D still counts.
       const rosterSet = new Set(roster.map(r => r.pokemonName));
       const departedStats = teamStats.filter(s => !rosterSet.has(s.pokemonName));
-      const departedRows = departedStats.length > 0
-        ? db.select().from(schema.pokemon)
-            .where(inArray(schema.pokemon.name, departedStats.map(s => s.pokemonName)))
-            .all()
-        : [];
-      const departedByName = new Map(departedRows.map(p => [p.name, p]));
       const departed = departedStats.map(s => {
-        const p = departedByName.get(s.pokemonName);
+        const p = pokemonByName.get(s.pokemonName);
         return {
           name: s.pokemonName,
           types: p ? [p.type1, p.type2].filter(Boolean).map(t => t!.toLowerCase()) : [],
@@ -189,7 +194,7 @@ export const standingsRoutes = new Elysia()
     // guests (see /api/matches/:id/replay.json).
     const maxWeek = revealedMaxWeek(params.leagueId);
 
-    const matches = db.select().from(schema.matches)
+    const matches = db.select({ ...matchListCols, hasReplay: sql<number>`replay_log IS NOT NULL` }).from(schema.matches)
       .where(eq(schema.matches.leagueId, params.leagueId))
       .orderBy(asc(schema.matches.week))
       .all()
@@ -212,7 +217,7 @@ export const standingsRoutes = new Elysia()
           // This flag is what gates the "watch" affordance — a match WITHOUT a
           // stored log can never play in-site, so callers must not offer one on
           // the strength of replayUrl alone.
-          hasReplay: m.replayLog != null,
+          hasReplay: !!m.hasReplay,
           status: m.status,
           phase: m.phase,
           playoffRound: m.playoffRound,
@@ -329,10 +334,16 @@ export const standingsRoutes = new Elysia()
     // and returns the correct per-format tier rather than the global baseline.
     const costMap = getLeagueCostMap(params.leagueId);
 
+    const names = [...new Set(stats.map(s => s.pokemonName))];
+    const pokemonByName = new Map<string, typeof schema.pokemon.$inferSelect>();
+    for (let i = 0; i < names.length; i += 500) {
+      for (const p of db.select().from(schema.pokemon).where(inArray(schema.pokemon.name, names.slice(i, i + 500))).all()) {
+        pokemonByName.set(p.name, p);
+      }
+    }
+
     return stats.map(s => {
-      const pokemon = db.select().from(schema.pokemon)
-        .where(eq(schema.pokemon.name, s.pokemonName))
-        .get();
+      const pokemon = pokemonByName.get(s.pokemonName);
 
       return {
         pokemonName: s.pokemonName,
