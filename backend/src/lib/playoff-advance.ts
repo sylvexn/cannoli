@@ -16,6 +16,7 @@
  * result endpoint) can log uniformly.
  */
 import { db, schema } from '../db';
+import { matchListCols } from './queries';
 import { and, eq, asc } from 'drizzle-orm';
 
 /** One slot in a freshly generated playoff bracket. `homeSeed`/`awaySeed` of 0
@@ -169,7 +170,7 @@ export function advancePlayoffWinner(params: {
   let sfMatchIds: string[] | undefined;
 
   if (playoffRound === 'qf') {
-    qfCount = db.select().from(schema.matches)
+    qfCount = db.select(matchListCols).from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, leagueId),
         eq(schema.matches.phase, 'playoffs'),
@@ -177,7 +178,7 @@ export function advancePlayoffWinner(params: {
       ))
       .all().length;
   } else if (playoffRound === 'sf') {
-    sfMatchIds = db.select().from(schema.matches)
+    sfMatchIds = db.select(matchListCols).from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, leagueId),
         eq(schema.matches.phase, 'playoffs'),
@@ -199,7 +200,7 @@ export function advancePlayoffWinner(params: {
   const { nextRound, nextMatchOffset, fillHome } = target;
   result.toRound = nextRound;
 
-  const nextMatches = db.select().from(schema.matches)
+  const nextMatches = db.select(matchListCols).from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.phase, 'playoffs'),

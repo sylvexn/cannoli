@@ -12,7 +12,7 @@
  */
 import { Elysia } from 'elysia';
 import { db, schema } from '../db';
-import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
+import { eq, and, isNull, sql, inArray, desc } from 'drizzle-orm';
 import { getCurrentMatchReminder } from '../lib/arena-state';
 
 // Types
@@ -129,6 +129,8 @@ export const notificationRoutes = new Elysia()
     if (user) {
       const directed = db.select().from(schema.notifications)
         .where(eq(schema.notifications.userId, parseInt(user.id)))
+        .orderBy(desc(schema.notifications.createdAt))
+        .limit(100)
         .all();
 
       for (const n of directed) {

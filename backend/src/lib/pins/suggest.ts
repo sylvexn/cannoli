@@ -10,6 +10,7 @@
  * archive-mint-pickers.ts); this module only feeds them rows.
  */
 import { db, schema } from '../../db';
+import { matchListCols } from '../queries';
 import { and, eq, sql } from 'drizzle-orm';
 import { matchWinner, computeStandings } from '../standings';
 import {
@@ -80,7 +81,7 @@ function suggestForLeague(leagueId: string, out: SuggestResult) {
     out.unresolved.push({ pinDefId, leagueId, reason, detail });
   };
 
-  const completed = db.select().from(schema.matches).where(and(
+  const completed = db.select(matchListCols).from(schema.matches).where(and(
     eq(schema.matches.leagueId, leagueId), eq(schema.matches.status, 'completed'),
   )).all();
   const regular = completed.filter(m => m.phase === 'regular');

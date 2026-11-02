@@ -1099,9 +1099,15 @@ export const api = {
     postJson<{ imported: number; skipped: number; teams: DcTeamDto[] }>('/api/draft-center/import', { teams }),
   dcGetShared: (token: string) => fetchJson<DcSharedTeam>(`/api/draft-center/shared/${encodeURIComponent(token)}`),
 
+  getMyTeams: () => fetchJson<{
+    teams: { leagueId: string; teamId: string; teamAbbrev: string; teamName: string }[];
+    pendingByLeague: Record<string, number>;
+  }>('/api/users/me/teams'),
+  getLiveMatches: () => fetchJson<{ id: string; leagueId: string; homePlayer: string | null; awayPlayer: string | null; week: number; phase: string; playoffRound: string | null }[]>('/api/matches/live'),
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
   getMatchPokemon: (matchId: string) => fetchJson<{ home: ApiMatchPokemon[]; away: ApiMatchPokemon[] }>(`/api/matches/${matchId}/pokemon`),
+  getReplaySummaries: (leagueId: string) => fetchJson<Record<string, ApiReplaySummary>>(`/api/leagues/${leagueId}/replay-summaries`),
   getReplaySummary: (matchId: string) => fetchJson<ApiReplaySummary | null>(`/api/matches/${matchId}/replay-summary`),
 
   getTransactions: (leagueId: string) => fetchJson<ApiTransaction[]>(`/api/leagues/${leagueId}/transactions`),

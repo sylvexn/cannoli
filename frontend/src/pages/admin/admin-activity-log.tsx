@@ -83,7 +83,7 @@ export function AdminActivityLog() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
-    api.getActivityLog({ limit: 500 })
+    api.getActivityLog({ limit: 200 })
       .then(({ events }) => setAllEvents(events))
       .catch(() => {});
   }, []);

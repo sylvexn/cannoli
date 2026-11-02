@@ -19,6 +19,7 @@
  * For unique wins-buckets (no tie at all), tiebreaker is null.
  */
 import { db, schema } from '../db';
+import { matchListCols } from './queries';
 import { and, eq, sql } from 'drizzle-orm';
 
 export type TiebreakerRule = 'h2h' | 'diff' | 'kills' | 'id';
@@ -180,7 +181,7 @@ function rawRecords(leagueId: string, opts: { maxWeek?: number | null } = {}): R
     ? sql`${schema.matches.week} <= ${maxWeek}`
     : undefined;
 
-  const completed = db.select().from(schema.matches)
+  const completed = db.select(matchListCols).from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.status, 'completed'),
@@ -239,7 +240,7 @@ function headToHeadWins(leagueId: string, tiedIds: string[], maxWeek?: number | 
 
   // Filter in JS after fetching matches that involve any of these teams.
   const setIds = new Set(tiedIds);
-  const matches = db.select().from(schema.matches)
+  const matches = db.select(matchListCols).from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.phase, 'regular'),
@@ -298,7 +299,7 @@ export interface PlayoffRecord {
  * Playoffs never feed standings — this is the separate playoff line.
  */
 export function computePlayoffRecords(leagueId: string, maxWeek?: number | null): Map<string, PlayoffRecord> {
-  const rows = db.select().from(schema.matches)
+  const rows = db.select(matchListCols).from(schema.matches)
     .where(and(
       eq(schema.matches.leagueId, leagueId),
       eq(schema.matches.phase, 'playoffs'),

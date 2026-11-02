@@ -11,6 +11,7 @@ import { db, schema, sqlite } from '../src/db';
 import { createSession, parseSessionToken, validateSession } from '../src/lib/auth';
 import { adminRoutes } from '../src/routes/admin';
 import { archiveDeepRoutes } from '../src/routes/archive';
+import { clearArchiveCache } from '../src/lib/archive-cache';
 import { recordMatchResult } from '../src/lib/match-service';
 
 const app = new Elysia()
@@ -63,7 +64,8 @@ function world(PFX: string, archived: boolean, seasonNumber: number) {
 
 const inTx = async (fn: () => Promise<void> | void) => {
   sqlite.exec('BEGIN');
-  try { await fn(); } finally { sqlite.exec('ROLLBACK'); }
+  clearArchiveCache(); // archive memo must not outlive the rolled-back fixture
+  try { await fn(); } finally { sqlite.exec('ROLLBACK'); clearArchiveCache(); }
 };
 
 describe('all-time archive leak', () => {

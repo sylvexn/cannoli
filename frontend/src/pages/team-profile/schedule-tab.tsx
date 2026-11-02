@@ -54,20 +54,17 @@ export function ScheduleTab({ player, scheduleRows }: ScheduleTabProps) {
     [scheduleRows],
   );
 
+  // One bulk request for the whole league (not one per match).
+  const leagueId = league.id;
   useEffect(() => {
-    const missing = neededIds.filter(id => !summaries.has(id));
-    if (missing.length === 0) return;
+    if (neededIds.length === 0) return;
     let cancelled = false;
-    Promise.all(missing.map(id => api.getReplaySummary(id).catch(() => null))).then(results => {
+    api.getReplaySummaries(leagueId).catch(() => ({} as Record<string, ApiReplaySummary>)).then(all => {
       if (cancelled) return;
-      setSummaries(prev => {
-        const next = new Map(prev);
-        missing.forEach((id, i) => next.set(id, results[i]));
-        return next;
-      });
+      setSummaries(new Map(neededIds.map(id => [id, all[id] ?? null])));
     });
     return () => { cancelled = true; };
-  }, [neededIds, summaries]);
+  }, [neededIds, leagueId]);
 
   return (
     <div className="p-3 flex-1 flex flex-col gap-0.5">
