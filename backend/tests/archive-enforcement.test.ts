@@ -165,12 +165,12 @@ describe('active (non-archived) season allows writes', () => {
 
 describe('?force=1 bypasses the guard on archived rows', () => {
   test.each(['1', 'true', true])('force=%p bypasses checkSeasonArchived', (force) => {
-    expect(checkSeasonArchived(ARCH_SEASON, force)).toBeNull();
+    expect(checkSeasonArchived(ARCH_SEASON, force, { role: 'admin' })).toBeNull();
   });
   test('force bypasses all four guard variants', () => {
-    expect(checkLeagueArchived(ARCH_LEAGUE, '1')).toBeNull();
-    expect(checkTeamArchived(ARCH_TEAM, '1')).toBeNull();
-    expect(checkMatchArchived(ARCH_MATCH, '1')).toBeNull();
+    expect(checkLeagueArchived(ARCH_LEAGUE, '1', { role: 'admin' })).toBeNull();
+    expect(checkTeamArchived(ARCH_TEAM, '1', { role: 'admin' })).toBeNull();
+    expect(checkMatchArchived(ARCH_MATCH, '1', { role: 'admin' })).toBeNull();
   });
   test('a non-matching force value does NOT bypass (only 1/true/"true")', () => {
     expect(checkSeasonArchived(ARCH_SEASON, '0')).not.toBeNull();
@@ -207,6 +207,6 @@ describe('FA archive guard (pickup + release gated via checkLeagueArchived)', ()
   });
 
   test('FA release: checkLeagueArchived force-bypass works', () => {
-    expect(checkLeagueArchived(ARCH_LEAGUE, '1')).toBeNull();
+    expect(checkLeagueArchived(ARCH_LEAGUE, '1', { role: 'admin' })).toBeNull();
   });
 });
