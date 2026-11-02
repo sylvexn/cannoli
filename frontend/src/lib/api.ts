@@ -94,6 +94,7 @@ export interface ApiLeague {
   color: string;
   draftDate?: string | null;
   draftOrder?: string[] | null;
+  draftOrderLocked?: boolean;
   /** IANA zone anchoring deadline cutoffs (TZ-DEADLINE). */
   timezone?: string | null;
   playoffTeamCount?: number;
