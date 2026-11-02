@@ -271,6 +271,11 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   const showOnTheClockGlow = isDraftRunning && isUserTurn && !isDraftComplete;
   const [paletteOpen, setPaletteOpen] = usePaletteOpen(showOnTheClockGlow && currentPick ? currentPick.overallPick : null);
 
+  // Cards unmount with the palette, so a lingering hover preview must go too.
+  useEffect(() => {
+    if (!paletteOpen) setPopover(prev => (prev && prev.mode === 'preview' ? null : prev));
+  }, [paletteOpen]);
+
   // Hovered card = target of Q / Enter / the footer button; falls back to queue #1.
   const [hovered, setHovered] = useState<string | null>(null);
   const target = hovered && !ownershipMap.has(hovered) ? hovered : state.draftQueue[0] ?? null;
@@ -415,7 +420,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
       <PoolPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
-        blocked={!!popover || !!state.detailPokemon}
+        blocked={(!!popover && popover.mode !== 'preview') || !!state.detailPokemon}
         clock={clockText}
         onQueueKey={hasTeam ? handlePaletteQueue : undefined}
         onDraft={hasTeam ? handleDraftTarget : undefined}

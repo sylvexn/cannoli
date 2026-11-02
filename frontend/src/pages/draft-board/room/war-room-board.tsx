@@ -68,8 +68,11 @@ export function WarRoomBoard({
   return (
     <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border-default bg-surface-raised/40">
       <div
-        className="grid min-w-max"
-        style={{ gridTemplateColumns: `34px repeat(${columns.length}, minmax(92px, 1fr))` }}
+        className="grid"
+        style={{
+          gridTemplateColumns: `34px repeat(${columns.length}, minmax(0, 1fr))`,
+          minWidth: 34 + columns.length * 96,
+        }}
       >
         <div className="sticky top-0 left-0 z-30 bg-surface border-b border-r border-border-default" />
         {columns.map(p => {
