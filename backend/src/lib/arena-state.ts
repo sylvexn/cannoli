@@ -8,8 +8,8 @@
  * arena.ts re-imports and re-exports them so its behavior is unchanged.
  */
 import { db, schema } from '../db';
-import { eq, and, sql } from 'drizzle-orm';
-import { getLeague } from './queries';
+import { eq, and, or, inArray, lte, sql } from 'drizzle-orm';
+import { getLeague, matchListCols } from './queries';
 import { createBattle, effectivePsUserid } from './ps-bot';
 
 // Team resolution
@@ -61,28 +61,26 @@ export function getPlayableMatches(teamId: string, leagueId: string) {
   // isn't playable yet) and it isn't finished. A team is only ever in one
   // resolved-and-unplayed playoff match at a time.
   if (league.phase === 'playoffs') {
-    return db.select().from(schema.matches).where(
+    return db.select(matchListCols).from(schema.matches).where(and(
       eq(schema.matches.leagueId, leagueId),
-    ).all().filter(m => {
-      if (m.phase !== 'playoffs') return false;
-      if (m.homeTeamId == null || m.awayTeamId == null) return false; // TBD slot
-      if (m.homeTeamId !== teamId && m.awayTeamId !== teamId) return false;
-      if (m.status === 'in_progress') return true; // never hide a live battle
-      return m.status === 'scheduled' || m.status === 'ready';
-    }).sort((a, b) => a.week - b.week);
+      eq(schema.matches.phase, 'playoffs'),
+      or(eq(schema.matches.homeTeamId, teamId), eq(schema.matches.awayTeamId, teamId)),
+      sql`${schema.matches.homeTeamId} IS NOT NULL AND ${schema.matches.awayTeamId} IS NOT NULL`, // TBD slot
+      inArray(schema.matches.status, ['scheduled', 'ready', 'in_progress']), // never hide a live battle
+    )).orderBy(schema.matches.week).all();
   }
 
   if (league.phase !== 'regular') return [];
 
   const maxWeek = league.currentWeek + BATTLE_LOOKAHEAD_WEEKS;
-  return db.select().from(schema.matches).where(
+  return db.select(matchListCols).from(schema.matches).where(and(
     eq(schema.matches.leagueId, leagueId),
-  ).all().filter(m => {
-    if (m.homeTeamId !== teamId && m.awayTeamId !== teamId) return false;
-    if (m.status === 'in_progress') return true; // never hide a live battle
-    if (m.status !== 'scheduled' && m.status !== 'ready') return false;
-    return m.week <= maxWeek;
-  }).sort((a, b) => a.week - b.week);
+    or(eq(schema.matches.homeTeamId, teamId), eq(schema.matches.awayTeamId, teamId)),
+    or(
+      eq(schema.matches.status, 'in_progress'), // never hide a live battle
+      and(inArray(schema.matches.status, ['scheduled', 'ready']), lte(schema.matches.week, maxWeek)),
+    ),
+  )).orderBy(schema.matches.week).all();
 }
 
 /** The team's fixture for the league's current week, if still playable. */
