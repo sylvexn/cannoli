@@ -38,12 +38,9 @@ export function StandingsPage() {
   const { players, standings, getWeekMatches, matches, loading, refresh } = useLeagueData();
   const currentSeason = league.season;
 
-  // Playoffs-final view: when the league has actually generated a playoff
-  // bracket, surface it as a first-class view on the standings page. We auto-
-  // select it once the league enters the playoffs/offseason phase so coaches
-  // landing on the hub see the live bracket instead of a stale regular-season
-  // table. The toggle stays visible so the regular-season table remains one
-  // click away (final seeding, tiebreakers, qualify-line context).
+  // Playoffs view: when the league has generated a playoff bracket it is
+  // offered as a toggle next to the regular table. The page always opens on
+  // the regular standings; the bracket is one click away.
   const hasPlayoffs = useMemo(
     () => matches.some(m => m.phase === 'playoffs'),
     [matches],
@@ -57,9 +54,6 @@ export function StandingsPage() {
   // so the regular-season table never masquerades as the current surface.
   const showBracket = hasPlayoffs || currentSeason.phase === 'playoffs';
   const [view, setView] = useState<StandingsView>('standings');
-  useEffect(() => {
-    if (showBracket && isPlayoffPhase) setView('playoffs');
-  }, [showBracket, isPlayoffPhase]);
 
   // Find the last completed week and next upcoming week
   const { recentWeek, upcomingWeek } = useMemo(() => {
@@ -140,9 +134,8 @@ export function StandingsPage() {
         </div>
 
         {/* Header controls — spoiler-free toggle always available; the view
-         *  toggle only when a playoff bracket exists. Defaults to the playoffs
-         *  view in playoff/offseason phase; falls back to the regular standings
-         *  table otherwise. */}
+         *  toggle only when a playoff bracket exists. Always defaults to the
+         *  regular standings table. */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ResultsRevealQuickAction league={league} onRevealed={refresh} />
           {showBracket && (
