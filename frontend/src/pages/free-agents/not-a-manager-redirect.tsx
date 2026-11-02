@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
-import { leagueGem } from '@/lib/constants';
+import { gemHex } from '@/lib/use-gem-scope';
+import { LeagueStripe } from '@/components/league-name';
 import type { League } from '@/lib/types';
 import { AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -85,13 +86,9 @@ export function NotAManagerRedirect({
           <Link
             key={l.id}
             to={`/league/${l.id}/market/free-agents`}
-            className="gem-wrapper w-full flex items-center gap-1.5 py-1 px-1 transition-all duration-150"
+            className="w-full flex items-center py-1 px-1 transition-transform duration-150 hover:translate-x-0.5"
           >
-            <div className={`league-banner league-banner-${leagueGem(l.id)} flex-1 min-w-0`}>
-              <span className="league-banner-text text-white truncate">
-                {l.name.replace(' League', '')}
-              </span>
-            </div>
+            <LeagueStripe name={l.name} color={gemHex(l.id)} size={18} />
           </Link>
         ))}
       </div>

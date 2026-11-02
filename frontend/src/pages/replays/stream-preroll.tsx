@@ -4,7 +4,8 @@ import { TeamCoachVs } from '@/components/team-coach-vs';
 import type { League } from '@/lib/types';
 import type { ApiTeam } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { leagueGem } from '@/lib/constants';
+import { gemHex } from '@/lib/use-gem-scope';
+import { LeagueStripe } from '@/components/league-name';
 
 interface PrerollProps {
   league: League;
@@ -87,13 +88,7 @@ export function StreamPreroll({
 
       <div className="relative z-10 flex flex-col items-center gap-10 px-12 max-w-5xl w-full">
         {/* League banner top */}
-        <div className="gem-wrapper">
-          <div className={`league-banner league-banner-${leagueGem(league.id)}`}>
-            <span className="league-banner-text text-white text-[16px] tracking-[0.22em]">
-              {league.name.replace(' League', '')}
-            </span>
-          </div>
-        </div>
+        <LeagueStripe name={league.name} color={gemHex(league.id)} size={40} />
 
         {/* Week / match heading — split-color mono */}
         <h1

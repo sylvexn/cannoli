@@ -1,4 +1,6 @@
-import { useParams, Outlet, Link } from 'react-router-dom';
+import { useParams, Outlet, Link, useMatch } from 'react-router-dom';
+import { LeagueStripe, leagueSubline } from '@/components/league-name';
+import { gemHex } from '@/lib/use-gem-scope';
 import { LeagueProvider } from '@/lib/league-context';
 import { LeagueDataProvider } from '@/lib/league-data-context';
 import { useAppData } from '@/lib/app-data-context';
@@ -8,6 +10,8 @@ export function LeagueLayout() {
   const { leagueId } = useParams<{ leagueId: string }>();
   const { leagues, loading } = useAppData();
   const league = leagues.find(l => l.id === leagueId);
+  // Team pages carry their own slab header; everything else opens on the league banner.
+  const onTeamPage = useMatch('/league/:leagueId/teams/:id');
 
   if (loading) {
     return (
@@ -54,6 +58,13 @@ export function LeagueLayout() {
     <LeagueProvider league={league}>
       <LeagueDataProvider leagueId={league.id}>
         <div className="flex flex-col h-full gap-4">
+          {!onTeamPage && (
+            <header className="shrink-0 pt-1">
+              <h1 className="sr-only">{league.name}</h1>
+              <LeagueStripe name={league.name} color={gemHex(league.id)} size={34} />
+              <p className="mt-2 text-sm text-text-secondary">{leagueSubline(league.season)}</p>
+            </header>
+          )}
           {/* Page content — flex-1 so draft board can fill height.
               overflow-hidden ensures the child sees this as its containing block. */}
           <div className="flex-1 min-h-0 overflow-hidden">

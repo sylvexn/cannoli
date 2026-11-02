@@ -5,7 +5,7 @@
  * loads, under reduced-motion, and on software/no GPU.
  */
 
-/** 4-stop palettes per league gem, sampled from the .league-banner-* gradients. */
+/** 4-stop palettes per league gem,. */
 const GEM_PALETTES: Record<string, string[]> = {
   sapphire: ['#0b1e54', '#1d4ed8', '#3b82f6', '#60a5fa'],
   emerald: ['#06301a', '#15803d', '#16a34a', '#34d399'],

@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, Calendar, LayoutDashboard, ArrowLeftRight, BarChart3,
-  Swords, ClipboardList, ListTree, Gamepad2, type LucideIcon,
+  Users, Swords, ClipboardList, ListTree, Gamepad2, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -20,6 +20,7 @@ export function leagueNavItems(leagueId: string, pendingTrades: number): NavItem
   return [
     { to: b, label: 'Overview', icon: Trophy, end: true },
     { to: `${b}/schedule`, label: 'Schedule', icon: Calendar },
+    { to: `${b}/teams`, label: 'Teams', icon: Users },
     { to: `${b}/draft`, label: 'Draft', icon: LayoutDashboard },
     { to: `${b}/market`, label: 'Market', icon: ArrowLeftRight, badge: pendingTrades },
     { to: `${b}/stats`, label: 'Stats', icon: BarChart3 },

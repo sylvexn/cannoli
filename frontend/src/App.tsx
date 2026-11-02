@@ -22,6 +22,7 @@ import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
+import { TeamsIndexPage } from '@/pages/teams-index';
 import { SchedulePage } from '@/pages/schedule';
 import { MarketLayout } from '@/pages/market';
 import { TradeDeskPage } from '@/pages/market/trade-desk';
@@ -113,6 +114,7 @@ export default function App() {
                 <Route index element={<StandingsPage />} />
                 <Route path="schedule" element={<SchedulePage />} />
                 <Route path="stats" element={<Suspense fallback={<PageLoadingSpinner />}><StatsPage /></Suspense>} />
+                <Route path="teams" element={<TeamsIndexPage />} />
                 <Route path="teams/:id" element={<TeamProfilePage />} />
 
                 {/* Protected league routes */}

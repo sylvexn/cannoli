@@ -8,7 +8,8 @@ import { api, type ApiLeague } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { FlaskConical, ChevronRight } from 'lucide-react';
 import { getErrorMessage } from '@/lib/errors';
-import { leagueGem } from '@/lib/constants';
+import { gemHex } from '@/lib/use-gem-scope';
+import { LeagueStripe } from '@/components/league-name';
 import { BRAND_PALETTE, buildGradientCss } from '@/lib/shader-gradient';
 import { ShaderField } from '@/components/shader-field-lazy';
 
@@ -255,10 +256,8 @@ export function LoginPage() {
                 const phaseLabel = phase ? PHASE_LABEL[phase] ?? phase : 'inactive';
                 return (
                   <div key={league.id} className="flex items-center gap-2">
-                    <div className={`league-banner league-banner-${leagueGem(league.id)} flex-1 min-w-0`}>
-                      <span className="league-banner-text text-white truncate">
-                        {league.name.replace(' League', '')}
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <LeagueStripe name={league.name.replace(' League', '')} color={gemHex(league.id)} size={16} />
                     </div>
                     <span className="text-[10px] font-mono text-text-muted/80 shrink-0 w-24 text-right">
                       {phaseLabel}
