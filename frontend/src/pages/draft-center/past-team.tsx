@@ -37,18 +37,22 @@ export function PastTeamPage() {
   }, [leagueId, teamId]);
 
   // Placement lives on the season endpoint, keyed by the league's season.
-  const seasonId = league ? Number(league.season.id) : NaN;
+  // season.id is a slug ('s11'); the endpoint wants the DB id, so resolve by number.
+  const seasonNumber = league?.season.seasonNumber;
   useEffect(() => {
-    if (!Number.isFinite(seasonId)) return;
+    if (seasonNumber == null) return;
     let cancelled = false;
-    api.getSeasonLeagues(seasonId).then(ls => {
+    api.getSeasons().then(ss => {
+      const s = ss.find(x => x.seasonNumber === seasonNumber);
+      return s ? api.getSeasonLeagues(s.id) : [];
+    }).then(ls => {
       if (cancelled) return;
       const l = ls.find(x => x.id === leagueId);
       setFinish(l?.teams.find(t => t.id === teamId)?.finishLabel ?? null);
       setChampion(l?.champion === teamId);
     }).catch(() => { /* placement is garnish */ });
     return () => { cancelled = true; };
-  }, [seasonId, leagueId, teamId]);
+  }, [seasonNumber, leagueId, teamId]);
 
   const { resolve, loading: rulesetsLoading } = useRulesetCatalog([{ leagueId }]);
   const ruleset = useMemo(() => resolve({ leagueId }), [resolve, leagueId]);
