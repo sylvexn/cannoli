@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { GitFork, Lock, ScrollText } from 'lucide-react';
+import { Eye, GitFork, Lock, Pencil, ScrollText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { rulesetsApi, type ApiRuleset } from '@/lib/api';
@@ -44,19 +44,27 @@ export function LeagueRuleset({ leagueId, phase }: { leagueId: string; phase: st
               {current.frozen && <Badge variant="outline" className="gap-1 text-[10px] text-draw border-draw/30 shrink-0"><Lock size={9} />Frozen</Badge>}
             </div>
             <div className="text-[10px] font-mono text-text-muted truncate">{summarize(current)}</div>
+            {!current.frozen && <div className="text-[10px] text-text-muted">editable until draft opens</div>}
           </>
         ) : (
           <span className="text-text-muted">{current === undefined ? 'Loading ruleset...' : 'No ruleset assigned'}</span>
         )}
       </div>
       {predraft ? (
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          {current && (
+            <Link to={`/admin/rulesets/${current.id}`}>
+              <Button size="sm" variant="ghost" className="h-7 gap-1.5"><Pencil size={12} />Edit rules</Button>
+            </Link>
+          )}
           <div className="w-44"><RulesetSelect value={pick} options={templates} onChange={setPick} /></div>
-          <Button size="sm" variant="outline" className="h-8" onClick={assign} disabled={busy || pick == null}>Assign</Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={assign} disabled={busy || pick == null}>Swap ruleset</Button>
         </div>
       ) : current ? (
         <Link to={`/admin/rulesets/${current.id}`}>
-          <Button size="sm" variant="ghost" className="h-7 gap-1.5"><GitFork size={12} />View / fork</Button>
+          <Button size="sm" variant="ghost" className="h-7 gap-1.5">
+            {current.forkable ? <><GitFork size={12} />View / fork</> : <><Eye size={12} />View</>}
+          </Button>
         </Link>
       ) : null}
     </div>

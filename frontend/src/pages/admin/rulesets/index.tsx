@@ -9,7 +9,7 @@ import { getErrorMessage } from '@/lib/errors';
 import { RulesetEditor } from './editor';
 import { summarize } from './form';
 
-type Filter = 'template' | 'instance';
+type Filter = 'template' | 'season';
 
 function Row({ r, onEdit, onClone, onDelete }: {
   r: ApiRuleset; onEdit: () => void; onClone: () => void; onDelete: () => void;
@@ -89,14 +89,16 @@ export function RulesetsAdmin({ basePath }: { basePath?: string }) {
   if (editing !== null) return <div className="text-sm text-text-muted">Ruleset not found. <button className="underline" onClick={close}>Back</button></div>;
 
   const shown = all.filter(r => (filter === 'template' ? r.isTemplate : !r.isTemplate));
+  const rowFor = (r: ApiRuleset) => <Row key={r.id} r={r} onEdit={() => open(r.id)} onClone={() => clone(r)} onDelete={() => remove(r)} />;
+  const seasons = [...new Set(shown.map(r => r.seasonNumber))].sort((a, b) => (b ?? -1) - (a ?? -1));
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <div className="flex rounded-md border border-border-default p-0.5 bg-surface-base">
-          {(['template', 'instance'] as const).map(f => (
+          {(['template', 'season'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-2.5 py-0.5 text-[11px] font-medium rounded ${filter === f ? 'bg-surface-overlay text-text-primary' : 'text-text-muted hover:text-text-secondary'}`}>
-              {f === 'template' ? 'Templates' : 'League instances'}
+              {f === 'template' ? 'Templates' : 'By season'}
             </button>
           ))}
         </div>
@@ -105,9 +107,16 @@ export function RulesetsAdmin({ basePath }: { basePath?: string }) {
         </Button>
       </div>
       {shown.length === 0 && <div className="text-sm text-text-muted">Nothing here yet.</div>}
-      <div className="space-y-1.5">
-        {shown.map(r => <Row key={r.id} r={r} onEdit={() => open(r.id)} onClone={() => clone(r)} onDelete={() => remove(r)} />)}
-      </div>
+      {filter === 'template' ? (
+        <div className="space-y-1.5">{shown.map(rowFor)}</div>
+      ) : seasons.map(n => (
+        <div key={n ?? 'none'} className="space-y-1.5">
+          <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-text-secondary">
+            {n == null ? 'Unassigned' : `Season ${n}`}
+          </h3>
+          {shown.filter(r => r.seasonNumber === n).map(rowFor)}
+        </div>
+      ))}
     </div>
   );
 }
