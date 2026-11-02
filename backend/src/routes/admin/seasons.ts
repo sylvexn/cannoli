@@ -4,6 +4,7 @@ import { eq, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
 import { createInstance } from '../../lib/ruleset-instances';
+import { clearArchiveCache } from '../../lib/archive-cache';
 
 export const seasonRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -244,6 +245,7 @@ export const seasonRoutes = new Elysia()
 
     tx(() => {
       db.update(schema.seasons).set({ archived }).where(eq(schema.seasons.id, seasonId)).run();
+      clearArchiveCache();
       db.insert(schema.activityLog).values({
         type: archived ? 'season_archived' : 'season_unarchived',
         category: 'config',
@@ -278,6 +280,7 @@ export const seasonRoutes = new Elysia()
 
     tx(() => {
       db.update(schema.seasons).set({ archived: true }).where(eq(schema.seasons.id, seasonId)).run();
+      clearArchiveCache();
       for (const l of leagues) {
         if (l.phase !== 'offseason') {
           db.update(schema.leagues).set({ phase: 'offseason' }).where(eq(schema.leagues.id, l.id)).run();

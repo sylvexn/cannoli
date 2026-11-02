@@ -21,6 +21,7 @@ import { db, schema } from '../db';
 import { isStaff } from '../lib/auth';
 import { eq, and, sql, asc, desc, inArray } from 'drizzle-orm';
 import { computeStandings, matchWinner } from '../lib/standings';
+import { archiveMemo } from '../lib/archive-cache';
 
 export const archiveDeepRoutes = new Elysia()
 
@@ -41,7 +42,9 @@ export const archiveDeepRoutes = new Elysia()
       .all();
     const teamMap = new Map(teamRows.map(t => [t.id, t]));
 
-    const standings = computeStandings(league.id);
+    const standings = season?.archived
+      ? archiveMemo(`standings:${league.id}`, () => computeStandings(league.id))
+      : computeStandings(league.id);
     const standingsMap = new Map(standings.map(s => [s.id, s]));
 
     // Roster bulk join — every team's full roster in one query.
@@ -417,7 +420,14 @@ export const archiveDeepRoutes = new Elysia()
   })
 
   // All-time aggregates
-  .get('/api/archive/all-time', ({ user }) => {
+  .get('/api/archive/all-time', ({ user }) => isStaff(user)
+    ? allTime(user)
+    : archiveMemo('all-time:public', () => allTime(user)))
+
+  ;
+
+function allTime(user: Parameters<typeof isStaff>[0]) {
+  {
     // Live-season results are unrevealed: non-staff aggregate archived seasons only.
     const archivedOnly = isStaff(user) ? undefined : eq(schema.seasons.archived, true);
     // Champions per (season, league) — finals winner. Single query, then
@@ -593,4 +603,5 @@ export const archiveDeepRoutes = new Elysia()
       allTimeLeaders,
       perPokemon,
     };
-  });
+  }
+}
