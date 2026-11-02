@@ -32,6 +32,16 @@ export const matchRoutes = new Elysia()
     return replaySummaryForMatch(match);
   })
 
+  // In-progress matches across all leagues (app-shell live indicator).
+  .get('/api/matches/live', () =>
+    db.select({
+      id: schema.matches.id, leagueId: schema.matches.leagueId,
+      homePlayer: schema.matches.homeTeamId, awayPlayer: schema.matches.awayTeamId,
+      week: schema.matches.week, phase: schema.matches.phase, playoffRound: schema.matches.playoffRound,
+    }).from(schema.matches)
+      .where(eq(schema.matches.status, 'in_progress'))
+      .all())
+
   // Bulk replay summaries for a league: { [matchId]: summary } for completed,
   // revealed matches. Replaces one /replay-summary request per replay card.
   .get('/api/leagues/:leagueId/replay-summaries', ({ params, user }) =>

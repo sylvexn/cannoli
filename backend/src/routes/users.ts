@@ -4,6 +4,7 @@
  * Endpoints:
  *   PATCH /api/users/me                  — update displayName/bio
  *   POST  /api/users/me/avatar           — multipart avatar upload (image/*, ≤512KB)
+ *   GET   /api/users/me/teams            — user's teams per league + pending trade counts (app shell)
  *   GET   /api/users/me/preferences      — read prefs (lazy default)
  *   PUT   /api/users/me/preferences      — upsert prefs
  *   GET   /api/users/me/lifetime-stats   — aggregate W/L, K/D, championships across leagues
@@ -13,7 +14,7 @@
 import { Elysia } from 'elysia';
 import { unlinkSync } from 'fs';
 import { db, schema } from '../db';
-import { eq, and, sql, ne } from 'drizzle-orm';
+import { eq, and, sql, ne, inArray } from 'drizzle-orm';
 import { isStaff } from '../lib/auth';
 import { matchWinner, computePlayoffRecords } from '../lib/standings';
 import { writeUpload, uploadsPath } from '../lib/uploads';
@@ -417,6 +418,34 @@ export const userRoutes = new Elysia()
     }
 
     return { success: true, path: publicPath };
+  })
+
+  // GET /api/users/me/teams — slim source for the app shell: the user's team in
+  // every league (one row per season) + trade offers awaiting them, per league.
+  .get('/api/users/me/teams', ({ user, set }) => {
+    if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const teams = db.select({
+      leagueId: schema.teams.leagueId,
+      teamId: schema.teams.id,
+      teamAbbrev: schema.teams.teamAbbrev,
+      teamName: schema.teams.teamName,
+    }).from(schema.teams)
+      .where(eq(schema.teams.userId, parseInt(user.id)))
+      .all();
+    const pendingByLeague: Record<string, number> = {};
+    if (teams.length > 0) {
+      const rows = db.select({ leagueId: schema.trades.leagueId, n: sql<number>`count(*)` })
+        .from(schema.trades)
+        .where(and(
+          inArray(schema.trades.recipientId, teams.map(t => t.teamId)),
+          inArray(schema.trades.status, ['pending', 'awaiting_admin']),
+        ))
+        .groupBy(schema.trades.leagueId)
+        .all();
+      for (const r of rows) pendingByLeague[r.leagueId] = r.n;
+      for (const t of teams) pendingByLeague[t.leagueId] ??= 0;
+    }
+    return { teams, pendingByLeague };
   })
 
   // GET /api/users/me/preferences
