@@ -28,6 +28,7 @@ import { TradeDeskPage } from '@/pages/market/trade-desk';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
 import { AdminPage } from '@/pages/admin';
+import { SeasonSetupRoute } from '@/pages/admin/season-setup';
 import { SettingsConsole } from '@/pages/admin/console';
 import { AdminDashboard } from '@/pages/admin/dashboard';
 import { AdminRulesetsRoute } from '@/pages/admin/rulesets/route';
@@ -166,6 +167,7 @@ export default function App() {
                     <Route path="membership" element={<AdminMembershipRoute />} />
                     <Route path="leagues" element={<AdminLeaguesRoute />} />
                     <Route path="season" element={<AdminSeasonRoute />} />
+                    <Route path="season/new" element={<SeasonSetupRoute />} />
                     <Route path="matches" element={<AdminMatchesRoute />} />
                     <Route path="trades" element={<AdminTradesRoute />} />
                     <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
@@ -173,7 +175,7 @@ export default function App() {
                     <Route path="rulesets" element={<AdminRulesetsRoute />} />
                     <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
                     <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
-                    <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
+                    <Route path="templates" element={<Navigate to="/admin/rulesets" replace />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
                     <Route path="pins" element={<AdminPinsRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />

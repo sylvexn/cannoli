@@ -13,7 +13,7 @@ import { useAppData } from '@/lib/app-data-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  Save, Calendar, Trophy, Swords, Lock, Pause, AlertTriangle, Trophy as TrophyIcon, Gamepad2,
+  Save, Calendar, Lock, Pause, AlertTriangle, Trophy as TrophyIcon, Gamepad2,
 } from 'lucide-react';
 import { DRAFT_FORMATS, type DraftFormat } from '@/data/pokemon-learnsets';
 import { getErrorMessage } from '@/lib/errors';
@@ -21,13 +21,7 @@ import { ScheduleDatesStep } from './season/schedule-dates-step';
 import { LeagueRuleset } from './rulesets/league-ruleset';
 
 interface LeagueSettings {
-  pointCap: number;
-  teraCaptainSlots: number;
   tradeDeadlineWeek: number;
-  rosterSize: number;
-  /** Roster band (min/max a team may hold post-draft). Editable in any phase. */
-  minRosterSize: number;
-  maxRosterSize: number;
   playoffTeamCount: number;
   paused: boolean;
   forfeitPolicy: 'double_forfeit' | 'admin_review';
@@ -54,20 +48,13 @@ const phaseLabels: Record<string, { label: string; color: string }> = {
 };
 
 interface LockState {
-  pointCap: boolean;
-  teraCaptainSlots: boolean;
   tradeDeadlineWeek: boolean;
-  rosterSize: boolean;
   playoffTeamCount: boolean;
 }
 
 function computeLocks(phase: string): LockState {
   // Conservative defaults — see plan §2a phase-aware locks.
-  const inOrPastDraft = phase === 'regular' || phase === 'playoffs' || phase === 'offseason';
   return {
-    pointCap: inOrPastDraft,
-    rosterSize: inOrPastDraft,
-    teraCaptainSlots: phase === 'regular' || phase === 'playoffs' || phase === 'offseason',
     tradeDeadlineWeek: phase === 'playoffs' || phase === 'offseason',
     // playoffTeamCount lock is enforced server-side once a bracket exists, but
     // we soft-lock here at offseason to discourage post-hoc edits.
@@ -120,16 +107,8 @@ export function AdminLeagues() {
       const next = { ...prev };
       for (const l of leagues) {
         if (next[l.id]) continue;
-        const baseRoster = l.season.rosterSize ?? 11;
         next[l.id] = {
-          pointCap: l.season.pointCap ?? 110,
-          teraCaptainSlots: l.season.teraCaptainSlots ?? 2,
           tradeDeadlineWeek: l.season.tradeDeadlineWeek ?? 7,
-          rosterSize: baseRoster,
-          // Roster band — null in the API means "no band"; show rosterSize so the
-          // inputs aren't empty (saving these establishes an explicit band).
-          minRosterSize: l.season.minRosterSize ?? baseRoster,
-          maxRosterSize: l.season.maxRosterSize ?? baseRoster,
           playoffTeamCount: l.playoffTeamCount ?? 6,
           paused: !!l.season.paused,
           forfeitPolicy: l.season.forfeitPolicy ?? 'double_forfeit',
@@ -149,21 +128,21 @@ export function AdminLeagues() {
 
   async function handleSave(leagueId: string) {
     const s = settings[leagueId];
-    if (!s) return;
+    const league = leagues.find(l => l.id === leagueId);
+    if (!s || !league) return;
+    const orig: LeagueSettings = {
+      tradeDeadlineWeek: league.season.tradeDeadlineWeek ?? 7,
+      playoffTeamCount: league.playoffTeamCount ?? 6,
+      paused: !!league.season.paused,
+      forfeitPolicy: league.season.forfeitPolicy ?? 'double_forfeit',
+      format: (league.format ?? 'gen9natdex') as DraftFormat,
+    };
+    const changed = (Object.keys(s) as (keyof LeagueSettings)[]).filter(k => s[k] !== orig[k]);
+    if (changed.length === 0) { toast.info('No changes to save'); return; }
+    const body = Object.fromEntries(changed.map(k => [k, s[k]]));
     setSaving(prev => ({ ...prev, [leagueId]: true }));
     try {
-      await api.updateLeague(leagueId, {
-        pointCap: s.pointCap,
-        teraCaptainSlots: s.teraCaptainSlots,
-        tradeDeadlineWeek: s.tradeDeadlineWeek,
-        rosterSize: s.rosterSize,
-        minRosterSize: s.minRosterSize,
-        maxRosterSize: s.maxRosterSize,
-        playoffTeamCount: s.playoffTeamCount,
-        paused: s.paused,
-        forfeitPolicy: s.forfeitPolicy,
-        format: s.format,
-      });
+      await api.updateLeague(leagueId, body);
       toast.success(`Saved settings for ${leagues.find(l => l.id === leagueId)?.name}`);
       refreshLeagues();
     } catch (err: unknown) {
@@ -255,35 +234,12 @@ export function AdminLeagues() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <LeagueRuleset leagueId={league.id} phase={league.season.phase} />
-                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-                  <SettingField
-                    label="Point Cap"
-                    icon={<Trophy size={10} />}
-                    value={s.pointCap}
-                    onChange={v => updateSetting(league.id, 'pointCap', v)}
-                    locked={locks.pointCap}
-                    lockReason="Locked once draft has begun"
-                  />
-                  <SettingField
-                    label="Tera Captains"
-                    icon={<Swords size={10} />}
-                    value={s.teraCaptainSlots}
-                    onChange={v => updateSetting(league.id, 'teraCaptainSlots', v)}
-                    min={0}
-                    max={6}
-                    locked={locks.teraCaptainSlots}
-                    lockReason="Locked once regular season begins"
-                    suffix={
-                      captainStats[league.id]
-                        ? `(${captainStats[league.id].actual}/${captainStats[league.id].expected} set)`
-                        : undefined
-                    }
-                    suffixClassName={
-                      captainStats[league.id] && captainStats[league.id].actual !== captainStats[league.id].expected
-                        ? 'text-draw font-mono text-[9px]'
-                        : 'text-text-muted/70 font-mono text-[9px]'
-                    }
-                  />
+                {captainStats[league.id] && (
+                  <div className={`text-[10px] font-mono ${captainStats[league.id].actual !== captainStats[league.id].expected ? 'text-draw' : 'text-text-muted'}`}>
+                    Tera captains set: {captainStats[league.id].actual}/{captainStats[league.id].expected}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
                   <SettingField
                     label="Trade Deadline"
                     icon={<Calendar size={10} />}
@@ -293,34 +249,6 @@ export function AdminLeagues() {
                     max={league.season.totalWeeks}
                     locked={locks.tradeDeadlineWeek}
                     lockReason="Locked after regular season"
-                  />
-                  <SettingField
-                    label="Roster Size"
-                    value={s.rosterSize}
-                    onChange={v => updateSetting(league.id, 'rosterSize', v)}
-                    min={6}
-                    max={20}
-                    locked={locks.rosterSize}
-                    lockReason="Locked once draft has begun"
-                  />
-                  {/* Roster band — editable in ANY phase (no draft-phase lock). */}
-                  <SettingField
-                    label="Min Roster"
-                    value={s.minRosterSize}
-                    onChange={v => updateSetting(league.id, 'minRosterSize', v)}
-                    min={1}
-                    max={20}
-                    locked={false}
-                    lockReason=""
-                  />
-                  <SettingField
-                    label="Max Roster"
-                    value={s.maxRosterSize}
-                    onChange={v => updateSetting(league.id, 'maxRosterSize', v)}
-                    min={1}
-                    max={30}
-                    locked={false}
-                    lockReason=""
                   />
                   <SettingField
                     label="Bracket Size"
@@ -335,14 +263,6 @@ export function AdminLeagues() {
                     lockReason="Locked after season ends"
                   />
                 </div>
-
-                {/* Roster-band ordering hint — backend also enforces this. */}
-                {(s.minRosterSize > s.rosterSize || s.rosterSize > s.maxRosterSize) && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-loss">
-                    <AlertTriangle size={11} className="shrink-0" />
-                    <span>Roster band must satisfy min ≤ roster size ≤ max ({s.minRosterSize} ≤ {s.rosterSize} ≤ {s.maxRosterSize}).</span>
-                  </div>
-                )}
 
                 {/* Operational toggles — format + paused + forfeit policy */}
                 <div className="grid grid-cols-3 gap-4 pt-2 border-t border-border-subtle">
@@ -451,7 +371,7 @@ export function AdminLeagues() {
                   <Button
                     size="sm"
                     onClick={() => handleSave(league.id)}
-                    disabled={saving[league.id] || s.minRosterSize > s.rosterSize || s.rosterSize > s.maxRosterSize}
+                    disabled={saving[league.id]}
                     className="bg-neon text-surface-base hover:bg-neon/90"
                   >
                     <Save size={14} />

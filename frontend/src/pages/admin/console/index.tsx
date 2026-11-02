@@ -1,5 +1,5 @@
 /**
- * Settings Console (/admin/console): one searchable home for Site Settings, Rules, Templates and Tier List.
+ * Settings Console (/admin/console): one searchable home for Site Settings, Rules and Tier List.
  *
  * Save model: scalar site settings share ONE sticky Save bar with a dirty count. Bulk editors (rules text,
  * templates CRUD, tier list) keep their own save flows inside their section: they are list/grid editors with
@@ -14,9 +14,7 @@ import { Input } from '@/components/ui/input';
 import { LoadingSprite } from '@/components/loading-sprite';
 import { cn } from '@/lib/utils';
 import { AdminRules } from '../rules';
-import { AdminTemplates } from '../admin-templates';
 import { AdminTierList } from '../admin-tier-list';
-import { RulesetsAdmin } from '../rulesets';
 import { SECTIONS, SETTINGS, matchSettings, type SectionId } from './registry';
 import { DeadlineFields, DraftFields, GeneralFields, useSiteSettings } from './site-form';
 
@@ -55,7 +53,7 @@ export function SettingsConsole() {
         <h1 className="text-lg font-mono font-bold uppercase tracking-tight">
           <span className="text-pink">Settings</span>{' '}<span className="text-text-primary">Console</span>
         </h1>
-        <p className="text-xs text-text-muted">Site, rules, templates and tiers in one searchable place.</p>
+        <p className="text-xs text-text-muted">Site, rules and tiers in one searchable place.</p>
       </div>
 
       <div className="relative">
@@ -102,9 +100,7 @@ export function SettingsConsole() {
           {active === 'deadlines' && !site.loading && <DeadlineFields site={site} hits={hitIds} />}
           {active === 'league' && <LeagueLinks />}
           {active === 'rules' && <div id="set-rulesAll" className="scroll-mt-24"><AdminRules /></div>}
-          {active === 'templates' && <div id="set-templates" className="scroll-mt-24"><AdminTemplates /></div>}
           {active === 'tiers' && <div id="set-tiers" className="scroll-mt-24"><AdminTierList /></div>}
-          {active === 'rulesets' && <div id="rulesets" className="scroll-mt-24"><RulesetsAdmin /></div>}
         </div>
       </div>
 
@@ -140,7 +136,7 @@ function LeagueLinks() {
         </Link>
       </div>
       <ul className="text-[11px] text-text-muted flex flex-wrap gap-x-3 gap-y-1">
-        {rows.map(r => <li key={r.id}>{r.label}</li>)}
+        {rows.map(r => <li key={r.id}>{r.href ? <Link to={r.href} className="text-neon hover:underline">{r.label}</Link> : r.label}</li>)}
       </ul>
     </div>
   );

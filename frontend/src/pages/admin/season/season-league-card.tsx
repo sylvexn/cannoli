@@ -8,7 +8,7 @@ import {
   Pencil, Trash2, Zap, Trophy, RotateCw,
 } from 'lucide-react';
 import type { ApiDraftState, ApiLeague } from '@/lib/api';
-import { PHASES, phaseConfig, getNextPhase, type EditableLeague, type Phase } from './phase-config';
+import { PHASES, PREDRAFT_CONFIG, phaseConfig, getNextPhase, type EditableLeague, type Phase } from './phase-config';
 import { cn } from '@/lib/utils';
 import { ResultsRevealControl } from './results-reveal-control';
 
@@ -92,7 +92,7 @@ export function SeasonLeagueCard({
   const phase = state.phase as Phase;
   // phaseConfig is keyed off post-predraft phases — fall back to offseason
   // styling so the card still renders for predraft leagues.
-  const config = phaseConfig[phase] ?? phaseConfig.offseason;
+  const config = (state.phase as string) === 'predraft' ? PREDRAFT_CONFIG : (phaseConfig[phase] ?? phaseConfig.offseason);
   const nextPhase = getNextPhase(phase);
   const Icon = config.icon;
   const isRegular = phase === 'regular';

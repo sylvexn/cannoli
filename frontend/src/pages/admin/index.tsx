@@ -84,7 +84,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Settings',
     items: [
       { slug: 'console', label: 'Settings Console', icon: Settings },
-      { slug: 'rulesets', label: 'Rulesets',         icon: Shield },
+      { slug: 'rulesets', label: 'Rulesets',         icon: ScrollText },
       { slug: 'moves',   label: 'Move Categories',  icon: List },
     ],
   },
