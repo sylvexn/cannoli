@@ -59,7 +59,7 @@ describe('wizard assigns rulesets + cost_format', () => {
     const tplRuby = mkTemplate({ costFormat: 'natdexplus', pointCap: 100, teraCaptainSlots: 1 });
     a = `${tag}-a`; b = `${tag}-b`;
     const res = await call('POST', '/api/seasons', {
-      seasonNumber: SEASON, rulesetId: tplRuby.id,
+      seasonNumber: SEASON, rulesetId: tplRuby.id, overlapOverride: true, // other files may leave an active league in the shared DB
       leagues: [
         { id: a, name: `${tag} A`, color: '#111', rulesetId: tplEmerald.id },
         { id: b, name: `${tag} B`, color: '#222' }, // falls back to season-level

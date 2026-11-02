@@ -10,6 +10,7 @@ import { draftCenterRoutes } from '../src/routes/draft-center';
 import { validateRoster, resolveRuleset, DEFAULT_RULESET, type Ruleset } from '../src/lib/draft-center/rules';
 import { sanitizeRoster, type DcMon } from '../src/lib/draft-center/types';
 import { buildCardSvg } from '../src/lib/draft-center/og-image';
+import { invalidateRulesetCache } from '../src/lib/rulesets';
 
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
@@ -171,6 +172,7 @@ afterAll(() => {
     }
     db.delete(schema.leagues).where(eq(schema.leagues.id, leagueId)).run();
     for (const id of rulesetIds) db.delete(schema.rulesets).where(eq(schema.rulesets.id, id)).run();
+    invalidateRulesetCache(); // SQLite reuses ids; don't leave stale cache entries for later files
     db.delete(schema.seasons).where(eq(schema.seasons.id, seasonId)).run();
   } catch { /* DB may be closed during teardown */ }
 });

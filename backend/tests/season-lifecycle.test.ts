@@ -552,7 +552,7 @@ describe('full season lifecycle (production code paths)', () => {
   test('archive read-only: ?force=1 bypasses the guard (admin amend escape hatch)', () => {
     expect(checkSeasonArchived(seasonId, '1', { role: 'admin' })).toBeNull();
     expect(checkLeagueArchived(LEAGUE_ID, true, { role: 'admin' })).toBeNull();
-    expect(checkTeamArchived(teamId(1), 'true')).toBeNull();
+    expect(checkTeamArchived(teamId(1), 'true', { role: 'admin' })).toBeNull();
   });
 
   test('archive isolation: archiving this season did not touch any other season', () => {

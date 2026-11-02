@@ -7,6 +7,7 @@ import { rulesetAdminRoutes } from '../src/routes/admin/rulesets';
 import { getLeagueRuleset, invalidateRulesetCache } from '../src/lib/rulesets';
 
 try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
+invalidateRulesetCache(); // earlier files may delete rulesets whose ids SQLite reuses
 
 const tag = `rs-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const staff = db.insert(schema.users).values({ username: tag, passwordHash: 'x', role: 'admin' }).returning().get();
