@@ -155,6 +155,25 @@ export const seasonRoutes = new Elysia()
       leaguePayloads.push({ ...l, id });
     }
 
+    // Reject duplicate abbrevs (per league, case-insensitive) and a coach on two teams
+    // (a coach owns one team per season) up front, before the tx can hit a PK collision.
+    const seenManagers = new Map<string, string>();
+    for (const lg of leaguePayloads) {
+      const abbrevs = new Set<string>();
+      for (const t of lg.teams ?? []) {
+        const a = (t.teamAbbrev ?? '').trim().toLowerCase();
+        if (a) {
+          if (abbrevs.has(a)) { set.status = 400; return { error: `Duplicate team abbreviation "${a.toUpperCase()}" in league ${lg.name}` }; }
+          abbrevs.add(a);
+        }
+        const u = (t.managerUsername ?? '').trim().toLowerCase();
+        if (!u) continue;
+        const prior = seenManagers.get(u);
+        if (prior) { set.status = 400; return { error: `User "${u}" is assigned to more than one team (${prior}, ${lg.name}); a coach owns one team per season` }; }
+        seenManagers.set(u, lg.name);
+      }
+    }
+
     // Pre-resolve manager usernames -> userIds (avoid resolving inside tx)
     const managerLookup = new Map<string, number>();
     for (const lg of leaguePayloads) {

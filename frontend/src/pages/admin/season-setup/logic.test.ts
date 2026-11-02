@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 import { DEFAULT_RULESET } from '@cannoli/rules';
 import { toForm } from '../rulesets/form';
-import { buildPayload, changedKeys, fillWeekly, initDraft, slugify } from './logic';
+import { blockingErrors, buildPayload, changedKeys, draftFits, fillWeekly, initDraft, slugify } from './logic';
 import type { ApiSeasonSetupDefaults } from '@/lib/api';
 
 const defaults: ApiSeasonSetupDefaults = {
@@ -39,4 +39,29 @@ test('payload: copy points at source ruleset, drops incomplete teams, caps deadl
   expect(p.leagues[0].teams).toHaveLength(1);
   expect(p.leagues[0].teams[0].managerUsername).toBe('Bob');
   expect('name' in p.leagues[0].rules).toBe(false);
+});
+
+test('blockingErrors: dup abbrev, shared username, bad rules', () => {
+  const d = initDraft(defaults);
+  expect(blockingErrors(d)).toEqual([]);
+  const row = { teamName: 'B', teamAbbrev: 'a', teamColor: '#222', coachName: '', username: 'bob' };
+  d.leagues[0].teams.push(row);
+  const errs = blockingErrors(d);
+  expect(errs.some(e => /duplicate abbreviation A/.test(e))).toBe(true);
+  expect(errs.some(e => /bob is on two teams/.test(e))).toBe(true);
+  expect(blockingErrors(d, 1)).toEqual([]);
+  d.leagues[0].included = false;
+  expect(blockingErrors(d)).toEqual([]);
+  d.leagues[0].included = true;
+  d.leagues[0].teams.pop();
+  d.leagues[0].rules = { ...d.leagues[0].rules, pointCap: 0 };
+  expect(blockingErrors(d).some(e => /rules:/.test(e))).toBe(true);
+});
+
+test('draftFits: stale season or missing league/ruleset is rejected', () => {
+  const d = initDraft(defaults);
+  expect(draftFits(d, defaults, [])).toBe(true);
+  expect(draftFits(d, { ...defaults, nextSeasonNumber: 13 }, [])).toBe(false);
+  expect(draftFits({ ...d, leagues: [{ ...d.leagues[0], sourceLeagueId: 's9-gone' }] }, defaults, [])).toBe(false);
+  expect(draftFits({ ...d, leagues: [{ ...d.leagues[0], choice: 99 }] }, defaults, [])).toBe(false);
 });

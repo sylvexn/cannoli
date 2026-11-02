@@ -137,6 +137,21 @@ describe('season setup', () => {
     db.delete(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + 6)).run();
   });
 
+  test('duplicate team abbrev / one username on two teams -> 400, nothing created', async () => {
+    const T = (teamName: string, teamAbbrev: string, managerUsername?: string) => ({ teamName, teamAbbrev, managerUsername });
+    const mk = (n: number, leagues: any[]) => call('POST', '/api/seasons', { overlapOverride: true, seasonNumber: SEASON + n, leagues });
+    const dupAbbrev = await mk(8, [{ slug: `${tag}-d`, name: 'd', color: '#000', teams: [T('One', 'abc'), T('Two', 'ABC')] }]);
+    expect(dupAbbrev.status).toBe(400);
+    expect(dupAbbrev.json.error).toContain('Duplicate team abbreviation');
+    const dupUser = await mk(9, [
+      { slug: `${tag}-u1`, name: 'u1', color: '#000', teams: [T('One', 'AA', tag)] },
+      { slug: `${tag}-u2`, name: 'u2', color: '#000', teams: [T('Two', 'BB', tag.toUpperCase())] },
+    ]);
+    expect(dupUser.status).toBe(400);
+    expect(dupUser.json.error).toContain('more than one team');
+    for (const n of [8, 9]) expect(db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + n)).get()).toBeUndefined();
+  });
+
   test('setup-defaults shape', async () => {
     const { json } = await call('GET', '/api/admin/seasons/setup-defaults');
     expect(json.source.seasonNumber).toBeGreaterThanOrEqual(SEASON);

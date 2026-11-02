@@ -88,8 +88,6 @@ const SAMPLES: { method: string; path: string; body?: unknown }[] = [
   { method: 'POST', path: '/api/leagues', body: {} },                           // leagues
   { method: 'POST', path: `/api/leagues/${tag}-nope/week`, body: {} },          // leagues
   { method: 'POST', path: '/api/seasons', body: {} },                           // seasons
-  { method: 'POST', path: '/api/draft-templates', body: {} },                   // templates
-  { method: 'GET', path: '/api/draft-templates' },                              // templates (staff read)
   { method: 'POST', path: '/api/users', body: {} },                             // users
   { method: 'GET', path: '/api/users' },                                        // users (staff read)
   { method: 'GET', path: '/api/admin/notifications/log' },                      // notifications (staff read)
