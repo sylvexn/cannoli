@@ -216,7 +216,7 @@ describe('admin user PUT — role escalation prevention', () => {
 
   test('role is unchanged in DB after a rejected dev-escalation attempt', async () => {
     // Reset target to 'user' first so we have a clean baseline.
-    await hit('PUT', `/api/users/${targetUserId}`, `session=${staffSession}`, { role: 'user' });
+    db.update(schema.users).set({ role: 'user' }).where(eq(schema.users.id, targetUserId)).run();
 
     await hit('PUT', `/api/users/${targetUserId}`, `session=${staffSession}`, { role: 'dev' });
 

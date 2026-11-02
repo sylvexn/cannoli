@@ -2,9 +2,10 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, asc } from 'drizzle-orm';
 import { hashPassword } from '../../lib/auth';
+import { destroyPsSessionsFor, getPsUserid } from '../../lib/ps-login';
 import { clearRateLimitForUser } from '../auth';
 import { tx } from '../../lib/tx';
-import { requireStaff } from '../../lib/auth-guards';
+import { requireStaff, canActOnRole } from '../../lib/auth-guards';
 
 export const userRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
@@ -71,6 +72,7 @@ export const userRoutes = new Elysia()
 
     const before = db.select().from(schema.users).where(eq(schema.users.id, userId)).get();
     if (!before) { set.status = 404; return { error: 'User not found' }; }
+    if (!canActOnRole(user, before.role)) { set.status = 403; return { error: 'Cannot modify a user of equal or higher role' }; }
 
     // Whitelist roles this endpoint may assign.  'dev' and 'bot' are platform
     // tiers that cannot be granted through the admin UI — prevents an admin
@@ -141,8 +143,10 @@ export const userRoutes = new Elysia()
     const settings = db.select().from(schema.siteSettings).get();
     const password = settings?.defaultUserPassword || 'password';
 
-    const target = db.select({ username: schema.users.username })
+    const target = db.select({ username: schema.users.username, role: schema.users.role, psUsername: schema.users.psUsername })
       .from(schema.users).where(eq(schema.users.id, userId)).get();
+    if (!target) { set.status = 404; return { error: 'User not found' }; }
+    if (!canActOnRole(user, target.role)) { set.status = 403; return { error: 'Cannot reset a user of equal or higher role' }; }
 
     db.update(schema.users).set({
       passwordHash: hashPassword(password),
@@ -151,7 +155,11 @@ export const userRoutes = new Elysia()
 
     // Clear any login lockout so a user who forgot their password (and got
     // rate-limited) can sign in immediately with the new temp password.
-    if (target) clearRateLimitForUser(target.username);
+    clearRateLimitForUser(target.username);
+
+    // Revoke every login + PS session so the old credentials stop working.
+    db.delete(schema.sessions).where(eq(schema.sessions.userId, userId)).run();
+    destroyPsSessionsFor(target.username, getPsUserid(target));
 
     return { password };
   })
