@@ -46,6 +46,9 @@ function RuleCard({ league, defaults, templates, formats, prevN, onChange }: {
     prev && JSON.stringify(prev[k]) !== JSON.stringify(f[k]) ? `${prevLabel}: ${fmt(prev[k])}` : null;
   const budget = budgetPreview(f);
   const copyLabel = `Copy of ${prevLabel} ${league.name}`;
+  const choiceLabel = league.choice === 'copy' ? copyLabel
+    : league.choice === 'blank' ? 'Start blank'
+    : (templates.find(t => t.id === league.choice)?.name ?? 'Template');
 
   return (
     <div className="rounded-lg border border-border-subtle bg-surface-raised/40 p-3 space-y-2">
@@ -58,7 +61,7 @@ function RuleCard({ league, defaults, templates, formats, prevN, onChange }: {
               const choice = fromValue(v ?? 'blank');
               onChange({ choice, rules: baseFor({ ...league, choice }, defaults, templates) });
             }}>
-            <SelectTrigger className="h-8 w-64 text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-64 text-xs"><SelectValue>{choiceLabel}</SelectValue></SelectTrigger>
             <SelectContent>
               {league.sourceLeagueId && <SelectItem value="copy">{copyLabel}</SelectItem>}
               {templates.map(t => <SelectItem key={t.id} value={`t:${t.id}`}>{t.name}</SelectItem>)}
@@ -85,7 +88,7 @@ function RuleCard({ league, defaults, templates, formats, prevN, onChange }: {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <Field label="Cost format" hint={hint('costFormat')}>
               <Select value={f.costFormat} onValueChange={v => set({ costFormat: v ?? f.costFormat })}>
-                <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-8 w-full text-xs"><SelectValue>{formats.find(c => c.id === f.costFormat)?.label ?? f.costFormat}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {formats.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}
                   {!formats.some(c => c.id === f.costFormat) && <SelectItem value={f.costFormat}>{f.costFormat}</SelectItem>}

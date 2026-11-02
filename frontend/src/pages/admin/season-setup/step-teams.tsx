@@ -66,7 +66,7 @@ function CloneFrom({ onRows }: { onRows: (rows: TeamRow[], label: string) => voi
       {open && (
         <>
           <Select value={seasonId} onValueChange={v => pickSeason(v ?? '')}>
-            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Season" /></SelectTrigger>
+            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Season">{seasonId ? `Season ${seasons.find(s => String(s.id) === seasonId)?.seasonNumber ?? ''}` : undefined}</SelectValue></SelectTrigger>
             <SelectContent>{seasons.map(s => <SelectItem key={s.id} value={String(s.id)}>Season {s.seasonNumber}</SelectItem>)}</SelectContent>
           </Select>
           <Select value="" onValueChange={id => {

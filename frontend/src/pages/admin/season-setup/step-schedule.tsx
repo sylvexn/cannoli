@@ -25,12 +25,12 @@ export function StepSchedule({ draft, patch }: { draft: Draft; patch: (p: Partia
           <NumberInput value={draft.tradeDeadlineWeek} min={0} max={draft.totalWeeks} onChange={n => patch({ tradeDeadlineWeek: n })} /></div>
         <div className="space-y-1"><Label>Playoff teams</Label>
           <Select value={String(draft.playoffTeamCount)} onValueChange={v => patch({ playoffTeamCount: Number(v) })}>
-            <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full text-xs"><SelectValue>{draft.playoffTeamCount}</SelectValue></SelectTrigger>
             <SelectContent>{[2, 4, 6, 8].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
           </Select></div>
         <div className="space-y-1"><Label>Forfeit policy</Label>
           <Select value={draft.forfeitPolicy} onValueChange={v => patch({ forfeitPolicy: v as Draft['forfeitPolicy'] })}>
-            <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 w-full text-xs"><SelectValue>{draft.forfeitPolicy === 'admin_review' ? 'Admin review' : 'Double forfeit'}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="double_forfeit">Double forfeit</SelectItem>
               <SelectItem value="admin_review">Admin review</SelectItem>

@@ -48,7 +48,7 @@ export function StepReview({ draft, defaults, status }: {
                   <span className="inline-block size-2.5 rounded-full mr-1.5 align-middle" style={{ backgroundColor: l.color }} />{l.name}
                 </TableCell>
                 <TableCell className="font-mono text-[11px]">{leagueId(draft.seasonNumber, l.slug)}</TableCell>
-                <TableCell className="font-mono text-[11px] text-text-muted">
+                <TableCell className="font-mono text-[11px] text-text-muted whitespace-normal min-w-48">
                   {summarySegments(l.rules, prevFor(l, defaults)).map((s, i) => (
                     <span key={i}>{i > 0 && ' · '}<span className={s.changed ? 'text-draw' : ''}>{s.text}</span></span>
                   ))}
