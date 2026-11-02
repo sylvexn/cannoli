@@ -20,7 +20,7 @@ export function makeChecker() {
 
 export function startBackend(dbPath: string, port: number, quiet = false) {
   const env: Record<string, string | undefined> = {
-    ...process.env, CANNOLI_DB_PATH: dbPath, CANNOLI_MODE: 'mock', PORT: String(port),
+    ...process.env, CANNOLI_DB_PATH: dbPath, CANNOLI_MODE: 'mock', CANNOLI_PORT: String(port),
   };
   // Never let a harness backend reach real external services.
   for (const k of ['PS_SERVER_WS_URL', 'DISCORD_WEBHOOK_URL', 'DISCORD_ALERT_WEBHOOK']) delete env[k];

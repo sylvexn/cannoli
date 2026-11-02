@@ -547,10 +547,12 @@ export const leagueAdminRoutes = new Elysia()
     if (league.phase !== 'predraft' && league.phase !== 'draft') {
       set.status = 400; return { error: `Cannot change draft order in ${league.phase} phase` };
     }
-    // Lock once the draft has begun (any picks made)
+    // Once a draft has started (in_progress/paused/completed) the order is frozen: no reorder, no unlock.
+    // Re-posting the identical order with locked unset/true stays an idempotent no-op.
     const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
-    if (draftState && draftState.currentPickIndex > 0) {
-      set.status = 400; return { error: 'Cannot change draft order once picks have been made' };
+    if (draftState && draftState.status !== 'not_started'
+        && (locked === false || JSON.stringify(order) !== league.draftOrder)) {
+      set.status = 409; return { error: 'Draft has started; the draft order can no longer be changed', code: 'draft_started' };
     }
 
     // Must be an exact permutation of the league's teams.

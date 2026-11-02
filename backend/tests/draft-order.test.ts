@@ -148,6 +148,31 @@ describe('startDraft', () => {
   });
 });
 
+describe('order frozen once the draft has started', () => {
+  const url = () => `/api/leagues/${fx.leagueId}/draft-order`;
+
+  test('reorder and unlock are 409 draft_started; idempotent re-lock ok; coach still sees running status', async () => {
+    // previous test started the draft via startDraft (in_progress, pick 0, locked)
+    expect(leagueRow().draftOrderLocked).toBe(true);
+    const order = JSON.parse(leagueRow().draftOrder!) as string[];
+
+    let res = await call('POST', url(), staff, { order, locked: false });
+    expect(res.status).toBe(409);
+    expect((await res.json() as any).code).toBe('draft_started');
+    res = await call('POST', url(), staff, { order: [...order].reverse() });
+    expect(res.status).toBe(409);
+    res = await call('POST', url(), staff, { order: [...order].reverse(), locked: true });
+    expect(res.status).toBe(409);
+    expect(JSON.parse(leagueRow().draftOrder!)).toEqual(order);
+    expect(leagueRow().draftOrderLocked).toBe(true);
+
+    expect((await call('POST', url(), staff, { order, locked: true })).status).toBe(200);
+
+    const pub = await (await call('GET', `/api/leagues/${fx.leagueId}/draft/state`, coach)).json() as any;
+    expect(pub.status).toBe('in_progress');
+  });
+});
+
 describe('GET /draft-order/history', () => {
   test('staff-only, newest first, documented shape', async () => {
     const url = `/api/leagues/${fx.leagueId}/draft-order/history`;
