@@ -175,7 +175,7 @@ export default function App() {
                     <Route path="rulesets" element={<AdminRulesetsRoute />} />
                     <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
                     <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
-                    <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
+                    <Route path="templates" element={<Navigate to="/admin/rulesets" replace />} />
                     <Route path="moves" element={<AdminMoveCategoriesRoute />} />
                     <Route path="pins" element={<AdminPinsRoute />} />
                     <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
