@@ -45,6 +45,7 @@ function groupAndAlert(input: {
   stack?: string | null;
   userId?: number | null;
   errorId?: string | null;
+  maxGroups?: number;
 }): string | null {
   try {
     const fingerprint = computeFingerprint(input);
@@ -57,6 +58,7 @@ function groupAndAlert(input: {
       stack: input.stack ?? null,
       userId: input.userId ?? null,
       version: GIT_SHA,
+      maxGroups: input.maxGroups,
     });
     if (rec) {
       alertFault({
@@ -241,6 +243,8 @@ export interface ClientErrorInput {
  * single place to look. Returns a correlation id the client shows to the user
  * and embeds in any follow-up feedback issue. Best-effort — never throws.
  */
+const CLIENT_GROUP_CAP = 2000;
+
 export function logClientError(
   input: ClientErrorInput,
   ctx: { user?: { id: string; username: string } | null; ip?: string | null },
@@ -263,6 +267,8 @@ export function logClientError(
       stack: input.stack ?? null,
       userId,
       errorId,
+      // Anonymous endpoint: bound error_groups growth from client noise.
+      maxGroups: CLIENT_GROUP_CAP,
     });
 
     db.insert(schema.requestLogs).values({

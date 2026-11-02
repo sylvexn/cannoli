@@ -13,11 +13,27 @@ import { Elysia, t } from 'elysia';
 import { logClientError } from '../lib/request-log';
 import type { AuthUser } from '../middleware/auth';
 
+// Per-IP fixed-window limiter (anonymous endpoint). ponytail: in-memory, single process.
+const RATE_MAX = 30;
+const RATE_WINDOW_MS = 60_000;
+const hits = new Map<string, { start: number; n: number }>();
+export function clientErrorRateLimited(ip: string, now = Date.now()): boolean {
+  if (hits.size > 5000) for (const [k, v] of hits) if (now - v.start >= RATE_WINDOW_MS) hits.delete(k);
+  const h = hits.get(ip);
+  if (!h || now - h.start >= RATE_WINDOW_MS) { hits.set(ip, { start: now, n: 1 }); return false; }
+  return ++h.n > RATE_MAX;
+}
+
 export const clientErrorRoutes = new Elysia()
-  .post('/api/client-errors', ({ body, request, ...ctx }) => {
+  .post('/api/client-errors', ({ body, request, set, ...ctx }) => {
     const user = (ctx as { user?: AuthUser | null }).user ?? null;
     const xff = request.headers.get('x-forwarded-for');
     const ip = xff ? xff.split(',')[0]!.trim() : request.headers.get('x-real-ip');
+
+    if (clientErrorRateLimited(ip ?? 'unknown')) {
+      set.status = 429;
+      return { errorId: null };
+    }
 
     const errorId = logClientError(
       {

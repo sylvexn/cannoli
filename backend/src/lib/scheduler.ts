@@ -32,6 +32,8 @@ const JOBS: JobDef[] = [
 ];
 
 const handles: NodeJS.Timeout[] = [];
+const bootHandles: NodeJS.Timeout[] = [];
+const BOOT_DELAY_MS = 30_000;
 
 /**
  * Whether the scheduler should run jobs in this process.
@@ -65,12 +67,18 @@ export function startSchedulers() {
   }
 
   for (const job of JOBS) {
-    const h = setInterval(() => {
-      Promise.resolve(job.fn()).catch(err => {
-        console.error(`[scheduler] ${job.name} failed:`, err);
-      });
-    }, job.intervalMs);
-    handles.push(h);
+    let running = false; // in-flight guard: a slow run never overlaps the next
+    const tick = () => {
+      if (running) return;
+      running = true;
+      Promise.resolve()
+        .then(job.fn)
+        .catch(err => console.error(`[scheduler] ${job.name} failed:`, err))
+        .finally(() => { running = false; });
+    };
+    handles.push(setInterval(tick, job.intervalMs));
+    // Redeploys faster than the interval would otherwise never run the job.
+    bootHandles.push(setTimeout(tick, BOOT_DELAY_MS));
     console.log(`[scheduler] registered ${job.name} (every ${job.intervalMs / 1000}s)`);
   }
 }
@@ -78,6 +86,8 @@ export function startSchedulers() {
 export function stopSchedulers() {
   for (const h of handles) clearInterval(h);
   handles.length = 0;
+  for (const h of bootHandles) clearTimeout(h);
+  bootHandles.length = 0;
 }
 
 /** Manually run a job by name (for admin tools / tests). Returns whether the job exists. */

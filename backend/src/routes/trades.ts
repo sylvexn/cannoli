@@ -289,8 +289,13 @@ export const tradeRoutes = new Elysia()
         }).run();
       });
     } catch (e) {
-      set.status = 400;
-      return { error: (e as Error).message };
+      // Only the expected domain error (executeRosterSwap's "Trade invalid: …")
+      // is a client error; anything else surfaces as a generic 500 via onError.
+      if (e instanceof Error && e.message.startsWith('Trade invalid:')) {
+        set.status = 400;
+        return { error: e.message };
+      }
+      throw e;
     }
 
     notifyTradeScheduled({
@@ -303,7 +308,7 @@ export const tradeRoutes = new Elysia()
 
     // Best-effort: refresh the PS bot's user→team map so it stays current.
     // Never let this fail the request.
-    try { refreshUserMap(); } catch {}
+    try { refreshUserMap(); } catch (err) { console.warn('[ps-bot] refreshUserMap failed:', err); }
 
     return { success: true, effectiveWeek, scheduled: deferred };
   })

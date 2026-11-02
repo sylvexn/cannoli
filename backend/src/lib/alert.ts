@@ -91,6 +91,7 @@ function postWebhook(webhookUrl: string, embed: DiscordEmbed): void {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (res.status === 429) {
@@ -110,6 +111,7 @@ function postWebhook(webhookUrl: string, embed: DiscordEmbed): void {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body,
+            signal: AbortSignal.timeout(10_000),
           }).catch(() => {
             /* drop on second failure */
           });
@@ -197,7 +199,49 @@ function _alertFault(args: Parameters<typeof alertFault>[0]): void {
   coalesceMap.set(fingerprint, entry);
 }
 
+/** Global cap on NEW-error Discord alerts: max per window, then one "suppressed" note. */
+const NEW_ALERT_MAX = 10;
+const NEW_ALERT_WINDOW_MS = 60_000;
+let newAlertWindowStart = 0;
+let newAlertCount = 0;
+let newAlertSuppressed = 0;
+
+function flushSuppressedNote(): void {
+  const n = newAlertSuppressed;
+  newAlertSuppressed = 0;
+  if (n > 0 && ERROR_WEBHOOK) {
+    postWebhook(ERROR_WEBHOOK, {
+      title: '🔇 Alerts suppressed',
+      description: `${n} new-error alert${n === 1 ? '' : 's'} suppressed (cap ${NEW_ALERT_MAX}/min)`,
+      color: COLOR.gray,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/** Returns false once the per-minute new-error budget is spent (and counts the suppression). */
+export function takeNewAlertSlot(now = Date.now()): boolean {
+  if (now - newAlertWindowStart >= NEW_ALERT_WINDOW_MS) {
+    flushSuppressedNote();
+    newAlertWindowStart = now;
+    newAlertCount = 0;
+  }
+  if (newAlertCount >= NEW_ALERT_MAX) {
+    // First suppression in the window arms the single summary note.
+    if (newAlertSuppressed++ === 0) {
+      setTimeout(flushSuppressedNote, NEW_ALERT_WINDOW_MS).unref();
+    }
+    return false;
+  }
+  newAlertCount++;
+  return true;
+}
+
+/** Test hook: suppressed count so far. */
+export function _suppressedNewAlertsForTest(): number { return newAlertSuppressed; }
+
 function _postFaultEmbed(args: Parameters<typeof alertFault>[0]): void {
+  if (args.isNew && !takeNewAlertSlot()) return;
   const { groupId, kind, errorName, message, path, count, affectedUsers, errorRef, version, isNew, isSpike } = args;
 
   let title: string;

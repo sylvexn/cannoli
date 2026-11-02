@@ -26,7 +26,7 @@ import { pinRoutes } from './routes/pins';
 import { pinAwardRoutes } from './routes/pins-awards';
 import { draftCenterRoutes } from './routes/draft-center';
 import { archiveDeepRoutes } from './routes/archive';
-import { startBot } from './lib/ps-bot';
+import { startBot, stopBot } from './lib/ps-bot';
 import { ensureBotUser, reconcileBotRoles } from './lib/ps-bot-seed';
 import { startSchedulers, stopSchedulers } from './lib/scheduler';
 import { runUsageRollup } from './lib/usage';
@@ -98,7 +98,7 @@ const app = new Elysia()
     if (url.pathname.includes('/action.php') && url.pathname !== '/api/ps/action.php') {
       const newUrl = new URL(request.url);
       newUrl.pathname = '/api/ps/action.php';
-      return fetch(new Request(newUrl.toString(), request));
+      return fetch(new Request(newUrl.toString(), request), { signal: AbortSignal.timeout(10_000) });
     }
   })
 
@@ -262,7 +262,8 @@ const app = new Elysia()
   .use(psLoginRoutes)
   .use(psInternalRoutes)
 
-  .listen(3001);
+  // Largest legit upload is 2MB (logo/screenshot); replay imports are JSON well under that.
+  .listen({ port: 3001, maxRequestBodySize: 10 * 1024 * 1024 });
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
 console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);
@@ -274,6 +275,8 @@ function shutdown(signal: string) {
   console.log(`[shutdown] received ${signal}, stopping schedulers and closing DB...`);
   stopSchedulers();
   stopHeartbeat();
+  stopBot();
+  try { app.stop(); } catch { /* best-effort */ }
   try { sqlite.close(); } catch { /* best-effort */ }
   process.exit(0);
 }
