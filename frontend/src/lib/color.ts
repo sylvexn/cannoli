@@ -117,7 +117,7 @@ export function tintColor(hex: string): string {
 }
 
 /** Inline style for a row tinted with a team color fading in from the left. */
-export function teamTintStyle(hex: string | null | undefined, strength = 30): CSSProperties | undefined {
+export function teamTintStyle(hex: string | null | undefined, strength = 20): CSSProperties | undefined {
   if (!hex) return undefined;
-  return { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tintColor(hex)} ${strength}%, transparent), transparent 50%)` };
+  return { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tintColor(hex)} ${strength}%, transparent), transparent 38%)` };
 }

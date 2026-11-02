@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Search, Menu } from 'lucide-react';
 import { NeonLogo } from '../neon-logo';
+import { gemHex } from '@/lib/use-gem-scope';
 import { NotificationsButton } from './notifications-button';
 import { LeagueSwitcher } from './league-switcher';
 import { LiveIndicator, type LiveMatch } from './live-indicator';
@@ -30,7 +31,7 @@ export function TopBar(p: TopBarProps) {
     <header className="sticky top-0 z-30 shrink-0 border-b border-border-subtle bg-surface/80 backdrop-blur shadow-[inset_0_2px_0_var(--gem)]">
       <div className="flex h-12 items-center gap-3 px-4">
         <Link to="/" aria-label="Cannoli home" className="shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-gem/60 rounded">
-          <NeonLogo className="h-6 w-auto" />
+          <NeonLogo className="h-6 w-auto" color={gemHex(p.activeLeague?.id)} />
         </Link>
         <LeagueSwitcher leagues={p.leagues} active={p.activeLeague} />
 
