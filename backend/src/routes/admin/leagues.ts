@@ -527,7 +527,7 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
-    const { order } = body as { order: string[] };
+    const { order, locked } = body as { order: string[]; locked?: boolean };
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -544,18 +544,42 @@ export const leagueAdminRoutes = new Elysia()
       set.status = 400; return { error: 'Cannot change draft order once picks have been made' };
     }
 
+    // Must be an exact permutation of the league's teams.
+    const teamIds = db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
+    if (!Array.isArray(order) || order.length !== teamIds.length || new Set(order).size !== order.length || !order.every(id => teamIds.includes(id))) {
+      set.status = 400; return { error: 'order must contain each team in the league exactly once' };
+    }
+    if (locked !== undefined && typeof locked !== 'boolean') { set.status = 400; return { error: 'locked must be a boolean' }; }
+    const draftOrderLocked = locked ?? league.draftOrderLocked;
+
     tx(() => {
-      db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
+      db.update(schema.leagues).set({ draftOrder: JSON.stringify(order), draftOrderLocked }).where(eq(schema.leagues.id, params.leagueId)).run();
       db.insert(schema.activityLog).values({
         type: 'draft_order_set',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
         description: `Set draft order (${order.length} teams)`,
-        metadata: JSON.stringify({ order }),
+        metadata: JSON.stringify({ order, locked: draftOrderLocked }),
       }).run();
     });
-    return { success: true };
+    return { success: true, draftOrderLocked };
+  })
+
+  .get('/api/leagues/:leagueId/draft-order/history', ({ params }) => {
+    const rows = db.select().from(schema.activityLog)
+      .where(and(eq(schema.activityLog.leagueId, params.leagueId), eq(schema.activityLog.type, 'draft_order_set')))
+      .orderBy(desc(schema.activityLog.id)).limit(20).all();
+    return rows.map(r => {
+      const m = r.metadata ? JSON.parse(r.metadata) : {};
+      const ts = r.timestamp ?? '';
+      return {
+        actor: r.actor,
+        at: new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').toISOString(),
+        order: (m.order ?? []) as string[],
+        locked: typeof m.locked === 'boolean' ? m.locked : null,
+      };
+    });
   })
 
 ;
