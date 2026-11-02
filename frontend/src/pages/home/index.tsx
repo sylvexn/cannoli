@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Swords, ClipboardList, ListTree, Gamepad2 } from 'lucide-react';
+import { Swords, ClipboardList, ListTree, Gamepad2, type LucideIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAppData } from '@/lib/app-data-context';
 import { api, type ApiTeam, type ApiActivityEvent } from '@/lib/api';
@@ -16,12 +16,14 @@ import { LeagueCard } from './league-card';
 
 const FEED_CATEGORIES = new Set(['draft', 'trade', 'match', 'team']);
 
-const TOOLS = [
+const TOOLS: { to: string; label: string; icon: LucideIcon; authOnly?: boolean }[] = [
   { to: '/matchup', label: 'Matchup Center', icon: Swords },
   { to: '/draft-center', label: 'Draft Center', icon: ClipboardList },
   { to: '/tiers', label: 'Pokédex', icon: ListTree },
-  { to: '/showdown', label: 'Play & Watch', icon: Gamepad2 },
+  { to: '/showdown', label: 'Play & Watch', icon: Gamepad2, authOnly: true },
 ];
+
+const FOOTER_LINKS = [['/rules', 'Rules'], ['/patch-notes', 'Patch notes'], ['/replays', 'Replays']] as const;
 
 /** Home = Lobby: your match + tools, the three leagues, then activity across them. */
 export function HomePage() {
@@ -53,7 +55,7 @@ export function HomePage() {
 
   const tools = (
     <div className="grid grid-cols-2 gap-2">
-      {TOOLS.map(({ to, label, icon: Icon }) => (
+      {TOOLS.filter(t => isAuthenticated || !t.authOnly).map(({ to, label, icon: Icon }) => (
         <Link
           key={to}
           to={to}
@@ -105,6 +107,15 @@ export function HomePage() {
         <SectionHeading action={isAuthenticated ? <SpoilerToggle /> : undefined}>Around the leagues</SectionHeading>
         <ActivityFeed activity={activity} teamsPerLeague={teamsPerLeague} variant="dense" bare />
       </section>
+
+      <footer className="flex items-center gap-x-2 text-xs text-text-muted">
+        {FOOTER_LINKS.map(([to, label], i) => (
+          <span key={to} className="flex items-center gap-2">
+            {i > 0 && <span aria-hidden>·</span>}
+            <Link to={to} className="px-1 py-1 hover:text-text-primary hover:underline">{label}</Link>
+          </span>
+        ))}
+      </footer>
     </div>
   );
 }

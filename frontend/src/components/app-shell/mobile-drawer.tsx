@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { X, MessageSquarePlus, LogOut } from 'lucide-react';
+import { X, MessageSquarePlus, LogOut, ScrollText, Newspaper, Film } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { openFeedback } from '@/lib/feedback-bus';
-import { NavItemLink, TOOL_NAV, Badge, type NavItem } from './nav-links';
+import { NavItemLink, toolNav, Badge, type NavItem } from './nav-links';
 import { LoginButton, type AuthUser, type ProfileLink } from './profile-menu';
 
 interface MobileDrawerProps {
@@ -15,6 +15,12 @@ interface MobileDrawerProps {
 }
 
 const row = 'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-overlay/60 hover:text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-gem/60';
+
+const GUEST_MORE = [
+  { to: '/rules', label: 'Rules', icon: ScrollText },
+  { to: '/patch-notes', label: 'Patch notes', icon: Newspaper },
+  { to: '/replays', label: 'Replays', icon: Film },
+];
 
 /** Always-mounted off-canvas drawer (CSS transform, not a Sheet) shown below lg. */
 export function MobileDrawer({ open, onClose, leagueItems, user, profileLinks, onLogout }: MobileDrawerProps) {
@@ -45,7 +51,7 @@ export function MobileDrawer({ open, onClose, leagueItems, user, profileLinks, o
         <nav aria-label="Primary" className="space-y-0.5">
           {leagueItems.map(i => <NavItemLink key={i.to} item={i} variant="drawer" onNavigate={onClose} />)}
           {leagueItems.length > 0 && <div className="mx-2 my-2 h-px bg-border-subtle" />}
-          {TOOL_NAV.map(i => <NavItemLink key={i.to} item={i} variant="drawer" onNavigate={onClose} />)}
+          {toolNav(!!user).map(i => <NavItemLink key={i.to} item={i} variant="drawer" onNavigate={onClose} />)}
         </nav>
         <div className="mx-2 my-2 h-px bg-border-subtle" />
         {user ? (
@@ -64,7 +70,15 @@ export function MobileDrawer({ open, onClose, leagueItems, user, profileLinks, o
             </button>
           </div>
         ) : (
-          <LoginButton className={row} />
+          <div className="space-y-0.5">
+            <div className="px-3 pb-1 pt-0.5 text-xs font-semibold text-text-muted">More</div>
+            {GUEST_MORE.map(l => (
+              <NavLink key={l.to} to={l.to} onClick={onClose} className={row}>
+                <l.icon size={16} className="shrink-0" /> {l.label}
+              </NavLink>
+            ))}
+            <LoginButton className={row} />
+          </div>
         )}
       </aside>
     </div>
