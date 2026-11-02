@@ -40,4 +40,7 @@ try {
   }
 }
 
+// Refresh planner stats once after migrations (cheap; picks up the new indexes).
+try { sqlite.exec('PRAGMA optimize'); } catch { /* non-fatal */ }
+
 export { schema };
