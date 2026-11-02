@@ -358,8 +358,15 @@ export const tradeRoutes = new Elysia()
       body as { pokemonName: string; note?: string; teamId?: string };
     const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
     if (!teamId) { set.status = 403; return { error: 'You don\'t have a team in this league' }; }
+    const teamInLeague = db.select({ id: schema.teams.id }).from(schema.teams)
+      .where(and(eq(schema.teams.id, teamId), eq(schema.teams.leagueId, params.leagueId))).get();
+    if (!teamInLeague) { set.status = 400; return { error: 'Team does not belong to this league' }; }
 
     if (!pokemonName?.trim()) { set.status = 400; return { error: 'Pokemon name required' }; }
+    if (note && note.length > 500) { set.status = 400; return { error: 'Note must be at most 500 characters' }; }
+    const onRoster = db.select({ id: schema.rosters.id }).from(schema.rosters)
+      .where(and(eq(schema.rosters.teamId, teamId), eq(schema.rosters.pokemonName, pokemonName.trim()))).get();
+    if (!onRoster) { set.status = 400; return { error: 'Pokemon is not on this team\'s roster' }; }
 
     const result = db.insert(schema.tradeBlockListings).values({
       leagueId: params.leagueId,
