@@ -74,7 +74,7 @@ function startBackend() {
       PS_RSA_PRIVATE_KEY: process.env.PS_RSA_PRIVATE_KEY,
       PS_LOGS_DIR: resolve(ROOT, 'showdown/server/logs'),
       READY_TIMEOUT_MS: '60000',
-      PORT: '3001',
+      CANNOLI_PORT: '3001',
     },
     stdout: 'pipe',
     stderr: 'pipe',
