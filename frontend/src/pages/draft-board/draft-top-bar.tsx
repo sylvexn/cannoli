@@ -2,7 +2,7 @@ import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import {
-  LayoutGrid, Table, History, Radio, Wifi, Loader2, ScrollText,
+  LayoutGrid, History, Radio, Wifi, Loader2, ScrollText,
   Volume2, VolumeX, FlaskConical, Zap, Rows3, Rows2, StretchHorizontal,
   MoreVertical,
 } from 'lucide-react';
@@ -25,22 +25,17 @@ interface DraftTopBarProps {
   isPractice: boolean;
   draftDemoVisible: boolean;
   isDraftRunning: boolean;
-  isDraftComplete: boolean;
   leagueId: string;
   wsConnected: boolean;
 
-  // Pick log toggle
-  pickLogExpanded: boolean;
-  onTogglePickLog: () => void;
+  /** Pool palette opener — shown here only when the on-the-clock bar (which has its own) is absent. */
+  showPoolButton: boolean;
+  onOpenPool: () => void;
 
   // Cry mute
   muted: boolean;
   onToggleMuted: () => void;
   hintVisible: boolean;
-
-  // Card density
-  density: CardDensity;
-  onChangeDensity: (d: CardDensity) => void;
 }
 
 /** Compact top chrome strip for the draft board. The visible row holds:
@@ -57,11 +52,10 @@ interface DraftTopBarProps {
  * kebab + the cluster.
  */
 export function DraftTopBar({
-  state, dispatch, isPractice, draftDemoVisible, isDraftRunning, isDraftComplete,
+  state, dispatch, isPractice, draftDemoVisible, isDraftRunning,
   leagueId, wsConnected,
-  pickLogExpanded, onTogglePickLog,
+  showPoolButton, onOpenPool,
   muted, onToggleMuted, hintVisible,
-  density, onChangeDensity,
 }: DraftTopBarProps) {
   const viewToggleValue: DraftView = state.view;
   const navigate = useNavigate();
@@ -71,8 +65,8 @@ export function DraftTopBar({
       <div className="flex items-center justify-between gap-3 pb-1.5 shrink-0 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="text-lg font-mono font-bold tracking-tight uppercase">
-            <span className="text-draw">Draft</span>
-            <span className="text-text-primary ml-1">Board</span>
+            <span className="text-draw">Draft</span>{' '}
+            <span className="text-text-primary">Room</span>
             {isPractice && (
               <span className="ml-2 text-[10px] font-mono uppercase tracking-widest text-pink/80 align-middle">
                 Practice
@@ -206,23 +200,20 @@ export function DraftTopBar({
           )}
         </div>
 
-        {/* Right cluster — segmented icon buttons, 28×28 each, hairline dividers. */}
-        <div className="flex items-center rounded-md border border-border-default bg-surface-raised overflow-hidden divide-x divide-border-subtle">
-          {/* Pick-count toggle (live mode only) */}
-          {isDraftRunning && state.allPicks.length > 0 && !isDraftComplete && (
-            <ClusterButton
-              onClick={onTogglePickLog}
-              active={pickLogExpanded}
-              ariaLabel={pickLogExpanded ? 'Hide recent picks' : `Show ${state.allPicks.length} recent picks`}
-              ariaPressed={pickLogExpanded}
-              tooltip={pickLogExpanded ? 'Hide recent picks' : 'Show recent picks'}
-            >
-              <span className="text-[9px] font-mono tabular-nums leading-none px-0.5">
-                {state.allPicks.length}
-              </span>
-            </ClusterButton>
-          )}
-
+        <div className="flex items-center gap-2">
+        {showPoolButton && (
+          <button
+            type="button"
+            onClick={onOpenPool}
+            className="h-7 px-2.5 rounded-md border border-border-default bg-surface-raised text-[11px] text-text-secondary hover:text-text-primary flex items-center gap-1.5 transition-colors"
+          >
+            <LayoutGrid size={12} aria-hidden />
+            Open pool
+            <kbd className="px-1 rounded border border-border-subtle bg-surface text-[9px] font-mono text-text-muted">P</kbd>
+          </button>
+        )}
+        {/* Right cluster — mute (live only). */}
+        <div className="flex items-center rounded-md border border-border-default bg-surface-raised overflow-hidden divide-x divide-border-subtle empty:hidden">
           {/* Mute */}
           {isDraftRunning && (
             <div className="relative">
@@ -252,20 +243,7 @@ export function DraftTopBar({
               )}
             </div>
           )}
-
-          {/* View mode (Grid / Table) */}
-          <ClusterButton
-            onClick={() => dispatch({ type: 'SET_VIEW_MODE', mode: state.viewMode === 'grid' ? 'table' : 'grid' })}
-            ariaLabel={state.viewMode === 'grid' ? 'Switch to table view' : 'Switch to grid view'}
-            tooltip={state.viewMode === 'grid' ? 'Switch to table view' : 'Switch to grid view'}
-          >
-            {state.viewMode === 'grid' ? <LayoutGrid size={13} /> : <Table size={13} />}
-          </ClusterButton>
-
-          {/* Density (compact / comfortable / detailed) — only meaningful in grid view */}
-          {state.viewMode === 'grid' && (
-            <ClusterDensity density={density} onChange={onChangeDensity} />
-          )}
+        </div>
         </div>
       </div>
     </TooltipProvider>
@@ -283,7 +261,7 @@ interface ClusterButtonProps {
   children: ReactNode;
 }
 
-function ClusterButton({
+export function ClusterButton({
   onClick, ariaLabel, tooltip, ariaPressed, active, children,
 }: ClusterButtonProps) {
   return (
@@ -311,7 +289,7 @@ interface ClusterDensityProps {
   onChange: (d: CardDensity) => void;
 }
 
-function ClusterDensity({ density, onChange }: ClusterDensityProps) {
+export function ClusterDensity({ density, onChange }: ClusterDensityProps) {
   const Icon = density === 'compact' ? Rows3 : density === 'detailed' ? StretchHorizontal : Rows2;
   const label = density === 'compact' ? 'Compact' : density === 'detailed' ? 'Detailed' : 'Comfortable';
 
