@@ -134,6 +134,7 @@ function tickTimers() {
   }
   const now = Date.now();
   for (const s of states) {
+   try {
     if (s.status !== 'in_progress' || !s.timerStartedAt) continue;
     const deadline = new Date(s.timerStartedAt).getTime() + s.timerDuration * 1000;
     if (now < deadline) continue;
@@ -159,7 +160,16 @@ function tickTimers() {
         data: { teamId: result.teamId },
       }));
     }
+   } catch (err) {
+    // One bad league must not skip the rest or throw every second.
+    console.warn(`[draft tick] league ${s.leagueId} failed:`, err instanceof Error ? err.message : err);
+   }
   }
+}
+
+function teamInLeague(teamId: string, leagueId: string): boolean {
+  return !!db.select({ id: schema.teams.id }).from(schema.teams)
+    .where(and(eq(schema.teams.id, teamId), eq(schema.teams.leagueId, leagueId))).get();
 }
 
 function ensureTimerInterval() {
@@ -231,13 +241,14 @@ export const draftRoutes = new Elysia()
   // Per-team draft queue (auto-pick preference list)
   // A coach pre-sets an ordered list; on timer-expiry auto-pick the engine
   // walks it top-down for the first eligible mon (see getAutoPick).
-  .get('/api/leagues/:leagueId/draft/queue', ({ params, user, set }) => {
+  .get('/api/leagues/:leagueId/draft/queue', ({ params, query, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
     const team = db.select({ id: schema.teams.id }).from(schema.teams)
       .where(and(eq(schema.teams.leagueId, params.leagueId), eq(schema.teams.userId, parseInt(user.id))))
       .get();
-    const teamId = (isStaff(user) && (params as any).teamId) || team?.id;
+    const teamId = (isStaff(user) && (query as Record<string, string | undefined>).teamId) || team?.id;
     if (!teamId) { set.status = 403; return { error: "You don't have a team in this league" }; }
+    if (!teamInLeague(teamId, params.leagueId)) { set.status = 400; return { error: 'Team does not belong to this league' }; }
     return { queue: getDraftQueue(params.leagueId, teamId) };
   })
 
@@ -253,6 +264,7 @@ export const draftRoutes = new Elysia()
     const teamId = (isStaff(user) && bodyTeamId) ? bodyTeamId : team?.id;
     if (!teamId) { set.status = 403; return { error: "You don't have a team in this league" }; }
 
+    if (!teamInLeague(teamId, params.leagueId)) { set.status = 400; return { error: 'Team does not belong to this league' }; }
     const saved = setDraftQueue(params.leagueId, teamId, names);
     return { queue: saved };
   })
@@ -502,8 +514,11 @@ export const draftRoutes = new Elysia()
         const auth = data.draftAuth;
 
         if (msg.type === 'identify') {
-          const { teamId, username, role } = msg;
-          if (!username) return;
+          // Identity comes from the session, never from the client payload.
+          const { teamId } = msg;
+          if (!sessionUser?.username) return;
+          const username = sessionUser.username;
+          const role = sessionUser.role;
 
           // Reject claimed teamIds that don't match the authed session's team
           // (staff can spectate as themselves; their teamId is always null).
@@ -523,7 +538,7 @@ export const draftRoutes = new Elysia()
           leaguePresence.get(leagueId)!.set(wsKey(ws), {
             teamId: presenceTeamId,
             username,
-            role: role || 'spectator',
+            role: (role || 'spectator') as DraftPresence['role'],
             userId: auth?.userId ?? null,
           });
 
@@ -583,9 +598,9 @@ export const draftRoutes = new Elysia()
         }
 
         if (msg.type === 'chat') {
-          const { username, message: rawMessage } = msg;
-          if (!username || !rawMessage) return;
-          if (!sessionUser) {
+          const { message: rawMessage } = msg;
+          if (!rawMessage) return;
+          if (!sessionUser?.username) {
             ws.send(JSON.stringify({ type: 'error', error: 'not_authenticated' }));
             return;
           }
@@ -607,7 +622,7 @@ export const draftRoutes = new Elysia()
 
           const chatMsg = JSON.stringify({
             type: 'chat',
-            data: { username: String(username).replace(/<[^>]*>/g, '').trim(), message: sanitized, timestamp: new Date().toISOString() },
+            data: { username: sessionUser.username, message: sanitized, timestamp: new Date().toISOString() },
           });
           ws.publish(`draft:${leagueId}`, chatMsg);
           ws.send(chatMsg);
