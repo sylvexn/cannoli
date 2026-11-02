@@ -10,7 +10,7 @@
  * Lives in its own file to keep draft-control-bar.tsx under the 600-LOC limit.
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, type Dispatch } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { useLeague } from '@/lib/league-context';
 import { api } from '@/lib/api';
 import { getTierList, DEFAULT_FORMAT } from '@/data/tier-list';
+import type { DraftAction } from './types';
 
 interface DraftAdminOverridesProps {
   draftOrder: { id: string; teamAbbrev: string; teamColor: string; name: string; logoPath?: string | null }[];
@@ -33,10 +34,16 @@ interface DraftAdminOverridesProps {
   draftedNames: Set<string>;
   /** Whether there's at least one pick to undo. */
   canUndo: boolean;
+  /**
+   * Dry-run / rehearsal: when set, every override dispatches to the client
+   * simulator reducer instead of calling the server. `currentTeamId` is the
+   * seat on the clock (force-pick always lands in the current slot).
+   */
+  simulator?: { dispatch: Dispatch<DraftAction>; currentTeamId: string | null };
 }
 
 export function DraftAdminOverrides({
-  draftOrder, draftedNames, canUndo,
+  draftOrder, draftedNames, canUndo, simulator,
 }: DraftAdminOverridesProps) {
   const league = useLeague();
   const [forcePickOpen, setForcePickOpen] = useState(false);
@@ -56,6 +63,15 @@ export function DraftAdminOverrides({
 
   const handleForcePick = useCallback(async () => {
     if (!forceTeamId || !forcePokemon) return;
+    if (simulator) {
+      const tier = getTierList(format).find(e => e.name === forcePokemon)?.tier ?? 1;
+      simulator.dispatch({ type: 'PICK_LANDED', pokemonName: forcePokemon, tier });
+      toast.success(`Force-picked ${forcePokemon} (simulated)`);
+      setForcePickOpen(false);
+      setForcePokemon('');
+      setForceSearch('');
+      return;
+    }
     setBusy('force');
     try {
       await api.forceDraftPick(league.id, forceTeamId, forcePokemon);
@@ -69,9 +85,10 @@ export function DraftAdminOverrides({
     } finally {
       setBusy(null);
     }
-  }, [forceTeamId, forcePokemon, league.id]);
+  }, [forceTeamId, forcePokemon, league.id, simulator, format]);
 
   const handleSkip = useCallback(async () => {
+    if (simulator) { simulator.dispatch({ type: 'SKIP_PICK' }); return; }
     if (!confirm('Skip the current pick? The team on the clock will lose this slot.')) return;
     setBusy('skip');
     try {
@@ -82,9 +99,10 @@ export function DraftAdminOverrides({
     } finally {
       setBusy(null);
     }
-  }, [league.id]);
+  }, [league.id, simulator]);
 
   const handleUndo = useCallback(async () => {
+    if (simulator) { simulator.dispatch({ type: 'UNDO_LAST_PICK' }); return; }
     if (!confirm('Undo the most recent draft pick?')) return;
     setBusy('undo');
     try {
@@ -95,7 +113,7 @@ export function DraftAdminOverrides({
     } finally {
       setBusy(null);
     }
-  }, [league.id]);
+  }, [league.id, simulator]);
 
   return (
     <>
@@ -136,7 +154,9 @@ export function DraftAdminOverrides({
               Force Pick
             </DialogTitle>
             <DialogDescription>
-              Submit a pick on behalf of any team. This will be activity-logged.
+              {simulator
+                ? 'Simulated: picks for the seat on the clock. Nothing is saved.'
+                : 'Submit a pick on behalf of any team. This will be activity-logged.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -145,7 +165,11 @@ export function DraftAdminOverrides({
               <label className="text-[10px] font-mono uppercase tracking-widest text-text-muted block mb-1">
                 Team
               </label>
-              <Select value={forceTeamId} onValueChange={v => setForceTeamId(v ?? '')}>
+              <Select
+                value={simulator ? (simulator.currentTeamId ?? '') : forceTeamId}
+                disabled={!!simulator}
+                onValueChange={v => setForceTeamId(v ?? '')}
+              >
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Choose team..." />
                 </SelectTrigger>
@@ -198,7 +222,7 @@ export function DraftAdminOverrides({
             <Button
               variant="destructive"
               onClick={handleForcePick}
-              disabled={!forceTeamId || !forcePokemon || busy === 'force'}
+              disabled={(!simulator && !forceTeamId) || !forcePokemon || busy === 'force'}
               className="gap-1.5"
             >
               {busy === 'force' ? <Loader2 size={14} className="animate-spin" /> : <Crosshair size={14} />}

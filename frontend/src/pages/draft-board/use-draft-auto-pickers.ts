@@ -12,7 +12,7 @@ import type { DraftAction, DraftState, SnakeSlot } from './types';
  * pick that would fail findPickConflict (same-species, mega-cap, over-budget,
  * or roster-reserve when picksLeft is provided).
  */
-function simulatorAutoPick(
+export function simulatorAutoPick(
   drafted: Set<string>,
   roster: ConflictInputRoster,
   pointCap: number,
@@ -83,6 +83,8 @@ export function useDraftAutoPickers({
     : null;
 
   const isUserTurn = isRunning && currentSlot?.teamId === state.userTeamId;
+  // Dry-run: staff drives every seat, so bots stay off.
+  const botsOn = state.roomMode !== 'dry-run' && !state.timerPaused;
 
   // Build a ConflictInputRoster for any team. Returns undefined when we have no
   // draft context (history view).
@@ -114,7 +116,7 @@ export function useDraftAutoPickers({
   // Gated on queueIdle so the previous pick's celebration finishes first.
   useEffect(() => {
     if (state.source !== 'simulator' || !isRunning || isComplete) return;
-    if (!currentSlot || isUserTurn) return;
+    if (!currentSlot || isUserTurn || !botsOn) return;
     if (!queueIdle) return;
 
     const delay = setTimeout(() => {
@@ -124,17 +126,17 @@ export function useDraftAutoPickers({
       if (pick) {
         dispatch({ type: 'PICK_LANDED', pokemonName: pick.name, tier: pick.tier });
       }
-    }, 300 + Math.random() * 700);
+    }, (300 + Math.random() * 700) / state.speed);
 
     return () => clearTimeout(delay);
-  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, queueIdle, buildConflictRoster, draftedSet, state.pointCap, rules, format, dispatch]);
+  }, [state.source, isRunning, isComplete, currentSlot, isUserTurn, queueIdle, buildConflictRoster, draftedSet, state.pointCap, rules, format, dispatch, botsOn, state.speed]);
 
   // Simulator-only: auto-pick for the user on timer expiry. Live mode pauses
   // on expiry server-side; admin resolves explicitly.
   // Gated on queueIdle so the previous celebration completes first.
   useEffect(() => {
     if (state.source !== 'simulator' || !isRunning || !isUserTurn) return;
-    if (state.timerSeconds > 0) return;
+    if (state.timerSeconds > 0 || state.roomMode === 'dry-run') return;
     if (!queueIdle) return;
 
     const ctx = state.userTeamId ? buildConflictRoster(state.userTeamId) : undefined;
@@ -176,7 +178,18 @@ export function useDraftAutoPickers({
     dispatch({ type: 'PICK_LANDED', pokemonName: chosen.name, tier: chosen.tier });
   }, [state.source, isUserTurn, state.autoDraftQueue, state.draftQueue, isRunning, isComplete, queueIdle, buildConflictRoster, draftedSet, state.pointCap, rules, format, state.userTeamId, dispatch]);
 
+  /** Auto-pick for whoever is on the clock (dry-run staff control). Simulator only. */
+  const autoPickCurrent = useCallback(() => {
+    if (state.source !== 'simulator' || !currentSlot) return;
+    const ctx = buildConflictRoster(currentSlot.teamId);
+    if (!ctx) return;
+    const pick = simulatorAutoPick(draftedSet, ctx, state.pointCap, rules, format);
+    if (pick) dispatch({ type: 'PICK_LANDED', pokemonName: pick.name, tier: pick.tier });
+    else toast.error('No legal pick available for this seat');
+  }, [state.source, currentSlot, buildConflictRoster, draftedSet, state.pointCap, rules, format, dispatch]);
+
   return {
+    autoPickCurrent,
     currentSlot,
     isUserTurn,
     buildConflictRoster,
