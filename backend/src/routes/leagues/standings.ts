@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { db, schema } from '../../db';
 import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { isStaff } from '../../lib/auth';
+import { checkLeagueArchived } from '../../lib/archive-guard';
 import { computeStandings, computePlayoffRecords, type TeamStandingRow } from '../../lib/standings';
 import { getLeagueCostMap } from '../../lib/league-costs';
 import { revealedMaxWeek } from '../../lib/queries';
@@ -236,8 +237,10 @@ export const standingsRoutes = new Elysia()
       .all();
   })
 
-  .put('/api/leagues/:leagueId/availability', ({ params, body, user, set }) => {
+  .put('/api/leagues/:leagueId/availability', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
+    if (archived) { set.status = 409; return archived; }
 
     const { teamId, week, day, status, note } = body as {
       teamId: string; week: number; day: string;
@@ -251,7 +254,7 @@ export const standingsRoutes = new Elysia()
 
     // Verify team ownership or staff
     const team = db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).get();
-    if (!team) { set.status = 404; return { error: 'Team not found' }; }
+    if (!team || team.leagueId !== params.leagueId) { set.status = 404; return { error: 'Team not found' }; }
     if (!isStaff(user) && team.userId !== parseInt(user.id)) {
       set.status = 403;
       return { error: 'Not your team' };
