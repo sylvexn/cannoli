@@ -69,6 +69,37 @@ export const pinAwardRoutes = new Elysia()
     };
   })
 
+  // Matches in which a Pokemon appeared for a team (match picker for match-tied awards).
+  .get('/api/admin/pins/pokemon-matches', ({ query, user, set }) => {
+    if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
+    const teamId = String(query?.teamId ?? '');
+    const pokemon = String(query?.pokemon ?? '').toLowerCase();
+    if (!teamId || !pokemon) { set.status = 400; return { error: 'teamId and pokemon are required' }; }
+    const rows = db.select({
+      id: schema.matches.id, week: schema.matches.week, homeTeamId: schema.matches.homeTeamId,
+      awayTeamId: schema.matches.awayTeamId, homeScore: schema.matches.homeScore,
+      awayScore: schema.matches.awayScore, kills: schema.matchPokemon.kills,
+      deaths: schema.matchPokemon.deaths,
+    })
+      .from(schema.matchPokemon)
+      .innerJoin(schema.matches, eq(schema.matches.id, schema.matchPokemon.matchId))
+      .where(and(eq(schema.matchPokemon.teamId, teamId), sql`LOWER(${schema.matchPokemon.pokemonName}) = ${pokemon}`))
+      .orderBy(schema.matches.week)
+      .all();
+    const names = new Map(db.select({ id: schema.teams.id, n: schema.teams.teamName }).from(schema.teams)
+      .where(inArray(schema.teams.id, [...new Set(rows.flatMap(r => [r.homeTeamId, r.awayTeamId]).filter((x): x is string => !!x))]))
+      .all().map(t => [t.id, t.n]));
+    return rows.map(r => {
+      const home = r.homeTeamId === teamId;
+      const oppId = home ? r.awayTeamId : r.homeTeamId;
+      return {
+        id: r.id, week: r.week, opponent: (oppId && names.get(oppId)) || 'TBD',
+        score: r.homeScore == null || r.awayScore == null ? null : `${home ? r.homeScore : r.awayScore}-${home ? r.awayScore : r.homeScore}`,
+        kills: r.kills, deaths: r.deaths,
+      };
+    });
+  })
+
   .post('/api/admin/pins/bulk', ({ body, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
     const b = body as { seasonId: number; pinDefId: string; changes: BulkChange[] };
@@ -107,6 +138,7 @@ export const pinAwardRoutes = new Elysia()
       const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, team.leagueId)).get();
       if (!league || league.seasonId !== b.seasonId) return fail(`${team.teamName} is not in this season`);
 
+      const metadata: Record<string, unknown> = {};
       let matchId: string | null = null;
       if (def.scope === 'match' || fields.includes('match')) {
         const m = c.matchId
@@ -116,9 +148,9 @@ export const pinAwardRoutes = new Elysia()
           return fail(`${team.teamName}: pick a match this team played`);
         }
         matchId = m.id;
+        metadata.week = m.week;
       }
 
-      const metadata: Record<string, unknown> = {};
       for (const k of STAT_KEYS) {
         const v = c.stats?.[k];
         if (typeof v === 'number' || (typeof v === 'string' && v.length <= 80)) metadata[k] = v;
@@ -132,6 +164,9 @@ export const pinAwardRoutes = new Elysia()
         if (!wanted) return fail(`${team.teamName}: pick a Pokemon`);
         const canon = canonicalMon(team.id, wanted);
         if (!canon) return fail(`${wanted} is not on ${team.teamName}'s roster`);
+        if (matchId && !appearedIn(matchId, team.id, canon)) {
+          return fail(`${canon} did not appear for ${team.teamName} in that match`);
+        }
         metadata.pokemon = canon;
       }
       if (fields.includes('nickname')) {
@@ -142,7 +177,7 @@ export const pinAwardRoutes = new Elysia()
       if (fields.includes('note') && c.note?.trim()) metadata.note = c.note.trim().slice(0, 200);
 
       const leagueId = def.scope === 'season' ? null : team.leagueId;
-      const key = `${team.id}|${matchId ?? ''}`;
+      const key = `${team.id}|${def.scope === 'match' ? matchId ?? '' : ''}`;
       if (seen.has(key)) return fail(`${team.teamName}: duplicate row`);
       seen.add(key);
       plan.push({ kind: 'award', leagueId, teamId: team.id, matchId, metadata });
@@ -163,10 +198,12 @@ export const pinAwardRoutes = new Elysia()
           eq(schema.pins.teamId, p.teamId), eq(schema.pins.pinDefId, def.id),
           eq(schema.pins.seasonId, b.seasonId),
           p.leagueId == null ? sql`${schema.pins.leagueId} IS NULL` : eq(schema.pins.leagueId, p.leagueId),
-          p.matchId == null ? sql`${schema.pins.matchId} IS NULL` : eq(schema.pins.matchId, p.matchId),
+          // Only per-match pins are identified by their match; elsewhere the match is just a field.
+          def.scope !== 'match' ? undefined
+            : p.matchId == null ? sql`${schema.pins.matchId} IS NULL` : eq(schema.pins.matchId, p.matchId),
         )).get();
         if (existing) {
-          db.update(schema.pins).set({ metadata: JSON.stringify(p.metadata), source: 'manual', awardedBy })
+          db.update(schema.pins).set({ metadata: JSON.stringify(p.metadata), matchId: p.matchId, source: 'manual', awardedBy })
             .where(eq(schema.pins.id, existing.id)).run();
           counts.updated++;
         } else {
@@ -232,4 +269,13 @@ function canonicalMon(teamId: string, name: string): string | null {
   const played = db.select({ n: schema.matchPokemon.pokemonName }).from(schema.matchPokemon)
     .where(and(eq(schema.matchPokemon.teamId, teamId), sql`LOWER(${schema.matchPokemon.pokemonName}) = ${lower}`)).get();
   return played?.n ?? null;
+}
+
+
+/** Did this Pokemon appear for the team in the match? Matches with no per-mon data
+ *  (archived seasons) are not second-guessed. */
+function appearedIn(matchId: string, teamId: string, pokemon: string): boolean {
+  const rows = db.select({ n: schema.matchPokemon.pokemonName }).from(schema.matchPokemon)
+    .where(and(eq(schema.matchPokemon.matchId, matchId), eq(schema.matchPokemon.teamId, teamId))).all();
+  return rows.length === 0 || rows.some(r => r.n.toLowerCase() === pokemon.toLowerCase());
 }

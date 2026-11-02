@@ -32,10 +32,10 @@ export function AwardsSheet({
   onChanged: () => void;
 }) {
   const [defId, setDefId] = useState<string | null>(initialDefId ?? defs[0]?.id ?? null);
-  const sheet = useAwardsSheet(season.id, defId);
   const [showDiff, setShowDiff] = useState(false);
   const [publishing, setPublishing] = useState<{ leagueId: string | null; published: boolean } | null>(null);
   const def = defs.find(d => d.id === defId) ?? null;
+  const sheet = useAwardsSheet(season.id, defId, def?.scope === 'match');
 
   const perDef = new Map<string, number>();
   for (const p of sheet.pins) perDef.set(p.pinDefId, (perDef.get(p.pinDefId) ?? 0) + 1);
@@ -73,8 +73,10 @@ export function AwardsSheet({
 
   // Required inputs missing on a selected row blocks the save up front.
   const fields = def?.metadataFields ?? [];
+  // The match is only demanded of new/changed rows so legacy awards (no match recorded) don't block saving.
   const incomplete = [...sheet.rows.values()].some(r =>
-    (fields.includes('pokemon') && !r.pokemon) || (fields.includes('nickname') && !r.nickname?.trim()));
+    (fields.includes('pokemon') && !r.pokemon) || (fields.includes('nickname') && !r.nickname?.trim()))
+    || [...sheet.diff.adds, ...sheet.diff.updates].some(r => fields.includes('match') && !r.matchId);
 
   return (
     <div className="space-y-3">
@@ -127,7 +129,7 @@ export function AwardsSheet({
               size="sm" className="h-7 text-[11px]"
               onClick={() => setShowDiff(true)}
               disabled={sheet.changeCount === 0 || incomplete || sheet.saving}
-              title={incomplete ? 'Fill in the required Pokemon / nickname first' : undefined}
+              title={incomplete ? 'Fill in the required Pokemon / nickname / match first' : undefined}
             >
               <Save size={11} />
               Save {sheet.changeCount} change{sheet.changeCount === 1 ? '' : 's'}

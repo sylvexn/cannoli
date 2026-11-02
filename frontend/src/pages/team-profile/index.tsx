@@ -415,7 +415,7 @@ function TeamProfileContent({ player, rank }: { player: Player; rank: number }) 
 
       {/* ═══ TROPHY CASE (this season's team-earned pins) ═══ */}
       {!theorycraftMode && season && (
-        <PinsTrophyCase player={player} leagueId={league.id} seasonId={season.id} />
+        <PinsTrophyCase player={player} leagueId={league.id} seasonNumber={season.seasonNumber} />
       )}
 
       {/* ═══ SPRITE SHOWCASE + POINT CAP + TERA ═══ */}
