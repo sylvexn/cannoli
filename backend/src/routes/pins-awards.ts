@@ -78,7 +78,7 @@ export const pinAwardRoutes = new Elysia()
     }
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, b.seasonId)).get();
     if (!season) { set.status = 404; return { error: 'Season not found' }; }
-    const archived = checkSeasonArchived(b.seasonId, query.force);
+    const archived = checkSeasonArchived(b.seasonId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const def = db.select().from(schema.pinDefinitions).where(eq(schema.pinDefinitions.id, b.pinDefId)).get();
     if (!def) { set.status = 404; return { error: 'Pin definition not found' }; }
@@ -197,7 +197,7 @@ export const pinAwardRoutes = new Elysia()
     if (!Number.isFinite(b?.seasonId)) { set.status = 400; return { error: 'seasonId is required' }; }
     const season = db.select().from(schema.seasons).where(eq(schema.seasons.id, b.seasonId)).get();
     if (!season) { set.status = 404; return { error: 'Season not found' }; }
-    const archived = checkSeasonArchived(b.seasonId, query.force);
+    const archived = checkSeasonArchived(b.seasonId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const published = b.published !== false;

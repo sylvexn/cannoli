@@ -22,6 +22,7 @@
 
 import { db, schema } from '../db';
 import { eq } from 'drizzle-orm';
+import { isStaff } from './auth';
 
 export interface ArchiveBlock {
   error: string;
@@ -29,7 +30,9 @@ export interface ArchiveBlock {
   seasonNumber: number;
 }
 
-function isForce(force: unknown): boolean {
+/** ?force only counts for staff; callers must pass the session user (omitted = ignored). */
+function isForce(force: unknown, user?: { role: string } | null): boolean {
+  if (!isStaff(user)) return false;
   return force === true || force === '1' || force === 'true';
 }
 
@@ -41,8 +44,8 @@ function block(seasonNumber: number): ArchiveBlock {
   };
 }
 
-export function checkSeasonArchived(seasonId: number, force?: unknown): ArchiveBlock | null {
-  if (isForce(force)) return null;
+export function checkSeasonArchived(seasonId: number, force?: unknown, user?: { role: string } | null): ArchiveBlock | null {
+  if (isForce(force, user)) return null;
   const season = db.select({
     archived: schema.seasons.archived,
     seasonNumber: schema.seasons.seasonNumber,
@@ -51,8 +54,8 @@ export function checkSeasonArchived(seasonId: number, force?: unknown): ArchiveB
   return block(season.seasonNumber);
 }
 
-export function checkLeagueArchived(leagueId: string, force?: unknown): ArchiveBlock | null {
-  if (isForce(force)) return null;
+export function checkLeagueArchived(leagueId: string, force?: unknown, user?: { role: string } | null): ArchiveBlock | null {
+  if (isForce(force, user)) return null;
   const row = db.select({
     archived: schema.seasons.archived,
     seasonNumber: schema.seasons.seasonNumber,
@@ -65,8 +68,8 @@ export function checkLeagueArchived(leagueId: string, force?: unknown): ArchiveB
   return block(row.seasonNumber);
 }
 
-export function checkMatchArchived(matchId: string, force?: unknown): ArchiveBlock | null {
-  if (isForce(force)) return null;
+export function checkMatchArchived(matchId: string, force?: unknown, user?: { role: string } | null): ArchiveBlock | null {
+  if (isForce(force, user)) return null;
   const row = db.select({
     archived: schema.seasons.archived,
     seasonNumber: schema.seasons.seasonNumber,
@@ -80,8 +83,8 @@ export function checkMatchArchived(matchId: string, force?: unknown): ArchiveBlo
   return block(row.seasonNumber);
 }
 
-export function checkTeamArchived(teamId: string, force?: unknown): ArchiveBlock | null {
-  if (isForce(force)) return null;
+export function checkTeamArchived(teamId: string, force?: unknown, user?: { role: string } | null): ArchiveBlock | null {
+  if (isForce(force, user)) return null;
   const row = db.select({
     archived: schema.seasons.archived,
     seasonNumber: schema.seasons.seasonNumber,

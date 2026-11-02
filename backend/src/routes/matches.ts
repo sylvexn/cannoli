@@ -447,7 +447,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/result', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { homeScore, awayScore, replayUrl, pokemonData, warnings, forfeitedBy } =
@@ -470,7 +470,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/dismiss-warnings', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -532,7 +532,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/void', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -668,7 +668,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/matches/:matchId/dispute', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { reason } = body as { reason: string };
     if (!reason || typeof reason !== 'string') { set.status = 400; return { error: 'reason required' }; }
@@ -703,7 +703,7 @@ export const matchRoutes = new Elysia()
 
   .patch('/api/matches/:matchId', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -753,7 +753,7 @@ export const matchRoutes = new Elysia()
 
   .delete('/api/matches/:matchId', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const match = db.select().from(schema.matches)
@@ -828,7 +828,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/schedule/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { force, confirmName } = (body || {}) as { force?: boolean; confirmName?: string };
@@ -906,7 +906,7 @@ export const matchRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/playoffs/generate', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { topN, force, confirmName, seedOrder } = (body || {}) as {

@@ -259,7 +259,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/start', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { timerDuration, force } = (body as { timerDuration?: number; force?: boolean }) ?? {};
     const result = startDraft(params.leagueId, timerDuration ?? 120, user.username, { force: !!force });
@@ -277,7 +277,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/pick', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { pokemonName, clientRequestId, teamId: bodyTeamId } =
       body as { pokemonName: string; clientRequestId?: string; teamId?: string };
@@ -336,7 +336,7 @@ export const draftRoutes = new Elysia()
   // Staff override: force a pick on behalf of any team
   .post('/api/leagues/:leagueId/draft/force-pick', ({ params, query, body, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { teamId, pokemonName } = body as { teamId: string; pokemonName: string };
     if (!teamId || !pokemonName) { set.status = 400; return { error: 'teamId and pokemonName required' }; }
@@ -364,7 +364,7 @@ export const draftRoutes = new Elysia()
   // Staff override: undo last pick
   .post('/api/leagues/:leagueId/draft/undo', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const result = undoLastPick(params.leagueId, user.username);
     if (!result.success) { set.status = 400; return { error: result.error }; }
@@ -379,7 +379,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/pause', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const state = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
     if (!state || state.status !== 'in_progress') { set.status = 400; return { error: 'Draft is not in progress' }; }
@@ -400,7 +400,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/resume', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const state = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
     if (!state || state.status !== 'paused') { set.status = 400; return { error: 'Draft is not paused' }; }
@@ -421,7 +421,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/auto-pick', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     let result;
     try {
@@ -451,7 +451,7 @@ export const draftRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/draft/skip', ({ params, query, user, set }) => {
     if (!isStaff(user)) { set.status = 403; return { error: 'Forbidden' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     // Force-skip the current turn even if we're not in the post-expiry paused state.
     const result = skipPick(params.leagueId, user.username, { force: true });

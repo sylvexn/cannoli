@@ -56,7 +56,7 @@ export const leagueAdminRoutes = new Elysia()
     // Archived seasons are read-only by default. Writes to a league belonging
     // to an archived season require ?force=1 (mirrors the schedule-regen and
     // delete-league guards).
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const leagueUpdates: Record<string, unknown> = {};
@@ -237,7 +237,7 @@ export const leagueAdminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Phase-aware destructive guard. A league mid-regular-season or in-playoffs
@@ -311,7 +311,7 @@ export const leagueAdminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Phase now lives on the league — advancing one league no longer drags
@@ -447,7 +447,7 @@ export const leagueAdminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const newWeek = league.currentWeek + 1;
@@ -532,7 +532,7 @@ export const leagueAdminRoutes = new Elysia()
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
 
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     // Lock once we're past draft phase
     if (league.phase !== 'predraft' && league.phase !== 'draft') {

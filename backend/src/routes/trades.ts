@@ -97,7 +97,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, proposerTeam, recipientTeam, season } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending') { set.status = 400; return { error: 'Trade is not pending' }; }
 
@@ -192,7 +192,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     // Which league week this trade takes effect in. Default = NEXT week, so
@@ -316,7 +316,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
       set.status = 400; return { error: `Trade is ${trade.status}` };
@@ -347,7 +347,7 @@ export const tradeRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/trade-block', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
@@ -379,7 +379,7 @@ export const tradeRoutes = new Elysia()
       .get();
     if (!listing) { set.status = 404; return { error: 'Listing not found' }; }
 
-    const archived = checkLeagueArchived(listing.leagueId, query.force);
+    const archived = checkLeagueArchived(listing.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (!isStaff(user)) {
@@ -397,7 +397,7 @@ export const tradeRoutes = new Elysia()
 
   .post('/api/leagues/:leagueId/trades/propose', ({ params, query, body, user, set }) => {
     if (!user) { set.status = 401; return { error: 'Not authenticated' }; }
-    const archived = checkLeagueArchived(params.leagueId, query.force);
+    const archived = checkLeagueArchived(params.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const team = db.select().from(schema.teams)
@@ -481,7 +481,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, proposerTeam } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending' && trade.status !== 'awaiting_admin') {
@@ -527,7 +527,7 @@ export const tradeRoutes = new Elysia()
     const ctx = loadTradeContext(tradeId);
     if (!ctx) { set.status = 404; return { error: 'Trade not found' }; }
     const { trade, league, season, recipientTeam } = ctx;
-    const archived = checkLeagueArchived(trade.leagueId, query.force);
+    const archived = checkLeagueArchived(trade.leagueId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     if (trade.status !== 'pending') {

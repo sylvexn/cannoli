@@ -8,6 +8,18 @@ import { createTicketFromFeedback } from '../lib/tickets';
 const VALID_CATEGORIES = ['bug', 'feature', 'league', 'general'] as const;
 type FeedbackCategory = typeof VALID_CATEGORIES[number];
 
+// Per-user submit throttle: 5 per 10 minutes (in-memory, resets on restart).
+const FB_WINDOW_MS = 10 * 60 * 1000;
+const FB_MAX = 5;
+const fbHits = new Map<string, number[]>();
+export function feedbackRateLimited(userId: string, now = Date.now()): boolean {
+  const recent = (fbHits.get(userId) ?? []).filter(t => now - t < FB_WINDOW_MS);
+  if (recent.length >= FB_MAX) { fbHits.set(userId, recent); return true; }
+  recent.push(now);
+  fbHits.set(userId, recent);
+  return false;
+}
+
 export const feedbackRoutes = new Elysia()
 
   // POST /api/feedback
@@ -40,6 +52,9 @@ export const feedbackRoutes = new Elysia()
       return { error: 'category must be one of: bug, feature, league, general' };
     }
     if (!title) { set.status = 400; return { error: 'title is required' }; }
+    if (title.length > 200) { set.status = 400; return { error: 'title must be at most 200 characters' }; }
+    if (description.length > 5000) { set.status = 400; return { error: 'description must be at most 5000 characters' }; }
+    if (feedbackRateLimited(user.id)) { set.status = 429; return { error: 'Too many submissions. Try again in a few minutes.' }; }
     if (!description) { set.status = 400; return { error: 'description is required' }; }
 
     // Screenshot upload (best-effort)

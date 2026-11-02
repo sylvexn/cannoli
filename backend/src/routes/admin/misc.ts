@@ -71,7 +71,7 @@ export const miscRoutes = new Elysia()
   // Force match result (admin override for forfeits / disputes)
 
   .post('/api/admin/matches/:matchId/force-result', ({ params, query, body, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const { homeScore, awayScore, forfeitedBy, note, pokemonData, homeTeamId, awayTeamId } = body as {
       homeScore: number; awayScore: number;
@@ -229,7 +229,7 @@ export const miscRoutes = new Elysia()
   // unplayed and completed matches — the result stays semantically identical.
 
   .post('/api/admin/matches/:matchId/swap-sides', ({ params, query, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
     const match = db.select().from(schema.matches).where(eq(schema.matches.id, params.matchId)).get();
     if (!match) { set.status = 404; return { error: 'Match not found' }; }
@@ -276,7 +276,7 @@ export const miscRoutes = new Elysia()
   // and the app sets no custom maxBody, so no special config is needed.
 
   .post('/api/admin/matches/:matchId/import-battle', ({ params, query, body, user, set }) => {
-    const archived = checkMatchArchived(params.matchId, query.force);
+    const archived = checkMatchArchived(params.matchId, query.force, user);
     if (archived) { set.status = 409; return archived; }
 
     const { roomId, replay, sideOverride } = (body ?? {}) as {
