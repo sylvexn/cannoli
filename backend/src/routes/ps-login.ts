@@ -8,6 +8,7 @@
  * This is a PS protocol quirk to prevent JSONP-style attacks.
  */
 import { Elysia } from 'elysia';
+import { clientIp, checkLockout, recordFailure, clearAttempts } from '../lib/login-limiter';
 import {
   authenticateUser, signAssertion, toUserid, getPsUserid,
   createPsSession, validatePsSid, destroyPsSession, parsePsSid,
@@ -41,10 +42,14 @@ export const psLoginRoutes = new Elysia()
       return psResponse(psJson({ actionsuccess: false, assertion: false }));
     }
 
+    const ip0 = clientIp(request);
+    if (checkLockout(ip0) > 0) return psResponse(psJson({ actionsuccess: false, assertion: false }));
     const user = authenticateUser(name, pass);
     if (!user) {
+      recordFailure(ip0, name);
       return psResponse(psJson({ actionsuccess: false, assertion: false }));
     }
+    clearAttempts(ip0);
 
     // Use the user's chosen psUsername (if set) as their PS identity.
     // Fall back to their Cannoli username when no PS-specific name is configured.
@@ -185,10 +190,14 @@ function handleActionPhp(params: Record<string, string>, request: Request): Resp
 
   switch (act) {
     case 'login': {
+      const ip0 = clientIp(request);
+      if (checkLockout(ip0) > 0) return psResponse(psJson({ actionsuccess: false, assertion: false }));
       const user = authenticateUser(params.name, params.pass);
       if (!user) {
+        recordFailure(ip0, params.name ?? '');
         return psResponse(psJson({ actionsuccess: false, assertion: false }));
       }
+      clearAttempts(ip0);
       // Use the user's chosen psUsername (if set) as their PS identity.
       const userid = getPsUserid(user);
       const assertion = signAssertion(params.challstr, userid);

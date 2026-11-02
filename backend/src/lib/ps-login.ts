@@ -89,6 +89,12 @@ const PS_COOKIE_DOMAIN = process.env.NODE_ENV === 'production' ? '.cannoli.live'
   sweepInterval.unref();
 }
 
+/** Drop every PS session belonging to any of the given usernames/userids. */
+export function destroyPsSessionsFor(...names: string[]) {
+  const ids = new Set(names.map(toUserid));
+  for (const [id, s] of psSessions) if (ids.has(s.userid)) psSessions.delete(id);
+}
+
 /**
  * Create a PS session and return the sid cookie value.
  */
