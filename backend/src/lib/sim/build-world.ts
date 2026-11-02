@@ -11,8 +11,8 @@
  *   • a FINISHED fictional season — 3 gem leagues, drafted, full regular season,
  *     playoffs played out, champions crowned, finish positions stamped, pins
  *     minted, phase = offseason
- *   • a LIVE fictional season — 3 gem leagues, drafted, regular season played
- *     through week 4, phase = regular
+ *   • two such seasons, numbered like live: S10 (archived) and S11 (offseason,
+ *     not archived). No in-progress season; S12 is created via the admin flow.
  *
  * Everything is deterministic: a `MockRng(masterSeed)` seeds the world and each
  * league derives its own sub-seed, so the same masterSeed always rebuilds the
@@ -52,7 +52,6 @@ const ROSTER_SIZE = 10;
 const PLAYOFF_TEAMS = 6;
 const POINT_CAP = 110;
 const TERA_CAPTAIN_SLOTS = 2;
-const LIVE_THROUGH_WEEK = 4;
 
 /** The three gem leagues, in display order. */
 const GEMS = [
@@ -225,14 +224,6 @@ function createFictionalSeason(opts: {
   });
 }
 
-/** Snap a date BACK to the most-recent Tuesday — the start of a league week,
- *  which runs Tuesday→Monday. */
-function snapToTuesday(d: Date): Date {
-  const out = new Date(d);
-  out.setUTCDate(out.getUTCDate() - ((out.getUTCDay() - 2 + 7) % 7));
-  return out;
-}
-
 /** Build a {week → ISO date} map: week 1 on `week1`, +7d per week. */
 function buildWeekDates(week1: Date, weeks: number): Record<string, string> {
   const out: Record<string, string> = {};
@@ -242,59 +233,6 @@ function buildWeekDates(week1: Date, weeks: number): Record<string, string> {
     out[String(w)] = d.toISOString().slice(0, 10);
   }
   return out;
-}
-
-/**
- * Seed a randomized player-availability grid for one league's teams across the
- * current week ± 2. Deterministic given `rng`. Mirrors seed.ts's pattern.
- */
-function seedAvailability(leagueId: string, currentWeek: number, weekDates: Record<string, string>, rng: MockRng): number {
-  const teams = sqlite.prepare(
-    `SELECT id FROM teams WHERE league_id = ?`,
-  ).all(leagueId) as { id: string }[];
-
-  const STATUS_W: Array<'available' | 'maybe' | 'unavailable'> = ['available', 'maybe', 'unavailable'];
-  const pickStatus = (weekend: boolean) => {
-    const weights = weekend ? [0.75, 0.18, 0.07] : [0.4, 0.3, 0.3];
-    const r = rng.next();
-    let acc = 0;
-    for (let i = 0; i < 3; i++) {
-      acc += weights[i]!;
-      if (r < acc) return STATUS_W[i]!;
-    }
-    return STATUS_W[0]!;
-  };
-  const NOTES_BUSY = ['out of town', 'work shift', 'family event', 'travel day', null, null];
-  const NOTES_MAYBE = ['after 8pm', 'might be late', 'depends on day-of', null, null, null];
-
-  const insert = sqlite.prepare(
-    `INSERT INTO player_availability (team_id, league_id, week, day, status, note) VALUES (?, ?, ?, ?, ?, ?)`,
-  );
-  let inserted = 0;
-  const weeks = [currentWeek - 2, currentWeek - 1, currentWeek, currentWeek + 1, currentWeek + 2].filter((w) => w >= 1);
-  const run = sqlite.transaction(() => {
-    for (const team of teams) {
-      for (const week of weeks) {
-        const wd = weekDates[String(week)];
-        const start = wd ? new Date(wd + 'T00:00:00Z') : new Date();
-        for (let i = 0; i < 7; i++) {
-          if (rng.next() < 0.1) continue; // ~10% gaps
-          const d = new Date(start);
-          d.setUTCDate(d.getUTCDate() + i);
-          const dow = d.getUTCDay();
-          const weekend = dow === 0 || dow === 6;
-          const status = pickStatus(weekend);
-          let note: string | null = null;
-          if (status === 'unavailable') note = rng.pick(NOTES_BUSY);
-          else if (status === 'maybe') note = rng.pick(NOTES_MAYBE);
-          insert.run(team.id, leagueId, week, d.toISOString().slice(0, 10), status, note);
-          inserted++;
-        }
-      }
-    }
-  });
-  run();
-  return inserted;
 }
 
 // Entry point
@@ -370,19 +308,23 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
   const rng = new MockRng(masterSeed);
   const seasons: SimWorldSeasonSummary[] = [];
 
-  // FINISHED season
-  // Season number 1 of the simulator world. Drafted last autumn, fully played.
-  {
-    const seasonNumber = 1;
+  // Two FINISHED seasons mirroring live numbering: S10 (archived history) and
+  // S11 (all leagues offseason, NOT archived). No in-progress season — the next
+  // season (S12) is created by an admin through the normal setup flow.
+  // Dates are Tuesdays — league weeks run Tuesday→Monday.
+  const FINISHED = [
+    { seasonNumber: 10, week1: Date.UTC(2025, 8, 9), draftDate: '2025-09-01T19:00:00Z', archive: true },
+    { seasonNumber: 11, week1: Date.UTC(2026, 5, 16), draftDate: '2026-06-08T19:00:00Z', archive: false },
+  ];
+  for (const { seasonNumber, week1, draftDate, archive } of FINISHED) {
     console.log(`\n── Finished season (S${seasonNumber}) ──`);
-    // 2025-09-09 is a Tuesday — league weeks run Tuesday→Monday.
-    const weekDates = buildWeekDates(new Date(Date.UTC(2025, 8, 9)), TEAMS_PER_LEAGUE - 1);
+    const weekDates = buildWeekDates(new Date(week1), TEAMS_PER_LEAGUE - 1);
     const { seasonId, leagues } = createFictionalSeason({
       seasonNumber,
       rng,
       usernamesTaken,
       weekDates,
-      draftDate: '2025-09-01T19:00:00Z',
+      draftDate,
     });
 
     const leagueSummaries: SimWorldLeagueSummary[] = [];
@@ -432,74 +374,15 @@ function buildSimWorldInner(masterSeed: number): BuildSimWorldResult {
     // route-level archive-write guards never fire mid-build. archived=1 makes
     // S1 a read-only history surface: it powers the /archive pages and gates
     // coach "past seasons" history (users.ts pastTeams on seasonArchived).
-    db.update(schema.seasons)
-      .set({ archived: true })
-      .where(eq(schema.seasons.id, seasonId))
-      .run();
-    console.log(`  Season ${seasonNumber} archived (read-only history).`);
-
-    seasons.push({ seasonId, seasonNumber, status: 'finished', leagues: leagueSummaries });
-  }
-
-  // LIVE season
-  // Season 2: drafted, regular season played through week 4, still running.
-  {
-    const seasonNumber = 2;
-    console.log(`\n── Live season (S${seasonNumber}) ──`);
-    // Week 1 sits ~3 weeks in the past so week 4 reads as "this week". Anchor
-    // to a Tuesday so the sim's weeks run Tuesday→Monday like the live league.
-    const week1 = snapToTuesday(new Date());
-    week1.setUTCDate(week1.getUTCDate() - (LIVE_THROUGH_WEEK - 1) * 7);
-    week1.setUTCHours(0, 0, 0, 0);
-    const weekDates = buildWeekDates(week1, TEAMS_PER_LEAGUE - 1);
-    const draftDateD = new Date(week1);
-    draftDateD.setUTCDate(draftDateD.getUTCDate() - 7);
-
-    const { seasonId, leagues } = createFictionalSeason({
-      seasonNumber,
-      rng,
-      usernamesTaken,
-      weekDates,
-      draftDate: draftDateD.toISOString(),
-    });
-
-    const leagueSummaries: SimWorldLeagueSummary[] = [];
-    for (let gi = 0; gi < leagues.length; gi++) {
-      const { leagueId } = leagues[gi]!;
-      const leagueRng = new MockRng(subSeed(masterSeed, seasonNumber, gi));
-
-      const draft = simulateDraft(leagueId, leagueRng);
-      if (!draft.success) throw new Error(`[${leagueId}] draft failed: ${draft.error}`);
-
-      const season = simulateSeason({ leagueId, throughWeek: LIVE_THROUGH_WEEK, rng: leagueRng });
-      if (!season.success) throw new Error(`[${leagueId}] season failed: ${season.error}`);
-
-      // Leave the league mid-season: phase='regular', pointer at week 4.
-      seedAvailability(leagueId, LIVE_THROUGH_WEEK, weekDates, leagueRng);
-
-      // Live trade activity — accepted (history) + open pending proposals +
-      // trade-block listings. Trades stamp weeks within the played range.
-      const trades = seedLeagueTrades(leagueId, leagueRng, false, LIVE_THROUGH_WEEK);
-      console.log(
-        `    ${leagueId}: ${trades.accepted} accepted, ${trades.pending} pending, ` +
-        `${trades.listings} block listings`,
-      );
-
-      const reg = (sqlite.prepare(
-        `SELECT COUNT(*) c FROM matches WHERE league_id = ? AND phase = 'regular'`,
-      ).get(leagueId) as { c: number }).c;
-
-      console.log(
-        `  ${leagueId}: ${draft.picks} picks, ${season.matchesPlayed} matches played ` +
-        `through week ${season.throughWeek} (${reg} total scheduled)`,
-      );
-      leagueSummaries.push({
-        leagueId, teams: TEAMS_PER_LEAGUE, picks: draft.picks,
-        regularMatches: reg, playoffMatches: 0, championId: null,
-      });
+    if (archive) {
+      db.update(schema.seasons)
+        .set({ archived: true })
+        .where(eq(schema.seasons.id, seasonId))
+        .run();
+      console.log(`  Season ${seasonNumber} archived (read-only history).`);
     }
 
-    seasons.push({ seasonId, seasonNumber, status: 'live', leagues: leagueSummaries });
+    seasons.push({ seasonId, seasonNumber, status: 'finished', leagues: leagueSummaries });
   }
 
   // Totals

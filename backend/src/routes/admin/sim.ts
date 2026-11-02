@@ -192,10 +192,14 @@ export const simRoutes = new Elysia()
     // season (future week dates) would never advance. The simulator's headline
     // control must always move, so we bump the pointer directly — guarded only
     // by phase and the total-weeks ceiling.
-    const weekBefore = league.currentWeek;
+    // Re-read: simulateSeason may have moved a post-draft league into regular
+    // (and set week 1), which the stale `league` row doesn't reflect.
+    const fresh = db.select().from(schema.leagues)
+      .where(eq(schema.leagues.id, leagueId)).get() ?? league;
+    const weekBefore = fresh.currentWeek;
     const nextWeek = weekBefore + 1;
     let weekAfter = weekBefore;
-    if (league.phase === 'regular' && nextWeek <= league.totalWeeks) {
+    if (fresh.phase === 'regular' && nextWeek <= league.totalWeeks) {
       tx(() => {
         db.update(schema.leagues)
           .set({ currentWeek: nextWeek })

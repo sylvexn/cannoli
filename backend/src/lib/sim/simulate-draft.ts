@@ -51,7 +51,19 @@ export function simulateDraft(leagueId: string, rng: MockRng): SimulateDraftResu
 
   const rs = getLeagueRuleset(leagueId);
 
-  const teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+  // A normally-created season sits in predraft with no draft order; open it
+  // the way an admin would (phase -> draft, order = shuffled teams).
+  let teamOrder: string[] = league.draftOrder ? JSON.parse(league.draftOrder) : [];
+  if (teamOrder.length < 2) {
+    const ids = db.select({ id: schema.teams.id }).from(schema.teams)
+      .where(eq(schema.teams.leagueId, leagueId)).all().map(t => t.id);
+    teamOrder = rng.shuffle(ids);
+    db.update(schema.leagues).set({ draftOrder: JSON.stringify(teamOrder) })
+      .where(eq(schema.leagues.id, leagueId)).run();
+  }
+  if (league.phase === 'predraft') {
+    db.update(schema.leagues).set({ phase: 'draft' }).where(eq(schema.leagues.id, leagueId)).run();
+  }
   if (teamOrder.length < 2) {
     return { success: false, error: 'Need ≥2 teams in draft order', picks: 0, captainsAssigned: 0 };
   }
