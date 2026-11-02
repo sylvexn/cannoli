@@ -241,15 +241,14 @@ describe('scheduled trade application', () => {
 
   test('a row with corrupt JSON is rejected without aborting the sweep', async () => {
     const { teamA, teamB, monA, monB } = seedTeams(host.id);
+    const tradeId = await proposeAndAccept(host.id, teamA, teamB, monA, monB);
+    await post(`/api/trades/${tradeId}/approve`);
     // Sorts first (resolvedAt asc) so it would abort the sweep if unguarded.
     const bad = db.insert(schema.trades).values({
       leagueId: host.id, week: START_WEEK, status: 'accepted', proposerId: teamA, recipientId: teamB,
       offering: '{not json', requesting: '[]', resolvedAt: '2000-01-01T00:00:00.000Z',
       effectiveWeek: START_WEEK + 1,
     }).returning({ id: schema.trades.id }).get().id;
-    const tradeId = await proposeAndAccept(host.id, teamA, teamB, monA, monB);
-    await post(`/api/trades/${tradeId}/approve`);
-
     setWeek(host.id, START_WEEK + 1);
     expect(applyDueTransactions(host.id)).toBe(1);
 
