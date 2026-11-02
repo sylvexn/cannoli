@@ -13,12 +13,12 @@ import type { Player } from '@/lib/types';
 interface PinsTrophyCaseProps {
   player: Player;
   leagueId: string;
-  /** Numeric season id (LeagueSeason.id, typed string on the frontend but
-   *  numeric at the wire level) — compared against pin.seasonId. */
-  seasonId: string;
+  /** Season number (LeagueSeason.id is a slug like 's11', not the numeric
+   *  pins.seasonId, so pins are matched on their season number). */
+  seasonNumber: number;
 }
 
-export function PinsTrophyCase({ player, leagueId, seasonId }: PinsTrophyCaseProps) {
+export function PinsTrophyCase({ player, leagueId, seasonNumber }: PinsTrophyCaseProps) {
   const [pins, setPins] = useState<ApiPin[]>([]);
 
   useEffect(() => {
@@ -29,9 +29,8 @@ export function PinsTrophyCase({ player, leagueId, seasonId }: PinsTrophyCasePro
     return () => { cancelled = true; };
   }, [player.id]);
 
-  const seasonNum = Number(seasonId);
   const teamPins = pins.filter(p => {
-    if (p.seasonId !== seasonNum) return false;
+    if (p.seasonNumber !== seasonNumber) return false;
     return p.leagueId == null || p.leagueId === leagueId;
   });
 
