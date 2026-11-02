@@ -206,7 +206,7 @@ describe('ReplayParser — K/D edge cases', () => {
   // killerNick = null. handleFaint now distinguishes "no entry"
   // from "explicit null decision" via pendingKiller.has(), so the
   // posthumous lastAttacker fallback is correctly skipped.
-  test('Recoil faint after KOing target does not credit the dead target', () => {
+  test('Recoil faint credits the last opponent that hit it this stint, even if fainted', () => {
     const parser = new ReplayParser();
     feed(parser, [
       '|player|p1|Alice|',
@@ -239,13 +239,13 @@ describe('ReplayParser — K/D edge cases', () => {
     expect(tang?.deaths).toBe(1);
     expect(talon?.deaths).toBe(1);
     expect(talon?.kills).toBe(1); // Brave Bird KO on Tangrowth
-    expect(tang?.kills).toBe(0); // No posthumous recoil credit
+    // League ruling 2026-11: a self-inflicted faint credits the last opposing
+    // mon that damaged it this stint — Tangrowth's Giga Drain — even posthumously.
+    expect(tang?.kills).toBe(1);
 
-    // Sanity: total kills = 1, total deaths = 2 (recoil suicide accounts for
-    // the imbalance — that's expected and intentional).
     const totalKills = result.pokemon.reduce((s, p) => s + p.kills, 0);
     const totalDeaths = result.pokemon.reduce((s, p) => s + p.deaths, 0);
-    expect(totalKills).toBe(1);
+    expect(totalKills).toBe(2);
     expect(totalDeaths).toBe(2);
   });
 
@@ -391,7 +391,10 @@ describe('ReplayParser — Illusion (|replace|)', () => {
 
     // Zoroark took the death; the disguise target Garchomp should not be dead
     expect(zoroark?.deaths).toBe(1);
-    expect(garchomp?.deaths).toBeUndefined(); // phantom Garchomp entry never created by poke/switch
+    // The real Garchomp keeps its brought slot, untouched and never on the field.
+    expect(garchomp?.deaths).toBe(0);
+    expect(garchomp?.appeared).toBe(false);
+    expect(garchomp?.brought).toBe(true);
 
     // Tyranitar landed the lethal hit → gets the kill
     expect(tyranitar?.kills).toBe(1);
@@ -433,9 +436,11 @@ describe('ReplayParser — Illusion (|replace|)', () => {
 
     const result = parser.getResult();
     const zoroark = result.pokemon.find(p => p.species === 'Zoroark');
-    // No entry should remain under 'Snorlax' (re-keyed on replace)
-    const fakeSnorlax = result.pokemon.find(p => p.species === 'Snorlax' && p.player === 'p1');
-    expect(fakeSnorlax).toBeUndefined();
+    // The real Snorlax keeps its brought slot but none of the disguised kills.
+    const snorlax = result.pokemon.find(p => p.species === 'Snorlax' && p.player === 'p1');
+    expect(snorlax?.kills).toBe(0);
+    expect(snorlax?.appeared).toBe(false);
+    expect(snorlax?.brought).toBe(true);
     // Both kills earned while disguised (or post-reveal, same nick) land on Zoroark
     expect(zoroark?.kills).toBe(2);
     expect(result.loserScore).toBe(0);
@@ -559,7 +564,7 @@ describe('ReplayParser — tie outcome', () => {
 });
 
 describe('ReplayParser — forfeit / timeout with surviving mons', () => {
-  test('forfeit forces loser to zero; owed kills accrue only for mons that took the field', () => {
+  test('forfeit forces loser to zero; no synthetic deaths or owed kills', () => {
     // Winner declared while Bob still has mons alive (a forfeit/DC, since PS
     // never lets a battle end via |win| with living mons through ordinary
     // play). Feedback #81: the MATCH score is a completed sweep — 3-0, not 3-3
@@ -592,18 +597,16 @@ describe('ReplayParser — forfeit / timeout with surviving mons', () => {
     // Bob forced to 0, not his raw 3 survivors.
     expect(result.loserScore).toBe(0);
 
-    // Only Kingambit actually took the field before Bob bailed, so it's the
-    // sole owed death. The two mons Bob never sent out stay at deaths 0 — the
-    // match_pokemon writer keeps only `appeared` mons, so marking them here
-    // would drop the death on save while the winner kept the kill (R1).
+    // Per-mon K/D counts only real faints (league ruling 2026-11): Kingambit
+    // took the field but never fainted, so it keeps deaths 0.
     const kingambit = result.pokemon.find(p => p.species === 'Kingambit');
-    expect(kingambit?.deaths).toBe(1);
+    expect(kingambit?.deaths).toBe(0);
     const benched = result.pokemon.filter(p => p.player === 'p2' && p.species !== 'Kingambit');
     expect(benched.every(p => p.deaths === 0 && !p.appeared)).toBe(true);
 
-    // Exactly the 1 owed kill (Kingambit) lands on Alice's active Garchomp — not 3.
+    // No owed kill for Alice's active Garchomp.
     const chomp = result.pokemon.find(p => p.species === 'Garchomp');
-    expect(chomp?.kills).toBe(1);
+    expect(chomp?.kills).toBe(0);
 
     // Persisted balance: over the mons the writer actually keeps (`appeared`),
     // winner-kills == loser-deaths. This is the invariant R1 restores.

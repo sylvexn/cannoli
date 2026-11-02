@@ -110,21 +110,18 @@ describe('bot message framing against a REAL PS server log', () => {
     // Both players had 2 mons alive when TestBob forfeited. The OLD parser
     // scored this as a raw "brought - deaths" 2-2, which let a forfeiter keep
     // points on the board. Fixed (#81): the MATCH score forces the loser to 0.
-    // Owed KO credit (R1) only accrues for loser survivors that actually took
-    // the field — here TestBob's Garchomp switched in but his Volcarona never
-    // did, so exactly one owed kill lands on TestAlice's active Garchomp.
+    // Per-mon K/D counts only REAL faints (league ruling 2026-11): no owed kill
+    // for TestAlice's Garchomp, no synthetic death for TestBob's survivors.
     const r = ReplayParser.parse(REAL_LOG.join('\n'));
     expect(r.winnerScore).toBe(2);
     expect(r.loserScore).toBe(0);
 
     const aliceGarchomp = r.pokemon.find(p => p.player === 'p1' && p.species === 'Garchomp');
-    expect(aliceGarchomp?.kills).toBe(1);
+    expect(aliceGarchomp?.kills).toBe(0);
 
-    // Bob's Garchomp appeared → its owed death persists; his Volcarona never
-    // switched in → no phantom death (the writer wouldn't persist it anyway).
     const bobGarchomp = r.pokemon.find(p => p.player === 'p2' && p.species === 'Garchomp');
     const bobVolcarona = r.pokemon.find(p => p.player === 'p2' && p.species === 'Volcarona');
-    expect(bobGarchomp?.deaths).toBe(1);
+    expect(bobGarchomp?.deaths).toBe(0);
     expect(bobVolcarona?.deaths).toBe(0);
     expect(bobVolcarona?.appeared).toBe(false);
 
