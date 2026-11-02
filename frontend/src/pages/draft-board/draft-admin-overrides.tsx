@@ -62,7 +62,7 @@ export function DraftAdminOverrides({
   }, [draftedNames, forceSearch, format]);
 
   const handleForcePick = useCallback(async () => {
-    if (!forceTeamId || !forcePokemon) return;
+    if ((!simulator && !forceTeamId) || !forcePokemon) return;
     if (simulator) {
       const tier = getTierList(format).find(e => e.name === forcePokemon)?.tier ?? 1;
       simulator.dispatch({ type: 'PICK_LANDED', pokemonName: forcePokemon, tier });
