@@ -128,6 +128,16 @@ function buildSpeedRows(leagueIds: string[], leagueId?: string) {
 }
 
 /** Resolve the active season's league IDs for the global endpoint default. */
+// ponytail: 60s TTL cache of the distinct species ever recorded in match_pokemon
+// (new species only appear when a match is recorded; a minute of staleness is fine).
+let namesCache: { at: number; names: string[] } | null = null;
+function distinctMatchPokemonNames(): string[] {
+  if (namesCache && Date.now() - namesCache.at < 60_000) return namesCache.names;
+  const names = db.selectDistinct({ n: schema.matchPokemon.pokemonName }).from(schema.matchPokemon).all().map(r => r.n);
+  namesCache = { at: Date.now(), names };
+  return names;
+}
+
 function getActiveLeagueIds(): string[] {
   const season = db.select().from(schema.seasons)
     .orderBy(desc(schema.seasons.seasonNumber))
@@ -178,10 +188,9 @@ export const speedTierRoutes = new Elysia()
     const teamById = new Map(teams.map(t => [t.id, t]));
     const teamIds = teams.map(t => t.id);
 
-    const rosters = db.select().from(schema.rosters)
-      .where(inArray(schema.rosters.teamId, teamIds))
+    const matches = db.select().from(schema.rosters)
+      .where(and(inArray(schema.rosters.teamId, teamIds), eq(schema.rosters.pokemonName, params.name)))
       .all();
-    const matches = rosters.filter(r => r.pokemonName === params.name);
     if (matches.length === 0) return [];
 
     const leagues = db.select().from(schema.leagues)
@@ -260,8 +269,8 @@ export const speedTierRoutes = new Elysia()
     // replay url — anything else has nothing to surface yet.
     // Stored names may be cosmetic formes of the requested species (Minior-Indigo).
     const want = getBaseFormName(params.name).toLowerCase();
-    const names = db.selectDistinct({ n: schema.matchPokemon.pokemonName }).from(schema.matchPokemon).all()
-      .map(r => r.n).filter(n => n === params.name || getBaseFormName(n).toLowerCase() === want);
+    const names = distinctMatchPokemonNames()
+      .filter(n => n === params.name || getBaseFormName(n).toLowerCase() === want);
     if (names.length === 0) return [];
     const rows = db.select({
       matchId: schema.matchPokemon.matchId,
