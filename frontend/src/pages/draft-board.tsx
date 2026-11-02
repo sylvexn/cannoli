@@ -18,6 +18,10 @@ import { WarRoomBoard } from './draft-board/room/war-room-board';
 import { PoolPalette } from './draft-board/room/pool-palette';
 import { PaletteSide } from './draft-board/room/palette-side';
 import { usePaletteOpen } from './draft-board/room/use-palette-open';
+import { RoomModeStrip } from './draft-board/room/room-mode-strip';
+import { useRoomMode } from './draft-board/room/use-room-mode';
+import { DraftLobby } from './draft-board/room/draft-lobby';
+import { useAppData } from '@/lib/app-data-context';
 import { DraftPokemonPopover, type PokemonPopoverMode } from './draft-board/draft-pokemon-popover';
 import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
@@ -59,13 +63,18 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     ownershipMap, filteredPool, poolByTier, matchReasons,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDraftComplete,
-    draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
+    draftOrder, handleUserPick, wsConnected: realWsConnected, presence, userBudgetRemaining,
     userMaxAffordableCost, selfAffordCap, userConflictRoster,
     currentDrafterMaxAffordableCost, currentDrafterConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
-    pickQueue, pickAnnouncement,
+    pickQueue, pickAnnouncement, autoPickCurrent,
   } = useDraftState({ source });
+  const { refreshLeagues } = useAppData();
+  const room = useRoomMode({ state, dispatch });
+  // Dev state-jumper fixtures can fake a dropped socket / open captain gate.
+  const wsConnected = room.flags.wsConnected ?? realWsConnected;
+  const strip = <RoomModeStrip room={room} onAutoPick={autoPickCurrent} />;
 
   const isPractice = source === 'simulator';
 
@@ -77,11 +86,11 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // isDraftComplete) but the league is still in phase=draft (= some team
   // hasn't locked captains yet). Once the last team locks, the backend flips
   // phase → regular and a fresh /api/leagues fetch closes the gate.
-  const captainGateOpen = state.source === 'server'
+  const captainGateOpen = room.flags.captainGateOpen ?? (state.source === 'server'
     && isDraftComplete
     && league.season?.phase === 'draft'
     && players.length > 0
-    && !players.every(p => p.captainsLocked);
+    && !players.every(p => p.captainsLocked));
 
   // Mobile viewport detection
   const [isMobile, setIsMobile] = useState(false);
@@ -294,13 +303,13 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // Mobile warning for active draft participants
   if (isMobile && isDraftRunning && state.userTeamId && !isDraftComplete) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
+      <>{strip}<div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
         <Monitor size={40} className="text-text-muted" />
         <h2 className="text-lg font-mono font-bold text-text-primary uppercase">Desktop Required</h2>
         <p className="text-sm text-text-muted max-w-sm">
           Draft participation requires a desktop browser. You can spectate from mobile.
         </p>
-      </div>
+      </div></>
     );
   }
 
@@ -309,6 +318,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     return (
       <UserAccentScope user={user} className="contents">
         <div className="flex flex-col h-full overflow-hidden">
+          {strip}
           <DraftCompleteSummary
             picks={state.allPicks}
             draftOrder={draftOrder}
@@ -328,6 +338,13 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   }
 
   const showFooter = state.view === 'active';
+  // Lobby = before the first pick: reducer 'configuring' (server not_started,
+  // rehearsal setup, or the lobby fixture), or a server-source pre-draft league
+  // that hasn't hydrated a draft yet.
+  const phase = league.season?.phase;
+  const showLobby = (state.view === 'active' && state.status === 'configuring')
+    || (state.source === 'server' && state.status === 'idle' && state.allPicks.length === 0
+      && (phase === 'predraft' || phase === 'draft'));
   const drafter = currentPick ? playerLookup.get(currentPick.playerId) : undefined;
   const showClock = isDraftRunning && !!currentPick && !!drafter && !isDraftComplete;
   const drafterRoster = drafter ? teamRosters.get(drafter.id) ?? [] : [];
@@ -343,6 +360,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
       className={cn('flex flex-col h-full overflow-hidden', showOnTheClockGlow && 'pulse-glow')}
       style={{ ['--card-size' as never]: DENSITY_SIZES[density] }}
     >
+      {strip}
       <span className="sr-only" aria-live="polite">{pickAnnouncement}</span>
 
       <DraftTopBar
@@ -388,6 +406,19 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         />
       )}
 
+      {showLobby ? (
+        <DraftLobby
+          teams={players}
+          draftOrder={league.draftOrder ?? null}
+          draftOrderLocked={league.draftOrderLocked}
+          presence={presence}
+          userTeamId={state.userTeamId}
+          draftStarted={false}
+          timerSeconds={state.timerDuration || undefined}
+          onRehearse={room.rehearse}
+          onOrderSaved={refreshLeagues}
+        />
+      ) : (
       <WarRoomBoard
         draftOrder={draftOrder}
         picks={state.allPicks}
@@ -403,6 +434,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         onSelectTeam={id => dispatch({ type: 'SELECT_TEAM', teamId: id })}
         onOpenPokemon={handleOpenPokemon}
       />
+      )}
 
       {showFooter && (
         <div className="shrink-0 mt-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
