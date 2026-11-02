@@ -6,7 +6,7 @@ import { isStaff } from '../lib/auth';
 import { tx } from '../lib/tx';
 import { advancePlayoffWinner } from '../lib/playoff-advance';
 import { computeStandings, matchWinner } from '../lib/standings';
-import { getLeague, isMatchRevealed } from '../lib/queries';
+import { getLeague, isMatchRevealed, matchListCols } from '../lib/queries';
 import { checkLeagueArchived, checkMatchArchived } from '../lib/archive-guard';
 import { recordMatchResult, type RecordResultInput } from '../lib/match-service';
 import { computeBroughtPreviewFromLog, type BroughtSides } from '../lib/brought-preview';
@@ -577,7 +577,7 @@ export const matchRoutes = new Elysia()
           downstreamToClear = [];
         } else {
 
-        const downstream = db.select().from(schema.matches)
+        const downstream = db.select(matchListCols).from(schema.matches)
           .where(and(
             eq(schema.matches.leagueId, match.leagueId),
             eq(schema.matches.phase, 'playoffs'),
@@ -777,7 +777,7 @@ export const matchRoutes = new Elysia()
           homeScore: match.homeScore,
           awayScore: match.awayScore,
         });
-        const downstream = winnerId ? db.select().from(schema.matches)
+        const downstream = winnerId ? db.select(matchListCols).from(schema.matches)
           .where(and(
             eq(schema.matches.leagueId, match.leagueId),
             eq(schema.matches.phase, 'playoffs'),
@@ -960,7 +960,7 @@ export const matchRoutes = new Elysia()
     // scratch. Once results exist that destroys completed games (and orphans
     // the pins that reference their match ids), so require the same
     // force+confirmName handshake schedule/generate uses.
-    const existing = db.select().from(schema.matches)
+    const existing = db.select(matchListCols).from(schema.matches)
       .where(and(
         eq(schema.matches.leagueId, params.leagueId),
         eq(schema.matches.phase, 'playoffs'),
