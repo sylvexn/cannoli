@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { TeamLogo } from '@/components/team-logo';
@@ -55,15 +56,18 @@ export function ThisWeek({ week, matches, byId, myTeamId }: {
 
 const played = (m: Match) => m.homeScore != null && m.awayScore != null;
 
-export function LastWeek({ week, matches, byId }: { week: number; matches: Match[]; byId: Map<string, Player> }) {
+export function LastWeek({ week, matches, byId, title = 'Last week', note }: {
+  week: number; matches: Match[]; byId: Map<string, Player>; title?: string; note?: ReactNode;
+}) {
   const { spoilerFreeMode, spoilerRevealedMatches, revealMatch } = useAuth();
   const leagueUrl = useLeagueUrl();
   const hidden = spoilerFreeMode && matches.some(m => played(m) && !spoilerRevealedMatches.includes(m.id));
   return (
     <section>
       <SectionHeading meta={`Week ${week}`} action={<Link to={leagueUrl('/schedule')}>Results</Link>}>
-        Last week
+        {title}
       </SectionHeading>
+      {note && <p className="text-sm text-text-secondary pb-1.5">{note}</p>}
       <div className="relative">
         <div
           className={cn('transition-[filter] duration-200', hidden && 'pointer-events-none select-none')}

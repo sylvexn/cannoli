@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useLeague } from '@/lib/league-context';
 import { formatDeadline, useUserTimezone } from '@/lib/format';
 import { weekDueInstant } from './week-due';
@@ -26,6 +27,21 @@ export function PhaseBanner() {
   }, []);
 
   const { phase, currentWeek, tradeDeadlineWeek } = league.season;
+  if ((phase === 'draft' || phase === 'playoffs') && !league.season.archived) {
+    const draft = phase === 'draft';
+    return (
+      <div className="relative flex items-center justify-between gap-4 flex-wrap rounded-md border border-border-subtle bg-surface-raised pl-5 pr-3 py-2.5 overflow-hidden">
+        <span className="absolute left-0 inset-y-0 w-1 bg-gem" aria-hidden />
+        <div className="font-display text-lg leading-tight text-text-primary">{draft ? 'Draft live' : 'Playoffs'}</div>
+        <Link
+          to={`/league/${league.id}/${draft ? 'draft' : 'schedule'}`}
+          className="text-sm text-gem-ink hover:underline px-2 py-1.5"
+        >
+          {draft ? 'Open draft room' : 'View bracket'}
+        </Link>
+      </div>
+    );
+  }
   if (phase !== 'regular') return null;
   const due = weekDueInstant(league, currentWeek);
   if (!due) return null;

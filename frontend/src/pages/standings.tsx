@@ -7,9 +7,12 @@ import { LoadingSprite } from '@/components/loading-sprite';
 import { SectionHeading } from '@/components/section-heading';
 import { ResultsRevealQuickAction } from '@/components/results-reveal-quick-action';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 import type { Player } from '@/lib/types';
 import { PlayoffBracket } from './schedule/playoff-bracket';
 import { PhaseBanner } from './standings/phase-banner';
+import { DraftCta, PlayoffsPanel } from './standings/phase-cta';
+import { panelFor, lastPlayedWeek, championId } from './standings/phase-panels';
 import { YourMatch } from './standings/your-match';
 import { StandingsTable } from './standings/standings-table';
 import { TeamPeek } from './standings/team-peek';
@@ -40,8 +43,15 @@ export function StandingsPage() {
   );
   const rankOf = (id: string) => standings.findIndex(p => p.id === id) + 1;
 
+  const panel = panelFor(season);
   const thisWeek = Math.max(1, season.currentWeek);
   const thisMatches = useMemo(() => getWeekMatches(thisWeek), [getWeekMatches, thisWeek]);
+  // Completed season: the final played regular-season week, with scores.
+  const finalWeek = useMemo(
+    () => (panel === 'complete' ? lastPlayedWeek(matches, season.currentWeek || season.totalWeeks) : 0),
+    [panel, matches, season.currentWeek, season.totalWeeks],
+  );
+  const champ = panel === 'complete' ? byId.get(championId(matches) ?? '') : undefined;
   // Most recent earlier week that has any played fixture.
   const lastWeek = useMemo(() => {
     for (let w = thisWeek - 1; w > 0; w--) {
@@ -49,7 +59,7 @@ export function StandingsPage() {
     }
     return 0;
   }, [getWeekMatches, thisWeek]);
-  const myMatch = me && season.phase === 'regular'
+  const myMatch = me && panel === 'regular'
     ? thisMatches.find(m => m.homePlayer === me.id || m.awayPlayer === me.id)
     : undefined;
   const opp = myMatch ? byId.get(myMatch.homePlayer === me!.id ? myMatch.awayPlayer : myMatch.homePlayer) : undefined;
@@ -110,8 +120,27 @@ export function StandingsPage() {
             </section>
           </div>
           <div className="space-y-6 min-w-0">
-            <ThisWeek week={thisWeek} matches={thisMatches} byId={byId} myTeamId={me?.id ?? null} />
-            {lastWeek > 0 && <LastWeek week={lastWeek} matches={getWeekMatches(lastWeek)} byId={byId} />}
+            {panel === 'draft' && <DraftCta />}
+            {panel === 'playoffs' && <PlayoffsPanel />}
+            {panel === 'complete' && (
+              finalWeek > 0
+                ? (
+                  <LastWeek
+                    week={finalWeek}
+                    matches={getWeekMatches(finalWeek).filter(m => m.phase !== 'playoffs')}
+                    byId={byId}
+                    title="Final week results"
+                    note={champ ? <>Season complete. Champion: <Link to={`/league/${league.id}/teams/${champ.id}`} className="font-semibold text-text-primary hover:underline">{champ.teamName}</Link></> : 'Season complete.'}
+                  />
+                )
+                : <p className="text-sm text-text-muted py-3">Season complete.</p>
+            )}
+            {panel === 'regular' && (
+              <>
+                <ThisWeek week={thisWeek} matches={thisMatches} byId={byId} myTeamId={me?.id ?? null} />
+                {lastWeek > 0 && <LastWeek week={lastWeek} matches={getWeekMatches(lastWeek)} byId={byId} />}
+              </>
+            )}
           </div>
         </div>
       )}
