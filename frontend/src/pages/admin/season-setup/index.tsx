@@ -3,14 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarCog, Check, ChevronLeft, ChevronRight, Loader2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { api, type ApiRuleset, type ApiSeasonSetupDefaults } from '@/lib/api';
+import { api, rulesetsApi, type ApiRuleset, type ApiSeasonSetupDefaults } from '@/lib/api';
 import { useAppData } from '@/lib/app-data-context';
 import { getErrorMessage, isApiError } from '@/lib/errors';
 import { cn } from '@/lib/utils';
 import { AdminSection } from '../admin-section';
-import { useRulesetTemplates } from '../rulesets/pickers';
 import { OverlapConfirmDialog } from '../season/overlap-confirm-dialog';
-import { buildPayload, includedLeagues, initDraft } from './logic';
+import { blockingErrors, buildPayload, draftFits, includedLeagues, initDraft } from './logic';
 import { useDraft } from './use-draft';
 import { StepLeagues } from './step-leagues';
 import { StepRules } from './step-rules';
@@ -23,7 +22,7 @@ const STEPS = ['Leagues', 'Rules', 'Teams', 'Schedule', 'Review & create'];
 function SetupBody({ defaults, templates }: { defaults: ApiSeasonSetupDefaults; templates: ApiRuleset[] }) {
   const navigate = useNavigate();
   const { refreshLeagues } = useAppData();
-  const { draft, patch, restored, discard, clear } = useDraft(() => initDraft(defaults));
+  const { draft, patch, restored, discard, clear } = useDraft(() => initDraft(defaults), d => draftFits(d, defaults, templates));
   const status = useResolvedUsernames(draft).status;
   const [creating, setCreating] = useState(false);
   const [overlap, setOverlap] = useState<{ priorSeasonNumber: number; priorPhase: string } | null>(null);
@@ -31,6 +30,8 @@ function SetupBody({ defaults, templates }: { defaults: ApiSeasonSetupDefaults; 
   const go = (step: number) => patch({ step, maxStep: Math.max(draft.maxStep, step) });
   const last = STEPS.length - 1;
   const nothing = includedLeagues(draft).length === 0;
+  const blocking = blockingErrors(draft, draft.step);
+  const blocked = nothing || blocking.length > 0;
 
   async function create(overlapOverride: boolean) {
     setCreating(true);
@@ -93,16 +94,20 @@ function SetupBody({ defaults, templates }: { defaults: ApiSeasonSetupDefaults; 
           {draft.step === 3 && <StepSchedule draft={draft} patch={patch} />}
           {draft.step === 4 && <StepReview draft={draft} defaults={defaults} status={status} />}
 
+          {blocking.length > 0 && (
+            <ul className="text-[11px] text-loss list-disc pl-4">{blocking.map(e => <li key={e}>{e}</li>)}</ul>
+          )}
+
           <div className="flex items-center justify-between border-t border-border-subtle pt-3">
             <Button variant="outline" size="sm" className="gap-1" disabled={draft.step === 0} onClick={() => go(draft.step - 1)}>
               <ChevronLeft size={13} />Back
             </Button>
             {draft.step < last ? (
-              <Button size="sm" className="gap-1 bg-pink text-surface-base hover:bg-pink/90" disabled={nothing} onClick={() => go(draft.step + 1)}>
+              <Button size="sm" className="gap-1 bg-pink text-surface-base hover:bg-pink/90" disabled={blocked} onClick={() => go(draft.step + 1)}>
                 Next<ChevronRight size={13} />
               </Button>
             ) : (
-              <Button size="sm" className="gap-1.5 bg-pink text-surface-base hover:bg-pink/90" disabled={nothing || creating} onClick={() => create(false)}>
+              <Button size="sm" className="gap-1.5 bg-pink text-surface-base hover:bg-pink/90" disabled={blocked || creating} onClick={() => create(false)}>
                 {creating && <Loader2 size={13} className="animate-spin" />}Create Season {draft.seasonNumber}
               </Button>
             )}
@@ -125,13 +130,16 @@ function SetupBody({ defaults, templates }: { defaults: ApiSeasonSetupDefaults; 
 export function SeasonSetup() {
   const [defaults, setDefaults] = useState<ApiSeasonSetupDefaults | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const templates = useRulesetTemplates();
+  const [templates, setTemplates] = useState<ApiRuleset[] | null>(null);
+  // Both must be loaded before the draft is restored, so it can be checked against them.
   useEffect(() => {
-    api.getSeasonSetupDefaults().then(setDefaults).catch(e => setError(getErrorMessage(e, 'Failed to load setup defaults')));
+    Promise.all([api.getSeasonSetupDefaults(), rulesetsApi.list({ kind: 'template' })])
+      .then(([d, t]) => { setDefaults(d); setTemplates(t); })
+      .catch(e => setError(getErrorMessage(e, 'Failed to load setup defaults')));
   }, []);
 
   if (error) return <div className="p-4 text-sm text-loss">{error}</div>;
-  if (!defaults) return <div className="p-4 text-sm text-text-muted">Loading setup...</div>;
+  if (!defaults || !templates) return <div className="p-4 text-sm text-text-muted">Loading setup...</div>;
   return <SetupBody defaults={defaults} templates={templates} />;
 }
 

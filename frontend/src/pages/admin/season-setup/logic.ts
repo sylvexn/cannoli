@@ -1,5 +1,5 @@
 import type { ApiCreateSeasonBody, ApiRuleset, ApiSeasonSetupDefaults } from '@/lib/api';
-import { summarize, toForm, toInput, type RulesetForm } from '../rulesets/form';
+import { formErrors, summarize, toForm, toInput, type RulesetForm } from '../rulesets/form';
 
 export type RulesChoice = 'copy' | 'blank' | number; // number = template id
 
@@ -155,4 +155,39 @@ export function buildPayload(d: Draft, overlapOverride: boolean): ApiCreateSeaso
       };
     }),
   };
+}
+
+/**
+ * Blocking problems: duplicate abbrev within a league, one username on two teams
+ * (a coach owns one team per season), invalid rules. Checks only what `buildPayload`
+ * would send (included leagues, complete teams). `step` = wizard step being left, so
+ * problems on a later step never block reaching it (rules from step 1, teams from step 2).
+ */
+export function blockingErrors(d: Draft, step = 4): string[] {
+  const out: string[] = [];
+  const owners = new Map<string, string>();
+  for (const l of includedLeagues(d)) {
+    const abbrs = new Set<string>();
+    if (step >= 1) for (const e of formErrors(l.rules)) out.push(`${l.name} rules: ${e}`);
+    if (step < 2) continue;
+    for (const t of l.teams.filter(teamComplete)) {
+      const a = t.teamAbbrev.trim().toLowerCase();
+      if (abbrs.has(a)) out.push(`${l.name}: duplicate abbreviation ${a.toUpperCase()}`);
+      abbrs.add(a);
+      const u = t.username.trim().toLowerCase();
+      if (!u) continue;
+      const prior = owners.get(u);
+      if (prior) out.push(`${u} is on two teams (${prior}, ${l.name}); one team per season`);
+      else owners.set(u, l.name);
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** A saved draft is only reusable if its season is still unclaimed and every league/ruleset it points at still exists. */
+export function draftFits(d: Draft, defaults: ApiSeasonSetupDefaults, templates: ApiRuleset[]): boolean {
+  if (d.seasonNumber < defaults.nextSeasonNumber) return false;
+  return d.leagues.every(l =>
+    (l.sourceLeagueId === null || defaults.leagues.some(s => s.sourceLeagueId === l.sourceLeagueId && s.ruleset.id === l.copyRulesetId))
+    && (typeof l.choice !== 'number' || templates.some(t => t.id === l.choice)));
 }
