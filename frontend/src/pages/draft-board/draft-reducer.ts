@@ -204,12 +204,15 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         overallPick: s.overallPick,
         teamId: s.teamId,
       }));
-      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map((p, i) => {
-        const slot = snakeOrder[i];
+      // Slot by the server's pickNumber (1-based overall slot), NOT array index:
+      // after a staff skip, picks.length < currentPickIndex and later picks
+      // must keep their own slot so skipped cells stay empty.
+      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map(p => {
+        const slot = snakeOrder[p.pickNumber - 1];
         return {
           round: slot?.round ?? 1,
           pick: slot?.pick ?? 1,
-          overallPick: i + 1,
+          overallPick: p.pickNumber,
           playerId: p.teamId,
           pokemonName: p.pokemonName,
           tier: p.tier,
@@ -218,7 +221,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       });
 
       // Compute timer from server expiry
-      let timerSeconds = state.timerDuration;
+      let timerSeconds = snap.timerDuration;
       if (snap.timerExpiresAt) {
         const remaining = Math.max(0, Math.floor((new Date(snap.timerExpiresAt).getTime() - Date.now()) / 1000));
         timerSeconds = remaining;
@@ -226,7 +229,10 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
 
       // Translate server status → client status enum.
       let status: DraftState['status'] = state.status;
-      if (snap.status === 'in_progress') status = 'running';
+      // A server pause keeps the board up (status 'running') with the clock frozen;
+      // the server restarts the full per-pick timer on resume, so show the full duration.
+      const paused = snap.status === 'paused';
+      if (snap.status === 'in_progress' || paused) status = 'running';
       else if (snap.status === 'completed') status = 'complete';
       else if (snap.status === 'not_started') status = 'configuring';
 
@@ -240,6 +246,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         currentPickIndex: snap.currentPickIndex,
         timerDuration: snap.timerDuration,
         timerSeconds,
+        timerPaused: paused,
         liveTimerExpiresAt: snap.timerExpiresAt ?? null,
         pointCap: snap.pointCap ?? state.pointCap,
       };

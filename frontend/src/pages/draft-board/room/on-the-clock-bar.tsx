@@ -77,6 +77,12 @@ export function OnTheClockBar({
           </div>
         )}
 
+        {timerPaused && (
+          <span className="px-1.5 py-0.5 rounded border border-draw/40 bg-draw/10 text-[10px] font-mono font-bold uppercase tracking-widest text-draw">
+            Paused
+          </span>
+        )}
+
         <div className="min-w-0">
           <div className={cn('text-sm font-heading font-bold truncate', tone)}>
             {isUserTurn ? (
