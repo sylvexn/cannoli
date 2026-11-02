@@ -133,8 +133,12 @@ export function useRoomMode({ state, dispatch }: UseRoomModeOptions) {
   // ?state=<id> (dev only): apply once teams are loaded, then drop the param
   // so a refresh / mode switch doesn't re-trigger it.
   const wanted = params.get('state');
+  const appliedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!wanted || !isDev || !isFixtureId(wanted) || !common()) return;
+    // A fixture changes state → `common` → this effect; apply each param once.
+    if (appliedRef.current === wanted) return;
+    appliedRef.current = wanted;
     jump(wanted);
     const next = new URLSearchParams(params);
     next.delete('state');

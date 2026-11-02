@@ -339,12 +339,9 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
 
   const showFooter = state.view === 'active';
   // Lobby = before the first pick: reducer 'configuring' (server not_started,
-  // rehearsal setup, or the lobby fixture), or a server-source pre-draft league
-  // that hasn't hydrated a draft yet.
-  const phase = league.season?.phase;
-  const showLobby = (state.view === 'active' && state.status === 'configuring')
-    || (state.source === 'server' && state.status === 'idle' && state.allPicks.length === 0
-      && (phase === 'predraft' || phase === 'draft'));
+  // rehearsal setup, or the lobby fixture). Predraft/draft leagues open in
+  // the active view (use-draft-state), so this is the default pre-draft screen.
+  const showLobby = state.view === 'active' && state.status === 'configuring';
   const drafter = currentPick ? playerLookup.get(currentPick.playerId) : undefined;
   const showClock = isDraftRunning && !!currentPick && !!drafter && !isDraftComplete;
   const drafterRoster = drafter ? teamRosters.get(drafter.id) ?? [] : [];

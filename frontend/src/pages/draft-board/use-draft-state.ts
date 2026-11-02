@@ -158,6 +158,18 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     dispatch({ type: 'SET_VIEW', view: 'active', source: 'simulator' });
   }, [source, state.view]);
 
+  // Draft Room: a league in predraft/draft opens straight into the live room
+  // (lobby → board) instead of the season recap. Once only, so the History
+  // toggle still works afterwards.
+  const didEnterLiveRoom = useRef(false);
+  const leaguePhase = league.season?.phase;
+  useEffect(() => {
+    if (source !== 'server' || didEnterLiveRoom.current) return;
+    if (leaguePhase !== 'predraft' && leaguePhase !== 'draft') return;
+    didEnterLiveRoom.current = true;
+    if (state.view !== 'active') dispatch({ type: 'SET_VIEW', view: 'active', source: 'server' });
+  }, [source, leaguePhase, state.view]);
+
   // Quick affordability cap for the pool's "fits my budget" filter — derived
   // straight from state so it's available before useDraftTeams resolves.
   // Mirrors getMaxAffordableCost: raw remaining minus 1pt × (picksLeft - 1) for
