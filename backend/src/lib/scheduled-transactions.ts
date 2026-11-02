@@ -156,21 +156,21 @@ export function applyDueTransactions(leagueId?: string): number {
       .all();
 
     for (const trade of dueTrades) {
-      const offering = JSON.parse(trade.offering) as string[];
-      const requesting = JSON.parse(trade.requesting) as string[];
-      const invalid = validateProposedTrade({
-        proposerId: trade.proposerId,
-        recipientId: trade.recipientId,
-        offering, requesting,
-        leagueId: league.id,
-        // This row is itself pending — don't let the projection apply it twice.
-        excludeTradeId: trade.id,
-      });
-      if (invalid) {
-        failScheduled('trade', trade.id, league.id, invalid, [trade.proposerId, trade.recipientId]);
-        continue;
-      }
       try {
+        const offering = JSON.parse(trade.offering) as string[];
+        const requesting = JSON.parse(trade.requesting) as string[];
+        const invalid = validateProposedTrade({
+          proposerId: trade.proposerId,
+          recipientId: trade.recipientId,
+          offering, requesting,
+          leagueId: league.id,
+          // This row is itself pending — don't let the projection apply it twice.
+          excludeTradeId: trade.id,
+        });
+        if (invalid) {
+          failScheduled('trade', trade.id, league.id, invalid, [trade.proposerId, trade.recipientId]);
+          continue;
+        }
         tx(() => {
           executeRosterSwap({
             proposerId: trade.proposerId,
@@ -197,6 +197,7 @@ export function applyDueTransactions(leagueId?: string): number {
           applied: true,
         });
       } catch (e) {
+        // Per-row guard (incl. JSON.parse): one bad row never aborts the sweep.
         failScheduled('trade', trade.id, league.id, (e as Error).message, [trade.proposerId, trade.recipientId]);
       }
     }
@@ -215,31 +216,33 @@ export function applyDueTransactions(leagueId?: string): number {
     for (const req of dueFa) {
       const week = req.effectiveWeek ?? league.currentWeek;
       const actor = req.requestedBy ?? req.resolvedBy ?? 'system';
-      if (req.requestType === 'tera_change') {
-        const captains = JSON.parse(req.teraChanges || '[]') as { pokemonName: string; teraTypes: string[] }[];
-        const result = applyTeraCaptains(req.teamId, captains, actor, week);
-        if (!result.ok) {
-          failScheduled('fa', req.id, league.id, result.error, [req.teamId]);
-          continue;
-        }
-      } else {
-        const result = applyFaPickup({
-          leagueId: league.id,
-          teamId: req.teamId,
-          pickupNames: JSON.parse(req.pickups || '[]') as string[],
-          dropNames: JSON.parse(req.drops || '[]') as string[],
-          actorUsername: actor,
-          dryRun: false,
-          effectiveWeek: week,
-          actedWeek: req.week,
+      try {
+        // Apply + appliedAt in ONE transaction; a !ok result throws to roll back.
+        tx(() => {
+          if (req.requestType === 'tera_change') {
+            const captains = JSON.parse(req.teraChanges || '[]') as { pokemonName: string; teraTypes: string[] }[];
+            const result = applyTeraCaptains(req.teamId, captains, actor, week);
+            if (!result.ok) throw new Error(result.error);
+          } else {
+            const result = applyFaPickup({
+              leagueId: league.id,
+              teamId: req.teamId,
+              pickupNames: JSON.parse(req.pickups || '[]') as string[],
+              dropNames: JSON.parse(req.drops || '[]') as string[],
+              actorUsername: actor,
+              dryRun: false,
+              effectiveWeek: week,
+              actedWeek: req.week,
+            });
+            if (!result.ok) throw new Error(result.error);
+          }
+          db.update(schema.faRequests).set({ appliedAt: new Date().toISOString() })
+            .where(eq(schema.faRequests.id, req.id)).run();
         });
-        if (!result.ok) {
-          failScheduled('fa', req.id, league.id, result.error, [req.teamId]);
-          continue;
-        }
+      } catch (e) {
+        failScheduled('fa', req.id, league.id, (e as Error).message, [req.teamId]);
+        continue;
       }
-      db.update(schema.faRequests).set({ appliedAt: new Date().toISOString() })
-        .where(eq(schema.faRequests.id, req.id)).run();
       applied++;
       notifyTeamOwner(req.teamId, league.id, {
         title: req.requestType === 'tera_change' ? 'Tera change now live' : 'Free agent pickup now live',
