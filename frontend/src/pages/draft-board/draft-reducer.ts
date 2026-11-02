@@ -182,7 +182,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
 
     case 'DRAFT_RESET':
       // Rehearsal / dry-run: restart in place from the frozen seed.
-      if (state.rehearsalSeed) return startRoom(state, state.roomMode, state.rehearsalSeed);
+      if (state.rehearsalSeed) return startRoom(state, state.roomMode === 'dry-run' ? 'dry-run' : 'rehearsal', state.rehearsalSeed);
       return {
         ...state,
         status: 'configuring',
