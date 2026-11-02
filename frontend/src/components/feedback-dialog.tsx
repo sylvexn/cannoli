@@ -22,7 +22,7 @@ const CATEGORIES: { value: FeedbackCategory; label: string }[] = [
   { value: 'general', label: 'General' },
 ];
 
-export function FeedbackDialog() {
+export function FeedbackDialog({ hideTrigger = false }: { hideTrigger?: boolean }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -95,13 +95,15 @@ export function FeedbackDialog() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:bg-surface-overlay hover:text-text-primary transition-colors"
-      >
-        <MessageSquarePlus size={14} />
-        <span>Send Feedback</span>
-      </button>
+      {!hideTrigger && (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:bg-surface-overlay hover:text-text-primary transition-colors"
+        >
+          <MessageSquarePlus size={14} />
+          <span>Send Feedback</span>
+        </button>
+      )}
 
       <Dialog open={open} onOpenChange={o => { if (!o) handleClose(); }}>
         <DialogContent

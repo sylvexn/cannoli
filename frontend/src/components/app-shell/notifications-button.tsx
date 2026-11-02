@@ -234,7 +234,7 @@ export function NotificationsButton({ collapsed = false }: NotificationsButtonPr
   );
 
   const panel = (
-    <PopoverContent side="top" align="start" sideOffset={8} className="w-full max-w-[22rem] p-0 gap-0">
+    <PopoverContent side="bottom" align="end" sideOffset={8} className="w-full max-w-[22rem] p-0 gap-0">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border-default">
         <Bell size={13} className="text-text-muted shrink-0" />
         <span className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
