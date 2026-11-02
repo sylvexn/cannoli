@@ -8,13 +8,14 @@ import { faRequestRoutes } from './fa-requests';
 import { pokemonRoutes } from './pokemon';
 import { archiveRoutes } from './archive';
 import { speedTierRoutes } from './speed-tiers';
+import { isStaff } from '../../lib/auth';
 import { getLeagueRuleset } from '../../lib/rulesets';
 
 export const leagueRoutes = new Elysia()
 
   // Leagues
 
-  .get('/api/leagues', ({ query }) => {
+  .get('/api/leagues', ({ query, user }) => {
     // `?all=1` returns leagues across EVERY season (incl. archived) — used by
     // the Replay Gallery to browse historical replays. Default (no param)
     // keeps the legacy behaviour: just the latest season's leagues.
@@ -52,7 +53,9 @@ export const leagueRoutes = new Elysia()
       name: l.name,
       color: l.color,
       draftDate: l.draftDate,
-      draftOrder: l.draftOrder ? JSON.parse(l.draftOrder) : null,
+      // Unlocked order is staff-only (coaches see "TBD").
+      draftOrder: l.draftOrder && (l.draftOrderLocked || isStaff(user)) ? JSON.parse(l.draftOrder) : null,
+      draftOrderLocked: l.draftOrderLocked,
       playoffTeamCount: l.playoffTeamCount,
       format: l.format,
       // Cost format ('natdex' | 'natdexplus') — which per-league price sheet this

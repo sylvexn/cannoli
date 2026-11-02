@@ -750,6 +750,8 @@ export function startDraft(
       }).run();
     }
 
+    db.update(schema.leagues).set({ draftOrderLocked: true }).where(eq(schema.leagues.id, leagueId)).run();
+
     db.insert(schema.activityLog).values({
       type: 'draft_started',
       category: 'draft',

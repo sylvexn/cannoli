@@ -232,7 +232,9 @@ export const draftRoutes = new Elysia()
     return getPresenceList(params.leagueId);
   })
 
-  .get('/api/leagues/:leagueId/draft/state', ({ params }) => {
+  .get('/api/leagues/:leagueId/draft/state', ({ params, user }) => {
+    // The snapshot embeds the snake order — never show it to non-staff before the order is locked.
+    if (!isStaff(user) && !getLeague(params.leagueId)?.draftOrderLocked) return { status: 'not_started' as const, leagueId: params.leagueId };
     const snapshot = getDraftSnapshot(params.leagueId);
     if (!snapshot) return { status: 'not_started' as const, leagueId: params.leagueId };
     return snapshot;
