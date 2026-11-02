@@ -346,7 +346,7 @@ export const teamAdminRoutes = new Elysia()
     });
 
     // Best-effort: refresh the PS bot's user→team map after roster change.
-    try { refreshUserMap(); } catch {}
+    try { refreshUserMap(); } catch (err) { console.warn('[ps-bot] refreshUserMap failed:', err); }
 
     return result;
   })
