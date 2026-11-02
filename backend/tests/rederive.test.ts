@@ -8,6 +8,11 @@ describe('resolveStoredName', () => {
   test('keeps stored variant name over the base roster name', () => {
     expect(resolveStoredName(['Thundurus-Incarnate'], ['Thundurus'], 'Thundurus-Incarnate')).toBe('Thundurus-Incarnate');
   });
+  test('folds a legacy battle-only / cosmetic forme row to the drafted name', () => {
+    expect(resolveStoredName(['Palafin-Hero'], ['Palafin'], 'Palafin-Hero')).toBe('Palafin');
+    expect(resolveStoredName(['Minior-Indigo'], [], 'Minior-Indigo')).toBe('Minior');
+    expect(resolveStoredName(['Tauros-Paldea-Combat'], ['Tauros'], 'Tauros-Paldea-Combat')).toBe('Tauros-Paldea');
+  });
   test('falls back to the roster for new rows', () => {
     expect(resolveStoredName([], ['Mega Lopunny'], 'Lopunny-Mega')).toBe('Mega Lopunny');
   });
