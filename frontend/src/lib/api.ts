@@ -1103,6 +1103,7 @@ export const api = {
   getSchedule: (leagueId: string) => fetchJson<ApiSchedule>(`/api/leagues/${leagueId}/schedule`),
 
   getMatchPokemon: (matchId: string) => fetchJson<{ home: ApiMatchPokemon[]; away: ApiMatchPokemon[] }>(`/api/matches/${matchId}/pokemon`),
+  getReplaySummaries: (leagueId: string) => fetchJson<Record<string, ApiReplaySummary>>(`/api/leagues/${leagueId}/replay-summaries`),
   getReplaySummary: (matchId: string) => fetchJson<ApiReplaySummary | null>(`/api/matches/${matchId}/replay-summary`),
 
   getTransactions: (leagueId: string) => fetchJson<ApiTransaction[]>(`/api/leagues/${leagueId}/transactions`),
