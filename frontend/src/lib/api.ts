@@ -1590,33 +1590,13 @@ export const api = {
   },
 
   // Season + Team admin
-  createSeason: (data: {
-    seasonNumber: number;
-    totalWeeks?: number;
-    pointCap?: number;
-    teraCaptainSlots?: number;
-    tradeDeadlineWeek?: number;
-    rosterSize?: number;
-    forfeitPolicy?: 'double_forfeit' | 'admin_review';
-    weekDates?: Record<string, string> | null;
-    leagues?: {
-      id: string;
-      name: string;
-      color: string;
-      draftDate?: string | null;
-      teams?: {
-        coachName?: string;
-        teamName: string;
-        teamAbbrev: string;
-        teamColor?: string;
-        managerUsername?: string | null;
-      }[];
-    }[];
-    overlapOverride?: boolean;
-  }) => postJson<{
+  getSeasonSetupDefaults: () => fetchJson<ApiSeasonSetupDefaults>('/api/admin/seasons/setup-defaults'),
+  resolveUsernames: (usernames: string[]) => postJson<{ found: string[] }>('/api/admin/users/resolve', { usernames }),
+  createSeason: (data: ApiCreateSeasonBody) => postJson<{
     id: number;
     seasonNumber: number;
     teamsCreated: number;
+    leagues: { id: string; rulesetId: number | null; costFormat: string }[];
     unresolvedManagers: string[];
   }>('/api/seasons', data),
 
@@ -2140,3 +2120,50 @@ export const rulesetsApi = {
   assign: (id: number, leagueId: string) => postJson<ApiRuleset>(`/api/admin/rulesets/${id}/assign`, { leagueId }),
   remove: (id: number) => deleteJson<{ success: boolean }>(`/api/admin/rulesets/${id}`),
 };
+
+// Season setup stepper contract (GET /api/admin/seasons/setup-defaults, POST /api/seasons)
+export interface ApiSeasonSetupDefaults {
+  nextSeasonNumber: number;
+  source: { seasonId: number; seasonNumber: number } | null;
+  leagues: {
+    sourceLeagueId: string;
+    slug: string;
+    name: string;
+    color: string;
+    ruleset: {
+      id: number | null; name: string; costFormat: string; pointCap: number; rosterSize: number;
+      rosterMin: number | null; rosterMax: number | null; megaCap: number | null; teraEnabled: boolean;
+      teraCaptainSlots: number; teraTypesPerCaptain: number; teraMarkup: Record<string, number>;
+    };
+    totalWeeks: number;
+    tradeDeadlineWeek: number;
+    playoffTeamCount: number;
+    forfeitPolicy: 'double_forfeit' | 'admin_review';
+    format: string;
+    teams: { teamName: string; teamAbbrev: string; teamColor: string; coachName: string; username: string | null }[];
+  }[];
+}
+
+export interface ApiCreateSeasonBody {
+  seasonNumber: number;
+  totalWeeks: number;
+  tradeDeadlineWeek: number;
+  playoffTeamCount: number;
+  forfeitPolicy: 'double_forfeit' | 'admin_review';
+  format: string;
+  weekDates: Record<string, string> | null;
+  overlapOverride: boolean;
+  leagues: {
+    slug: string;
+    name: string;
+    color: string;
+    draftDate: string | null;
+    sourceRulesetId: number | null;
+    rules: {
+      costFormat: string; pointCap: number; rosterSize: number; rosterMin: number | null; rosterMax: number | null;
+      megaCap: number | null; teraEnabled: boolean; teraCaptainSlots: number; teraTypesPerCaptain: number;
+      teraMarkup: Record<string, number>;
+    };
+    teams: { teamName: string; teamAbbrev: string; teamColor: string; managerUsername: string | null; coachName?: string }[];
+  }[];
+}

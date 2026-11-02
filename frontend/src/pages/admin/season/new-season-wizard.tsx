@@ -196,7 +196,7 @@ export function NewSeasonWizard({ open, onClose, leagues }: { open: boolean; onC
   async function postCreate(includedList: WizardLeague[], overlapOverride: boolean) {
     setCreating(true);
     try {
-      const result = await api.createSeason(buildPayload(includedList, overlapOverride));
+      const result = await api.createSeason(buildPayload(includedList, overlapOverride) as never);
       const teamMsg = result.teamsCreated > 0 ? `, ${result.teamsCreated} teams` : '';
       toast.success(`Season ${config.seasonNumber} created for ${includedList.length} league(s)${teamMsg}`);
       if (result.unresolvedManagers && result.unresolvedManagers.length > 0) {
