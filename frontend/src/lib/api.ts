@@ -1348,6 +1348,10 @@ export const api = {
       { teamId, pokemonName },
     ),
 
+  /** Staff: auto-pick for the team whose timer expired (server rejects otherwise). */
+  autoPickDraft: (leagueId: string) =>
+    postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/auto-pick`),
+
   skipDraftPick: (leagueId: string) =>
     postJson<{ success: boolean }>(`/api/leagues/${leagueId}/draft/skip`),
 
