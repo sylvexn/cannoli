@@ -860,6 +860,10 @@ export interface ApiPinDefinition {
 }
 
 export type PinScope = 'league' | 'season' | 'team' | 'match';
+export interface ApiPokemonMatch {
+  id: string; week: number; opponent: string; score: string | null; kills: number; deaths: number;
+}
+
 export type PinMetadataFieldName = 'pokemon' | 'nickname' | 'match' | 'note';
 
 export type PinSource = 'auto' | 'manual';
@@ -1914,6 +1918,10 @@ export const api = {
   /** A team's published pins - works for teams with no linked coach. */
   getTeamPins: (teamId: string) =>
     fetchJson<ApiPin[]>(`/api/teams/${encodeURIComponent(teamId)}/pins`),
+
+  getPokemonMatches: (teamId: string, pokemon: string) =>
+    fetchJson<ApiPokemonMatch[]>(
+      `/api/admin/pins/pokemon-matches?teamId=${encodeURIComponent(teamId)}&pokemon=${encodeURIComponent(pokemon)}`),
 
   getPinDefinitions: () => fetchJson<ApiPinDefinition[]>('/api/admin/pin-definitions'),
 

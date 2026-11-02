@@ -7,6 +7,7 @@
  * purpose-built line; everything else renders its declared pokemon/nickname.
  */
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { PokemonLink } from '@/components/pokemon-link';
 import { TeamLink } from '@/components/team-link';
 import type { PinMetadataFieldName } from '@/lib/api';
@@ -131,12 +132,17 @@ export function formatPinMetadata(
     }
 
     default: {
+      const matchId = str(metadata, 'matchId');
+      const week = num(metadata, 'week');
+      const matchLink = matchId && fields.includes('match') ? (
+        <> · <Link to={`/replay/${matchId}`} className="hover:underline">{week != null ? `Week ${week} match` : 'Match'}</Link></>
+      ) : null;
       const nick = fields.includes('nickname') ? nickname : null;
       const tail = note ? <> · {note}</> : null;
-      if (nick && pokemon) return <>&ldquo;{nick}&rdquo; — {mon(pokemon)}{tail}</>;
-      if (nick) return <>&ldquo;{nick}&rdquo;{tail}</>;
-      if (pokemon) return <>{mon(pokemon)}{tail}</>;
-      return note;
+      if (nick && pokemon) return <>&ldquo;{nick}&rdquo; — {mon(pokemon)}{matchLink}{tail}</>;
+      if (nick) return <>&ldquo;{nick}&rdquo;{matchLink}{tail}</>;
+      if (pokemon) return <>{mon(pokemon)}{matchLink}{tail}</>;
+      return matchLink ? <>{matchLink}{tail}</> : note;
     }
   }
 }
