@@ -9,8 +9,8 @@
  *   1. Wipes + migrates backend/data/cannoli.db in place (the seed-fresh
  *      pattern: drop every table, vacuum — preserves the inode so a running
  *      dev server picks up the fresh schema).
- *   2. Calls buildSimWorld(), which produces one FINISHED fictional season and
- *      one LIVE in-progress fictional season, plus the `demo` admin user.
+ *   2. Calls buildSimWorld(), which produces two FINISHED fictional seasons (S10 archived, S11 not) and
+ *      no in-progress season, plus the `demo` admin user.
  *   3. Logs a summary and confirms the world is fictional-only.
  *
  * MOCK-ONLY: buildSimWorld asserts CANNOLI_MODE=mock. The npm script sets it.
@@ -23,7 +23,9 @@
 import { Database } from 'bun:sqlite';
 import { resolve } from 'path';
 
-const DB_PATH = resolve(import.meta.dir, '../data/cannoli.db');
+const DB_PATH = process.env.CANNOLI_DB_PATH
+  ? resolve(process.env.CANNOLI_DB_PATH)
+  : resolve(import.meta.dir, '../data/cannoli.db');
 
 if (process.env.CANNOLI_MODE !== 'mock') {
   console.error(
