@@ -110,6 +110,8 @@ export interface OccurrenceInput {
   stack?: string | null;
   userId?: number | null;
   version: string;
+  /** If set, refuse to create a NEW group once error_groups already holds this many rows. */
+  maxGroups?: number;
 }
 
 export interface RecordResult {
@@ -194,6 +196,11 @@ export function recordOccurrence(input: OccurrenceInput): RecordResult | null {
       .get(fingerprint);
 
     const isNew = existing == null;
+
+    if (isNew && input.maxGroups != null) {
+      const total = sqlite.query<{ n: number }, []>('SELECT COUNT(*) AS n FROM error_groups').get()?.n ?? 0;
+      if (total >= input.maxGroups) return null;
+    }
 
     // 2. Determine whether to reopen a resolved regression
     // A group was marked resolved at a specific version. If we see a fresh
