@@ -18,6 +18,8 @@ import { validatePokemonDataForMatch } from './match-validation';
 import { resolveRosterPokemonName } from './pokedex';
 import { matchWinner } from './standings';
 
+const isCount = (x: unknown): x is number => Number.isInteger(x) && (x as number) >= 0;
+
 export interface PokemonDataEntry {
   teamId: string;
   pokemonName: string;
@@ -91,6 +93,9 @@ export function recordMatchResult(
   const forfeitedBy = input.forfeitedBy ?? null;
   if (homeScore === undefined || awayScore === undefined) {
     return { ok: false, status: 400, error: 'homeScore and awayScore required' };
+  }
+  if (!isCount(homeScore) || !isCount(awayScore)) {
+    return { ok: false, status: 400, error: 'homeScore and awayScore must be non-negative integers' };
   }
   // A bracket has nowhere to put a tie. Downstream, advancement used to fall
   // back to the home team and assignFinishPositions skips equal-score matches
