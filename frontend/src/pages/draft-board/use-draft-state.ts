@@ -52,7 +52,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   /** Cost format for this league — drives tier list, bans, and captain reserve. */
   const format: CostFormat = league.costFormat ?? DEFAULT_FORMAT;
   const { players, standings, transactions } = useLeagueData();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   // Presence tracking
   const [presence, setPresence] = useState<DraftPresenceData>({ players: [], spectators: [] });
@@ -297,6 +297,19 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
       toast.error(error);
     }, []),
   });
+
+  // Server source: sit the viewer in their own seat. Staff may re-pick via the
+  // pre-start dropdown, so userTeamId is deliberately not a dep (it would undo
+  // their choice); non-coaches get no seat.
+  const myTeamId = useMemo(
+    () => players.find(p => p.userId != null && user && String(p.userId) === String(user.id))?.id ?? null,
+    [players, user],
+  );
+  useEffect(() => {
+    if (state.source !== 'server' || state.roomMode !== 'live') return;
+    const seat = myTeamId ?? (isAdmin ? undefined : null);
+    if (seat !== undefined) dispatch({ type: 'SET_USER_TEAM', teamId: seat });
+  }, [state.source, state.roomMode, myTeamId, isAdmin]);
 
   // Identify ourselves when connected
   useEffect(() => {
