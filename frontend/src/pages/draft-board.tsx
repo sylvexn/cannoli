@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { preloadSprites } from '@/components/pokemon-sprite';
-import { Monitor } from 'lucide-react';
+import { Monitor, LayoutGrid, Table } from 'lucide-react';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { UserAccentScope } from '@/components/user-accent-scope';
@@ -9,16 +10,22 @@ import { useDraftState } from './draft-board/use-draft-state';
 import { useDraftMute } from './draft-board/use-draft-mute';
 import { DraftFilterBar } from './draft-board/draft-filter-bar';
 import { DraftPoolWithRail } from './draft-board/draft-pool-with-rail';
-import { DraftTeamSidebar } from './draft-board/draft-team-sidebar';
 import { DraftPoolTable } from './draft-board/draft-pool-table';
 import { PokemonDetailSheet } from './draft-board/pokemon-detail-sheet';
 import { DraftControlBar } from './draft-board/draft-control-bar';
-import { DraftOnTheClock } from './draft-board/draft-on-the-clock';
-import { DraftPickLog } from './draft-board/draft-pick-log';
+import { OnTheClockBar, formatClock } from './draft-board/room/on-the-clock-bar';
+import { WarRoomBoard } from './draft-board/room/war-room-board';
+import { PoolPalette } from './draft-board/room/pool-palette';
+import { PaletteSide } from './draft-board/room/palette-side';
+import { usePaletteOpen } from './draft-board/room/use-palette-open';
+import { RoomModeStrip } from './draft-board/room/room-mode-strip';
+import { useRoomMode } from './draft-board/room/use-room-mode';
+import { DraftLobby } from './draft-board/room/draft-lobby';
+import { useAppData } from '@/lib/app-data-context';
 import { DraftPokemonPopover, type PokemonPopoverMode } from './draft-board/draft-pokemon-popover';
 import { DraftCaptainGate } from './draft-board/draft-captain-gate';
 import { DraftCompleteSummary } from './draft-board/draft-complete-summary';
-import { DraftTopBar } from './draft-board/draft-top-bar';
+import { DraftTopBar, ClusterButton, ClusterDensity } from './draft-board/draft-top-bar';
 import type { CardDensity } from './draft-board/pokemon-compact-card';
 import { getTierList, getTierEntry, getBanned } from '@/data/tier-list';
 import type { DraftSource } from './draft-board/types';
@@ -56,13 +63,18 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     ownershipMap, filteredPool, poolByTier, matchReasons,
     currentPick, teamRosters, teamPoints,
     rosterLookup, playerLookup, isUserTurn, isDraftComplete,
-    draftOrder, handleUserPick, wsConnected, presence, userBudgetRemaining,
+    draftOrder, handleUserPick, wsConnected: realWsConnected, presence, userBudgetRemaining,
     userMaxAffordableCost, selfAffordCap, userConflictRoster,
     currentDrafterMaxAffordableCost, currentDrafterConflictRoster,
     draftTimerEnabled, draftDemoVisible,
     displayTimerSeconds,
-    pickQueue, pickAnnouncement,
+    pickQueue, pickAnnouncement, autoPickCurrent,
   } = useDraftState({ source });
+  const { refreshLeagues } = useAppData();
+  const room = useRoomMode({ state, dispatch });
+  // Dev state-jumper fixtures can fake a dropped socket / open captain gate.
+  const wsConnected = room.flags.wsConnected ?? realWsConnected;
+  const strip = <RoomModeStrip room={room} onAutoPick={autoPickCurrent} />;
 
   const isPractice = source === 'simulator';
 
@@ -74,11 +86,11 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   // isDraftComplete) but the league is still in phase=draft (= some team
   // hasn't locked captains yet). Once the last team locks, the backend flips
   // phase → regular and a fresh /api/leagues fetch closes the gate.
-  const captainGateOpen = state.source === 'server'
+  const captainGateOpen = room.flags.captainGateOpen ?? (state.source === 'server'
     && isDraftComplete
     && league.season?.phase === 'draft'
     && players.length > 0
-    && !players.every(p => p.captainsLocked);
+    && !players.every(p => p.captainsLocked));
 
   // Mobile viewport detection
   const [isMobile, setIsMobile] = useState(false);
@@ -88,8 +100,6 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
-
-  const [pickLogExpanded, setPickLogExpanded] = useState(false);
 
   // Card density toggle — controls --card-size CSS var on the page root.
   const [density, setDensity] = useState<CardDensity>(() => readStoredDensity());
@@ -155,6 +165,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
 
   const handleCardHoverStart = useCallback((name: string, rect: DOMRect) => {
     cardRectsRef.current.set(name, rect);
+    setHovered(name);
     setPopover(prev => {
       // Don't downgrade an active interactive popover (quick-draft / detail-summary)
       // back to a hover preview when the cursor drifts to a sibling card.
@@ -196,16 +207,13 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     }
   }, [isUserTurn, state.draftQueue, ownershipMap, handleUserPick]);
 
-  // Auto-expand the pick log on every pick + show the one-time mute hint.
-  // Cry playback used to live here — it's now owned by usePickAnimationQueue,
-  // which fires the cry on the landing-phase boundary so batched picks get
-  // spaced cries instead of overlapping.
+  // Show the one-time mute hint on the first live pick.
+  // Cry playback is owned by usePickAnimationQueue (fires on the landing phase).
   const prevPickCountRef = useRef(state.allPicks.length);
   useEffect(() => {
     const prev = prevPickCountRef.current;
     prevPickCountRef.current = state.allPicks.length;
     if (isDraftRunning && state.allPicks.length > prev && state.allPicks.length > 0) {
-      setPickLogExpanded(true);
       // Show the mute hint the first time a cry is about to play (the queue
       // will play it shortly when the pick lands). Hint is independent of the
       // actual cry firing — it only nudges users toward the mute control.
@@ -268,21 +276,40 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     return undefined;
   }, [popover, userBudgetRemaining, format]);
 
-  // The Pokemon currently being celebrated by the animation queue. Threaded
-  // into the pool grid (so the matching card stamps its VT name) and the
-  // sidebar (so the matching roster slot does too).
-  const animatingPokemonName = pickQueue.current?.pokemonName ?? null;
+  const rosterSize = league.season?.rosterSize ?? 10;
+  const showOnTheClockGlow = isDraftRunning && isUserTurn && !isDraftComplete;
+  const [paletteOpen, setPaletteOpen] = usePaletteOpen(showOnTheClockGlow && currentPick ? currentPick.overallPick : null);
+
+  // Cards unmount with the palette, so a lingering hover preview must go too.
+  useEffect(() => {
+    if (!paletteOpen) setPopover(prev => (prev && prev.mode === 'preview' ? null : prev));
+  }, [paletteOpen]);
+
+  // Hovered card = target of Q / Enter / the footer button; falls back to queue #1.
+  const [hovered, setHovered] = useState<string | null>(null);
+  const target = hovered && !ownershipMap.has(hovered) ? hovered : state.draftQueue[0] ?? null;
+  const canDraft = isDraftRunning && isUserTurn && !!target;
+  const handleDraftTarget = useCallback(() => { if (target) handleUserPick(target); }, [target, handleUserPick]);
+  const handlePaletteQueue = useCallback(() => {
+    if (!hovered || ownershipMap.has(hovered)) return;
+    if (state.draftQueue.includes(hovered)) handleQueueRemove(hovered);
+    else handleQueueAdd(hovered);
+  }, [hovered, ownershipMap, state.draftQueue, handleQueueAdd, handleQueueRemove]);
+
+  const userRoster = state.userTeamId ? teamRosters.get(state.userTeamId) ?? [] : [];
+  const userPointsLeft = state.pointCap - (state.userTeamId ? teamPoints.get(state.userTeamId) ?? 0 : 0);
+  const handleOpenPokemon = useCallback((name: string) => dispatch({ type: 'SET_DETAIL', name }), [dispatch]);
 
   // Mobile warning for active draft participants
   if (isMobile && isDraftRunning && state.userTeamId && !isDraftComplete) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
+      <>{strip}<div className="flex flex-col items-center justify-center h-64 gap-4 px-6 text-center">
         <Monitor size={40} className="text-text-muted" />
         <h2 className="text-lg font-mono font-bold text-text-primary uppercase">Desktop Required</h2>
         <p className="text-sm text-text-muted max-w-sm">
           Draft participation requires a desktop browser. You can spectate from mobile.
         </p>
-      </div>
+      </div></>
     );
   }
 
@@ -291,6 +318,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
     return (
       <UserAccentScope user={user} className="contents">
         <div className="flex flex-col h-full overflow-hidden">
+          {strip}
           <DraftCompleteSummary
             picks={state.allPicks}
             draftOrder={draftOrder}
@@ -310,23 +338,26 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
   }
 
   const showFooter = state.view === 'active';
-
-  // Pulse-glow on the draft room body when it's THIS user's turn — peripheral
-  // signal to remove "did I miss my turn?" anxiety. Color = user accent.
-  const showOnTheClockGlow = isDraftRunning && isUserTurn && !isDraftComplete;
+  // Lobby = before the first pick: reducer 'configuring' (server not_started,
+  // rehearsal setup, or the lobby fixture). Predraft/draft leagues open in
+  // the active view (use-draft-state), so this is the default pre-draft screen.
+  const showLobby = state.view === 'active' && state.status === 'configuring';
+  const drafter = currentPick ? playerLookup.get(currentPick.playerId) : undefined;
+  const showClock = isDraftRunning && !!currentPick && !!drafter && !isDraftComplete;
+  const drafterRoster = drafter ? teamRosters.get(drafter.id) ?? [] : [];
+  const clockText = draftTimerEnabled && showClock ? formatClock(displayTimerSeconds) : null;
+  const hasTeam = isDraftRunning && !!state.userTeamId && playerLookup.has(state.userTeamId);
+  const draftLabel = target
+    ? `Draft ${target}${state.draftQueue[0] === target && hovered !== target ? ' (queue #1)' : ''}`
+    : 'Draft';
 
   return (
     <UserAccentScope user={user} className="contents">
     <div
-      className={cn(
-        'flex flex-col h-full overflow-hidden',
-        showOnTheClockGlow && 'pulse-glow',
-      )}
+      className={cn('flex flex-col h-full overflow-hidden', showOnTheClockGlow && 'pulse-glow')}
       style={{ ['--card-size' as never]: DENSITY_SIZES[density] }}
     >
-      {/* Aria-live region — fires once per pick on the queue's landing phase
-          so screen-reader users hear one event per pick (not on every state
-          churn). Empty most of the time. */}
+      {strip}
       <span className="sr-only" aria-live="polite">{pickAnnouncement}</span>
 
       <DraftTopBar
@@ -335,22 +366,16 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         isPractice={isPractice}
         draftDemoVisible={draftDemoVisible}
         isDraftRunning={isDraftRunning}
-        isDraftComplete={isDraftComplete}
         leagueId={league.id}
         wsConnected={wsConnected}
-        pickLogExpanded={pickLogExpanded}
-        onTogglePickLog={() => setPickLogExpanded(v => !v)}
+        showPoolButton={!showClock}
+        onOpenPool={() => setPaletteOpen(true)}
         muted={muted}
         onToggleMuted={toggleMuted}
         hintVisible={hintVisible}
-        density={density}
-        onChangeDensity={setDensity}
       />
 
-      {/* Captain gate — surfaces between draft completion and league
-          advancing to regular play. The user's team profile is the canonical
-          place to actually pick captains; we just nudge them there.
-          Only shown during running (not complete — the summary surface owns it then). */}
+      {/* Captain gate — nudges to the team profile between draft end and league advance. */}
       {captainGateOpen && !isDraftComplete && (
         <DraftCaptainGate
           players={players}
@@ -360,153 +385,164 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         />
       )}
 
-      {/* Pick log — collapsible, only when toggled */}
-      {pickLogExpanded && isDraftRunning && state.allPicks.length > 0 && !isDraftComplete && (
-        <DraftPickLog
-          picks={state.allPicks}
-          playerLookup={playerLookup}
-          currentPickEvent={pickQueue.current}
-          currentPhase={pickQueue.phase}
+      {showClock && currentPick && drafter && (
+        <OnTheClockBar
+          pick={currentPick}
+          player={drafter}
+          timerSeconds={displayTimerSeconds}
+          timerDuration={state.timerDuration}
+          timerEnabled={draftTimerEnabled}
+          timerPaused={state.timerPaused}
+          isUserTurn={isUserTurn}
+          totalPicks={state.snakeOrder.length}
+          pointsLeft={state.pointCap - (teamPoints.get(drafter.id) ?? 0)}
+          slotsLeft={Math.max(0, rosterSize - drafterRoster.length)}
+          topQueuedName={state.draftQueue[0] ?? null}
+          onDraftFromQueue={handleDraftFromQueue}
+          onOpenPool={() => setPaletteOpen(true)}
         />
       )}
 
-      {/* Filter bar */}
-      <div className="shrink-0">
-        <DraftFilterBar
-          filters={state.filters}
-          onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
-          totalCount={getTierList(format).length}
-          filteredCount={filteredPool.length}
-          showAffordableToggle={isDraftRunning && state.userTeamId != null}
-          affordCap={selfAffordCap}
-          format={league.format ?? 'gen9natdex'}
+      {showLobby ? (
+        <DraftLobby
+          teams={players}
+          draftOrder={league.draftOrder ?? null}
+          draftOrderLocked={league.draftOrderLocked}
+          presence={presence}
+          userTeamId={state.userTeamId}
+          draftStarted={false}
+          timerSeconds={state.timerDuration || undefined}
+          onRehearse={room.rehearse}
+          onOrderSaved={refreshLeagues}
         />
-      </div>
+      ) : (
+      <WarRoomBoard
+        draftOrder={draftOrder}
+        picks={state.allPicks}
+        snakeOrder={state.snakeOrder}
+        rosterSize={rosterSize}
+        pointCap={state.pointCap}
+        teamPoints={teamPoints}
+        selectedTeamId={state.selectedTeamId}
+        userTeamId={state.userTeamId}
+        currentPick={showClock ? currentPick : null}
+        landingPick={pickQueue.current?.overallPick ?? null}
+        clockLabel={clockText}
+        onSelectTeam={id => dispatch({ type: 'SELECT_TEAM', teamId: id })}
+        onOpenPokemon={handleOpenPokemon}
+      />
+      )}
 
-      {/* Main content: pool + sidebar — fills remaining space */}
-      <div className="flex flex-1 mt-1.5 min-h-0 gap-0">
-        {/* Pool column: hero + pool + chrome bar stacked (chrome doesn't extend under sidebar) */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* OTC hero — docks above the pool when a draft is active.
-              The .otc-shell class drives the entrance animation (320ms fade +
-              translate); .otc-shell-user adds the neon edge-glow ramp on the
-              user's turn. Both respect prefers-reduced-motion. */}
-          {isDraftRunning && currentPick && !isDraftComplete && (() => {
-            const drafter = playerLookup.get(currentPick.playerId);
-            if (!drafter) return null;
-            return (
-              <div
-                key={`otc-${currentPick.overallPick}`}
-                className={cn(
-                  'otc-shell shrink-0 mb-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden',
-                  isUserTurn && 'otc-shell-user',
-                )}
+      {showFooter && (
+        <div className="shrink-0 mt-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
+          <DraftControlBar
+            state={state}
+            dispatch={dispatch}
+            isDraftComplete={isDraftComplete}
+            draftOrder={draftOrder}
+            presence={presence}
+            timerEnabled={draftTimerEnabled}
+          />
+        </div>
+      )}
+
+      <PoolPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        blocked={(!!popover && popover.mode !== 'preview') || !!state.detailPokemon}
+        clock={clockText}
+        onQueueKey={hasTeam ? handlePaletteQueue : undefined}
+        onDraft={hasTeam ? handleDraftTarget : undefined}
+        canDraft={canDraft}
+        draftLabel={draftLabel}
+        filters={
+          <DraftFilterBar
+            filters={state.filters}
+            onUpdate={filters => dispatch({ type: 'UPDATE_FILTERS', filters })}
+            totalCount={getTierList(format).length}
+            filteredCount={filteredPool.length}
+            showAffordableToggle={hasTeam}
+            affordCap={selfAffordCap}
+            format={league.format ?? 'gen9natdex'}
+          />
+        }
+        viewControls={
+          <TooltipProvider delay={300}>
+            <div className="flex items-center rounded-md border border-border-default bg-surface-raised overflow-hidden divide-x divide-border-subtle">
+              <ClusterButton
+                onClick={() => dispatch({ type: 'SET_VIEW_MODE', mode: state.viewMode === 'grid' ? 'table' : 'grid' })}
+                ariaLabel={state.viewMode === 'grid' ? 'Switch to table view' : 'Switch to shelf view'}
+                tooltip={state.viewMode === 'grid' ? 'Switch to table view' : 'Switch to shelf view'}
               >
-                <DraftOnTheClock
-                  pick={currentPick}
-                  player={drafter}
-                  timerSeconds={displayTimerSeconds}
-                  timerDuration={state.timerDuration}
-                  isUserTurn={isUserTurn}
-                  totalPicks={state.snakeOrder.length}
-                  timerPaused={state.timerPaused}
-                  timerEnabled={draftTimerEnabled}
-                  topQueuedName={state.draftQueue[0] ?? null}
-                  onDraftFromQueue={handleDraftFromQueue}
-                  autoDraftQueueEnabled={state.autoDraftQueue}
-                />
-              </div>
-            );
-          })()}
-
-          {/* Pool area */}
-          {state.viewMode === 'grid' ? (
-            <DraftPoolWithRail
-              poolByTier={poolByTier}
+                {state.viewMode === 'grid' ? <LayoutGrid size={13} /> : <Table size={13} />}
+              </ClusterButton>
+              {state.viewMode === 'grid' && <ClusterDensity density={density} onChange={setDensity} />}
+            </div>
+          </TooltipProvider>
+        }
+        side={hasTeam ? (
+          <PaletteSide
+            pointCap={state.pointCap}
+            pointsLeft={userPointsLeft}
+            slotsLeft={Math.max(0, rosterSize - userRoster.length)}
+            maxNow={userMaxAffordableCost}
+            queue={state.draftQueue}
+            autoDraft={state.autoDraftQueue}
+            roster={userRoster}
+            format={format}
+            onQueueRemove={handleQueueRemove}
+            onQueueReorder={queue => dispatch({ type: 'QUEUE_REORDER', queue })}
+            onToggleAuto={() => dispatch({ type: 'TOGGLE_AUTO_DRAFT_QUEUE' })}
+            onOpenPokemon={handleOpenPokemon}
+          />
+        ) : undefined}
+      >
+        {state.viewMode === 'grid' ? (
+          <DraftPoolWithRail
+            poolByTier={poolByTier}
+            ownershipMap={ownershipMap}
+            playerLookup={playerLookup}
+            rosterLookup={rosterLookup}
+            selectedTeamId={state.selectedTeamId}
+            isUserPickable={isUserTurn}
+            showTierBadges={isDraftRunning}
+            userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
+            userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
+            drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
+            drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
+            pointCap={state.pointCap}
+            draftQueue={isDraftRunning ? state.draftQueue : undefined}
+            density={density}
+            animatingPokemonName={null}
+            format={format}
+            matchReasons={matchReasons}
+            bannedNames={bannedNames}
+            onCardClick={handleCardClick}
+            onCardHoverStart={handleCardHoverStart}
+            onCardHoverEnd={handleCardHoverEnd}
+          />
+        ) : (
+          <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
+            <DraftPoolTable
+              pool={filteredPool}
               ownershipMap={ownershipMap}
               playerLookup={playerLookup}
               rosterLookup={rosterLookup}
               selectedTeamId={state.selectedTeamId}
-              isUserPickable={isUserTurn}
               showTierBadges={isDraftRunning}
               userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
-              userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
-              drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
               drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
+              drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
               pointCap={state.pointCap}
-              draftQueue={isDraftRunning ? state.draftQueue : undefined}
-              density={density}
-              animatingPokemonName={animatingPokemonName}
-              format={format}
               matchReasons={matchReasons}
               bannedNames={bannedNames}
-              onCardClick={handleCardClick}
-              onCardHoverStart={handleCardHoverStart}
-              onCardHoverEnd={handleCardHoverEnd}
+              onRowClick={handleCardClick}
             />
-          ) : (
-            <div className="flex-1 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/50 min-w-0 min-h-0">
-              <DraftPoolTable
-                pool={filteredPool}
-                ownershipMap={ownershipMap}
-                playerLookup={playerLookup}
-                rosterLookup={rosterLookup}
-                selectedTeamId={state.selectedTeamId}
-                showTierBadges={isDraftRunning}
-                userMaxAffordableCost={isDraftRunning ? userMaxAffordableCost : undefined}
-                drafterConflictRoster={isDraftRunning ? currentDrafterConflictRoster : undefined}
-                drafterMaxAffordableCost={isDraftRunning ? currentDrafterMaxAffordableCost : undefined}
-                pointCap={state.pointCap}
-                matchReasons={matchReasons}
-                bannedNames={bannedNames}
-                onRowClick={handleCardClick}
-              />
-            </div>
-          )}
+          </div>
+        )}
+      </PoolPalette>
 
-          {/* Slim chrome bar at the bottom — progress + presence + admin + reset */}
-          {showFooter && (
-            <div className="shrink-0 mt-1.5 rounded-lg border border-border-default bg-surface-raised overflow-hidden">
-              <DraftControlBar
-                state={state}
-                dispatch={dispatch}
-                isDraftComplete={isDraftComplete}
-                draftOrder={draftOrder}
-                presence={presence}
-                timerEnabled={draftTimerEnabled}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Team sidebar — always visible, scrolls internally */}
-        <DraftTeamSidebar
-          teamOrder={draftOrder}
-          teamRosters={teamRosters}
-          teamPoints={teamPoints}
-          selectedTeamId={state.selectedTeamId}
-          onSelectTeam={id => dispatch({ type: 'SELECT_TEAM', teamId: id })}
-          currentDrafterId={currentPick?.playerId ?? null}
-          isLiveMode={isDraftRunning}
-          userTeamId={state.userTeamId}
-          pointCap={state.pointCap}
-          rosterSize={league.season?.rosterSize ?? 10}
-          teraCaptainSlots={league.season?.teraCaptainSlots ?? 2}
-          draftQueue={state.draftQueue}
-          onQueueRemove={handleQueueRemove}
-          autoDraftQueue={state.autoDraftQueue}
-          onToggleAutoDraft={() => dispatch({ type: 'TOGGLE_AUTO_DRAFT_QUEUE' })}
-          onDraftFromQueue={handleDraftFromQueue}
-          isUserTurn={isUserTurn}
-          presence={presence}
-          animatingPokemonName={animatingPokemonName}
-          format={format}
-        />
-      </div>
-
-      {/* Unified pokemon popover — preview / quick-draft / detail-summary.
-          The mode is driven by hover vs click; sprite morphs across mode
-          changes via the shared `pokemon-card-${name}` view-transition-name. */}
+      {/* Quick-draft / preview popover and detail sheet sit above the palette (z-60 / z-50). */}
       <DraftPokemonPopover
         name={popover?.name ?? null}
         anchorRect={popover?.rect ?? null}
@@ -520,7 +556,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         queueFull={state.draftQueue.length >= 3}
         userConflictRoster={isDraftRunning ? userConflictRoster : undefined}
         pointCap={state.pointCap}
-        animatingPokemonName={animatingPokemonName}
+        animatingPokemonName={null}
         format={format}
         onClose={handlePopoverClose}
         onModeChange={handlePopoverModeChange}
@@ -529,7 +565,6 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         onOpenDetailSheet={handleViewDetails}
       />
 
-      {/* Detail sheet */}
       <PokemonDetailSheet
         name={state.detailPokemon}
         onClose={() => dispatch({ type: 'SET_DETAIL', name: null })}
@@ -538,7 +573,7 @@ export function DraftBoardPage({ source = 'server' }: DraftBoardPageProps = {}) 
         playerLookup={playerLookup}
         canDraft={isUserTurn && !!state.detailPokemon && !ownershipMap.has(state.detailPokemon)}
         onDraft={handleUserPick}
-        animatingPokemonName={animatingPokemonName}
+        animatingPokemonName={null}
         format={format}
       />
     </div>

@@ -120,6 +120,8 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     snakeOrder: [],
     currentPickIndex: seasonPicks.length,
     speed: 1,
+    roomMode: 'live',
+    rehearsalSeed: null,
     timerSeconds: DEFAULT_TIMER,
     timerDuration: DEFAULT_TIMER,
     timerPaused: false,
@@ -155,6 +157,18 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     didEnterSimulatorActive.current = true;
     dispatch({ type: 'SET_VIEW', view: 'active', source: 'simulator' });
   }, [source, state.view]);
+
+  // Draft Room: a league in predraft/draft opens straight into the live room
+  // (lobby → board) instead of the season recap. Once only, so the History
+  // toggle still works afterwards.
+  const didEnterLiveRoom = useRef(false);
+  const leaguePhase = league.season?.phase;
+  useEffect(() => {
+    if (source !== 'server' || didEnterLiveRoom.current) return;
+    if (leaguePhase !== 'predraft' && leaguePhase !== 'draft') return;
+    didEnterLiveRoom.current = true;
+    if (state.view !== 'active') dispatch({ type: 'SET_VIEW', view: 'active', source: 'server' });
+  }, [source, leaguePhase, state.view]);
 
   // Quick affordability cap for the pool's "fits my budget" filter — derived
   // straight from state so it's available before useDraftTeams resolves.
@@ -201,7 +215,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
   // Auto-pickers (simulator AI + queue auto-draft + your-turn toast)
   // Gated on queueIdle so picks land one at a time without overlapping.
-  const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
+  const { currentSlot, isUserTurn, buildConflictRoster, autoPickCurrent } = useDraftAutoPickers({
     state, dispatch, draftedSet,
     demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
     teraCaptainSlots, queueIdle, format, rules,
@@ -441,6 +455,8 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     isDraftComplete,
     draftOrder,
     handleUserPick,
+    /** Simulator only: auto-pick for whoever is on the clock (dry-run staff control). */
+    autoPickCurrent,
     draftedSet,
     wsConnected,
     presence,

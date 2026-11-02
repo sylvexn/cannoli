@@ -263,7 +263,7 @@ const app = new Elysia()
   .use(psInternalRoutes)
 
   // Largest legit upload is 2MB (logo/screenshot); replay imports are JSON well under that.
-  .listen({ port: 3001, maxRequestBodySize: 10 * 1024 * 1024 });
+  .listen({ port: Number(process.env.PORT) || 3001, maxRequestBodySize: 10 * 1024 * 1024 });
 
 console.log(`Backend running at http://localhost:${app.server?.port}`);
 console.log(`Mode: ${MODE}, NODE_ENV: ${NODE_ENV}`);

@@ -30,10 +30,10 @@ export function useDraftTimer(state: DraftState, dispatch: Dispatch<DraftAction>
 
     simTimerRef.current = setInterval(() => {
       dispatch({ type: 'TIMER_TICK' });
-    }, 1000);
+    }, 1000 / state.speed);
 
     return () => clearInterval(simTimerRef.current);
-  }, [simTimerActive, dispatch]);
+  }, [simTimerActive, state.speed, dispatch]);
 
   // Server source: timer is server-driven. We re-derive seconds-remaining each
   // tick from the last LIVE_SYNC's timerExpiresAt so we display, not drive, the

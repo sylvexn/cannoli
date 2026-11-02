@@ -54,6 +54,8 @@ export function mapLeagues(apiLeagues: Awaited<ReturnType<typeof api.getLeagues>
       name: a.name,
       color: a.color,
       draftDate: a.draftDate,
+      draftOrder: a.draftOrder ?? null,
+      draftOrderLocked: a.draftOrderLocked,
       timezone: a.timezone ?? 'America/New_York',
       playoffTeamCount: a.playoffTeamCount ?? 6,
       costFormat,

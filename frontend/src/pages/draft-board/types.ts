@@ -96,6 +96,17 @@ export const DEFAULT_FILTERS: DraftFilters = {
 export type DraftView = 'history' | 'active';
 export type DraftStatus = 'idle' | 'configuring' | 'running' | 'complete';
 export type DraftSource = 'server' | 'simulator';
+/** Room mode: live = real league; rehearsal = client sim, user in own seat;
+ *  dry-run = client sim, staff drives EVERY seat. Only 'live' may use source 'server'. */
+export type RoomMode = 'live' | 'rehearsal' | 'dry-run';
+
+/** Frozen start config of a rehearsal, so DRAFT_RESET can restart it in place. */
+export interface RehearsalSeed {
+  snakeOrder: SnakeSlot[];
+  userTeamId: string;
+  timerDuration: number;
+  pointCap: number;
+}
 
 /** Draft state for the page */
 export interface DraftState {
@@ -110,7 +121,10 @@ export interface DraftState {
   snakeOrder: SnakeSlot[];
   /** In active view: how many picks have been made (0..totalPicks) */
   currentPickIndex: number;
-  speed: 1 | 2 | 5;
+  /** Simulator clock multiplier (timer tick + bot pick cadence). */
+  speed: 1 | 4;
+  roomMode: RoomMode;
+  rehearsalSeed: RehearsalSeed | null;
   timerSeconds: number;
   timerDuration: number;
   timerPaused: boolean;
@@ -139,6 +153,13 @@ export type DraftAction =
   | { type: 'SYNC_DATA'; allPicks: DraftPickEntry[]; trades: MockTrade[] }
   // Active draft lifecycle
   | { type: 'DRAFT_START'; snakeOrder: SnakeSlot[]; userTeamId: string; timerDuration: number; pointCap: number }
+  | { type: 'START_ROOM'; mode: 'rehearsal' | 'dry-run'; seed: RehearsalSeed }
+  | { type: 'EXIT_ROOM' }
+  | { type: 'SET_SPEED'; speed: 1 | 4 }
+  | { type: 'UNDO_LAST_PICK' }
+  | { type: 'SKIP_PICK' }
+  /** Dev state jumper: overlay a fixture on top of the current state (forces simulator source). */
+  | { type: 'HYDRATE_FIXTURE'; mode: 'rehearsal' | 'dry-run'; patch: Partial<DraftState> }
   | { type: 'PICK_LANDED'; pokemonName: string; tier: number; playerId?: string }
   | { type: 'TIMER_TICK' }
   | { type: 'DRAFT_RESET' }

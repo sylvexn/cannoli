@@ -55,6 +55,8 @@ export function DraftControlBar({
   timerEnabled = true,
 }: DraftControlBarProps) {
   const isServer = state.source === 'server';
+  // Staff dry-run runs the client simulator but exposes the same staff chrome.
+  const staffChrome = isServer || state.roomMode === 'dry-run';
   const isConfiguring = state.status === 'configuring' || state.status === 'idle';
   const { isAdmin } = useAuth();
   const league = useLeague();
@@ -403,7 +405,7 @@ export function DraftControlBar({
             Suppressed in simulator/practice mode — practice has no playback
             controls (no pause/step/speed); the user just runs the draft to
             completion or hits Reset. */}
-        {isAdmin && isServer && !isDraftComplete && timerEnabled && (
+        {isAdmin && staffChrome && !isDraftComplete && timerEnabled && (
           <>
             <button
               onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
@@ -437,8 +439,9 @@ export function DraftControlBar({
         )}
 
         {/* Staff overrides — server source only, while draft is active */}
-        {isAdmin && isServer && !isDraftComplete && (
+        {isAdmin && staffChrome && !isDraftComplete && (
           <DraftAdminOverrides
+            simulator={isServer ? undefined : { dispatch, currentTeamId: state.snakeOrder[state.currentPickIndex]?.teamId ?? null }}
             draftOrder={draftOrder}
             draftedNames={new Set(state.allPicks.map(p => p.pokemonName))}
             canUndo={state.allPicks.length > 0}
