@@ -11,18 +11,19 @@
  *
  *   CANNOLI_DB_PATH=/tmp/draft-e2e.db bun run scripts/draft-e2e/draft-load.ts
  */
-import { resolve } from 'path';
 import { seedDraft, DRAFT } from './seed-draft';
 import fixture from '../../tests/fixtures/pokemon-reference.json';
+import {
+  sleep, makeChecker, startBackend, waitHealthy, DraftClient, type Auth,
+  login as hLogin, api as hApi,
+} from './harness';
 
-const BACKEND_DIR = resolve(import.meta.dir, '../..');
 const DB_PATH = process.env.CANNOLI_DB_PATH || '/tmp/draft-e2e.db';
-const BASE = 'http://localhost:3001';
-const DRAFT_WS = `ws://localhost:3001/ws/draft/${DRAFT.leagueId}`;
+const PORT = Number(process.env.DRAFT_PORT) || 3001;
+const BASE = `http://localhost:${PORT}`;
+const DRAFT_WS = `ws://localhost:${PORT}/ws/draft/${DRAFT.leagueId}`;
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-let FAILS = 0;
-function check(cond: boolean, msg: string) { console.log(`${cond ? '  PASS' : '  FAIL'} ${msg}`); if (!cond) FAILS++; }
+const { check, state: checks } = makeChecker();
 
 // captain eligibility lookup (tier ≤ 9, not tera-banned)
 const monMeta = new Map((fixture as any[]).map((p) => [p.name, { tier: p.tier, teraBanned: !!p.tera_banned, banned: !!p.banned }]));
@@ -33,67 +34,8 @@ const POOL = (fixture as any[])
 let poolIdx = 0;
 const nextName = () => POOL[poolIdx++];
 
-// backend
-function startBackend() {
-  const proc = Bun.spawn(['bun', 'run', 'src/index.ts'], {
-    cwd: BACKEND_DIR,
-    env: { ...process.env, CANNOLI_DB_PATH: DB_PATH, CANNOLI_MODE: 'mock', PORT: '3001' },
-    stdout: 'pipe', stderr: 'pipe',
-  });
-  (async () => { const d = new TextDecoder(); for await (const c of proc.stdout) process.stdout.write(`    [be] ${d.decode(c)}`); })();
-  (async () => { const d = new TextDecoder(); for await (const c of proc.stderr) process.stderr.write(`    [be:err] ${d.decode(c)}`); })();
-  return proc;
-}
-
-// auth
-async function login(username: string): Promise<{ cookie: string; csrf: string }> {
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: DRAFT.password }),
-  });
-  if (!res.ok) throw new Error(`login ${username}: ${res.status} ${await res.text()}`);
-  const setc = res.headers.getSetCookie();
-  const cookie = setc.map((c) => c.split(';')[0]).join('; ');
-  const csrf = (cookie.match(/csrf_token=([^;]+)/) || [])[1] ?? '';
-  return { cookie, csrf };
-}
-function api(method: string, path: string, auth: { cookie: string; csrf: string }, body?: unknown) {
-  return fetch(`${BASE}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', Cookie: auth.cookie, 'X-CSRF-Token': auth.csrf },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-}
-
-// draft WS client
-class DraftClient {
-  snapshot: any = null;
-  picksObserved: { clientRequestId?: string; idempotent?: boolean }[] = [];
-  private ws!: WebSocket;
-  constructor(public teamId: string, public username: string, private cookie: string) {}
-
-  connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(DRAFT_WS, { headers: { Cookie: this.cookie } } as any);
-      const t = setTimeout(() => reject(new Error(`${this.username}: draft WS open timeout`)), 10000);
-      this.ws.addEventListener('open', () => { clearTimeout(t); resolve(); });
-      this.ws.addEventListener('error', (e) => { clearTimeout(t); reject(new Error(`${this.username}: ws err ${e}`)); });
-      this.ws.addEventListener('message', (ev) => {
-        let m: any; try { m = JSON.parse(String(ev.data)); } catch { return; }
-        if (m.type === 'draft_state') this.snapshot = m.data;
-        else if (m.type === 'pick_made' || m.type === 'auto_pick') {
-          if (m.data?.snapshot) this.snapshot = m.data.snapshot;
-          this.picksObserved.push({ clientRequestId: m.clientRequestId, idempotent: m.idempotent });
-        }
-      });
-    });
-  }
-  identify() { this.ws.send(JSON.stringify({ type: 'identify', teamId: this.teamId, username: this.username, role: 'user' })); }
-  pick(pokemonName: string, clientRequestId: string) {
-    this.ws.send(JSON.stringify({ type: 'pick', pokemonName, teamId: this.teamId, username: this.username, clientRequestId }));
-  }
-  close() { try { this.ws.close(); } catch {} }
-}
+const login = (username: string) => hLogin(BASE, username, DRAFT.password);
+const api = (method: string, path: string, auth: Auth, body?: unknown) => hApi(BASE, method, path, auth, body);
 
 // main
 console.log('[draft-harness] seeding (fresh DB)');
@@ -101,22 +43,15 @@ for (const suf of ['', '-wal', '-shm']) { try { require('fs').rmSync(DB_PATH + s
 seedDraft();
 
 console.log('[draft-harness] booting backend');
-const backend = startBackend();
-const reap = () => { try { backend.kill(); } catch {} };
-process.on('SIGINT', () => { reap(); process.exit(130); });
-process.on('SIGTERM', () => { reap(); process.exit(143); });
-process.on('exit', reap);
+const backend = startBackend(DB_PATH, PORT);
 
-let healthy = false;
-for (let end = Date.now() + 30000; Date.now() < end; await sleep(500)) {
-  try { if ((await fetch(`${BASE}/api/health`)).ok) { healthy = true; break; } } catch {}
-}
-check(healthy, 'backend healthy on :3001');
+const healthy = await waitHealthy(BASE);
+check(healthy, `backend healthy on :${PORT}`);
 
 if (healthy) {
   const admin = await login(DRAFT.admin);
   const auths = await Promise.all(DRAFT.teams.map((t) => login(t.username)));
-  const clients = DRAFT.teams.map((t, i) => new DraftClient(t.teamId, t.username, auths[i].cookie));
+  const clients = DRAFT.teams.map((t, i) => new DraftClient(DRAFT_WS, t.teamId, t.username, auths[i].cookie));
   (globalThis as any).__clients = clients;
   await Promise.all(clients.map((c) => c.connect()));
   clients.forEach((c) => c.identify());
@@ -217,10 +152,10 @@ if (healthy) {
   }
 }
 
-console.log(`\n${FAILS === 0 ? 'PASS — all checks green' : `FAIL — ${FAILS} check(s) failed`}`);
+console.log(`\n${checks.fails === 0 ? 'PASS — all checks green' : `FAIL — ${checks.fails} check(s) failed`}`);
 backend.kill();
 await sleep(300);
-process.exit(FAILS === 0 ? 0 : 1);
+process.exit(checks.fails === 0 ? 0 : 1);
 
 // helpers that close over clients
 function currentSnap(): any { return (globalThis as any).__clients?.find((c: any) => c.snapshot)?.snapshot ?? null; }
