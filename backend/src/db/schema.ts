@@ -113,6 +113,8 @@ export const leagues = sqliteTable('leagues', {
   seasonId: integer('season_id').notNull().references(() => seasons.id),
   /** JSON array of team IDs in draft order */
   draftOrder: text('draft_order'),
+  /** Staff locked the order (or the draft started): non-staff may see it. */
+  draftOrderLocked: integer('draft_order_locked', { mode: 'boolean' }).notNull().default(false),
   /** ISO datetime for the league's draft date/time */
   draftDate: text('draft_date'),
   /** Bracket size for this league's playoffs (2/4/6/8). */

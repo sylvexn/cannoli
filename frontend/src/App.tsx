@@ -22,12 +22,14 @@ import { AdminPatchNotesRoute } from '@/pages/admin/patch-notes';
 import { TierListPage } from '@/pages/tier-list';
 import { StandingsPage } from '@/pages/standings';
 import { TeamProfilePage } from '@/pages/team-profile';
+import { TeamsIndexPage } from '@/pages/teams-index';
 import { SchedulePage } from '@/pages/schedule';
 import { MarketLayout } from '@/pages/market';
 import { TradeDeskPage } from '@/pages/market/trade-desk';
 import { FreeAgentsPage } from '@/pages/free-agents';
 import { UserSettingsPage } from '@/pages/settings';
-import { AdminPage } from '@/pages/admin';
+import { AdminShell } from '@/pages/admin/shell/admin-shell';
+import { SeasonSetupRoute } from '@/pages/admin/season-setup';
 import { SettingsConsole } from '@/pages/admin/console';
 import { AdminDashboard } from '@/pages/admin/dashboard';
 import { AdminRulesetsRoute } from '@/pages/admin/rulesets/route';
@@ -99,6 +101,49 @@ export default function App() {
               <Route path="/replays/stream/:week" element={<PageErrorBoundary><StreamPage /></PageErrorBoundary>} />
             </Route>
 
+            {/* Standalone admin area — own shell, outside AppShell. */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<ProtectedRoute requireAdmin />}>
+                <Route path="admin" element={<AdminShell />}>
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="users" element={<AdminUsersRoute />} />
+                  <Route path="teams" element={<AdminTeamsRoute />} />
+                  <Route path="membership" element={<AdminMembershipRoute />} />
+                  <Route path="leagues" element={<AdminLeaguesRoute />} />
+                  <Route path="season" element={<AdminSeasonRoute />} />
+                  <Route path="season/new" element={<SeasonSetupRoute />} />
+                  <Route path="matches" element={<AdminMatchesRoute />} />
+                  <Route path="trades" element={<AdminTradesRoute />} />
+                  <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
+                  <Route path="console" element={<SettingsConsole />} />
+                  <Route path="rulesets" element={<AdminRulesetsRoute />} />
+                  <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
+                  <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
+                  <Route path="templates" element={<Navigate to="/admin/rulesets" replace />} />
+                  <Route path="moves" element={<AdminMoveCategoriesRoute />} />
+                  <Route path="pins" element={<AdminPinsRoute />} />
+                  <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
+                  <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
+                  <Route path="announcements" element={<AdminAnnouncementsRoute />} />
+                  <Route path="rules" element={<Navigate to="/admin/console#rules" replace />} />
+                  <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
+                  <Route path="playoffs" element={<Suspense fallback={null}><AdminPlayoffs /></Suspense>} />
+                  <Route path="settings" element={<Navigate to="/admin/console#general" replace />} />
+                  <Route path="activity" element={<AdminActivityRoute />} />
+                  <Route path="api-logs" element={<AdminApiLogsRoute />} />
+                  <Route path="observability" element={<AdminObservabilityRoute />} />
+                  <Route path="dev" element={<DevConsolePage />} />
+                  <Route path="usage" element={<AdminUsageRoute />} />
+                  <Route path="bot" element={<AdminBotRoute />} />
+                  <Route path="feedback" element={<Navigate to="/admin/tickets" replace />} />
+                  <Route path="tickets" element={<AdminTicketsRoute />} />
+                  <Route path="tickets/:id" element={<AdminTicketsRoute />} />
+                  {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
+                  <Route path="sim" element={<AdminSimRoute />} />
+                </Route>
+              </Route>
+            </Route>
+
             {/* App shell (works for both guests and authenticated users) */}
             <Route element={<AppShell />}>
               <Route index element={<HomePage />} />
@@ -112,6 +157,7 @@ export default function App() {
                 <Route index element={<StandingsPage />} />
                 <Route path="schedule" element={<SchedulePage />} />
                 <Route path="stats" element={<Suspense fallback={<PageLoadingSpinner />}><StatsPage /></Suspense>} />
+                <Route path="teams" element={<TeamsIndexPage />} />
                 <Route path="teams/:id" element={<TeamProfilePage />} />
 
                 {/* Protected league routes */}
@@ -158,44 +204,6 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="showdown" element={<ShowdownPage />} />
                 <Route path="settings" element={<UserSettingsPage />} />
-                <Route element={<ProtectedRoute requireAdmin />}>
-                  <Route path="admin" element={<AdminPage />}>
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="users" element={<AdminUsersRoute />} />
-                    <Route path="teams" element={<AdminTeamsRoute />} />
-                    <Route path="membership" element={<AdminMembershipRoute />} />
-                    <Route path="leagues" element={<AdminLeaguesRoute />} />
-                    <Route path="season" element={<AdminSeasonRoute />} />
-                    <Route path="matches" element={<AdminMatchesRoute />} />
-                    <Route path="trades" element={<AdminTradesRoute />} />
-                    <Route path="free-agents" element={<AdminFreeAgentsRoute />} />
-                    <Route path="console" element={<SettingsConsole />} />
-                    <Route path="rulesets" element={<AdminRulesetsRoute />} />
-                    <Route path="rulesets/:id" element={<AdminRulesetsRoute />} />
-                    <Route path="tiers" element={<Navigate to="/admin/console#tiers" replace />} />
-                    <Route path="templates" element={<Navigate to="/admin/console#templates" replace />} />
-                    <Route path="moves" element={<AdminMoveCategoriesRoute />} />
-                    <Route path="pins" element={<AdminPinsRoute />} />
-                    <Route path="pins/definitions" element={<AdminPinsLegacyRedirect />} />
-                    <Route path="pins/award" element={<AdminPinsLegacyRedirect />} />
-                    <Route path="announcements" element={<AdminAnnouncementsRoute />} />
-                    <Route path="rules" element={<Navigate to="/admin/console#rules" replace />} />
-                    <Route path="patch-notes" element={<AdminPatchNotesRoute />} />
-                    <Route path="playoffs" element={<Suspense fallback={null}><AdminPlayoffs /></Suspense>} />
-                    <Route path="settings" element={<Navigate to="/admin/console#general" replace />} />
-                    <Route path="activity" element={<AdminActivityRoute />} />
-                    <Route path="api-logs" element={<AdminApiLogsRoute />} />
-                    <Route path="observability" element={<AdminObservabilityRoute />} />
-                    <Route path="dev" element={<DevConsolePage />} />
-                    <Route path="usage" element={<AdminUsageRoute />} />
-                    <Route path="bot" element={<AdminBotRoute />} />
-                    <Route path="feedback" element={<Navigate to="/admin/tickets" replace />} />
-                    <Route path="tickets" element={<AdminTicketsRoute />} />
-                    <Route path="tickets/:id" element={<AdminTicketsRoute />} />
-                    {/* Mock-mode only — AdminSimRoute redirects to /admin on live */}
-                    <Route path="sim" element={<AdminSimRoute />} />
-                  </Route>
-                </Route>
               </Route>
 
               <Route path="*" element={<NotFoundPage />} />

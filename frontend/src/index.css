@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 @font-face {
   font-family: 'Berkeley Mono';
   src: url('/fonts/mono-regular.otf') format('opentype');
@@ -30,41 +29,15 @@
   font-style: oblique;
   font-display: swap;
 }
-@import "@fontsource-variable/space-grotesk";
-@import "@fontsource-variable/cinzel";
+@import "@fontsource-variable/figtree";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/archivo-black";
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  /* Base palette — deeper, richer darks.
-     Border/overlay lightness tuned for low-vision legibility: default borders
-     read ~2.4:1 against --color-surface, subtle ~1.7:1, and the overlay hover
-     fill lands a clearly perceptible step above raised surfaces. */
-  --color-surface: #08080d;
-  --color-surface-raised: #111118;
-  --color-surface-overlay: #232331;
-  --color-border-default: #494d5c;
-  --color-border-subtle: #343846;
-
-  /* Neon accents */
-  --color-neon: #22d3ee;
-  --color-neon-muted: #0e7490;
-  --color-neon-glow: rgba(34, 211, 238, 0.15);
-  --color-pink: #e879f9;
-  --color-pink-muted: #a21caf;
-  --color-pink-glow: rgba(232, 121, 249, 0.15);
-
-  /* Text — slightly warmer whites. De-emphasis happens through hue/steps,
-     not transparency: muted stays >=4.5:1 on every app surface. */
-  --color-text-primary: #eeeef2;
-  --color-text-secondary: #9499a8;
-  --color-text-muted: #7d8296;
-
-  /* Status */
-  --color-win: #4ade80;
-  --color-loss: #f87171;
-  --color-draw: #fbbf24;
-
+/* Always emitted (read via var() in inline styles, not just utilities). */
+@theme static {
   /* Pokemon type colors */
   --color-type-normal: #a8a77a;
   --color-type-fire: #ee8130;
@@ -84,6 +57,39 @@
   --color-type-dark: #705746;
   --color-type-steel: #b7b7ce;
   --color-type-fairy: #d685ad;
+
+}
+
+
+@theme {
+  /* Base palette (1.4): neutral ink. Borders stay clearly visible
+     (~2:1 on surface) for low-vision legibility. */
+  --color-surface: #0d0f13;
+  --color-surface-raised: #14171d;
+  --color-surface-overlay: #1f232b;
+  --color-border-default: #363b47;
+  --color-border-subtle: #262a33;
+
+  /* The accent is the active league's gem (see --gem on :root). The legacy
+     "neon" token names stay so every existing utility follows the gem. */
+  --color-neon: var(--gem);
+  --color-neon-muted: var(--gem-muted);
+  --color-neon-glow: var(--gem-glow);
+  --color-gem: var(--gem);
+  --color-gem-ink: var(--gem-ink);
+  --color-pink: #e879f9;
+  --color-pink-muted: #a21caf;
+  --color-pink-glow: rgba(232, 121, 249, 0.15);
+
+  /* Text: muted stays >=4.5:1 on every surface. */
+  --color-text-primary: #e9ebef;
+  --color-text-secondary: #a0a6b2;
+  --color-text-muted: #868d9a;
+
+  /* Status */
+  --color-win: #3ccf87;
+  --color-loss: #ff6b72;
+  --color-draw: #fbbf24;
 
   /* Tier colors */
   --color-tier-20: #ff4444;
@@ -108,37 +114,51 @@
   --color-tier-1: #776666;
 
   /* Shadows — real depth */
-  --shadow-glow-sm: 0 0 8px rgba(34, 211, 238, 0.15);
-  --shadow-glow-md: 0 0 16px rgba(34, 211, 238, 0.2);
-  --shadow-glow-lg: 0 0 32px rgba(34, 211, 238, 0.25);
+  --shadow-glow-sm: 0 0 8px var(--gem-glow);
+  --shadow-glow-md: 0 0 16px var(--gem-glow);
+  --shadow-glow-lg: 0 0 32px var(--gem-glow);
   --shadow-glow-pink-sm: 0 0 8px rgba(232, 121, 249, 0.15);
   --shadow-glow-pink-md: 0 0 16px rgba(232, 121, 249, 0.2);
   --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
   --shadow-card-lg: 0 2px 6px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.3);
 }
 
+/* League gem accent. AppShell sets data-gem on <html> from the active league. */
+:root {
+  --gem: #3d7bff;
+}
+:root[data-gem="ruby"] { --gem: #ff3b5c; }
+:root[data-gem="emerald"] { --gem: #19c37d; }
+:root {
+  --gem-muted: color-mix(in oklab, var(--gem) 55%, black);
+  --gem-glow: color-mix(in oklab, var(--gem) 16%, transparent);
+  --gem-soft: color-mix(in oklab, var(--gem) 12%, transparent);
+  /* gem as readable text on ink */
+  --gem-ink: oklch(from var(--gem) max(l, 0.78) c h);
+}
+
 /* Dark-first */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.06 0.01 270);
+  --radius: 0.375rem;
+  --background: #0d0f13;
   --foreground: oklch(0.95 0.01 270);
-  --card: oklch(0.10 0.01 270);
+  --card: #14171d;
   --card-foreground: oklch(0.95 0.01 270);
-  --popover: oklch(0.10 0.01 270);
+  --popover: #14171d;
   --popover-foreground: oklch(0.95 0.01 270);
-  --primary: oklch(0.82 0.15 195);
-  --primary-foreground: oklch(0.07 0.01 270);
+  --primary: var(--gem);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.78 0.18 320);
   --secondary-foreground: oklch(0.07 0.01 270);
-  --muted: oklch(0.16 0.01 270);
+  --muted: #1b1f26;
   --muted-foreground: oklch(0.65 0.015 270);
-  --accent: oklch(0.24 0.015 270);
+  --accent: #1f232b;
   --accent-foreground: oklch(0.95 0.01 270);
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.42 0.015 270);
+  --border: #363b47;
   --input: oklch(0.47 0.015 270);
-  --ring: oklch(0.82 0.15 195);
+  --ring: var(--gem);
   --chart-1: oklch(0.82 0.15 195);
   --chart-2: oklch(0.78 0.18 320);
   --chart-3: oklch(0.75 0.18 150);
@@ -155,9 +175,11 @@
 }
 
 @theme inline {
-  --font-heading: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
-  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-heading: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --font-sans: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Figtree Variable', system-ui, sans-serif;
   --font-mono: 'Berkeley Mono', ui-monospace, monospace;
+  --font-stripe: 'Archivo Black', 'Figtree Variable', system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -204,7 +226,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
@@ -221,7 +243,7 @@
      avoid showing a ring after click/tap on buttons & links. Components that
      prefer the ruby/pink/team-color edge can override `--focus-ring`. */
   :where(a, button, [role="button"], [role="tab"], [role="link"], [role="menuitem"], input, textarea, select, summary, [tabindex]):focus-visible {
-    --focus-ring: var(--color-neon, #22d3ee);
+    --focus-ring: var(--gem);
     outline: 2px solid color-mix(in oklab, var(--focus-ring) 65%, transparent);
     outline-offset: 2px;
     border-radius: 4px;
@@ -254,27 +276,23 @@
   initial-value: 0deg;
 }
 
-/* Background texture */
+/* Background: gem light falls from the top and breathes very slowly. */
 body::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto 0;
+  height: 520px;
   z-index: -1;
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(34, 211, 238, 0.03), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(232, 121, 249, 0.02), transparent 50%),
-    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(10, 10, 20, 0), transparent);
+  background: radial-gradient(1200px 420px at 50% -140px, color-mix(in oklab, var(--gem) 15%, transparent), transparent 70%);
   pointer-events: none;
+  animation: gem-breathe 9s ease-in-out infinite;
 }
-
-/* Card depth */
-.bg-surface-raised {
-  box-shadow: var(--shadow-card);
+@keyframes gem-breathe {
+  0%, 100% { opacity: .75; }
+  50% { opacity: 1; }
 }
-
-/* Sidebar depth */
-aside {
-  box-shadow: 4px 0 16px rgba(0,0,0,0.3);
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 /* Rank medals */
@@ -385,192 +403,6 @@ aside {
     inset 0 1px 2px rgba(255, 255, 255, 0.2),
     inset 0 -1px 2px rgba(0, 0, 0, 0.15);
   border: 1.5px solid rgba(205, 127, 50, 0.4);
-}
-
-/* League banners */
-
-.league-banner {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 14px 5px 16px;
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%, 6px 50%);
-  justify-content: center;
-  transition: filter 0.15s ease;
-}
-
-.gem-wrapper:hover .league-banner {
-  filter: brightness(1.1);
-}
-
-/* Glint sweep across the banner on hover */
-.league-banner::before {
-  content: '';
-  position: absolute;
-  inset: -50%;
-  background: linear-gradient(
-    -60deg,
-    transparent 0%,
-    transparent 40%,
-    rgba(255,255,255,0.25) 45%,
-    rgba(255,255,255,0.4) 50%,
-    rgba(255,255,255,0.25) 55%,
-    transparent 60%,
-    transparent 100%
-  );
-  transform: translateX(-200%);
-  pointer-events: none;
-  transition: none;
-}
-
-/* Glint is the non-interactive treatment; enhanced .gem-3d gems use a
-   pointer-tracked specular instead (defined in the Gem 3D block below). */
-.gem-wrapper:not(.gem-3d):hover .league-banner::before {
-  animation: glint 0.6s ease-out forwards;
-}
-
-/* Top edge bevel highlight */
-.league-banner::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 8px;
-  right: 12px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25) 30%, rgba(255,255,255,0.1) 70%, transparent);
-  pointer-events: none;
-}
-
-.league-banner-text {
-  font-family: 'Cinzel Variable', serif;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-  transition: color 0.2s ease, text-shadow 0.2s ease;
-}
-
-.gem-wrapper:hover .league-banner-sapphire .league-banner-text {
-  color: #bfdbfe;
-  text-shadow: 0 0 8px rgba(191,219,254,0.4), 0 1px 3px rgba(0,0,0,0.5);
-}
-.gem-wrapper:hover .league-banner-ruby .league-banner-text {
-  color: #fecdd3;
-  text-shadow: 0 0 8px rgba(254,205,211,0.4), 0 1px 3px rgba(0,0,0,0.5);
-}
-.gem-wrapper:hover .league-banner-emerald .league-banner-text {
-  color: #bbf7d0;
-  text-shadow: 0 0 8px rgba(187,247,208,0.4), 0 1px 3px rgba(0,0,0,0.5);
-}
-
-/* Sapphire — faceted gemstone */
-.league-banner-sapphire {
-  background:
-    linear-gradient(135deg, rgba(37,99,235,0) 20%, rgba(96,165,250,0.4) 35%, rgba(37,99,235,0) 50%),
-    linear-gradient(225deg, rgba(59,130,246,0) 15%, rgba(147,197,253,0.3) 30%, rgba(59,130,246,0) 45%),
-    linear-gradient(170deg, rgba(30,58,138,0) 40%, rgba(96,165,250,0.35) 55%, rgba(30,58,138,0) 70%),
-    linear-gradient(300deg, rgba(29,78,216,0) 30%, rgba(191,219,254,0.2) 45%, rgba(29,78,216,0) 55%),
-    linear-gradient(135deg, #172554 0%, #1e3a8a 15%, #1d4ed8 35%, #2563eb 50%, #1d4ed8 65%, #1e3a8a 85%, #172554 100%);
-  box-shadow:
-    0 1px 4px rgba(37, 99, 235, 0.4),
-    inset 0 1px 1px rgba(147, 197, 253, 0.2),
-    inset 0 -1px 1px rgba(23, 37, 84, 0.4);
-}
-
-/* Ruby — faceted gemstone */
-.league-banner-ruby {
-  background:
-    linear-gradient(135deg, rgba(220,38,38,0) 20%, rgba(252,165,165,0.35) 35%, rgba(220,38,38,0) 50%),
-    linear-gradient(225deg, rgba(239,68,68,0) 15%, rgba(254,202,202,0.25) 30%, rgba(239,68,68,0) 45%),
-    linear-gradient(170deg, rgba(127,29,29,0) 40%, rgba(252,165,165,0.3) 55%, rgba(127,29,29,0) 70%),
-    linear-gradient(300deg, rgba(185,28,28,0) 30%, rgba(254,226,226,0.15) 45%, rgba(185,28,28,0) 55%),
-    linear-gradient(135deg, #450a0a 0%, #7f1d1d 15%, #b91c1c 35%, #dc2626 50%, #b91c1c 65%, #7f1d1d 85%, #450a0a 100%);
-  box-shadow:
-    0 1px 4px rgba(220, 38, 38, 0.4),
-    inset 0 1px 1px rgba(254, 202, 202, 0.2),
-    inset 0 -1px 1px rgba(69, 10, 10, 0.4);
-}
-
-/* Emerald — faceted gemstone */
-.league-banner-emerald {
-  background:
-    linear-gradient(135deg, rgba(22,163,74,0) 20%, rgba(134,239,172,0.35) 35%, rgba(22,163,74,0) 50%),
-    linear-gradient(225deg, rgba(34,197,94,0) 15%, rgba(187,247,208,0.25) 30%, rgba(34,197,94,0) 45%),
-    linear-gradient(170deg, rgba(20,83,45,0) 40%, rgba(134,239,172,0.3) 55%, rgba(20,83,45,0) 70%),
-    linear-gradient(300deg, rgba(21,128,61,0) 30%, rgba(220,252,231,0.15) 45%, rgba(21,128,61,0) 55%),
-    linear-gradient(135deg, #052e16 0%, #14532d 15%, #15803d 35%, #16a34a 50%, #15803d 65%, #14532d 85%, #052e16 100%);
-  box-shadow:
-    0 1px 4px rgba(22, 163, 74, 0.4),
-    inset 0 1px 1px rgba(187, 247, 208, 0.2),
-    inset 0 -1px 1px rgba(5, 46, 22, 0.4);
-}
-
-/* Gem 3D interactive treatment (sidebar nav, opt-in via .gem-3d)
-   Pointer-tracked tilt + cursor specular + hue-matched glow. No conic sheen.
-   --mx/--my (0–1) are written by usePointerTilt on the .league-banner itself.
-   The glow uses filter: drop-shadow (not box-shadow) because the banner has a
-   clip-path, which would clip an outer box-shadow but not a drop-shadow. */
-.gem-3d {
-  perspective: 520px;
-}
-
-.gem-3d .league-banner {
-  transform-style: preserve-3d;
-  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1), filter 0.18s ease;
-  will-change: transform;
-}
-
-.gem-3d .league-banner.tilt {
-  transform:
-    rotateX(calc((var(--my, 0.5) - 0.5) * -10deg))
-    rotateY(calc((var(--mx, 0.5) - 0.5) * 16deg))
-    translateZ(8px) scale(1.04);
-}
-
-/* Pointer-tracked specular highlight — overrides the glint ::before for gems. */
-.gem-3d .league-banner::before {
-  inset: 0;
-  transform: none;
-  opacity: 0;
-  background: radial-gradient(
-    110px circle at calc(var(--mx, 0.5) * 100%) calc(var(--my, 0.5) * 100%),
-    rgba(255, 255, 255, 0.55),
-    rgba(255, 255, 255, 0.1) 28%,
-    transparent 58%
-  );
-  mix-blend-mode: overlay;
-  transition: opacity 0.2s ease;
-  animation: none;
-}
-.gem-3d .league-banner:hover::before {
-  opacity: 1;
-}
-
-/* Hue-matched dark glow bloom on hover (clip-path-safe drop-shadows). */
-.gem-3d .league-banner-sapphire:hover {
-  filter: brightness(1.08)
-    drop-shadow(0 2px 9px rgba(37, 99, 235, 0.55))
-    drop-shadow(0 7px 22px rgba(37, 99, 235, 0.4));
-}
-.gem-3d .league-banner-ruby:hover {
-  filter: brightness(1.08)
-    drop-shadow(0 2px 9px rgba(220, 38, 38, 0.55))
-    drop-shadow(0 7px 22px rgba(220, 38, 38, 0.4));
-}
-.gem-3d .league-banner-emerald:hover {
-  filter: brightness(1.08)
-    drop-shadow(0 2px 9px rgba(22, 163, 74, 0.55))
-    drop-shadow(0 7px 22px rgba(22, 163, 74, 0.4));
-}
-
-@media (prefers-reduced-motion) {
-  .gem-3d .league-banner,
-  .gem-3d .league-banner.tilt {
-    transform: none;
-    transition: filter 0.18s ease;
-  }
 }
 
 /* Neon Logo */
@@ -1220,4 +1052,27 @@ aside {
 :root[data-gpu='software'] .neon-glow-layer,
 :root[data-gpu='none'] .neon-glow-layer {
   animation: none !important;
+}
+
+/* War Room board: pick landing (cell only) and on-the-clock pulse. */
+@keyframes wr-drop {
+  0%   { transform: translateY(-26px) scale(1.2); opacity: 0; }
+  55%  { transform: translateY(3px) scale(0.96); opacity: 1; }
+  78%  { transform: translateY(-1px) scale(1.02); }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes wr-glow {
+  0%   { box-shadow: inset 0 0 0 1px var(--wr), inset 0 0 22px 2px var(--wr); }
+  100% { box-shadow: inset 0 0 0 1px transparent, inset 0 0 0 0 transparent; }
+}
+@keyframes wr-now {
+  0%, 100% { background-color: rgba(232, 121, 249, 0.06); box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.35); }
+  50%      { background-color: rgba(232, 121, 249, 0.16); box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.8), inset 0 0 14px rgba(232, 121, 249, 0.25); }
+}
+.wr-sprite-drop { animation: wr-drop 500ms cubic-bezier(0.34, 1.4, 0.64, 1) both; }
+.wr-cell-fx { animation: wr-glow 1500ms ease-out both; }
+.wr-cell-now { animation: wr-now 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .wr-sprite-drop, .wr-cell-fx { animation: none; }
+  .wr-cell-now { animation: none; background-color: rgba(232, 121, 249, 0.12); box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.6); }
 }

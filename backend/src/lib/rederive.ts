@@ -1,7 +1,7 @@
 /**
  * Pure helpers for scripts/rederive-match-pokemon.ts (kept DB-free so they're unit-testable).
  */
-import { resolveRosterPokemonName } from './pokedex';
+import { resolveRosterPokemonName, stripBattleOnlySuffixes } from './pokedex';
 
 export interface DiffRow {
   teamId: string;
@@ -20,7 +20,12 @@ export interface DiffRow {
  */
 export function resolveStoredName(storedNames: string[], rosterNames: string[], species: string): string {
   const stored = resolveRosterPokemonName(storedNames, species);
-  if (storedNames.includes(stored)) return stored;
+  if (storedNames.includes(stored)) {
+    // A legacy row stored under a battle-only / cosmetic forme ("Palafin-Hero",
+    // "Minior-Indigo") folds to the drafted name; real formes stay as stored.
+    const clean = stripBattleOnlySuffixes(stored);
+    return clean === stored ? stored : resolveRosterPokemonName(rosterNames, clean);
+  }
   return resolveRosterPokemonName(rosterNames, species);
 }
 

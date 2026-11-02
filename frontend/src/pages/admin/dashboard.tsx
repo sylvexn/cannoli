@@ -28,7 +28,7 @@ function Tile({ icon: Icon, title, to, count, rows, lane, hint, unavailable }: {
     <section className={cn('rounded-lg border bg-surface-raised/40 flex flex-col min-w-0', lane ? 'border-pink/40' : 'border-border-default')}>
       <header className="flex items-center gap-2 px-3 py-2 border-b border-border-subtle">
         <Icon size={14} className={cn('shrink-0', lane ? 'text-pink' : 'text-text-muted')} />
-        <h3 className="text-xs font-mono font-bold uppercase tracking-wide truncate min-w-0">{title}</h3>
+        <h3 className="text-[13px] font-semibold truncate min-w-0">{title}</h3>
         {!unavailable && (
           <span className={cn('ml-1 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-mono font-bold tabular-nums shrink-0',
             count ? 'bg-draw/20 text-draw' : 'bg-win/15 text-win')}>{count}</span>
@@ -93,9 +93,7 @@ export function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="text-lg font-mono font-bold tracking-tight uppercase">
-        <span className="text-neon">Admin</span>{' '}<span>Dashboard</span>
-      </h1>
+      <h1 className="font-display text-[22px] font-semibold leading-tight">Dashboard</h1>
       <p className="text-[11px] text-text-muted mb-3">
         {!loaded ? 'Loading...' : !q ? 'Could not load queues.' : total === 0 ? 'Nothing is waiting on you.' : `${total} item${total === 1 ? '' : 's'} waiting`}
       </p>
@@ -121,7 +119,7 @@ export function AdminDashboard() {
 
       {t && Object.keys(t.byStatus).length > 0 && (
         <div className="mt-4 flex items-center gap-3 flex-wrap text-[11px] text-text-muted">
-          <span className="font-mono uppercase tracking-wide">Tickets</span>
+          <span>Tickets</span>
           {Object.entries(t.byStatus).map(([s, n]) => (
             <span key={s} className="font-mono">{s.replace('_', ' ')} {n}</span>
           ))}

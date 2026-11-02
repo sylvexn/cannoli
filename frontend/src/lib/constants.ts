@@ -13,7 +13,7 @@ export const PATCH_SECTION_META: Record<PatchSectionKind, { label: string; color
 export const PATCH_SECTION_ORDER: PatchSectionKind[] = ['new', 'changes', 'fixes', 'balance'];
 
 /**
- * Gem identity for a league id, used to pick its `.league-banner-<gem>` styling.
+ * Gem identity for a league id, e.g. `s11-ruby` -> `ruby`.
  * League ids are season-scoped — the current season uses bare gem names
  * (`sapphire`/`ruby`/`emerald`) while past seasons are prefixed (`s9-sapphire`,
  * `s10-ruby`, …). The gem theming is the same regardless of season, so strip any

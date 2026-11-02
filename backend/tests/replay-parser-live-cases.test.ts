@@ -113,10 +113,9 @@ describe('Mega / form change (|detailschange|)', () => {
 describe('Mid-battle forfeit / disconnect', () => {
   // PS represents a forfeit/disconnect/timeout as a plain |win|WINNER while
   // the loser may still have undefeated mons on the field. Feedback #81: this
-  // must score as a completed sweep (loser forced to 0), with the loser's
-  // survivors credited as owed kills to the winner's active mon — NOT a
-  // brought-minus-deaths score that leaves the loser with points on the board.
-  test('forfeit win forces the loser to 0 and credits owed kills to the winner active mon', () => {
+  // must score as a completed sweep (loser forced to 0) — NOT a brought-minus-
+  // deaths score. Per-mon K/D counts only real faints (league ruling 2026-11).
+  test('forfeit win forces the loser to 0 without synthetic K/D', () => {
     const p = new ReplayParser();
     feed(p, [
       ...preamble('Alice', 'Bob'),

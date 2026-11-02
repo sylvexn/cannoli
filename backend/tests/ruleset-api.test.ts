@@ -13,11 +13,13 @@ try { sqlite.exec('PRAGMA busy_timeout = 15000'); } catch { /* best-effort */ }
 
 const tag = `rsapi-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const staff = db.insert(schema.users).values({ username: tag, passwordHash: 'x', role: 'admin' }).returning().get();
+import { userRoutes } from '../src/routes/admin/users';
 const app = new Elysia()
   .derive(() => ({ user: { id: String(staff.id), role: 'admin', username: tag } }))
   .use(leagueRoutes)
   .use(leagueAdminRoutes)
   .use(seasonRoutes)
+  .use(userRoutes)
   .use(archiveFullRoutes);
 
 const call = async (method: string, path: string, body?: unknown) => {
@@ -36,7 +38,7 @@ const mkTemplate = (over: Record<string, unknown> = {}) => db.insert(schema.rule
 }).returning().get();
 
 afterAll(() => {
-  const lg = db.select({ id: schema.leagues.id }).from(schema.leagues).where(like(schema.leagues.id, `${tag}%`)).all().map(l => l.id);
+  const lg = db.select({ id: schema.leagues.id }).from(schema.leagues).where(like(schema.leagues.id, `%${tag}%`)).all().map(l => l.id);
   if (lg.length) {
     db.delete(schema.activityLog).where(inArray(schema.activityLog.leagueId, lg)).run();
     db.delete(schema.teams).where(inArray(schema.teams.leagueId, lg)).run();
@@ -57,12 +59,12 @@ describe('wizard assigns rulesets + cost_format', () => {
   test('per-league rulesetId, season-level prefill, cost format written', async () => {
     const tplEmerald = mkTemplate({ costFormat: 'natdex', pointCap: 120 });
     const tplRuby = mkTemplate({ costFormat: 'natdexplus', pointCap: 100, teraCaptainSlots: 1 });
-    a = `${tag}-a`; b = `${tag}-b`;
+    a = `s${SEASON}-${tag}-a`; b = `s${SEASON}-${tag}-b`;
     const res = await call('POST', '/api/seasons', {
       seasonNumber: SEASON, rulesetId: tplRuby.id, overlapOverride: true, // other files may leave an active league in the shared DB
       leagues: [
-        { id: a, name: `${tag} A`, color: '#111', rulesetId: tplEmerald.id },
-        { id: b, name: `${tag} B`, color: '#222' }, // falls back to season-level
+        { slug: `${tag}-a`, id: 's1-ignored', name: `${tag} A`, color: '#111', rulesetId: tplEmerald.id },
+        { slug: `${tag}-b`, name: `${tag} B`, color: '#222' }, // falls back to season-level
       ],
     });
     expect(res.status).toBe(200);
@@ -80,22 +82,90 @@ describe('wizard assigns rulesets + cost_format', () => {
   test('legacy payload (no rulesetId) builds instances and defaults cost format explicitly', async () => {
     const res = await call('POST', '/api/seasons', {
       overlapOverride: true, seasonNumber: SEASON + 1, pointCap: 90, teraCaptainSlots: 1, costFormat: 'natdex',
-      leagues: [{ id: `${tag}-legacy`, name: `${tag} L`, color: '#333' }],
+      leagues: [{ slug: `${tag}-legacy`, name: `${tag} L`, color: '#333' }],
     });
     expect(res.status).toBe(200);
-    const l = db.select().from(schema.leagues).where(eq(schema.leagues.id, `${tag}-legacy`)).get()!;
+    const l = db.select().from(schema.leagues).where(eq(schema.leagues.id, `s${SEASON + 1}-${tag}-legacy`)).get()!;
     const r = db.select().from(schema.rulesets).where(eq(schema.rulesets.id, l.rulesetId!)).get()!;
     expect([l.costFormat, r.costFormat, r.pointCap, r.teraCaptainSlots]).toEqual(['natdex', 'natdex', 90, 1]);
-    db.delete(schema.leagues).where(eq(schema.leagues.id, `${tag}-legacy`)).run();
+    db.delete(schema.leagues).where(eq(schema.leagues.id, `s${SEASON + 1}-${tag}-legacy`)).run();
     db.delete(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + 1)).run();
   });
 
   test('unknown ruleset is a 400 and creates nothing', async () => {
     const res = await call('POST', '/api/seasons', {
-      overlapOverride: true, seasonNumber: SEASON + 2, leagues: [{ id: `${tag}-bad`, name: 'x', color: '#000', rulesetId: 99999999 }],
+      overlapOverride: true, seasonNumber: SEASON + 2, leagues: [{ slug: `${tag}-bad`, name: 'x', color: '#000', rulesetId: 99999999 }],
     });
     expect(res.status).toBe(400);
     expect(db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + 2)).get()).toBeUndefined();
+  });
+});
+
+describe('season setup', () => {
+  test('server-generated ids; client id ignored; duplicate slug / existing id -> 409', async () => {
+    expect(a).toBe(`s${SEASON}-${tag}-a`);
+    expect(db.select().from(schema.leagues).where(eq(schema.leagues.id, 's1-ignored')).get()).toBeUndefined();
+    const dupInPayload = await call('POST', '/api/seasons', {
+      overlapOverride: true, seasonNumber: SEASON + 5,
+      leagues: [{ slug: `${tag}-x`, name: 'x', color: '#000' }, { id: `s9-${tag}-x`, name: 'y', color: '#000' }],
+    });
+    expect(dupInPayload.status).toBe(409);
+    expect(dupInPayload.json.error).toBe(`League id s${SEASON + 5}-${tag}-x already exists`);
+    expect(db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + 5)).get()).toBeUndefined();
+  });
+
+  test('re-using a previous season slug + copy from a frozen instance with overrides', async () => {
+    db.update(schema.leagues).set({ phase: 'regular' }).where(eq(schema.leagues.id, a)).run(); // freezes rsA
+    const res = await call('POST', '/api/seasons', {
+      overlapOverride: true, seasonNumber: SEASON + 6, playoffTeamCount: 4,
+      leagues: [{ id: a, slug: `${tag}-a`, name: `${tag} A`, color: '#111', sourceRulesetId: rsA, rules: { pointCap: 99 } }],
+    });
+    expect(res.status).toBe(200);
+    const nid = `s${SEASON + 6}-${tag}-a`;
+    expect(res.json.leagues[0].id).toBe(nid);
+    const inst = db.select().from(schema.rulesets).where(eq(schema.rulesets.id, res.json.leagues[0].rulesetId)).get()!;
+    expect([inst.pointCap, inst.sourceRulesetId, inst.teraCaptainSlots]).toEqual([99, rsA, 3]);
+    expect(db.select().from(schema.leagues).where(eq(schema.leagues.id, nid)).get()!.playoffTeamCount).toBe(4);
+    const bad = await call('POST', '/api/seasons', {
+      overlapOverride: true, seasonNumber: SEASON + 7,
+      leagues: [{ slug: `${tag}-z`, name: 'z', color: '#000', sourceRulesetId: rsA, rules: { pointCap: -5 } }],
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.json.error).toContain('Invalid ruleset');
+    db.update(schema.leagues).set({ phase: 'predraft' }).where(eq(schema.leagues.id, a)).run();
+    db.delete(schema.leagues).where(eq(schema.leagues.id, nid)).run();
+    db.delete(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + 6)).run();
+  });
+
+  test('duplicate team abbrev / one username on two teams -> 400, nothing created', async () => {
+    const T = (teamName: string, teamAbbrev: string, managerUsername?: string) => ({ teamName, teamAbbrev, managerUsername });
+    const mk = (n: number, leagues: any[]) => call('POST', '/api/seasons', { overlapOverride: true, seasonNumber: SEASON + n, leagues });
+    const dupAbbrev = await mk(8, [{ slug: `${tag}-d`, name: 'd', color: '#000', teams: [T('One', 'abc'), T('Two', 'ABC')] }]);
+    expect(dupAbbrev.status).toBe(400);
+    expect(dupAbbrev.json.error).toContain('Duplicate team abbreviation');
+    const dupUser = await mk(9, [
+      { slug: `${tag}-u1`, name: 'u1', color: '#000', teams: [T('One', 'AA', tag)] },
+      { slug: `${tag}-u2`, name: 'u2', color: '#000', teams: [T('Two', 'BB', tag.toUpperCase())] },
+    ]);
+    expect(dupUser.status).toBe(400);
+    expect(dupUser.json.error).toContain('more than one team');
+    for (const n of [8, 9]) expect(db.select().from(schema.seasons).where(eq(schema.seasons.seasonNumber, SEASON + n)).get()).toBeUndefined();
+  });
+
+  test('setup-defaults shape', async () => {
+    const { json } = await call('GET', '/api/admin/seasons/setup-defaults');
+    expect(json.source.seasonNumber).toBeGreaterThanOrEqual(SEASON);
+    expect(json.nextSeasonNumber).toBe(json.source.seasonNumber + 1);
+    const la = json.leagues.find((l: any) => l.sourceLeagueId === a);
+    expect(la.slug).toBe(`${tag}-a`);
+    expect(la.ruleset).toMatchObject({ id: rsA, costFormat: 'natdex', pointCap: 120, teraCaptainSlots: 3 });
+    expect(la).toHaveProperty('playoffTeamCount');
+    expect(Array.isArray(la.teams)).toBe(true);
+  });
+
+  test('users/resolve', async () => {
+    const { json } = await call('POST', '/api/admin/users/resolve', { usernames: [tag.toUpperCase(), 'nobody-xyz-123'] });
+    expect(json.found).toEqual([tag]);
   });
 });
 
@@ -156,6 +226,15 @@ describe('PUT /api/leagues/:id edits the ruleset, not the season', () => {
     expect(db.select().from(schema.rulesets).where(eq(schema.rulesets.id, rsA)).get()!.pointCap).toBe(130);
     // non-rule fields still editable
     expect((await call('PUT', `/api/leagues/${a}`, { name: `${tag} A2` })).status).toBe(200);
+  });
+});
+
+describe('PUT /api/leagues/:id locks only bite on real changes', () => {
+  test('unchanged rule values are silent no-ops after the phase moved; changed ones fail', async () => {
+    const cur = getLeagueRuleset(a); // league a is in 'regular' (previous test)
+    expect((await call('PUT', `/api/leagues/${a}`, { pointCap: cur.pointCap, teraCaptainSlots: cur.teraCaptainSlots, rosterSize: cur.rosterSize })).status).toBe(200);
+    expect((await call('PUT', `/api/leagues/${a}`, { teraCaptainSlots: cur.teraCaptainSlots + 1 })).status).toBe(400);
+    expect((await call('PUT', `/api/leagues/${a}`, { rosterSize: cur.rosterSize + 1 })).status).toBe(400);
   });
 });
 

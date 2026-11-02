@@ -86,7 +86,9 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     } else {
       // Active / current view: rosters are the source of truth for who owns what
       // right now. Seed every rostered mon, then enrich with draft detail.
-      for (const player of players) {
+      // Simulator (rehearsal / dry-run / fixtures) is a clean-slate draft: real
+      // rosters of a mid-season league must not leak into it.
+      for (const player of state.source === 'simulator' ? [] : players) {
         for (const mon of player.roster) {
           map.set(mon.name, { teamId: player.id, acquisition: { method: 'drafted' } });
         }
@@ -107,7 +109,7 @@ export function useDraftPool(state: DraftState, players: Player[], opts: UseDraf
     }
 
     return map;
-  }, [players, state.allPicks, state.trades, state.view]);
+  }, [players, state.allPicks, state.trades, state.view, state.source]);
 
   // Filtered pool + match reasons
   const { filteredPool, matchReasons } = useMemo(() => {

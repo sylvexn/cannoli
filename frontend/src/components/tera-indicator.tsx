@@ -18,7 +18,7 @@ interface TeraIndicatorProps {
 
 /**
  * Displays a Pokemon name with tera captain styling.
- * - Tera captains: name in pink + "T" badge that shows tera types on hover
+ * - Tera captains: tiny pink "C" tag that shows tera types on hover
  * - Non-captains: name in default color, no badge
  */
 export function TeraIndicator({ name, isTeraCaptain, teraTypes, className, asLink }: TeraIndicatorProps) {
@@ -41,12 +41,12 @@ export function TeraIndicator({ name, isTeraCaptain, teraTypes, className, asLin
     <Link
       to={pokemonRoute(name)}
       onClick={e => e.stopPropagation()}
-      className="text-pink hover:underline transition-colors"
+      className="text-text-primary hover:text-neon hover:underline transition-colors"
     >
       {name}
     </Link>
   ) : (
-    <span className="text-pink">{name}</span>
+    <span className="text-text-primary">{name}</span>
   );
 
   return (
@@ -54,9 +54,10 @@ export function TeraIndicator({ name, isTeraCaptain, teraTypes, className, asLin
       {nameNode}
       <Tooltip>
         <TooltipTrigger
-          className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm bg-pink/20 text-pink text-[8px] font-black leading-none border border-pink/40 cursor-default hover:bg-pink/30 transition-colors"
+          className="shrink-0 inline-flex items-center justify-center h-3.5 px-1 rounded-[3px] bg-[#ff7ae0] text-[#0b0d11] text-[9.5px] font-extrabold leading-none cursor-default hover:brightness-110 transition"
+          aria-label="Tera captain"
         >
-          T
+          C
         </TooltipTrigger>
         <TooltipContent side="top" className="bg-surface-overlay border-border-default">
           <div className="text-[10px] space-y-1">

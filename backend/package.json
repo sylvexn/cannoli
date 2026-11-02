@@ -12,6 +12,9 @@
     "seed:sim": "CANNOLI_MODE=mock bun run scripts/seed-sim.ts",
     "seed:s11": "CANNOLI_SEED_SEASON=11 bun run scripts/seed.ts",
     "seed:s11:fresh": "CANNOLI_SEED_SEASON=11 bun run scripts/seed-fresh.ts",
+    "draft:chaos": "bun run scripts/draft-e2e/draft-chaos.ts",
+    "draft:dry-run": "bun run scripts/draft-e2e/draft-dry-run.ts",
+    "draft:preflight": "bun run scripts/draft-preflight.ts",
     "test": "bun test tests/"
   },
   "dependencies": {

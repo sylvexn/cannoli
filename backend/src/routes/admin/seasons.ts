@@ -3,11 +3,51 @@ import { db, schema } from '../../db';
 import { eq, sql, desc } from 'drizzle-orm';
 import { requireStaff } from '../../lib/auth-guards';
 import { tx } from '../../lib/tx';
-import { createInstance } from '../../lib/ruleset-instances';
+import { createInstance, RulesetInputError, type RuleOverrides } from '../../lib/ruleset-instances';
+import { getLeagueRuleset } from '../../lib/rulesets';
 import { clearArchiveCache } from '../../lib/archive-cache';
+
+/** `s11-ruby` -> `ruby`; names like "Ruby League" -> `ruby`. */
+export const stripSeasonPrefix = (id: string) => id.replace(/^s\d+-/, '');
+const slugify = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+export function leagueSlug(slug?: string, id?: string, name?: string): string {
+  return slugify(slug ?? '') || slugify(stripSeasonPrefix(id ?? '')) || slugify((name ?? '').trim().replace(/\s+league$/i, ''));
+}
 
 export const seasonRoutes = new Elysia()
   .guard({ beforeHandle: requireStaff })
+
+  // Prefill data for the season-setup wizard: the latest season's leagues, rules and teams.
+  .get('/api/admin/seasons/setup-defaults', () => {
+    const latest = db.select().from(schema.seasons).orderBy(desc(schema.seasons.seasonNumber)).get();
+    if (!latest) return { nextSeasonNumber: 1, source: null, leagues: [] };
+    const leagues = db.select().from(schema.leagues).where(eq(schema.leagues.seasonId, latest.id)).all().map(l => {
+      const rs = getLeagueRuleset(l.id);
+      const teams = db.select({
+        teamName: schema.teams.teamName, teamAbbrev: schema.teams.teamAbbrev, teamColor: schema.teams.teamColor,
+        coachName: schema.teams.coachName, username: schema.users.username,
+      }).from(schema.teams).leftJoin(schema.users, eq(schema.users.id, schema.teams.userId))
+        .where(eq(schema.teams.leagueId, l.id)).all();
+      return {
+        sourceLeagueId: l.id,
+        slug: stripSeasonPrefix(l.id),
+        name: l.name,
+        color: l.color,
+        ruleset: { ...rs, id: l.rulesetId },
+        totalWeeks: l.totalWeeks,
+        tradeDeadlineWeek: l.tradeDeadlineWeek,
+        playoffTeamCount: l.playoffTeamCount,
+        forfeitPolicy: l.forfeitPolicy,
+        format: l.format,
+        teams,
+      };
+    });
+    return {
+      nextSeasonNumber: latest.seasonNumber + 1,
+      source: { seasonId: latest.id, seasonNumber: latest.seasonNumber },
+      leagues,
+    };
+  })
 
   // Seasons CRUD
 
@@ -25,8 +65,9 @@ export const seasonRoutes = new Elysia()
       maxRosterSize = null,
       forfeitPolicy = 'double_forfeit',
       format = 'gen9natdex',
+      playoffTeamCount = 6,
       weekDates = null,
-      leagues: leaguePayloads = [],
+      leagues: rawLeagues = [],
       overlapOverride = false,
     } = body as {
       seasonNumber: number;
@@ -43,14 +84,20 @@ export const seasonRoutes = new Elysia()
       maxRosterSize?: number | null;
       forfeitPolicy?: 'double_forfeit' | 'admin_review';
       format?: string;
+      playoffTeamCount?: number;
       weekDates?: Record<string, string> | null;
       leagues?: {
-        id: string;
+        /** Ignored as an id (server generates `s<N>-<slug>`); fallback slug source. */
+        id?: string;
+        slug?: string;
         name: string;
         color: string;
         draftDate?: string | null;
-        /** Per-league ruleset; overrides the season-level one. */
+        /** Template or another league's instance (even frozen/archived) to copy. */
+        sourceRulesetId?: number | null;
+        /** Legacy alias of sourceRulesetId; overrides the season-level one. */
         rulesetId?: number | null;
+        rules?: RuleOverrides;
         costFormat?: string;
         teams?: {
           coachName?: string;
@@ -90,10 +137,41 @@ export const seasonRoutes = new Elysia()
       };
     }
 
-    // Every referenced ruleset must exist and be unarchived (400, not a rolled-back 500).
-    for (const rid of new Set([seasonRulesetId, ...leaguePayloads.map(l => l.rulesetId)].filter((x): x is number => x != null))) {
-      const r = db.select({ id: schema.rulesets.id, archived: schema.rulesets.archived }).from(schema.rulesets).where(eq(schema.rulesets.id, rid)).get();
-      if (!r || r.archived) { set.status = 400; return { error: `Ruleset ${rid} not found or archived` }; }
+    if (![2, 4, 6, 8].includes(playoffTeamCount)) {
+      set.status = 400; return { error: 'playoffTeamCount must be one of 2, 4, 6, 8' };
+    }
+
+    // League ids are server-generated (`s<N>-<slug>`): never trust client ids.
+    const leaguePayloads: (typeof rawLeagues[number] & { id: string })[] = [];
+    const seenIds = new Set<string>();
+    for (const l of rawLeagues) {
+      const slug = leagueSlug(l.slug, l.id, l.name);
+      if (!slug) { set.status = 400; return { error: 'League needs a name or slug' }; }
+      const id = `s${seasonNumber}-${slug}`;
+      if (seenIds.has(id) || db.select({ id: schema.leagues.id }).from(schema.leagues).where(eq(schema.leagues.id, id)).get()) {
+        set.status = 409; return { error: `League id ${id} already exists` };
+      }
+      seenIds.add(id);
+      leaguePayloads.push({ ...l, id });
+    }
+
+    // Reject duplicate abbrevs (per league, case-insensitive) and a coach on two teams
+    // (a coach owns one team per season) up front, before the tx can hit a PK collision.
+    const seenManagers = new Map<string, string>();
+    for (const lg of leaguePayloads) {
+      const abbrevs = new Set<string>();
+      for (const t of lg.teams ?? []) {
+        const a = (t.teamAbbrev ?? '').trim().toLowerCase();
+        if (a) {
+          if (abbrevs.has(a)) { set.status = 400; return { error: `Duplicate team abbreviation "${a.toUpperCase()}" in league ${lg.name}` }; }
+          abbrevs.add(a);
+        }
+        const u = (t.managerUsername ?? '').trim().toLowerCase();
+        if (!u) continue;
+        const prior = seenManagers.get(u);
+        if (prior) { set.status = 400; return { error: `User "${u}" is assigned to more than one team (${prior}, ${lg.name}); a coach owns one team per season` }; }
+        seenManagers.set(u, lg.name);
+      }
     }
 
     // Pre-resolve manager usernames -> userIds (avoid resolving inside tx)
@@ -119,7 +197,8 @@ export const seasonRoutes = new Elysia()
         // One private ruleset instance per league (copied from the chosen ruleset, or
         // built from the legacy wizard fields). The league's cost_format comes from it.
         const instances = leaguePayloads.map(lg => createInstance(`S${seasonNumber} ${lg.name}`, {
-          sourceId: lg.rulesetId ?? seasonRulesetId,
+          sourceId: lg.sourceRulesetId ?? lg.rulesetId ?? seasonRulesetId,
+          overrides: lg.rules,
           legacy: { costFormat: lg.costFormat ?? seasonCostFormat, pointCap, teraCaptainSlots, rosterSize, rosterMin: minRosterSize, rosterMax: maxRosterSize },
           userId: parseInt(user.id),
         }));
@@ -154,13 +233,14 @@ export const seasonRoutes = new Elysia()
             costFormat: inst.costFormat,
             forfeitPolicy,
             format,
+            playoffTeamCount,
           }).run();
 
           for (const t of lg.teams ?? []) {
             const teamName = (t.teamName ?? '').trim();
             const teamAbbrev = (t.teamAbbrev ?? '').trim();
             if (!teamName || !teamAbbrev) {
-              throw new Error(`Team in league ${lg.id} missing name/abbrev`);
+              throw new RulesetInputError(`Team in league ${lg.id} missing name/abbrev`);
             }
             const teamId = `${lg.id}-${teamAbbrev.toLowerCase()}`;
             const lookupKey = (t.managerUsername ?? '').trim().toLowerCase();
@@ -221,10 +301,11 @@ export const seasonRoutes = new Elysia()
         ),
       };
     } catch (err: any) {
+      if (err instanceof RulesetInputError) { set.status = 400; return { error: err.message }; }
       set.status = 500;
       return {
-        error: 'partial_provision_failure',
-        message: err?.message ?? String(err),
+        error: err?.message ?? String(err),
+        code: 'partial_provision_failure',
         teamsCreated,
         hint: 'Transaction rolled back. Inspect server logs and retry.',
       };

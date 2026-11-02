@@ -10,6 +10,9 @@ export const phaseConfig: Record<Phase, { label: string; color: string; icon: ty
   offseason: { label: 'Offseason', color: 'text-text-muted bg-surface-overlay border-border', icon: Calendar, description: 'Between seasons — prep for next' },
 };
 
+/** Predraft sits before PHASES (new seasons start here); shown on cards, not in the advance order. */
+export const PREDRAFT_CONFIG = { label: 'Predraft', color: 'text-text-secondary bg-surface-overlay border-border-default', icon: Calendar, description: 'Season created; rules, teams and dates editable until the draft opens' };
+
 export function getNextPhase(current: Phase): Phase | null {
   const idx = PHASES.indexOf(current);
   return idx < PHASES.length - 1 ? PHASES[idx + 1] : null;

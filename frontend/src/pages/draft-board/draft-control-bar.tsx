@@ -17,7 +17,7 @@ import {
 import { TeamLogo } from '@/components/team-logo';
 import {
   Play, Pause, RotateCcw, User, Timer, Trophy, AlertTriangle,
-  Circle, Eye,
+  Circle, Eye, Zap,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useLeague } from '@/lib/league-context';
@@ -55,6 +55,8 @@ export function DraftControlBar({
   timerEnabled = true,
 }: DraftControlBarProps) {
   const isServer = state.source === 'server';
+  // Staff dry-run runs the client simulator but exposes the same staff chrome.
+  const staffChrome = isServer || state.roomMode === 'dry-run';
   const isConfiguring = state.status === 'configuring' || state.status === 'idle';
   const { isAdmin } = useAuth();
   const league = useLeague();
@@ -145,6 +147,16 @@ export function DraftControlBar({
     setForceStartOpen(false);
   }, [isServer, startLiveDraft, startSimulatorDraft]);
 
+  // Server source: pause/resume/auto-pick go through the API; the WS broadcast
+  // (LIVE_SYNC) flips timerPaused. Simulator / dry-run stay in the reducer.
+  const serverCall = (call: () => Promise<unknown>) => {
+    call().catch(err => toast.error(err instanceof Error ? err.message : 'Draft action failed'));
+  };
+  const togglePause = () => {
+    if (!isServer) { dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' }); return; }
+    serverCall(() => (state.timerPaused ? api.resumeDraft(league.id) : api.pauseDraft(league.id)));
+  };
+
   // Pre-start configuration
   if (isConfiguring) {
     return (
@@ -155,6 +167,8 @@ export function DraftControlBar({
               <User size={13} className="text-text-muted" />
               <Select
                 value={state.userTeamId}
+                // Server source: coaches sit in their own seat; only staff may act for another team.
+                disabled={isServer && !isAdmin}
                 onValueChange={(v: string | null) => dispatch({ type: 'SET_USER_TEAM', teamId: v })}
               >
                 <SelectTrigger className="h-7 w-[160px] text-xs bg-surface-overlay border-border-default">
@@ -403,10 +417,10 @@ export function DraftControlBar({
             Suppressed in simulator/practice mode — practice has no playback
             controls (no pause/step/speed); the user just runs the draft to
             completion or hits Reset. */}
-        {isAdmin && isServer && !isDraftComplete && timerEnabled && (
+        {isAdmin && staffChrome && !isDraftComplete && (timerEnabled || (isServer && state.timerPaused)) && (
           <>
             <button
-              onClick={() => dispatch({ type: state.timerPaused ? 'RESUME_TIMER' : 'PAUSE_TIMER' })}
+              onClick={togglePause}
               className={cn(
                 'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors',
                 state.timerPaused
@@ -418,6 +432,8 @@ export function DraftControlBar({
               {state.timerPaused ? 'resume' : 'pause'}
             </button>
 
+            {/* No server add-time endpoint exists, so these are simulator-only. */}
+            {!isServer && (
             <div className="flex items-center rounded border border-border-subtle overflow-hidden">
               {[15, 30, 60].map(s => (
                 <button
@@ -429,6 +445,17 @@ export function DraftControlBar({
                 </button>
               ))}
             </div>
+            )}
+
+            {isServer && state.timerPaused && (
+              <button
+                onClick={() => serverCall(() => api.autoPickDraft(league.id))}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-text-muted hover:text-neon hover:bg-neon/5 transition-colors"
+              >
+                <Zap size={10} />
+                auto-pick for this team
+              </button>
+            )}
 
             {state.timerPaused && (
               <span className="text-[9px] font-mono text-draw animate-pulse">PAUSED</span>
@@ -437,21 +464,25 @@ export function DraftControlBar({
         )}
 
         {/* Staff overrides — server source only, while draft is active */}
-        {isAdmin && isServer && !isDraftComplete && (
+        {isAdmin && staffChrome && !isDraftComplete && (
           <DraftAdminOverrides
+            simulator={isServer ? undefined : { dispatch, currentTeamId: state.snakeOrder[state.currentPickIndex]?.teamId ?? null }}
             draftOrder={draftOrder}
             draftedNames={new Set(state.allPicks.map(p => p.pokemonName))}
             canUndo={state.allPicks.length > 0}
           />
         )}
 
-        <button
-          onClick={() => dispatch({ type: 'DRAFT_RESET' })}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-neon transition-colors"
-        >
-          <RotateCcw size={10} />
-          reset
-        </button>
+        {/* Client-side reset only makes sense for simulator / rehearsal / dry-run; on server source it would wipe live state locally. */}
+        {!isServer && (
+          <button
+            onClick={() => dispatch({ type: 'DRAFT_RESET' })}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-neon transition-colors"
+          >
+            <RotateCcw size={10} />
+            reset
+          </button>
+        )}
       </div>
     </div>
   );

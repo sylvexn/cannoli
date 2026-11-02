@@ -389,7 +389,7 @@ export function getAutoPick(
     const byName = new Map(queuedMons.map(m => [m.name, m]));
     for (const name of queued) {
       const mon = byName.get(name);
-      if (mon && isEligible(mon)) {
+      if (mon && isEligible(mon) && validatePick(mon.name, teamId, leagueId).valid) {
         const effectiveTier = costMap.get(mon.name)?.tier ?? mon.tier;
         return { name: mon.name, tier: effectiveTier };
       }
@@ -406,15 +406,20 @@ export function getAutoPick(
     .all()
     .filter(isEligible);
 
-  if (available.length === 0) return null;
-
   available.sort((a, b) => {
     const tierA = costMap.get(a.name)?.tier ?? a.tier;
     const tierB = costMap.get(b.name)?.tier ?? b.tier;
     return tierB - tierA || a.name.localeCompare(b.name);
   });
-  const best = available[0];
-  return { name: best.name, tier: costMap.get(best.name)?.tier ?? best.tier };
+  // isEligible's budget uses the CURRENT roster's captain markup; the validator uses the roster
+  // including the incoming mon (a new high-tier mon can raise the markup). Take the first
+  // candidate the validator accepts so auto-pick can never be refused at execute time.
+  for (const mon of available) {
+    if (validatePick(mon.name, teamId, leagueId).valid) {
+      return { name: mon.name, tier: costMap.get(mon.name)?.tier ?? mon.tier };
+    }
+  }
+  return null;
 }
 
 // Draft Queue (per-team auto-pick preference list)
@@ -749,6 +754,8 @@ export function startDraft(
         startedAt: new Date().toISOString(),
       }).run();
     }
+
+    db.update(schema.leagues).set({ draftOrderLocked: true }).where(eq(schema.leagues.id, leagueId)).run();
 
     db.insert(schema.activityLog).values({
       type: 'draft_started',

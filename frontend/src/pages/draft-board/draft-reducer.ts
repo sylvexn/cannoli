@@ -1,4 +1,4 @@
-import type { DraftAction, DraftPickEntry, DraftState, SnakeSlot } from './types';
+import type { DraftAction, DraftPickEntry, DraftState, RehearsalSeed, SnakeSlot } from './types';
 import { DEFAULT_FILTERS } from './types';
 
 /**
@@ -45,6 +45,52 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         timerPaused: false,
         draftQueue: [],
         liveTimerExpiresAt: null,
+      };
+    }
+
+    case 'START_ROOM':
+      return startRoom(state, action.mode, action.seed);
+
+    case 'EXIT_ROOM':
+      return {
+        ...draftReducer(state, { type: 'SET_VIEW', view: 'active', source: 'server' }),
+        roomMode: 'live',
+        rehearsalSeed: null,
+        timerPaused: false,
+      };
+
+    case 'SET_SPEED':
+      return { ...state, speed: action.speed };
+
+    case 'HYDRATE_FIXTURE':
+      return {
+        ...state, ...action.patch,
+        view: 'active', source: 'simulator', roomMode: action.mode, liveTimerExpiresAt: null,
+      };
+
+    case 'UNDO_LAST_PICK': {
+      const last = state.allPicks[state.allPicks.length - 1];
+      if (!last || state.source !== 'simulator') return state;
+      const idx = last.overallPick - 1;
+      return {
+        ...state,
+        allPicks: state.allPicks.slice(0, -1),
+        currentPickIndex: idx,
+        status: state.status === 'complete' ? 'running' : state.status,
+        timerSeconds: state.timerDuration,
+        userTeamId: seatFollow(state, idx),
+      };
+    }
+
+    case 'SKIP_PICK': {
+      if (state.source !== 'simulator' || !state.snakeOrder[state.currentPickIndex]) return state;
+      const next = state.currentPickIndex + 1;
+      return {
+        ...state,
+        currentPickIndex: next,
+        timerSeconds: state.timerDuration,
+        status: next >= state.snakeOrder.length ? 'complete' : state.status,
+        userTeamId: seatFollow(state, next),
       };
     }
 
@@ -120,6 +166,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         currentPickIndex: nextIndex,
         timerSeconds: state.timerDuration,
         status: isComplete ? 'complete' : state.status,
+        userTeamId: seatFollow(state, nextIndex),
         // Remove drafted Pokemon from queue
         draftQueue: state.draftQueue.filter(n => n !== action.pokemonName),
       };
@@ -134,6 +181,8 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
     }
 
     case 'DRAFT_RESET':
+      // Rehearsal / dry-run: restart in place from the frozen seed.
+      if (state.rehearsalSeed) return startRoom(state, state.roomMode === 'dry-run' ? 'dry-run' : 'rehearsal', state.rehearsalSeed);
       return {
         ...state,
         status: 'configuring',
@@ -155,12 +204,15 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         overallPick: s.overallPick,
         teamId: s.teamId,
       }));
-      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map((p, i) => {
-        const slot = snakeOrder[i];
+      // Slot by the server's pickNumber (1-based overall slot), NOT array index:
+      // after a staff skip, picks.length < currentPickIndex and later picks
+      // must keep their own slot so skipped cells stay empty.
+      const allPicks: DraftPickEntry[] = (snap.picks ?? []).map(p => {
+        const slot = snakeOrder[p.pickNumber - 1];
         return {
           round: slot?.round ?? 1,
           pick: slot?.pick ?? 1,
-          overallPick: i + 1,
+          overallPick: p.pickNumber,
           playerId: p.teamId,
           pokemonName: p.pokemonName,
           tier: p.tier,
@@ -169,7 +221,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
       });
 
       // Compute timer from server expiry
-      let timerSeconds = state.timerDuration;
+      let timerSeconds = snap.timerDuration;
       if (snap.timerExpiresAt) {
         const remaining = Math.max(0, Math.floor((new Date(snap.timerExpiresAt).getTime() - Date.now()) / 1000));
         timerSeconds = remaining;
@@ -177,7 +229,10 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
 
       // Translate server status → client status enum.
       let status: DraftState['status'] = state.status;
-      if (snap.status === 'in_progress') status = 'running';
+      // A server pause keeps the board up (status 'running') with the clock frozen;
+      // the server restarts the full per-pick timer on resume, so show the full duration.
+      const paused = snap.status === 'paused';
+      if (snap.status === 'in_progress' || paused) status = 'running';
       else if (snap.status === 'completed') status = 'complete';
       else if (snap.status === 'not_started') status = 'configuring';
 
@@ -191,6 +246,7 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
         currentPickIndex: snap.currentPickIndex,
         timerDuration: snap.timerDuration,
         timerSeconds,
+        timerPaused: paused,
         liveTimerExpiresAt: snap.timerExpiresAt ?? null,
         pointCap: snap.pointCap ?? state.pointCap,
       };
@@ -233,6 +289,34 @@ export function draftReducer(state: DraftState, action: DraftAction): DraftState
     default:
       return state;
   }
+}
+
+/** Dry-run: the "user" is whoever is on the clock, so the whole UI follows the seat. */
+function seatFollow(state: DraftState, nextIndex: number): string | null {
+  if (state.roomMode !== 'dry-run') return state.userTeamId;
+  return state.snakeOrder[nextIndex]?.teamId ?? state.userTeamId;
+}
+
+function startRoom(state: DraftState, mode: 'rehearsal' | 'dry-run', seed: RehearsalSeed): DraftState {
+  return {
+    ...state,
+    view: 'active',
+    status: 'running',
+    source: 'simulator',
+    roomMode: mode,
+    rehearsalSeed: seed,
+    snakeOrder: seed.snakeOrder,
+    userTeamId: mode === 'dry-run' ? seed.snakeOrder[0]?.teamId ?? seed.userTeamId : seed.userTeamId,
+    timerDuration: seed.timerDuration,
+    timerSeconds: seed.timerDuration,
+    pointCap: seed.pointCap,
+    allPicks: [],
+    currentPickIndex: 0,
+    timerPaused: false,
+    draftQueue: [],
+    liveTimerExpiresAt: null,
+    filters: { ...state.filters, ownership: 'free-agent' },
+  };
 }
 
 /** Snake order generation (client-side) — used by simulator start path. */

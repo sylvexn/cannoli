@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 /** Mix two #RRGGBB hex colors at the given ratio (0 = a, 1 = b). */
 export function blendHex(a: string, b: string, ratio = 0.5): string {
   const parse = (h: string): [number, number, number] => {
@@ -69,4 +71,53 @@ export function readableOnDark(hex: string, minL = 55): string {
   if (l >= minL) return hex;
   const newS = l < 25 ? Math.max(s, 65) : s;
   return hslToHex(h, newS, minL);
+}
+
+/* ---------- 1.4 team color rules ----------
+   Team colors are never text on dark. They appear as slabs (solid areas) or
+   tints (a fade into a row). Very dark colors vanish on the ink background and
+   neon ones glare as big areas, so both ends get handled here. */
+
+function luminance(hex: string): number {
+  const x = hex.replace('#', '');
+  if (x.length !== 6) return 0;
+  return [0, 2, 4]
+    .map(i => parseInt(x.slice(i, i + 2), 16) / 255)
+    .map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+}
+
+/** Text color (near-black or white) that reads on top of `hex`. */
+export function onColor(hex: string): string {
+  return luminance(hex) > 0.32 ? '#0b0d11' : '#ffffff';
+}
+
+/** True when `hex` is too dark to see on the ink background as-is. */
+export function isDarkTeamColor(hex: string): boolean {
+  return luminance(hex) < 0.06;
+}
+
+/** A team color for a big solid area (header slab, score bug). Neon colors are
+ *  toned down ~28%; dark ones keep their true color (pair with `slabRing`). */
+export function slabColor(hex: string): string {
+  return luminance(hex) > 0.4 ? blendHex(hex, '#000000', 0.28) : hex;
+}
+
+/** Faint light outline for dark slabs so they separate from the page. */
+export function slabRing(hex: string): string | undefined {
+  return isDarkTeamColor(hex) ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : undefined;
+}
+
+/** A team color for tinted rows: dark colors are brightened until the tint
+ *  actually shows; everything else passes through. */
+export function tintColor(hex: string): string {
+  let c = hex;
+  for (let i = 0; i < 40 && luminance(c) < 0.07; i++) c = blendHex(c, '#ffffff', 0.07);
+  return c;
+}
+
+/** Inline style for a row tinted with a team color fading in from the left. */
+export function teamTintStyle(hex: string | null | undefined, strength = 20): CSSProperties | undefined {
+  if (!hex) return undefined;
+  return { backgroundImage: `linear-gradient(90deg, color-mix(in oklab, ${tintColor(hex)} ${strength}%, transparent), transparent 38%)` };
 }

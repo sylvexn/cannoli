@@ -52,7 +52,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
   /** Cost format for this league — drives tier list, bans, and captain reserve. */
   const format: CostFormat = league.costFormat ?? DEFAULT_FORMAT;
   const { players, standings, transactions } = useLeagueData();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   // Presence tracking
   const [presence, setPresence] = useState<DraftPresenceData>({ players: [], spectators: [] });
@@ -120,6 +120,8 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     snakeOrder: [],
     currentPickIndex: seasonPicks.length,
     speed: 1,
+    roomMode: 'live',
+    rehearsalSeed: null,
     timerSeconds: DEFAULT_TIMER,
     timerDuration: DEFAULT_TIMER,
     timerPaused: false,
@@ -155,6 +157,18 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     didEnterSimulatorActive.current = true;
     dispatch({ type: 'SET_VIEW', view: 'active', source: 'simulator' });
   }, [source, state.view]);
+
+  // Draft Room: a league in predraft/draft opens straight into the live room
+  // (lobby → board) instead of the season recap. Once only, so the History
+  // toggle still works afterwards.
+  const didEnterLiveRoom = useRef(false);
+  const leaguePhase = league.season?.phase;
+  useEffect(() => {
+    if (source !== 'server' || didEnterLiveRoom.current) return;
+    if (leaguePhase !== 'predraft' && leaguePhase !== 'draft') return;
+    didEnterLiveRoom.current = true;
+    if (state.view !== 'active') dispatch({ type: 'SET_VIEW', view: 'active', source: 'server' });
+  }, [source, leaguePhase, state.view]);
 
   // Quick affordability cap for the pool's "fits my budget" filter — derived
   // straight from state so it's available before useDraftTeams resolves.
@@ -201,7 +215,7 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
 
   // Auto-pickers (simulator AI + queue auto-draft + your-turn toast)
   // Gated on queueIdle so picks land one at a time without overlapping.
-  const { currentSlot, isUserTurn, buildConflictRoster } = useDraftAutoPickers({
+  const { currentSlot, isUserTurn, buildConflictRoster, autoPickCurrent } = useDraftAutoPickers({
     state, dispatch, draftedSet,
     demoTeamPoints, demoTeamRosterNames, picksLeftByTeam,
     teraCaptainSlots, queueIdle, format, rules,
@@ -283,6 +297,19 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
       toast.error(error);
     }, []),
   });
+
+  // Server source: sit the viewer in their own seat. Staff may re-pick via the
+  // pre-start dropdown, so userTeamId is deliberately not a dep (it would undo
+  // their choice); non-coaches get no seat.
+  const myTeamId = useMemo(
+    () => players.find(p => p.userId != null && user && String(p.userId) === String(user.id))?.id ?? null,
+    [players, user],
+  );
+  useEffect(() => {
+    if (state.source !== 'server' || state.roomMode !== 'live') return;
+    const seat = myTeamId ?? (isAdmin ? undefined : null);
+    if (seat !== undefined) dispatch({ type: 'SET_USER_TEAM', teamId: seat });
+  }, [state.source, state.roomMode, myTeamId, isAdmin]);
 
   // Identify ourselves when connected
   useEffect(() => {
@@ -441,6 +468,8 @@ export function useDraftState({ source = 'server' }: UseDraftStateOptions = {}) 
     isDraftComplete,
     draftOrder,
     handleUserPick,
+    /** Simulator only: auto-pick for whoever is on the clock (dry-run staff control). */
+    autoPickCurrent,
     draftedSet,
     wsConnected,
     presence,

@@ -9,6 +9,7 @@ import { checkLeagueArchived } from '../../lib/archive-guard';
 import { isLeaguePhase } from '../../lib/queries';
 import { scheduleDeadline } from '../../lib/deadline';
 import { applyDueTransactions } from '../../lib/scheduled-transactions';
+import { leagueSlug } from './seasons';
 import { createInstance, editLeagueRules, type RuleEdit } from '../../lib/ruleset-instances';
 import { getLeagueRuleset, getRuleset, rulesetUsage } from '../../lib/rulesets';
 
@@ -24,9 +25,14 @@ export const leagueAdminRoutes = new Elysia()
     const { name, color } = body as { name: string; color: string };
     if (!name?.trim()) { set.status = 400; return { error: 'Name required' }; }
 
-    const id = name.trim().toLowerCase().replace(/\s+league$/i, '').replace(/\s+/g, '-');
     const season = db.select().from(schema.seasons).orderBy(desc(schema.seasons.seasonNumber)).get();
     if (!season) { set.status = 400; return { error: 'No active season' }; }
+    const slug = leagueSlug(undefined, undefined, name);
+    if (!slug) { set.status = 400; return { error: 'Name required' }; }
+    const id = `s${season.seasonNumber}-${slug}`;
+    if (db.select({ id: schema.leagues.id }).from(schema.leagues).where(eq(schema.leagues.id, id)).get()) {
+      set.status = 409; return { error: `League id ${id} already exists` };
+    }
 
     // New league plays under a private copy of a sibling's ruleset (else the defaults),
     // and takes its cost format from it.
@@ -97,16 +103,19 @@ export const leagueAdminRoutes = new Elysia()
     // Phase-aware locks (phase now lives on the league row)
     const draftStarted = !!db.select().from(schema.draftState)
       .where(and(eq(schema.draftState.leagueId, params.leagueId), sql`current_pick_index > 0`)).get();
-    if (pointCap !== undefined && draftStarted) {
+    // Locks only bite on an actual change: an unchanged value is a silent no-op in every phase.
+    const cur0 = getLeagueRuleset(params.leagueId);
+    if (pointCap !== undefined && pointCap !== cur0.pointCap && draftStarted) {
       set.status = 400; return { error: 'Cannot change point cap once draft has begun' };
     }
-    if (teraCaptainSlots !== undefined && league.phase !== 'predraft' && league.phase !== 'draft') {
+    if (teraCaptainSlots !== undefined && teraCaptainSlots !== cur0.teraCaptainSlots && league.phase !== 'predraft' && league.phase !== 'draft') {
       set.status = 400; return { error: `Cannot change tera captain slots in ${league.phase} phase` };
     }
     // rosterSize must be locked once any picks have been made — would invalidate
     // the snake order. Editable until draft starts.
     if (rosterSize !== undefined) {
-      if (draftStarted || (league.phase !== 'predraft' && league.phase !== 'draft')) {
+      const locked = Number(rosterSize) !== cur0.rosterSize;
+      if (locked && (draftStarted || (league.phase !== 'predraft' && league.phase !== 'draft'))) {
         set.status = 400;
         return { error: `Cannot change roster size once draft has started (phase: ${league.phase})` };
       }
@@ -155,7 +164,7 @@ export const leagueAdminRoutes = new Elysia()
 
     // pointCap / teraCaptainSlots are RULESET fields, edited for this league only
     // (never the season row). Unchanged values are no-ops so full-form PUTs stay valid.
-    const cur = getLeagueRuleset(params.leagueId);
+    const cur = cur0;
     const ruleEdit: RuleEdit = {};
     if (pointCap !== undefined && pointCap !== cur.pointCap) {
       if (!Number.isInteger(pointCap) || (pointCap as number) < 1) { set.status = 400; return { error: 'pointCap must be a positive integer' }; }
@@ -527,7 +536,7 @@ export const leagueAdminRoutes = new Elysia()
   })
 
   .post('/api/leagues/:leagueId/draft-order', ({ params, query, body, user, set }) => {
-    const { order } = body as { order: string[] };
+    const { order, locked } = body as { order: string[]; locked?: boolean };
 
     const league = db.select().from(schema.leagues).where(eq(schema.leagues.id, params.leagueId)).get();
     if (!league) { set.status = 404; return { error: 'League not found' }; }
@@ -538,24 +547,50 @@ export const leagueAdminRoutes = new Elysia()
     if (league.phase !== 'predraft' && league.phase !== 'draft') {
       set.status = 400; return { error: `Cannot change draft order in ${league.phase} phase` };
     }
-    // Lock once the draft has begun (any picks made)
+    // Once a draft has started (in_progress/paused/completed) the order is frozen: no reorder, no unlock.
+    // Re-posting the identical order with locked unset/true stays an idempotent no-op.
     const draftState = db.select().from(schema.draftState).where(eq(schema.draftState.leagueId, params.leagueId)).get();
-    if (draftState && draftState.currentPickIndex > 0) {
-      set.status = 400; return { error: 'Cannot change draft order once picks have been made' };
+    if (draftState && draftState.status !== 'not_started'
+        && (locked === false || JSON.stringify(order) !== league.draftOrder)) {
+      set.status = 409; return { error: 'Draft has started; the draft order can no longer be changed', code: 'draft_started' };
     }
 
+    // Must be an exact permutation of the league's teams.
+    const teamIds = db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.leagueId, params.leagueId)).all().map(t => t.id);
+    if (!Array.isArray(order) || order.length !== teamIds.length || new Set(order).size !== order.length || !order.every(id => teamIds.includes(id))) {
+      set.status = 400; return { error: 'order must contain each team in the league exactly once' };
+    }
+    if (locked !== undefined && typeof locked !== 'boolean') { set.status = 400; return { error: 'locked must be a boolean' }; }
+    const draftOrderLocked = locked ?? league.draftOrderLocked;
+
     tx(() => {
-      db.update(schema.leagues).set({ draftOrder: JSON.stringify(order) }).where(eq(schema.leagues.id, params.leagueId)).run();
+      db.update(schema.leagues).set({ draftOrder: JSON.stringify(order), draftOrderLocked }).where(eq(schema.leagues.id, params.leagueId)).run();
       db.insert(schema.activityLog).values({
         type: 'draft_order_set',
         category: 'config',
         actor: user.username,
         leagueId: params.leagueId,
         description: `Set draft order (${order.length} teams)`,
-        metadata: JSON.stringify({ order }),
+        metadata: JSON.stringify({ order, locked: draftOrderLocked }),
       }).run();
     });
-    return { success: true };
+    return { success: true, draftOrderLocked };
+  })
+
+  .get('/api/leagues/:leagueId/draft-order/history', ({ params }) => {
+    const rows = db.select().from(schema.activityLog)
+      .where(and(eq(schema.activityLog.leagueId, params.leagueId), eq(schema.activityLog.type, 'draft_order_set')))
+      .orderBy(desc(schema.activityLog.id)).limit(20).all();
+    return rows.map(r => {
+      const m = r.metadata ? JSON.parse(r.metadata) : {};
+      const ts = r.timestamp ?? '';
+      return {
+        actor: r.actor,
+        at: new Date(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z').toISOString(),
+        order: (m.order ?? []) as string[],
+        locked: typeof m.locked === 'boolean' ? m.locked : null,
+      };
+    });
   })
 
 ;
