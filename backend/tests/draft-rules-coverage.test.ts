@@ -159,3 +159,21 @@ describe('captain gate', () => {
     expect(phase()).toBe('regular');
   });
 });
+
+describe('auto-pick vs captain reserve', () => {
+  // Regression: getAutoPick sized its budget from the CURRENT roster's captain markup, but
+  // validatePick checks the roster INCLUDING the incoming mon. A tier-9 candidate (+3 markup)
+  // looked affordable, then was refused, leaving the paused draft stuck.
+  test('auto-pick never selects a mon the validator would refuse for captain headroom', () => {
+    const f = fx({ teams: 2, rosterSize: 3, teraCaptainSlots: 1, timerStartedAt: new Date() });
+    db.update(schema.seasons).set({ pointCap: 16 }).where(eq(schema.seasons.id, f.seasonId)).run();
+    const [t0, t1] = f.teamIds;
+    expect(executePick(f.leagueId, pickByTier(5), t0, 't').success).toBe(true);
+    expect(executePick(f.leagueId, pickByTier(1), t1, 't').success).toBe(true);
+    expect(executePick(f.leagueId, pickByTier(2), t1, 't').success).toBe(true);
+
+    db.update(schema.draftState).set({ timerStartedAt: secondsAgo(500).toISOString() }).where(eq(schema.draftState.leagueId, f.leagueId)).run();
+    expect(handleTimerExpiry(f.leagueId)?.paused).toBe(true);
+    expect(executeAutoPick(f.leagueId, 'admin')?.success).toBe(true);
+  });
+});
