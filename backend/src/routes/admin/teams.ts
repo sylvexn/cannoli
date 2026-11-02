@@ -458,7 +458,7 @@ export const teamAdminRoutes = new Elysia()
     if (file.size > 2 * 1024 * 1024) { set.status = 400; return { error: 'File must be ≤ 2MB' }; }
 
     const ext = (file.type.split('/')[1] || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext) ? ext : 'png';
+    const safeExt = ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext) ? ext : 'png';
     const filename = `${params.teamId}.${safeExt}`;
     const key = `team-logos/${filename}`;
 
@@ -552,7 +552,8 @@ export const teamAdminRoutes = new Elysia()
     const path = uploadsPath(`${params.dir}/${params.file}`);
     const f = Bun.file(path);
     if (!(await f.exists())) { set.status = 404; return 'Not found'; }
-    return new Response(f);
+    // nosniff + sandbox CSP: legacy SVGs can't run script from our origin.
+    return new Response(f, { headers: { 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': 'sandbox' } });
   })
 
 ;
