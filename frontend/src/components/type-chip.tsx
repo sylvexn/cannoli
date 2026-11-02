@@ -2,6 +2,7 @@ import type { PokemonType } from '@/lib/pokemon';
 import { cn } from '@/lib/utils';
 import { TYPE_COLORS, TYPE_LABELS } from '@/lib/constants';
 import { TypeEffectivenessTooltip } from './type-effectiveness-tooltip';
+import { typePillClass, typePillStyle } from './type-badge';
 
 /**
  * @deprecated Import `TYPE_COLORS` from `@/lib/constants` directly.
@@ -18,9 +19,9 @@ interface TypeChipProps {
 }
 
 const sizeStyles = {
-  xs: 'text-[9px] h-4 min-w-[38px]',
-  sm: 'text-[10px] h-5 min-w-[44px]',
-  md: 'text-[11px] h-6 min-w-[52px]',
+  xs: 'text-[9px] px-[3px]',
+  sm: 'text-[9px] px-[3px]',
+  md: 'text-[10.5px] px-1',
 };
 
 export function TypeChip({ types, size = 'sm', className, noTooltip }: TypeChipProps) {
@@ -38,43 +39,13 @@ export function TypeChip({ types, size = 'sm', className, noTooltip }: TypeChipP
 }
 
 function TypeChipInner({ types, size = 'sm', className }: { types: PokemonType[]; size?: 'xs' | 'sm' | 'md'; className?: string }) {
-  const isMono = types.length === 1;
-
-  if (isMono) {
-    return (
-      <span
-        className={cn(
-          'inline-flex items-center justify-center rounded-full font-bold uppercase tracking-wider text-white px-2 cursor-default',
-          sizeStyles[size],
-          className,
-        )}
-        style={{ backgroundColor: TYPE_COLORS[types[0]] }}
-      >
-        {TYPE_LABELS[types[0]]}
-      </span>
-    );
-  }
-
   return (
-    <span
-      className={cn(
-        'inline-flex items-stretch rounded-full overflow-hidden font-bold uppercase tracking-wider text-white cursor-default',
-        sizeStyles[size],
-        className,
-      )}
-    >
-      <span
-        className="inline-flex items-center justify-center px-1.5 flex-1"
-        style={{ backgroundColor: TYPE_COLORS[types[0]] }}
-      >
-        {TYPE_LABELS[types[0]]}
-      </span>
-      <span
-        className="inline-flex items-center justify-center px-1.5 flex-1"
-        style={{ backgroundColor: TYPE_COLORS[types[1]] }}
-      >
-        {TYPE_LABELS[types[1]]}
-      </span>
+    <span className={cn('inline-flex items-center gap-[3px]', className)}>
+      {types.map(t => (
+        <span key={t} className={cn(typePillClass, sizeStyles[size])} style={typePillStyle(t)}>
+          {TYPE_LABELS[t]}
+        </span>
+      ))}
     </span>
   );
 }

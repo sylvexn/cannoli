@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 @font-face {
   font-family: 'Berkeley Mono';
   src: url('/fonts/mono-regular.otf') format('opentype');
@@ -30,39 +29,41 @@
   font-style: oblique;
   font-display: swap;
 }
-@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/figtree";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
 @import "@fontsource-variable/cinzel";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  /* Base palette — deeper, richer darks.
-     Border/overlay lightness tuned for low-vision legibility: default borders
-     read ~2.4:1 against --color-surface, subtle ~1.7:1, and the overlay hover
-     fill lands a clearly perceptible step above raised surfaces. */
-  --color-surface: #08080d;
-  --color-surface-raised: #111118;
-  --color-surface-overlay: #232331;
-  --color-border-default: #494d5c;
-  --color-border-subtle: #343846;
+  /* Base palette (1.4): neutral ink. Borders stay clearly visible
+     (~2:1 on surface) for low-vision legibility. */
+  --color-surface: #0d0f13;
+  --color-surface-raised: #14171d;
+  --color-surface-overlay: #1f232b;
+  --color-border-default: #363b47;
+  --color-border-subtle: #262a33;
 
-  /* Neon accents */
-  --color-neon: #22d3ee;
-  --color-neon-muted: #0e7490;
-  --color-neon-glow: rgba(34, 211, 238, 0.15);
+  /* The accent is the active league's gem (see --gem on :root). The legacy
+     "neon" token names stay so every existing utility follows the gem. */
+  --color-neon: var(--gem);
+  --color-neon-muted: var(--gem-muted);
+  --color-neon-glow: var(--gem-glow);
+  --color-gem: var(--gem);
+  --color-gem-ink: var(--gem-ink);
   --color-pink: #e879f9;
   --color-pink-muted: #a21caf;
   --color-pink-glow: rgba(232, 121, 249, 0.15);
 
-  /* Text — slightly warmer whites. De-emphasis happens through hue/steps,
-     not transparency: muted stays >=4.5:1 on every app surface. */
-  --color-text-primary: #eeeef2;
-  --color-text-secondary: #9499a8;
-  --color-text-muted: #7d8296;
+  /* Text: muted stays >=4.5:1 on every surface. */
+  --color-text-primary: #e9ebef;
+  --color-text-secondary: #a0a6b2;
+  --color-text-muted: #868d9a;
 
   /* Status */
-  --color-win: #4ade80;
-  --color-loss: #f87171;
+  --color-win: #3ccf87;
+  --color-loss: #ff6b72;
   --color-draw: #fbbf24;
 
   /* Pokemon type colors */
@@ -108,37 +109,51 @@
   --color-tier-1: #776666;
 
   /* Shadows — real depth */
-  --shadow-glow-sm: 0 0 8px rgba(34, 211, 238, 0.15);
-  --shadow-glow-md: 0 0 16px rgba(34, 211, 238, 0.2);
-  --shadow-glow-lg: 0 0 32px rgba(34, 211, 238, 0.25);
+  --shadow-glow-sm: 0 0 8px var(--gem-glow);
+  --shadow-glow-md: 0 0 16px var(--gem-glow);
+  --shadow-glow-lg: 0 0 32px var(--gem-glow);
   --shadow-glow-pink-sm: 0 0 8px rgba(232, 121, 249, 0.15);
   --shadow-glow-pink-md: 0 0 16px rgba(232, 121, 249, 0.2);
   --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.25);
   --shadow-card-lg: 0 2px 6px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.3);
 }
 
+/* League gem accent. AppShell sets data-gem on <html> from the active league. */
+:root {
+  --gem: #3d7bff;
+}
+:root[data-gem="ruby"] { --gem: #ff3b5c; }
+:root[data-gem="emerald"] { --gem: #19c37d; }
+:root {
+  --gem-muted: color-mix(in oklab, var(--gem) 55%, black);
+  --gem-glow: color-mix(in oklab, var(--gem) 16%, transparent);
+  --gem-soft: color-mix(in oklab, var(--gem) 12%, transparent);
+  /* gem as readable text on ink */
+  --gem-ink: oklch(from var(--gem) max(l, 0.78) c h);
+}
+
 /* Dark-first */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.06 0.01 270);
+  --radius: 0.375rem;
+  --background: #0d0f13;
   --foreground: oklch(0.95 0.01 270);
-  --card: oklch(0.10 0.01 270);
+  --card: #14171d;
   --card-foreground: oklch(0.95 0.01 270);
-  --popover: oklch(0.10 0.01 270);
+  --popover: #14171d;
   --popover-foreground: oklch(0.95 0.01 270);
-  --primary: oklch(0.82 0.15 195);
-  --primary-foreground: oklch(0.07 0.01 270);
+  --primary: var(--gem);
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.78 0.18 320);
   --secondary-foreground: oklch(0.07 0.01 270);
-  --muted: oklch(0.16 0.01 270);
+  --muted: #1b1f26;
   --muted-foreground: oklch(0.65 0.015 270);
-  --accent: oklch(0.24 0.015 270);
+  --accent: #1f232b;
   --accent-foreground: oklch(0.95 0.01 270);
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.42 0.015 270);
+  --border: #363b47;
   --input: oklch(0.47 0.015 270);
-  --ring: oklch(0.82 0.15 195);
+  --ring: var(--gem);
   --chart-1: oklch(0.82 0.15 195);
   --chart-2: oklch(0.78 0.18 320);
   --chart-3: oklch(0.75 0.18 150);
@@ -155,8 +170,9 @@
 }
 
 @theme inline {
-  --font-heading: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
-  --font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-heading: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --font-sans: 'Figtree Variable', 'Figtree', system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Figtree Variable', system-ui, sans-serif;
   --font-mono: 'Berkeley Mono', ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -204,7 +220,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-variant-numeric: tabular-nums;
   }
   html {
     @apply font-sans;
@@ -221,7 +237,7 @@
      avoid showing a ring after click/tap on buttons & links. Components that
      prefer the ruby/pink/team-color edge can override `--focus-ring`. */
   :where(a, button, [role="button"], [role="tab"], [role="link"], [role="menuitem"], input, textarea, select, summary, [tabindex]):focus-visible {
-    --focus-ring: var(--color-neon, #22d3ee);
+    --focus-ring: var(--gem);
     outline: 2px solid color-mix(in oklab, var(--focus-ring) 65%, transparent);
     outline-offset: 2px;
     border-radius: 4px;
@@ -254,27 +270,23 @@
   initial-value: 0deg;
 }
 
-/* Background texture */
+/* Background: gem light falls from the top and breathes very slowly. */
 body::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto 0;
+  height: 520px;
   z-index: -1;
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(34, 211, 238, 0.03), transparent 50%),
-    radial-gradient(ellipse 60% 50% at 80% 90%, rgba(232, 121, 249, 0.02), transparent 50%),
-    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(10, 10, 20, 0), transparent);
+  background: radial-gradient(1200px 420px at 50% -140px, color-mix(in oklab, var(--gem) 15%, transparent), transparent 70%);
   pointer-events: none;
+  animation: gem-breathe 9s ease-in-out infinite;
 }
-
-/* Card depth */
-.bg-surface-raised {
-  box-shadow: var(--shadow-card);
+@keyframes gem-breathe {
+  0%, 100% { opacity: .75; }
+  50% { opacity: 1; }
 }
-
-/* Sidebar depth */
-aside {
-  box-shadow: 4px 0 16px rgba(0,0,0,0.3);
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 /* Rank medals */

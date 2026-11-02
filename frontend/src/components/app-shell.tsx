@@ -33,6 +33,7 @@ import { SidebarFooter } from './app-shell/sidebar-footer';
 import { PageErrorBoundary } from './page-error-boundary';
 import { SimBanner } from './sim-banner';
 import { AnnouncementBanners } from './announcement-banners';
+import { useGemScope } from '@/lib/use-gem-scope';
 
 // Routes that need full-width layout (no max-w constraint). The trailing
 // slash on '/replay/' targets the full-bleed replay watch page (/replay/:id)
@@ -126,7 +127,8 @@ export function AppShell() {
     }
   }, [urlLeagueId, persistedActiveLeagueId, setPersistedActiveLeagueId]);
 
-  const activeLeagueId = urlLeagueId ?? persistedActiveLeagueId;
+  const activeLeagueId = urlLeagueId ?? persistedActiveLeagueId ?? myTeams[0]?.leagueId ?? null;
+  useGemScope(activeLeagueId);
   const activeLeague = useMemo(
     () => leagues.find(l => l.id === activeLeagueId) ?? null,
     [activeLeagueId, leagues],
