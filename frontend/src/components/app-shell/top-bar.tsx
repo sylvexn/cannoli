@@ -5,7 +5,7 @@ import { gemHex } from '@/lib/use-gem-scope';
 import { NotificationsButton } from './notifications-button';
 import { LeagueSwitcher } from './league-switcher';
 import { LiveIndicator, type LiveMatch } from './live-indicator';
-import { NavItemLink, TOOL_NAV, type NavItem } from './nav-links';
+import { NavItemLink, toolNav, type NavItem } from './nav-links';
 import { ProfileMenu, LoginButton, type AuthUser, type ProfileLink } from './profile-menu';
 import type { useAppData } from '@/lib/app-data-context';
 
@@ -38,7 +38,7 @@ export function TopBar(p: TopBarProps) {
         <nav aria-label="Primary" className="hidden min-w-0 items-center gap-0.5 lg:flex">
           {p.leagueItems.map(i => <NavItemLink key={i.to} item={i} variant="bar" />)}
           {p.leagueItems.length > 0 && <span aria-hidden className="mx-2 h-5 w-px bg-border-default" />}
-          {TOOL_NAV.map(i => <NavItemLink key={i.to} item={i} variant="bar" />)}
+          {toolNav(!!p.user).map(i => <NavItemLink key={i.to} item={i} variant="bar" />)}
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1.5">

@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import {
   Trophy, Calendar, LayoutDashboard, ArrowLeftRight, BarChart3,
-  Users, Swords, ClipboardList, ListTree, Gamepad2, type LucideIcon,
+  Users, Swords, ClipboardList, ListTree, Gamepad2, Film, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -13,6 +13,8 @@ export interface NavItem {
   /** Extra path prefixes that also light this link up. */
   also?: string[];
   badge?: number;
+  /** Hidden for logged-out users (the route is behind login). */
+  authOnly?: boolean;
 }
 
 export function leagueNavItems(leagueId: string, pendingTrades: number): NavItem[] {
@@ -31,8 +33,12 @@ export const TOOL_NAV: NavItem[] = [
   { to: '/matchup', label: 'Matchup Center', icon: Swords },
   { to: '/draft-center', label: 'Draft Center', icon: ClipboardList },
   { to: '/tiers', label: 'Pokédex', icon: ListTree, also: ['/speed-tiers', '/pokemon/'] },
-  { to: '/showdown', label: 'Play & Watch', icon: Gamepad2, also: ['/replays', '/replay/'] },
+  { to: '/replays', label: 'Replays', icon: Film, also: ['/replay/'] },
+  { to: '/showdown', label: 'Play & Watch', icon: Gamepad2, authOnly: true },
 ];
+
+/** Tool links visible to this viewer (guests don't get login-gated ones). */
+export const toolNav = (authed: boolean) => TOOL_NAV.filter(i => authed || !i.authOnly);
 
 export const Badge = ({ n, title }: { n: number; title: string }) => (
   <span
