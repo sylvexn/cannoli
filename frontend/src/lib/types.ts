@@ -208,6 +208,9 @@ export interface League {
   name: string;
   color: string;
   draftDate?: string | null;
+  /** Team ids in seat order; null for non-staff until the order is locked. */
+  draftOrder?: string[] | null;
+  draftOrderLocked?: boolean;
   /** IANA timezone that anchors this league's deadline CUTOFFS (auto-forfeit,
    *  week-end). Deadlines are DISPLAYED in each viewer's own zone but the
    *  enforced cutoff is 23:59:59 in THIS zone. Defaults to America/New_York. */
