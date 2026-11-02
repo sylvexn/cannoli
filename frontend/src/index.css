@@ -36,6 +36,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Always emitted (read via var() in inline styles, not just utilities). */
+@theme static {
+  /* Pokemon type colors */
+  --color-type-normal: #a8a77a;
+  --color-type-fire: #ee8130;
+  --color-type-water: #6390f0;
+  --color-type-electric: #f7d02c;
+  --color-type-grass: #7ac74c;
+  --color-type-ice: #96d9d6;
+  --color-type-fighting: #c22e28;
+  --color-type-poison: #a33ea1;
+  --color-type-ground: #e2bf65;
+  --color-type-flying: #a98ff3;
+  --color-type-psychic: #f95587;
+  --color-type-bug: #a6b91a;
+  --color-type-rock: #b6a136;
+  --color-type-ghost: #735797;
+  --color-type-dragon: #6f35fc;
+  --color-type-dark: #705746;
+  --color-type-steel: #b7b7ce;
+  --color-type-fairy: #d685ad;
+
+}
+
+
 @theme {
   /* Base palette (1.4): neutral ink. Borders stay clearly visible
      (~2:1 on surface) for low-vision legibility. */
@@ -65,26 +90,6 @@
   --color-win: #3ccf87;
   --color-loss: #ff6b72;
   --color-draw: #fbbf24;
-
-  /* Pokemon type colors */
-  --color-type-normal: #a8a77a;
-  --color-type-fire: #ee8130;
-  --color-type-water: #6390f0;
-  --color-type-electric: #f7d02c;
-  --color-type-grass: #7ac74c;
-  --color-type-ice: #96d9d6;
-  --color-type-fighting: #c22e28;
-  --color-type-poison: #a33ea1;
-  --color-type-ground: #e2bf65;
-  --color-type-flying: #a98ff3;
-  --color-type-psychic: #f95587;
-  --color-type-bug: #a6b91a;
-  --color-type-rock: #b6a136;
-  --color-type-ghost: #735797;
-  --color-type-dragon: #6f35fc;
-  --color-type-dark: #705746;
-  --color-type-steel: #b7b7ce;
-  --color-type-fairy: #d685ad;
 
   /* Tier colors */
   --color-tier-20: #ff4444;

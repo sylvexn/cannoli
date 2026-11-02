@@ -67,7 +67,11 @@ function Row({ player, rank, isMe, onSelect }: { player: Player; rank: number; i
         <TeamLogo abbrev={player.teamAbbrev} color={player.teamColor} logoPath={player.logoPath} className="!w-6 !h-6 shrink-0" />
         <Link
           to={leagueUrl(`/teams/${player.id}`)}
-          onClick={e => e.stopPropagation()}
+          onClick={e => {
+            // Plain click peeks (row handler); modified/middle clicks open the page.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) { e.stopPropagation(); return; }
+            e.preventDefault();
+          }}
           className={cn('truncate text-sm hover:underline', isMe ? 'font-bold text-text-primary' : 'text-text-primary')}
         >
           {player.teamName}
