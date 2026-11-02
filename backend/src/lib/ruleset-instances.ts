@@ -18,6 +18,15 @@ export interface LegacyRules {
   teraCaptainSlots?: number;
 }
 
+/** Bad caller input (unknown source, invalid shape): routes answer 400, not 500. */
+export class RulesetInputError extends Error {}
+
+export type RuleOverrides = Partial<{
+  costFormat: string; pointCap: number; rosterSize: number; rosterMin: number | null; rosterMax: number | null;
+  megaCap: number | null; teraEnabled: boolean; teraCaptainSlots: number; teraTypesPerCaptain: number;
+  teraMarkup: Record<string, number> | string;
+}>;
+
 const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
 
 /**
@@ -25,12 +34,14 @@ const now = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
  * given, else built from legacy fields over the standard defaults. Throws on an
  * unknown/archived source or an internally inconsistent result.
  */
-export function createInstance(name: string, opts: { sourceId?: number | null; legacy?: LegacyRules; userId?: number | null }): Row {
+export function createInstance(name: string, opts: { sourceId?: number | null; legacy?: LegacyRules; overrides?: RuleOverrides; userId?: number | null }): Row {
   const src = opts.sourceId != null
     ? db.select().from(schema.rulesets).where(eq(schema.rulesets.id, opts.sourceId)).get()
     : undefined;
-  if (opts.sourceId != null && !src) throw new Error(`Ruleset ${opts.sourceId} not found`);
-  if (src?.archived) throw new Error(`Ruleset ${src.id} is archived`);
+  if (opts.sourceId != null && !src) throw new RulesetInputError(`Ruleset ${opts.sourceId} not found`);
+  // Only an archived TEMPLATE is off-limits; an archived-season instance is a legitimate
+  // "same rules as last season" source (its archived flag just hides it from pickers).
+  if (src?.archived && src.isTemplate) throw new RulesetInputError(`Ruleset ${src.id} is archived`);
   const l = opts.legacy ?? {};
   const values = {
     name,
@@ -50,8 +61,13 @@ export function createInstance(name: string, opts: { sourceId?: number | null; l
     policy: src?.policy ?? null,
     createdBy: opts.userId ?? null,
   };
+  const o = opts.overrides ?? {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v === undefined || !(k in values)) continue;
+    (values as Record<string, unknown>)[k] = k === 'teraMarkup' && typeof v !== 'string' ? JSON.stringify(v) : v;
+  }
   const errs = validateRulesetShape(rowToRuleset({ ...values, id: 0, archived: false, createdAt: null, updatedAt: null } as Row));
-  if (errs.length) throw new Error(`Invalid ruleset: ${errs.join('; ')}`);
+  if (errs.length) throw new RulesetInputError(`Invalid ruleset: ${errs.join('; ')}`);
   return db.insert(schema.rulesets).values(values).returning().get();
 }
 
