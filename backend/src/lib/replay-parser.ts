@@ -111,6 +111,21 @@ export const LEAGUE_BANNED_MOVES = new Map<string, string[]>([
 export const LEAGUE_BANNED_ABILITIES = new Map<string, string[]>();
 export const LEAGUE_BANNED_ITEMS = new Map<string, string[]>();
 
+// Kill-attribution tables (league ruling 2026-11, see plan/stats-audit-2026-11.md).
+
+/** The user faints with no damage line; the opposing active mon gets the kill. */
+const SACRIFICE_MOVES = new Set([
+  'Explosion', 'Self-Destruct', 'Misty Explosion', 'Memento', 'Final Gambit',
+  'Healing Wish', 'Lunar Dance',
+]);
+/** Volatile residuals logged via |-start|: the applier owns the KO. */
+const RESIDUAL_EFFECTS = new Set(['Leech Seed', 'Salt Cure', 'Curse', 'Nightmare']);
+/** Partial-trapping moves, logged via |-activate|…|[of] trapper. */
+const TRAP_MOVES = new Set([
+  'Bind', 'Wrap', 'Fire Spin', 'Whirlpool', 'Sand Tomb', 'Clamp', 'Infestation',
+  'Magma Storm', 'Snap Trap', 'Thunder Cage',
+]);
+
 // Parser
 
 export class ReplayParser {
@@ -165,6 +180,27 @@ export class ReplayParser {
   private bunkerMon: string | null = null;
   // Destiny Bond user whose bond just triggered; consumed by the next opposing faint.
   private pendingBond: string | null = null;
+  // Last OPPOSING mon to damage each mon during its current stint on the field
+  // (cleared on switch-out). Credits self-inflicted faints (Life Orb, recoil,
+  // confusion, crash) — no hit this stint → no credit.
+  private lastDamager = new Map<string, string>();
+  // Volatile residual effects and who applied them: target nick → effect → source
+  // nick (Leech Seed, Salt Cure, Curse, Nightmare, partial trapping). The
+  // original applier gets the kill, not whoever now sits in its slot.
+  private residualSource = new Map<string, Map<string, string>>();
+  // Who started the current weather (Sand Stream / Sandstorm user).
+  private weatherSetter: string | null = null;
+  private lastMoveUser: string | null = null;
+  // Mon that just used a sacrifice move (Explosion, Memento, …); its faint
+  // credits the opposing active mon.
+  private sacrificeUser: string | null = null;
+  // Mon holding a Toxic/Flame Orb it received via Trick/Switcheroo → the giver.
+  private orbGiver = new Map<string, string>();
+  // Pending Future Sight / Doom Desire caster, keyed by the side it will land on.
+  private futureCaster = new Map<'p1' | 'p2', string>();
+  // Per-stint bookkeeping so an Illusion reveal can move only the disguised
+  // stint's kills off the disguise target.
+  private stint = new Map<string, { wasAppeared: boolean; kills: Record<string, number> }>();
 
   /**
    * Parse a complete battle log (post-match).
@@ -216,6 +252,11 @@ export class ReplayParser {
       case '-activate': return this.handleActivate(parts);
       case '-anim':
       case '-prepare': return this.handleCharge(parts);
+      case '-start': return this.handleStart(parts);
+      case '-end': return this.handleEnd(parts);
+      case '-weather': return this.handleWeather(parts);
+      case '-item': return this.handleItem(parts);
+      case '-enditem': if (parts[2]) this.orbGiver.delete(parts[2]); return false;
       default: return false;
     }
   }
@@ -262,43 +303,13 @@ export class ReplayParser {
         loserScore = p1Remaining;
       }
 
-      // Forfeit / timeout / disconnect normalization (feedback #81). PS never
-      // lets a battle end with a `|win|` while the loser still has living
-      // Pokemon through ordinary play — a fainted active mon forces a switch
-      // prompt first — so `loserScore > 0` here only happens on a non-standard
-      // termination (FF/timeout/DC). Treat it as a completed sweep: zero the
-      // loser's score, mark their survivors as deaths (keeps winner-kills ==
-      // loser-deaths so the standings differential reflects a real sweep and
-      // downstream match_pokemon writes stay consistent), and credit the
-      // "owed" kills to the winner's active Pokemon. winnerScore is left
-      // untouched — it already reflects the winner's real survivors.
-      if (loserScore > 0) {
-        let owedKills = 0;
-        for (const st of allStats) {
-          // Only credit an owed death (and matching winner kill) for a loser
-          // mon that actually took the field. The match_pokemon writer persists
-          // rows only for `appeared` mons (ps-bot.ts), so marking a never-sent
-          // bench mon here would drop its death on save while the winner keeps
-          // the kill — fabricating a phantom KO that inflates leaderboards/MVP.
-          // Gating on `appeared` keeps persisted winner-kills == loser-deaths.
-          if (st.player === loserSide && st.brought && st.appeared && st.deaths === 0) {
-            st.deaths = 1;
-            owedKills++;
-          }
-        }
-        loserScore = 0;
-
-        if (owedKills > 0) {
-          // Winner's active Pokemon at the moment the match ended. May be
-          // unresolvable (e.g. a forfeit at team preview, before any
-          // |switch| ever fired) — degrade gracefully rather than guess.
-          const activeNick = this.activeSlot.get(`${winnerSide}a`);
-          const activeSpecies = activeNick ? this.nickToSpecies.get(activeNick) : undefined;
-          if (activeSpecies) {
-            this.getOrCreateStats(winnerSide, activeSpecies).kills += owedKills;
-          }
-        }
-      }
+      // Forfeit / timeout / disconnect (feedback #81). PS never ends a battle
+      // with `|win|` while the loser still has living mons through ordinary
+      // play, so `loserScore > 0` means a non-standard termination. The match
+      // score reads as a sweep (loser → 0), but per-mon K/D counts ONLY real
+      // faints — no synthetic deaths for the forfeiter's survivors and no
+      // "owed" kills for the winner's active mon (league ruling, 2026-11).
+      if (loserScore > 0) loserScore = 0;
     }
 
     return {
@@ -405,13 +416,18 @@ export class ReplayParser {
     this.nickToSpecies.set(nick, species);
     this.nickToSide.set(nick, side);
 
-    // Update active slot
+    // Update active slot; the previous occupant's stint ends, and so does any
+    // stale stint state for the incoming nick.
     const slot = nick.substring(0, 3); // "p1a" or "p2a"
+    const prev = this.activeSlot.get(slot);
+    if (prev) this.endStint(prev);
+    this.endStint(nick);
     this.activeSlot.set(slot, nick);
 
     this.justSwitched.add(nick);
 
     const stats = this.getOrCreateStats(side, species);
+    this.stint.set(nick, { wasAppeared: stats.appeared, kills: {} });
     stats.appeared = true;
     // Also mark as brought in case |poke| lines were missing
     stats.brought = true;
@@ -492,24 +508,31 @@ export class ReplayParser {
     const oldSpecies = this.nickToSpecies.get(nick);
     const side = this.nickToSide.get(nick) ?? this.parseSide(nick);
 
-    if (oldSpecies && oldSpecies !== newSpecies) {
-      // Transfer any stats already accumulated under the disguise's species key
-      // to the true species (the disguise target may not have appeared, so the
-      // old key may reference a phantom entry). We re-key so kill/death credit
-      // flows correctly going forward.
-      const oldKey = `${side}:${oldSpecies}`;
-      const existing = this.stats.get(oldKey);
-      if (existing) {
-        this.stats.delete(oldKey);
-        existing.species = newSpecies;
-        this.stats.set(`${side}:${newSpecies}`, existing);
-      }
-    }
-
     // Ensure the true species has an entry and is marked appeared
     const stats = this.getOrCreateStats(side, newSpecies);
     stats.appeared = true;
     stats.brought = true;
+
+    if (oldSpecies && oldSpecies !== newSpecies) {
+      // Move ONLY this stint's kills off the disguise target — the real mon
+      // behind the disguise may have played earlier and keeps its own K/D and
+      // its brought slot. If it never actually appeared, un-flag it.
+      const disguise = this.stats.get(`${side}:${oldSpecies}`);
+      const st = this.stint.get(nick);
+      if (disguise && disguise !== stats && st) {
+        for (const [cause, n] of Object.entries(st.kills)) {
+          disguise.kills -= n;
+          if (disguise.killCauses) {
+            disguise.killCauses[cause] = (disguise.killCauses[cause] ?? 0) - n;
+            if (disguise.killCauses[cause] <= 0) delete disguise.killCauses[cause];
+          }
+          stats.kills += n;
+          stats.killCauses ??= {};
+          stats.killCauses[cause] = (stats.killCauses[cause] ?? 0) + n;
+        }
+        disguise.appeared = st.wasAppeared;
+      }
+    }
 
     this.nickToSpecies.set(nick, newSpecies);
     this.nickToSide.set(nick, side);
@@ -573,6 +596,8 @@ export class ReplayParser {
     this.bunkerUser = null;
     this.pendingBond = null;
     if (parts[3] === 'Baneful Bunker') this.bunkerMon = attacker;
+    this.lastMoveUser = attacker;
+    this.sacrificeUser = SACRIFICE_MOVES.has(parts[3]) ? attacker : null;
 
     // Track last attacker for direct KO attribution
     if (target && !target.startsWith('[')) {
@@ -625,6 +650,9 @@ export class ReplayParser {
     let inflictor: string | null;
     if (ofTag) {
       inflictor = ofTag;
+    } else if ((fromTag === 'item: Toxic Orb' || fromTag === 'item: Flame Orb') && this.orbGiver.has(target)) {
+      // Orb handed over via Trick/Switcheroo — the giver caused the status.
+      inflictor = this.orbGiver.get(target)!;
     } else if (fromTag && (fromTag.startsWith('item:') || fromTag.startsWith('ability:'))) {
       // Self-inflicted from own item/ability (Flame Orb, Toxic Orb) — no credit.
       inflictor = null;
@@ -653,39 +681,44 @@ export class ReplayParser {
   private handleDamage(parts: string[]): boolean {
     const target = parts[2];
     const hpStr = parts[3];
+    if (!target || !hpStr) return false;
 
-    if (!hpStr || !hpStr.includes('fnt')) return false;
+    const fromTag = this.findTag(parts, 'from');
+    const ofTag = this.findTag(parts, 'of');
+
+    // Track the last OPPOSING mon to damage the target this stint — direct
+    // move damage, or an [of]-attributed effect (Rocky Helmet, Rough Skin…).
+    const hitter = fromTag === null ? this.lastAttacker.get(target) : ofTag;
+    if (hitter && this.parseSide(hitter) !== this.parseSide(target)) this.lastDamager.set(target, hitter);
+
+    if (!hpStr.includes('fnt')) return false;
 
     // This is a lethal hit — attribute the kill
     // The actual faint is confirmed by |faint|, but we figure out
     // the killer here because we have the [from]/[of] context
-    const fromTag = this.findTag(parts, 'from');
-    const ofTag = this.findTag(parts, 'of');
-
     let killerNick: string | null = null;
     let cause = 'other';
 
     if (fromTag) {
       // Indirect damage source
-      if (ofTag) {
-        // Specific Pokemon caused it (Rocky Helmet, Rough Skin, etc.)
-        killerNick = ofTag;
-      } else if (
-        fromTag.startsWith('item:')
-        || fromTag.startsWith('ability:')
-        || fromTag === 'Recoil'
-        || fromTag === 'confusion'
-      ) {
-        // Self-damage from own item/ability/recoil/confusion — no kill
-        // credit. Without this branch, the catch-all below would credit
-        // `lastAttacker(target)` — i.e. whoever last attacked the recoiler,
-        // which can be the now-fainted opponent and produces a posthumous
-        // bogus kill.
-        killerNick = null;
-      } else if (this.isHazard(fromTag)) {
+      const effect = fromTag.replace(/^move: /, '');
+      const residual = this.residualSource.get(target)?.get(effect);
+      if (this.isHazard(fromTag)) {
         // Hazard damage — credit whoever set the hazard
         killerNick = this.getHazardSetter(target, fromTag);
         cause = 'hazard';
+      } else if (effect === 'Sandstorm' || effect === 'Hail') {
+        // Weather — credit whoever started it (own-side setter → no credit).
+        killerNick = this.weatherSetter;
+        cause = 'weather';
+      } else if (residual) {
+        // Leech Seed / Salt Cure / Curse / binding — the original applier,
+        // not whoever now occupies its slot (PS's [of] for Leech Seed).
+        killerNick = residual;
+        cause = 'residual';
+      } else if (ofTag && this.parseSide(ofTag) !== this.parseSide(target)) {
+        // Specific opposing Pokemon caused it (Rocky Helmet, Rough Skin, etc.)
+        killerNick = ofTag;
       } else if (fromTag === 'psn' || fromTag === 'tox' || fromTag === 'brn') {
         // Residual status damage — credit whoever INFLICTED the status (the mon
         // whose Scald/Toxic/Flamethrower/Flame-Body applied it), not whoever last
@@ -697,16 +730,12 @@ export class ReplayParser {
           ? this.statusInflictor.get(target) ?? null
           : this.lastAttacker.get(target) ?? null;
         cause = 'status';
-      } else if (fromTag.startsWith('move:')) {
-        // Residual move damage (e.g., Leech Seed)
-        if (ofTag) {
-          killerNick = ofTag;
-        } else {
-          killerNick = this.lastAttacker.get(target) ?? null;
-        }
       } else {
-        // Other indirect — weather, etc. Credit last attacker
-        killerNick = this.lastAttacker.get(target) ?? null;
+        // Self-inflicted — Life Orb, Recoil/recoil (Struggle), confusion, crash
+        // (High Jump Kick), Belly Drum, own ability/item. Credit the last
+        // opposing mon that damaged it THIS stint; none → no credit.
+        killerNick = this.lastDamager.get(target) ?? null;
+        cause = 'self';
       }
     } else {
       // Direct damage — credit last attacker
@@ -738,13 +767,18 @@ export class ReplayParser {
     const faintedStats = this.getOrCreateStats(side, species);
     faintedStats.deaths = 1;
 
-    // Apply kill credit. If handleDamage explicitly recorded a decision
-    // (including "null = no credit") use that; otherwise fall back to
-    // lastAttacker (covers faint-without-prior-damage-line scenarios).
-    let killerNick = this.pendingKiller.has(faintedNick)
-      ? this.pendingKiller.get(faintedNick) ?? null
-      : this.lastAttacker.get(faintedNick) ?? null;
+    // Apply kill credit from handleDamage's decision (including "null = no
+    // credit"). A faint with NO lethal damage line is a sacrifice move
+    // (Explosion, Memento, Final Gambit, Healing Wish…) → the opposing active
+    // mon; anything else (Perish Song) credits no one.
+    let killerNick: string | null = null;
     let cause = this.pendingCause.get(faintedNick) ?? 'direct';
+    if (this.pendingKiller.has(faintedNick)) {
+      killerNick = this.pendingKiller.get(faintedNick) ?? null;
+    } else if (faintedNick === this.sacrificeUser) {
+      killerNick = this.activeSlot.get(`${side === 'p1' ? 'p2' : 'p1'}a`) ?? null;
+      cause = 'sacrifice';
+    }
 
     // Destiny Bond: the bonder takes the victim down with it, regardless of
     // who the victim last attacked.
@@ -762,6 +796,8 @@ export class ReplayParser {
         killerStats.kills += 1;
         killerStats.killCauses ??= {};
         killerStats.killCauses[cause] = (killerStats.killCauses[cause] ?? 0) + 1;
+        const st = this.stint.get(killerNick);
+        if (st) st.kills[cause] = (st.kills[cause] ?? 0) + 1;
       }
     }
 
@@ -840,7 +876,77 @@ export class ReplayParser {
     if (!nick) return false;
     if (what.endsWith('Baneful Bunker') || (what.endsWith('Protect') && nick === this.bunkerMon)) this.bunkerUser = nick;
     else if (what.endsWith('Destiny Bond')) this.pendingBond = nick;
+    else if (TRAP_MOVES.has(what.replace(/^move: /, ''))) this.recordResidual(nick, what, this.findTag(parts, 'of'));
     return false;
+  }
+
+  /** |-start|p2a: X|move: Leech Seed / Salt Cure / Curse|[of] p1a: Y / Nightmare;
+   *  |-start|p1a: Caster|move: Future Sight (the hit lands on the other side later). */
+  private handleStart(parts: string[]): boolean {
+    const nick = parts[2];
+    const effect = (parts[3] ?? '').replace(/^move: /, '');
+    if (!nick) return false;
+    if (effect === 'Future Sight' || effect === 'Doom Desire') {
+      this.futureCaster.set(this.parseSide(nick) === 'p1' ? 'p2' : 'p1', nick);
+    } else if (RESIDUAL_EFFECTS.has(effect)) {
+      this.recordResidual(nick, effect, this.findTag(parts, 'of'));
+    }
+    return false;
+  }
+
+  /** |-end|p2a: X|move: Future Sight — the delayed hit lands as a plain |-damage| next. */
+  private handleEnd(parts: string[]): boolean {
+    const nick = parts[2];
+    const effect = (parts[3] ?? '').replace(/^move: /, '');
+    if (nick && (effect === 'Future Sight' || effect === 'Doom Desire')) {
+      const caster = this.futureCaster.get(this.parseSide(nick));
+      if (caster) this.lastAttacker.set(nick, caster);
+    }
+    return false;
+  }
+
+  /** |-weather|Sandstorm|[from] ability: Sand Stream|[of] p1a: Ttar, or after a
+   *  |move|…|Sandstorm|; `[upkeep]` keeps the current setter; `none` clears it. */
+  private handleWeather(parts: string[]): boolean {
+    const weather = parts[2];
+    if (!weather || weather === 'none') { this.weatherSetter = null; return false; }
+    if (parts.some(p => p.trim() === '[upkeep]')) return false;
+    this.weatherSetter = this.findTag(parts, 'of') ?? this.lastMoveUser;
+    return false;
+  }
+
+  /** |-item|p1a: X|Toxic Orb|[from] move: Trick — X received the orb from its Trick partner. */
+  private handleItem(parts: string[]): boolean {
+    const nick = parts[2];
+    if (!nick) return false;
+    const fromTag = this.findTag(parts, 'from');
+    const giver = this.activeSlot.get(`${this.parseSide(nick) === 'p1' ? 'p2' : 'p1'}a`);
+    if ((parts[3] === 'Toxic Orb' || parts[3] === 'Flame Orb')
+        && (fromTag === 'move: Trick' || fromTag === 'move: Switcheroo') && giver) {
+      this.orbGiver.set(nick, giver);
+    } else {
+      this.orbGiver.delete(nick);
+    }
+    return false;
+  }
+
+  /** Volatile residual applied to `target`: source is the [of] tag, else the
+   *  mon whose move just targeted it. Same-side sources are ignored. */
+  private recordResidual(target: string, effect: string, ofTag: string | null): void {
+    const source = ofTag ?? this.lastAttacker.get(target);
+    if (!source || this.parseSide(source) === this.parseSide(target)) return;
+    let m = this.residualSource.get(target);
+    if (!m) { m = new Map(); this.residualSource.set(target, m); }
+    m.set(effect.replace(/^move: /, ''), source);
+  }
+
+  /** A mon left the field: drop everything scoped to its stint on the field.
+   *  Major status (statusInflictor) and hazards deliberately persist. */
+  private endStint(nick: string): void {
+    this.lastAttacker.delete(nick);
+    this.lastDamager.delete(nick);
+    this.residualSource.delete(nick);
+    this.stint.delete(nick);
   }
 
   /** |-anim|p1a: X|Electro Shot|p2a: Y and |-prepare|p1a: X|Solar Beam|p2a: Y —
